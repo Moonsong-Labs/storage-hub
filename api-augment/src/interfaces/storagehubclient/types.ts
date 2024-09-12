@@ -40,7 +40,8 @@ export interface GetBspInfoError extends Enum {
 /** @name GetChallengePeriodError */
 export interface GetChallengePeriodError extends Enum {
   readonly isProviderNotRegistered: boolean;
-  readonly type: "ProviderNotRegistered";
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
 }
 
 /** @name GetChallengeSeedError */
@@ -117,11 +118,25 @@ export interface MerklePatriciaRoot extends H256 {}
 /** @name ProviderId */
 export interface ProviderId extends H256 {}
 
+/** @name QueryAvailableStorageCapacityError */
+export interface QueryAvailableStorageCapacityError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
+}
+
 /** @name QueryBspConfirmChunksToProveForFileError */
 export interface QueryBspConfirmChunksToProveForFileError extends Enum {
   readonly isStorageRequestNotFound: boolean;
   readonly isInternalError: boolean;
   readonly type: "StorageRequestNotFound" | "InternalError";
+}
+
+/** @name QueryEarliestChangeCapacityBlockError */
+export interface QueryEarliestChangeCapacityBlockError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
 }
 
 /** @name QueryFileEarliestVolunteerBlockError */
@@ -139,6 +154,13 @@ export interface QueryFileEarliestVolunteerBlockError extends Enum {
     | "InternalError";
 }
 
+/** @name QueryStorageProviderCapacityError */
+export interface QueryStorageProviderCapacityError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
+}
+
 /** @name RandomnessOutput */
 export interface RandomnessOutput extends H256 {}
 
@@ -154,6 +176,9 @@ export interface SaveFileToDisk extends Enum {
 
 /** @name StorageData */
 export interface StorageData extends u32 {}
+
+/** @name StorageDataUnit */
+export interface StorageDataUnit extends u32 {}
 
 /** @name StorageProviderId */
 export interface StorageProviderId extends Enum {

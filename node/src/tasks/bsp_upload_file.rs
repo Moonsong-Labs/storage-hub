@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::{cmp::max, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -11,8 +11,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    handler::ConfirmStoringRequest,
-    types::{RetryStrategy, Tip},
+    types::{ConfirmStoringRequest, RetryStrategy, Tip},
 };
 use shc_common::types::{
     Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -22,7 +21,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::MILLIUNIT;
+use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
@@ -97,7 +96,8 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer for location: {:?}, fingerprint: {:?}",
+            "Initiating BSP volunteer for file_key {:?}, location {:?}, fingerprint {:?}",
+            event.file_key,
             event.location,
             event.fingerprint
         );
@@ -424,15 +424,6 @@ where
             location: event.location.to_vec(),
         };
 
-        // Get the file key.
-        let file_key: FileKey = metadata
-            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
-            .as_ref()
-            .try_into()?;
-
-        self.file_key_cleanup = Some(file_key.into());
-
-        // Get the node's provider id needed for threshold calculation.
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -455,6 +446,123 @@ where
             }
         };
 
+        let available_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_available_storage_capacity(own_bsp_id)
+            .await
+            .map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to query available storage capacity: {:?}", e
+                );
+                anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+            })?;
+
+        // Increase storage capacity if the available capacity is less than the file size.
+        if available_capacity < event.size {
+            warn!(
+                target: LOG_TARGET,
+                "Insufficient storage capacity to volunteer for file key: {:?}",
+                event.file_key
+            );
+
+            let current_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .max_storage_capacity;
+
+            if max_storage_capacity == current_capacity {
+                let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
+            let new_capacity = self.calculate_capacity(&event, current_capacity)?;
+
+            let call = storage_hub_runtime::RuntimeCall::Providers(
+                pallet_storage_providers::Call::change_capacity { new_capacity },
+            );
+
+            let earliest_change_capacity_block = self
+                .storage_hub_handler
+                .blockchain
+                .query_earliest_change_capacity_block(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
+            // Wait for the earliest block where the capacity can be changed.
+            self.storage_hub_handler
+                .blockchain
+                .wait_for_block(earliest_change_capacity_block)
+                .await?;
+
+            self.storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, Tip::from(0))
+                .await?
+                .with_timeout(Duration::from_secs(60))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await?;
+
+            info!(
+                target: LOG_TARGET,
+                "Increased storage capacity to {:?} bytes",
+                new_capacity
+            );
+
+            let available_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_available_storage_capacity(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query available storage capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                })?;
+
+            // Skip volunteering if the new available capacity is still less than the file size.
+            if available_capacity < event.size {
+                let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Skipping volunteering.";
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        }
+
+        // Get the file key.
+        let file_key: FileKey = metadata
+            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
+            .as_ref()
+            .try_into()?;
+
+        self.file_key_cleanup = Some(file_key.into());
+
         // Query runtime for the earliest block where the BSP can volunteer for the file.
         let earliest_volunteer_block = self
             .storage_hub_handler
@@ -462,6 +570,13 @@ where
             .query_file_earliest_volunteer_block(own_bsp_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "Waiting for block {:?} to volunteer for file {:?}",
+            earliest_volunteer_block,
+            file_key
+        );
 
         // TODO: if the earliest block is too far away, we should drop the task.
         // TODO: based on the limit above, also add a timeout for the task.
@@ -518,6 +633,37 @@ where
             .await?;
 
         Ok(())
+    }
+
+    /// Calculate the new capacity after adding the required capacity for the file.
+    ///
+    /// The new storage capacity will be increased by the jump capacity until it reaches the
+    /// `max_storage_capacity` or it
+    ///
+    /// The `max_storage_capacity` is returned if the new capacity exceeds it.
+    fn calculate_capacity(
+        &mut self,
+        event: &NewStorageRequest,
+        current_capacity: StorageDataUnit,
+    ) -> Result<StorageDataUnit, anyhow::Error> {
+        let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
+        let jumps_needed = (event.size + jump_capacity - 1) / jump_capacity;
+        let jumps = max(jumps_needed, 1);
+        let bytes_to_add = jumps * jump_capacity;
+        let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Reached maximum storage capacity limit. Skipping volunteering for file."
+            )
+        })?;
+
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .max_storage_capacity;
+
+        let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
+
+        Ok(new_capacity)
     }
 
     async fn unvolunteer_file(&self, file_key: H256) -> anyhow::Result<()> {

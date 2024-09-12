@@ -2,15 +2,16 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { SealedBlock } from "./helpers";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, before, it } from "node:test";
 import type { launchNetwork } from "./testrunner";
+import type { BspNetTestApi } from "./test-api";
+import type { SealedBlock } from "./block";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
-export type BspNetApi = ApiPromise & {
+export interface BspNetApi extends ApiPromise {
   /**
    * Seals a block optionally with a given extrinsic and signer.
    *
@@ -18,12 +19,12 @@ export type BspNetApi = ApiPromise & {
    * @param signer - The keyring pair used to sign the block.
    * @returns A promise that resolves to a sealed block.
    */
-  sealBlock: (
+  sealBlock(
     calls?:
       | SubmittableExtrinsic<"promise", ISubmittableResult>
       | SubmittableExtrinsic<"promise", ISubmittableResult>[],
     signer?: KeyringPair
-  ) => Promise<SealedBlock>;
+  ): Promise<SealedBlock>;
 
   /**
    * @description Advances the block number to the given block number.
@@ -46,44 +47,36 @@ export type BspNetApi = ApiPromise & {
    * @param source - The local path to the file to be uploaded.
    * @param location - The StorageHub "location" field of the file to be uploaded.
    * @param bucketName - The name of the bucket to be created.
-   * @returns
+   * @returns A promise that resolves to file metadata.
    */
-  sendNewStorageRequest: (
+  sendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string
-  ) => Promise<FileMetadata>;
+  ): Promise<FileMetadata>;
 
   /**
-   * @description Creates a new bucket.
+   * Creates a new bucket.
    *
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to a new bucket event.
    */
-  createBucket: (bucketName: string) => Promise<Event>;
+  createBucket(bucketName: string): Promise<Event>;
 
   /**
-   * @description Asserts that a specific event occurred in a list of events.
+   * Asserts that a specific event occurred in a list of events.
    *
    * @param module - The module where the event originated.
    * @param method - The method that triggered the event.
    * @param events - The list of event records to search through.
    * @returns An object containing the event and its data.
    */
-  assertEvent: (
+  assertEvent(
     module: string,
     method: string,
     events?: EventRecord[]
-  ) => { event: Event; data: Codec[] & IEventData };
-
-  /**
-   * @description Fetches an event, inferring its type from the module and method.
-   *
-   * @remarks
-   * This function needs to be implemented.
-   */
-  // fetchEvent: () => void;
-};
+  ): { event: Event; data: Codec[] & IEventData };
+}
 
 /**
  * Represents information about a network toxicity.
@@ -161,6 +154,12 @@ export type BspNetConfig = {
    * Measured in bytes.
    */
   capacity?: bigint;
+
+  /**
+   * Optional parameter to set the weight of the BSP.
+   * Measured in bytes.
+   */
+  bspStartingWeight?: bigint;
 };
 
 /**
@@ -175,15 +174,23 @@ export type BspNetContext = {
 
   /**
    * Creates and returns a connected API instance for a user node.
-   * @returns A promise that resolves to a BspNetApi instance for user operations.
+   * @returns A promise that resolves to an enriched api instance for user operations.
    */
-  createUserApi: () => Promise<BspNetApi>;
+  createUserApi: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
-   * @returns A promise that resolves to a BspNetApi instance for BSP operations.
+   * @returns A promise that resolves to an enriched api instance for BSP operations.
    */
-  createBspApi: () => Promise<BspNetApi>;
+  createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
+   * Creates and returns a connected API instance for a BSP node.
+   * @returns A promise that resolves to  an enriched api instance for BSP operations.
+   */
+  createApi: (
+    endpoint: `ws://${string}` | `wss://${string}`
+  ) => ReturnType<typeof BspNetTestApi.create>;
 
   /**
    * The current configuration of the BSP network for this test run.
@@ -242,6 +249,10 @@ export type TestOptions = {
    * - "multi": Runs tests with both initialised and non-initialised network configurations
    */
   initialised?: boolean | "multi";
+  /** Set a custom capacity for the BSP */
+  capacity?: bigint;
+  /** Set a custom BSP weight */
+  bspStartingWeight?: bigint;
 };
 
 /**
@@ -266,4 +277,29 @@ export type InitialisedMultiBspNetwork = {
    * @see FileMetadata for details on the file metadata structure.
    */
   fileData: FileMetadata;
+};
+
+/**
+ * Options for creating a block in the chain.
+ */
+export type SealBlockOptions = {
+  /**
+   * Optional extrinsic(s) to include in the sealed block.
+   * Can be a single extrinsic or an array of extrinsics.
+   */
+  calls?:
+    | SubmittableExtrinsic<"promise", ISubmittableResult>
+    | SubmittableExtrinsic<"promise", ISubmittableResult>[];
+
+  /**
+   * Optional signer for the extrinsics.
+   * If not provided, a default signer (usually 'alice') will be used.
+   */
+  signer?: KeyringPair;
+
+  /**
+   * Whether to finalize the block after sealing.
+   * Defaults to true if not specified.
+   */
+  finaliseBlock?: boolean;
 };

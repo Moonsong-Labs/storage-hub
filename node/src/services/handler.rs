@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::{
@@ -7,7 +8,7 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        LastChargeableInfoUpdated, NewChallengeSeed, NewStorageRequest,
+        LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
         ProcessConfirmStoringRequest, ProcessSubmitProofRequest, SlashableProvider,
     },
     BlockchainService,
@@ -25,6 +26,19 @@ use crate::tasks::{
     BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
 
+/// Configuration paramaters for Storage Providers.
+#[derive(Clone)]
+pub struct ProviderConfig {
+    /// Maximum storage capacity of the provider (bytes).
+    ///
+    /// The Storage Provider will not request to increase its storage capacity beyond this value.
+    pub max_storage_capacity: StorageDataUnit,
+    /// Jump capacity (bytes).
+    ///
+    /// Storage capacity increases in jumps of this size.
+    pub jump_capacity: StorageDataUnit,
+}
+
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<FL, FSH>
 where
@@ -41,6 +55,8 @@ where
     pub file_storage: Arc<RwLock<FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
     pub forest_storage_handler: FSH,
+    /// The configuration parameters for the provider.
+    pub provider_config: ProviderConfig,
 }
 
 impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
@@ -55,6 +71,7 @@ where
             blockchain: self.blockchain.clone(),
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
+            provider_config: self.provider_config.clone(),
         }
     }
 }
@@ -70,6 +87,7 @@ where
         blockchain: ActorHandle<BlockchainService>,
         file_storage: Arc<RwLock<FL>>,
         forest_storage_handler: FSH,
+        provider_config: ProviderConfig,
     ) -> Self {
         Self {
             task_spawner,
@@ -77,6 +95,7 @@ where
             blockchain,
             file_storage,
             forest_storage_handler,
+            provider_config,
         }
     }
 
@@ -142,19 +161,21 @@ where
             bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_download_request_event_bus_listener.start();
 
-        // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
-        // It responds by computing challenges derived from the seed, taking also into account
+        // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
+        // It responds by computing challenges derived from the seeds, taking also into account
         // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
         // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
         // BlockchainService when it is time to actually submit the proof of storage.
         // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
         let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
-        // Subscribing to NewChallengeSeed event from the BlockchainService.
-        let new_challenge_seed_event_bus_listener: EventBusListener<NewChallengeSeed, _> =
-            bsp_submit_proof_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain);
-        new_challenge_seed_event_bus_listener.start();
+        // Subscribing to MultipleNewChallengeSeeds event from the BlockchainService.
+        let multiple_new_challenge_seeds_event_bus_listener: EventBusListener<
+            MultipleNewChallengeSeeds,
+            _,
+        > = bsp_submit_proof_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        multiple_new_challenge_seeds_event_bus_listener.start();
         // Subscribing to ProcessSubmitProofRequest event from the BlockchainService.
         let process_submit_proof_request_event_bus_listener: EventBusListener<
             ProcessSubmitProofRequest,

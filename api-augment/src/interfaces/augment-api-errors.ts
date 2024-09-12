@@ -247,6 +247,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * SP does not have enough storage capacity to store the file.
+       **/
+      InsufficientAvailableCapacity: AugmentedError<ApiType>;
+      /**
        * Metadata does not correspond to expected file key.
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
@@ -268,6 +272,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MinWaitForStopStoringNotReached: AugmentedError<ApiType>;
       /**
+       * The MSP is trying to confirm to store a file from a storage request that it has already confirmed to store.
+       **/
+      MspAlreadyConfirmed: AugmentedError<ApiType>;
+      /**
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
@@ -284,6 +292,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NotAMsp: AugmentedError<ApiType>;
       /**
+       * Account is not a SP.
+       **/
+      NotASp: AugmentedError<ApiType>;
+      /**
        * Operation failed because the account is not the owner of the bucket.
        **/
       NotBucketOwner: AugmentedError<ApiType>;
@@ -291,6 +303,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer does not own the file.
        **/
       NotFileOwner: AugmentedError<ApiType>;
+      /**
+       * The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
+       **/
+      NotSelectedMsp: AugmentedError<ApiType>;
       /**
        * Pending stop storing request already exists.
        **/
@@ -307,6 +323,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Replication target cannot be zero.
        **/
       ReplicationTargetCannotBeZero: AugmentedError<ApiType>;
+      /**
+       * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
+       **/
+      RequestWithoutMsp: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
@@ -339,6 +359,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
       UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;
+      /**
+       * A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
+       **/
+      UserNotInsolvent: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -631,6 +655,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to clear the flag of being without funds before the cooldown period has passed
+       **/
+      CooldownPeriodNotPassed: AugmentedError<ApiType>;
+      /**
        * Error thrown when the new last chargeable tick number that is trying to be set is greater than the current tick number or smaller than the previous last chargeable tick number
        **/
       InvalidLastChargeableBlockNumber: AugmentedError<ApiType>;
@@ -670,6 +698,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to update the rate of a fixed-rate payment stream to the same rate as before
        **/
       UpdateRateToSameRate: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
+       **/
+      UserNotFlaggedAsWithoutFunds: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to operate when the User has been flagged for not having enough funds.
        **/

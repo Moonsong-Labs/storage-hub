@@ -156,7 +156,7 @@ impl pallet_storage_providers::Config for Test {
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 parameter_types! {
@@ -236,6 +236,7 @@ impl crate::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type Units = StorageUnit;
     type NewStreamDeposit = ConstU64<10>;
+    type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
 }

@@ -1,24 +1,23 @@
-import "@storagehub/api-augment";
 import Docker from "dockerode";
-import { strictEqual } from "node:assert";
-import {
-  addBspContainer,
-  type BspNetApi,
-  createApiObject,
-  describeBspNet,
-  DOCKER_IMAGE,
-  stopBspContainer
-} from "../../../util";
+import assert, { strictEqual } from "node:assert";
+import { addBspContainer, describeBspNet, DOCKER_IMAGE, type EnrichedBspApi } from "../../../util";
+import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
 
-describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
-  let api: BspNetApi;
+describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it }) => {
+  let api: EnrichedBspApi;
 
   before(async () => {
     api = await createBspApi();
   });
 
   it("New BSP can be created", async () => {
-    const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({ name: "nueva" });
+    const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
+      name: "nueva",
+      additionalArgs: [
+        `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
+    });
 
     await it("is in a running container", async () => {
       const docker = new Docker();
@@ -30,7 +29,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
 
     await it("can open new API connection with", async () => {
       console.log(`connecting to rpcPort ${rpcPort}`);
-      const newApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+      await using newApi = await createApi(`ws://127.0.0.1:${rpcPort}`);
 
       await it("has correct reported peerId", async () => {
         const localPeerId = await newApi.rpc.system.localPeerId();
@@ -52,8 +51,6 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
         );
         strictEqual(matchingAddress.length > 1, true);
       });
-
-      await newApi.disconnect();
     });
 
     await it("is peer of other nodes", async () => {
@@ -63,9 +60,30 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
   });
 
   it("Lots of BSPs can be created", async () => {
-    await addBspContainer({ name: "timbo1", additionalArgs: ["--database=rocksdb"] });
-    await addBspContainer({ name: "timbo2", additionalArgs: ["--database=paritydb"] });
-    await addBspContainer({ name: "timbo3", additionalArgs: ["--database=auto"] });
+    await addBspContainer({
+      name: "timbo1",
+      additionalArgs: [
+        "--database=rocksdb",
+        `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
+    });
+    await addBspContainer({
+      name: "timbo2",
+      additionalArgs: [
+        "--database=paritydb",
+        `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
+    });
+    await addBspContainer({
+      name: "timbo3",
+      additionalArgs: [
+        "--database=auto",
+        `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
+    });
 
     const docker = new Docker();
     const sh_nodes = (
@@ -79,11 +97,15 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
 
   it("Inserts new blockchain service keys (BCSV)", async () => {
     const keystorePath = "/tmp/test/insert/keystore";
-    const { containerName, rpcPort } = await addBspContainer({
+    const { rpcPort } = await addBspContainer({
       name: "insert-keys-container",
-      additionalArgs: [`--keystore-path=${keystorePath}`]
+      additionalArgs: [
+        `--keystore-path=${keystorePath}`,
+        `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
-    const insertKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+    await using insertKeysApi = await createApi(`ws://127.0.0.1:${rpcPort}`);
 
     const alicePubKey = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
     const bobPubKey = "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48";
@@ -91,54 +113,50 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
     const bobSeed = "//Bob";
 
     const hasAliceKey = await insertKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
-    strictEqual(hasAliceKey.toHuman().valueOf(), true);
+    strictEqual(hasAliceKey.isTrue, true);
 
     let hasBobKey = await insertKeysApi.rpc.author.hasKey(bobPubKey, bcsvKeyType);
-    strictEqual(hasBobKey.toHuman().valueOf(), false);
+    strictEqual(hasBobKey.isTrue, false);
 
     // Rotate keys and check that Bob's pub key is now in Keystore.
     await insertKeysApi.rpc.storagehubclient.insertBcsvKeys(bobSeed);
     hasBobKey = await insertKeysApi.rpc.author.hasKey(bobPubKey, bcsvKeyType);
-    strictEqual(hasBobKey.toHuman().valueOf(), true);
-
-    // We remove again the keys added in this test.
-    await insertKeysApi.rpc.storagehubclient.removeBcsvKeys(keystorePath);
-
-    stopBspContainer({ containerName, api: insertKeysApi });
+    strictEqual(hasBobKey.isTrue, true);
   });
 
   it("Removes BCSV keys from keystore", async () => {
     const keystore_path = "/tmp/test/remove/keystore";
-    const { containerName, rpcPort } = await addBspContainer({
+    const { rpcPort } = await addBspContainer({
       name: "remove-keys-container",
-      additionalArgs: [`--keystore-path=${keystore_path}`]
+      additionalArgs: [
+        `--keystore-path=${keystore_path}`,
+        `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
-    const removeKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
-
+    await using removeKeysApi = await createApi(`ws://127.0.0.1:${rpcPort}`);
     const alicePubKey = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
     const davePubKey = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
     const bcsvKeyType = "bcsv";
     const daveSeed = "//Dave";
 
     let hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
-    strictEqual(hasAliceKey.toHuman().valueOf(), true);
+    strictEqual(hasAliceKey.isTrue, true);
 
     let hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
-    strictEqual(hasDaveKey.toHuman().valueOf(), false);
+    strictEqual(hasDaveKey.isTrue, false);
 
     // Rotate keys and check that Dave's pub key is now in Keystore.
     await removeKeysApi.rpc.storagehubclient.insertBcsvKeys(daveSeed);
     hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
-    strictEqual(hasDaveKey.toHuman().valueOf(), true);
+    strictEqual(hasDaveKey.isTrue, true);
 
     await removeKeysApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
 
     // We still have Alice's key in `--dev` mode because it's inserted into the in-memory Keystore.
     hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
-    strictEqual(hasAliceKey.toHuman().valueOf(), true);
+    strictEqual(hasAliceKey.isTrue, true);
     hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
-    strictEqual(hasDaveKey.toHuman().valueOf(), false);
-
-    stopBspContainer({ containerName, api: removeKeysApi });
+    assert(hasDaveKey.isFalse);
   });
 });

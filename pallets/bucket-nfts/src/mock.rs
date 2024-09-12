@@ -10,7 +10,8 @@ use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    ProofSubmittersInterface, ProofsDealerInterface, TrieMutation, TrieRemoveMutation,
+    ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface, TrieMutation,
+    TrieRemoveMutation,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -183,6 +184,14 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(H256::default())
     }
 
+    fn generic_apply_delta(
+        _root: &Self::MerkleHash,
+        _mutations: &[(Self::MerkleHash, TrieMutation)],
+        _proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
+        Ok(H256::default())
+    }
+
     fn initialise_challenge_cycle(
         _who: &Self::ProviderId,
     ) -> frame_support::dispatch::DispatchResult {
@@ -194,6 +203,7 @@ impl pallet_file_system::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = MockProofsDealer;
+    type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
@@ -215,6 +225,15 @@ impl pallet_file_system::Config for Test {
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+}
+
+pub struct MockUserSolvency;
+impl ReadUserSolvencyInterface for MockUserSolvency {
+    type AccountId = AccountId;
+
+    fn is_user_insolvent(_user_account: &Self::AccountId) -> bool {
+        false
+    }
 }
 
 parameter_types! {
@@ -291,7 +310,7 @@ impl pallet_storage_providers::Config for Test {
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

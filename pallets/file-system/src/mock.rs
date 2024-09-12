@@ -10,7 +10,8 @@ use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadUserSolvencyInterface,
+    TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -213,7 +214,7 @@ impl pallet_storage_providers::Config for Test {
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -334,6 +335,7 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
@@ -357,6 +359,21 @@ impl crate::Config for Test {
     type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
+// TODO: To write tests we probably should use the actual implementation instead of this mock.
+// (Or at least a better mock)
+pub struct MockUserSolvency;
+impl ReadUserSolvencyInterface for MockUserSolvency {
+    type AccountId = AccountId;
+
+    fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
+        if user_account == &Keyring::Eve.to_account_id() {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut t = system::GenesisConfig::<Test>::default()
@@ -365,7 +382,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     crate::GenesisConfig::<Test> {
         replication_target: 2,
-        maximum_threshold: u32::MAX,
         block_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)
@@ -377,6 +393,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)

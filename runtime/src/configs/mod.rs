@@ -69,20 +69,23 @@ use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
 // Local module imports
-use super::{
+use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, ProofsDealer, Providers,
-    Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
-    RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
-    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
-    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
-    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
+    PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
+    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
+    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
+    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MILLIUNIT, MINUTES,
+    NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
+    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
-use crate::PolkadotXcm;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
+
+/// Type representing the storage data units in StorageHub.
+pub type StorageDataUnit = u32;
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -450,7 +453,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
+    pub const SlashAmountPerMaxFileSize: Balance = 20 * MILLIUNIT; // TODO: Change this to a more realistic slashing amount.
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -465,7 +468,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
@@ -486,12 +489,13 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
-    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
-    type StartingReputationWeight = ConstU32<10>;
+    type SlashAmountPerMaxFileSize = SlashAmountPerMaxFileSize;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 parameter_types! {
     pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
+    pub const UserWithoutFundsCooldown: BlockNumber = 100;
 }
 
 // Converter from the BlockNumber type to the Balance type for math
@@ -508,6 +512,7 @@ impl pallet_payment_streams::Config for Runtime {
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type UserWithoutFundsCooldown = UserWithoutFundsCooldown; // Amount of blocks that a user will have to wait before being able to clear the out of funds flag
     type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
     type Units = u32; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
@@ -604,6 +609,7 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;

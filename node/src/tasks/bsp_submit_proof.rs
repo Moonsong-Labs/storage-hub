@@ -7,11 +7,9 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
-        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, NewChallengeSeed,
-        ProcessSubmitProofRequest,
+        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
-    handler::SubmitProofRequest,
-    types::RetryStrategy,
+    types::{RetryStrategy, SubmitProofRequest},
 };
 use shc_common::types::{
     BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
@@ -28,15 +26,16 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 /// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
 /// The flow includes the following steps:
-/// - **NewChallengeSeed Event:**
+/// - **MultipleNewChallengeSeeds Event:**
 ///   - Triggered by the on-chain generation of a new challenge seed.
-///   - Derives forest challenges from the seed.
-///   - Checks for any checkpoint challenges and adds them to the forest challenges.
-///   - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
+///   - For each seed:
+///     - Derives forest challenges from the seed.
+///     - Checks for any checkpoint challenges and adds them to the forest challenges.
+///     - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
 ///
 /// - **ProcessSubmitProofRequest Event:**
 ///   - Triggered when the Blockchain Service detects that the Forest write lock has been released.
-///   - Generates proofs for the queued challenges derived from the `NewChallengeSeed`.
+///   - Generates proofs for the queued challenges derived from the seed in the [`MultipleNewChallengeSeeds`] event.
 ///   - Constructs key proofs for each file key involved in the challenges.
 ///   - Submits the proofs to the runtime, with up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] retries on failure.
 ///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
@@ -81,38 +80,14 @@ where
     }
 }
 
-/// Handles the `NewChallengeSeed` event.
-///
-/// This event is triggered by an on-chain event of a new challenge seed being generated. The task performs the following actions:
-/// - Derives forest challenges from the seed.
-/// - Checks for checkpoint challenges and adds them to the forest challenges.
-/// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<FL, FSH> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FSH>
-where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
-{
-    async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Initiating BSP proof submission for BSP ID: {:?}, at tick: {:?}, with seed: {:?}",
-            event.provider_id,
-            event.tick,
-            event.seed
-        );
-        let provider_id = event.provider_id;
-        let tick = event.tick;
-        let seed = event.seed;
-
-        self.queue_submit_proof_request(provider_id, tick, seed)
-            .await
-    }
-}
-
 /// Handles the `MultipleNewChallengeSeeds` event.
 ///
 /// This event is triggered when catching up to proof submissions, and there are multiple new challenge seeds
 /// that have to be responded in order. It queues the proof submissions for the given seeds.
+/// The task performs the following actions for each seed:
+/// - Derives forest challenges from the seed.
+/// - Checks for checkpoint challenges and adds them to the forest challenges.
+/// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
 impl<FL, FSH> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -158,13 +133,18 @@ where
         info!(
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
-            event.data.forest_challenges
+            event.data
         );
+
+        // Check if this proof is the next one to be submitted.
+        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
+        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
+        self.check_if_proof_is_outdated(&event).await?;
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                error!(target: LOG_TARGET, "This is a bug! Forest root write tx already taken.");
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
                 ));
@@ -182,7 +162,7 @@ where
             let p = fs
                 .read()
                 .await
-                .generate_proof(event.data.forest_challenges)
+                .generate_proof(event.data.forest_challenges.clone())
                 .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
 
             p
@@ -243,6 +223,9 @@ where
             .query_worst_case_scenario_slashable_amount(event.data.provider_id)
             .await?
             .ok_or(anyhow!("Worst case slashable amount is None. Runtime no longer has this provider registered?"))?;
+
+        // TODO: Integrate with the new tip strategy.
+        //self.check_if_proof_is_outdated(&event).await?;
 
         // Attempt to submit the extrinsic with retries and tip increase.
         self.storage_hub_handler
@@ -449,6 +432,28 @@ where
             // Else, return an empty checkpoint challenges vector.
             Ok(Vec::new())
         }
+    }
+
+    async fn check_if_proof_is_outdated(
+        &self,
+        event: &ProcessSubmitProofRequest,
+    ) -> anyhow::Result<()> {
+        // Get the next challenge tick for this provider.
+        let next_challenge_tick = self
+            .storage_hub_handler
+            .blockchain
+            .get_next_challenge_tick_for_provider(event.data.provider_id)
+            .await?;
+
+        if next_challenge_tick != event.data.tick {
+            warn!(target: LOG_TARGET, "The proof for tick [{:?}] is not the next one to be submitted. Next challenge tick is [{:?}]", event.data.tick, next_challenge_tick);
+            return Err(anyhow!(
+                "The proof for tick [{:?}] is not the next one to be submitted.",
+                event.data.tick,
+            ));
+        }
+
+        Ok(())
     }
 
     async fn generate_key_proof(

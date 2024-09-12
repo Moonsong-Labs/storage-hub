@@ -58,3 +58,14 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: pnpm install
       - run: pnpm lint
+
+  typecheck-ts:
+    name: "Typecheck with tsc"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: pnpm install
+      - run: |
+          cd test
+          pnpm typecheck

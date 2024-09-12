@@ -1,6 +1,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use clap::{Parser, ValueEnum};
+use storage_hub_runtime::StorageDataUnit;
 
 use crate::command::ProviderOptions;
 
@@ -82,6 +83,20 @@ pub struct ProviderConfigurations {
     )]
     pub provider_type: Option<ProviderType>,
 
+    /// Maximum storage capacity of the provider (bytes).
+    #[clap(long, required_if_eq_any([
+        ("provider_type", "msp"),
+        ("provider_type", "bsp")
+    ]))]
+    pub max_storage_capacity: Option<StorageDataUnit>,
+
+    /// Jump capacity (bytes).
+    #[clap(long, required_if_eq_any([
+        ("provider_type", "msp"),
+        ("provider_type", "bsp")
+    ]))]
+    pub jump_capacity: Option<StorageDataUnit>,
+
     /// Type of StorageHub provider.
     /// Currently: `memory` and `rocks-db`.
     #[clap(
@@ -93,7 +108,7 @@ pub struct ProviderConfigurations {
     pub storage_layer: Option<StorageLayer>,
 
     /// Storage location in the file system
-    #[clap(long, required_if_eq("storage-layer", "rocks-db"))]
+    #[clap(long, required_if_eq("storage_layer", "rocks-db"))]
     pub storage_path: Option<String>,
 }
 
@@ -109,6 +124,10 @@ impl ProviderConfigurations {
                 .clone()
                 .expect("Storage layer is required"),
             storage_path: self.storage_path.clone(),
+            // We can default since the clap would have errored out if it was not provided when required.
+            // In any other case, max_storage_capacity is not required and can be set to default.
+            max_storage_capacity: self.max_storage_capacity.clone(),
+            jump_capacity: self.jump_capacity.clone(),
         }
     }
 }

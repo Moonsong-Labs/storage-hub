@@ -13,6 +13,8 @@ services:
         "--dev",
         "--provider",
         "--provider-type=bsp",
+        "--max-storage-capacity=4294967295",
+        "--jump-capacity=1073741824",
         "--storage-layer=rocks-db",
         "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}",
         "--name=sh-bsp",

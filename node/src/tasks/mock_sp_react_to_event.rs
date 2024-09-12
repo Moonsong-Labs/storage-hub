@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::types::Tip;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface, events::MultipleNewChallengeSeeds, types::Tip,
+};
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::services::handler::StorageHubHandler;
@@ -11,7 +12,7 @@ use crate::tasks::FileStorageT;
 
 const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 
-pub type EventToReactTo = NewChallengeSeed;
+pub type EventToReactTo = MultipleNewChallengeSeeds;
 
 /// SpReactToEventMockTask is a mocked task used specifically for testing events emitted by the
 /// BlockchainService, which this tasks reacts to by sending a remark with event transaction.

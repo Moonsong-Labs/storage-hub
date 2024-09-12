@@ -3,9 +3,12 @@ use async_trait::async_trait;
 use log::warn;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
-    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
-use pallet_storage_providers_runtime_api::GetBspInfoError;
+use pallet_storage_providers_runtime_api::{
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
+    QueryStorageProviderCapacityError,
+};
 use serde_json::Number;
 use sp_api::ApiError;
 use sp_core::H256;
@@ -18,14 +21,14 @@ use shc_common::types::{
     BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId,
     TrieRemoveMutation,
 };
-use storage_hub_runtime::{AccountId, Balance};
+use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::types::{RetryStrategy, Tip};
 
 use super::{
-    handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
+    handler::BlockchainService,
     transaction::SubmittedTransaction,
-    types::{Extrinsic, ExtrinsicResult},
+    types::{ConfirmStoringRequest, Extrinsic, ExtrinsicResult, SubmitProofRequest},
 };
 
 const LOG_TARGET: &str = "blockchain-service-interface";
@@ -55,6 +58,12 @@ pub enum BlockchainServiceCommand {
         file_key: H256,
         callback:
             tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>,
+    },
+    QueryEarliestChangeCapacityBlock {
+        bsp_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<
+            Result<BlockNumber, QueryEarliestChangeCapacityBlockError>,
+        >,
     },
     GetNodePublicKey {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
@@ -91,6 +100,14 @@ pub enum BlockchainServiceCommand {
             Result<BlockNumber, GetLastTickProviderSubmittedProofError>,
         >,
     },
+    QueryChallengePeriod {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetChallengePeriodError>>,
+    },
+    QueryNextChallengeTickForProvider {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber>>,
+    },
     QueryLastCheckpointChallengeTick {
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber, ApiError>>,
     },
@@ -103,6 +120,18 @@ pub enum BlockchainServiceCommand {
     QueryProviderForestRoot {
         provider_id: ProviderId,
         callback: tokio::sync::oneshot::Sender<Result<H256, GetBspInfoError>>,
+    },
+    QueryStorageProviderCapacity {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<
+            Result<StorageDataUnit, QueryStorageProviderCapacityError>,
+        >,
+    },
+    QueryAvailableStorageCapacity {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<
+            Result<StorageDataUnit, QueryAvailableStorageCapacityError>,
+        >,
     },
     QueryStorageProviderId {
         maybe_node_pub_key: Option<sp_core::sr25519::Public>,
@@ -151,6 +180,11 @@ pub trait BlockchainServiceInterface {
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
 
+    async fn query_earliest_change_capacity_block(
+        &self,
+        bsp_id: ProviderId,
+    ) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
+
     /// Get the node's public key.
     async fn get_node_public_key(&self) -> sp_core::sr25519::Public;
 
@@ -191,6 +225,18 @@ pub trait BlockchainServiceInterface {
         provider_id: ProviderId,
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
 
+    /// Query the challenge period for a given Provider.
+    async fn query_challenge_period(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber, GetChallengePeriodError>;
+
+    /// Query the next challenge tick for a given Provider.
+    async fn get_next_challenge_tick_for_provider(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber>;
+
     /// Query the last checkpoint tick.
     async fn query_last_checkpoint_challenge_tick(&self) -> Result<BlockNumber, ApiError>;
 
@@ -205,6 +251,18 @@ pub trait BlockchainServiceInterface {
         &self,
         provider_id: ProviderId,
     ) -> Result<H256, GetBspInfoError>;
+
+    /// Query the storage capacity for a Provider.
+    async fn query_storage_provider_capacity(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
+
+    /// Query the available storage capacity for a Provider.
+    async fn query_available_storage_capacity(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
 
     /// Query the ProviderId for a given account. If no account is provided, the node's account is
     /// used.
@@ -311,6 +369,17 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
+    async fn query_earliest_change_capacity_block(
+        &self,
+        bsp_id: ProviderId,
+    ) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message =
+            BlockchainServiceCommand::QueryEarliestChangeCapacityBlock { bsp_id, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
     /// Get the node's public key.
     async fn get_node_public_key(&self) -> sp_core::sr25519::Public {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -396,6 +465,32 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
+    async fn query_challenge_period(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber, GetChallengePeriodError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryChallengePeriod {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn get_next_challenge_tick_for_provider(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryNextChallengeTickForProvider {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
     async fn query_last_checkpoint_challenge_tick(&self) -> Result<BlockNumber, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastCheckpointChallengeTick { callback };
@@ -433,6 +528,32 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryStorageProviderId {
             maybe_node_pub_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_storage_provider_capacity(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<StorageDataUnit, QueryStorageProviderCapacityError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryStorageProviderCapacity {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_available_storage_capacity(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryAvailableStorageCapacity {
+            provider_id,
             callback,
         };
         self.send(message).await;

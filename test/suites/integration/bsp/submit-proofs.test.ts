@@ -1,54 +1,31 @@
-import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import {
-  assertEventMany,
-  assertExtrinsicPresent,
-  BSP_DOWN_ID,
-  createApiObject,
   describeBspNet,
-  DUMMY_BSP_ID,
-  NODE_INFOS,
-  pauseBspContainer,
-  resumeBspContainer,
-  BSP_TWO_ID,
-  assertEventPresent,
   shUser,
-  BSP_THREE_ID,
   sleep,
-  type BspNetApi
+  type EnrichedBspApi,
+  type FileMetadata,
+  ShConsts
 } from "../../../util";
+import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
 
 describeBspNet(
   "Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
-  ({ before, createUserApi, after, it, getLaunchResponse }) => {
-    let userApi: BspNetApi;
-    let bspTwoApi: BspNetApi;
-    let bspThreeApi: BspNetApi;
-    let fileData: {
-      fileKey: string;
-      bucketId: string;
-      location: string;
-      owner: string;
-      fingerprint: string;
-      fileSize: number;
-    };
-    let oneBspFileData: {
-      fileKey: string;
-      bucketId: string;
-      location: string;
-      owner: string;
-      fingerprint: string;
-      fileSize: number;
-    };
+  ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
+    let userApi: EnrichedBspApi;
+    let bspTwoApi: EnrichedBspApi;
+    let bspThreeApi: EnrichedBspApi;
+    let fileData: FileMetadata;
+    let oneBspFileData: FileMetadata;
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
       assert(launchResponse, "BSPNet failed to initialise");
       fileData = launchResponse.fileData;
       userApi = await createUserApi();
-      bspTwoApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
-      bspThreeApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
     });
 
     after(async () => {
@@ -58,12 +35,12 @@ describeBspNet(
 
     it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
-      strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
-      const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+      const bspApi = await createBspApi();
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
       await bspApi.disconnect();
-      strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
+      strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
     });
 
     it("Many BSPs are challenged and correctly submit proofs", async () => {
@@ -71,13 +48,15 @@ describeBspNet(
       // since they all have the same file they were initialised with, and responded to it at
       // the same time.
       // We first get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        userApi.shConsts.DUMMY_BSP_ID
+      );
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const challengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        userApi.shConsts.DUMMY_BSP_ID
+      );
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -86,7 +65,7 @@ describeBspNet(
       await userApi.advanceToBlock(nextChallengeTick);
 
       // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(500);
+      await sleep(1000);
       // Check that there are 3 pending extrinsics from BSPs (proof submission).
       const submitProofPending = await userApi.rpc.author.pendingExtrinsics();
       strictEqual(
@@ -98,9 +77,8 @@ describeBspNet(
       // Seal one more block with the pending extrinsics.
       const blockResult = await userApi.sealBlock();
 
-      // Assert for the event of the proof successfully submitted and verified.
-      const proofAcceptedEvents = assertEventMany(
-        userApi,
+      // Assert for the the event of the proof successfully submitted and verified.
+      const proofAcceptedEvents = userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
         blockResult.events
@@ -110,7 +88,9 @@ describeBspNet(
       // Get the new last tick for which the BSP submitted a proof.
       // It should be the previous last tick plus one BSP period.
       const lastTickResultAfterProof =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+          userApi.shConsts.DUMMY_BSP_ID
+        );
       assert(lastTickResultAfterProof.isOk);
       const lastTickBspSubmittedProofAfterProof = lastTickResultAfterProof.asOk.toNumber();
       strictEqual(
@@ -124,8 +104,9 @@ describeBspNet(
       const challengesTickTolerance = Number(userApi.consts.proofsDealer.challengeTicksTolerance);
       const newDeadline =
         lastTickBspSubmittedProofAfterProof + challengePeriod + challengesTickTolerance;
-      const newDeadlineResult =
-        await userApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
+      const newDeadlineResult = await userApi.call.proofsDealerApi.getNextDeadlineTick(
+        userApi.shConsts.DUMMY_BSP_ID
+      );
       assert(newDeadlineResult.isOk);
       const newDeadlineOnChain = newDeadlineResult.asOk.toNumber();
       strictEqual(
@@ -137,14 +118,16 @@ describeBspNet(
 
     it("BSP fails to submit proof and is marked as slashable", async () => {
       // Get BSP-Down's deadline.
-      const bspDownDeadlineResult =
-        await userApi.call.proofsDealerApi.getNextDeadlineTick(BSP_DOWN_ID);
+      const bspDownDeadlineResult = await userApi.call.proofsDealerApi.getNextDeadlineTick(
+        userApi.shConsts.BSP_DOWN_ID
+      );
       assert(bspDownDeadlineResult.isOk);
       const bspDownDeadline = bspDownDeadlineResult.asOk.toNumber();
 
       // Get the last tick for which the BSP-Down submitted a proof before advancing to the deadline.
-      const lastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        userApi.shConsts.BSP_DOWN_ID
+      );
       assert(lastTickResult.isOk);
       const lastTickBspDownSubmittedProof = lastTickResult.asOk.toNumber();
       // Finally, advance to the next challenge tick.
@@ -162,20 +145,23 @@ describeBspNet(
       assert(slashableProviderEventDataBlob, "Event doesn't match Type");
       strictEqual(
         slashableProviderEventDataBlob.provider.toString(),
-        BSP_DOWN_ID,
+        userApi.shConsts.BSP_DOWN_ID,
         "The BSP-Down should be slashable"
       );
 
       // Get the last tick for which the BSP-Down submitted a proof after advancing to the deadline.
       const lastTickResultAfterSlashable =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+          userApi.shConsts.BSP_DOWN_ID
+        );
       assert(lastTickResultAfterSlashable.isOk);
       const lastTickBspDownSubmittedProofAfterSlashable =
         lastTickResultAfterSlashable.asOk.toNumber();
 
       // The new last tick should be equal to the last tick before BSP-Down was marked as slashable plus one challenge period.
-      const challengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        userApi.shConsts.DUMMY_BSP_ID
+      );
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       strictEqual(
@@ -220,14 +206,14 @@ describeBspNet(
 
     it("New storage request sent by user, to only one BSP", async () => {
       // Pause BSP-Two and BSP-Three.
-      await pauseBspContainer("sh-bsp-two");
-      await pauseBspContainer("sh-bsp-three");
+      await userApi.docker.pauseBspContainer("sh-bsp-two");
+      await userApi.docker.pauseBspContainer("sh-bsp-three");
 
       // Send transaction to create new storage request.
       const source = "res/adolphus.jpg";
       const location = "test/adolphus.jpg";
       const bucketName = "nothingmuch-2";
-      const fileData = await userApi.sendNewStorageRequest(source, location, bucketName);
+      const fileData = await userApi.file.newStorageRequest(source, location, bucketName);
       oneBspFileData = fileData;
     });
 
@@ -235,7 +221,7 @@ describeBspNet(
       // Wait for the remaining BSP to volunteer.
       await sleep(500);
 
-      const volunteerPending = await assertExtrinsicPresent(userApi, {
+      const volunteerPending = await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",
         checkTxPool: true
@@ -250,7 +236,7 @@ describeBspNet(
 
       // Wait for the BSP to download the file.
       await sleep(5000);
-      const confirmPending = await assertExtrinsicPresent(userApi, {
+      const confirmPending = await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true
@@ -275,13 +261,15 @@ describeBspNet(
       // extrinsic. So we advance two challenge periods ahead to be sure.
 
       // First we get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const challengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate two challenge ticks ahead.
@@ -293,7 +281,7 @@ describeBspNet(
       await sleep(1000);
 
       // There should be at least one pending submit proof transaction.
-      const submitProofsPending = await assertExtrinsicPresent(userApi, {
+      const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true
@@ -304,8 +292,7 @@ describeBspNet(
       const blockResult = await userApi.sealBlock();
 
       // Assert for the event of the proof successfully submitted and verified.
-      const proofAcceptedEvents = assertEventMany(
-        userApi,
+      const proofAcceptedEvents = userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
         blockResult.events
@@ -323,101 +310,80 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.advanceToBlock(currentBlockNumber + storageRequestTtl, {
-        waitForBspProofs: [DUMMY_BSP_ID]
+        waitForBspProofs: [ShConsts.DUMMY_BSP_ID]
       });
 
       // Resume BSP-Two and BSP-Three.
-      await resumeBspContainer({ containerName: "sh-bsp-two" });
-      await resumeBspContainer({ containerName: "sh-bsp-three" });
+      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
+      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
 
       // Wait for BSPs to resync.
-      await sleep(500);
+      await sleep(1000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
         async () => {
-          await assertExtrinsicPresent(userApi, {
+          await userApi.assert.extrinsicPresent({
             module: "fileSystem",
             method: "bspVolunteer",
             checkTxPool: true
           });
         },
-        (err: Error) => {
-          const firstThreeWords = err.message.split(" ").slice(0, 3).join(" ");
-          return firstThreeWords === "No extrinsics matching";
-        },
+        /No extrinsics matching fileSystem\.bspVolunteer found/,
         "There should be no pending volunteer transactions"
       );
     });
 
-    // TODO: FIX THIS TEST
-    it(
-      "BSP-Two still correctly responds to challenges with same forest root",
-      {
-        skip: "Pending bug fix. When BSPs are back online, they don't handle well past challenges."
-      },
-      async () => {
-        // TODO: Remove this
-        const prevLastTickResult =
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
-        assert(prevLastTickResult.isOk);
-        const prevLastTickBspTwoSubmittedProof = prevLastTickResult.asOk.toNumber();
-        console.log(`Prev last tick BSP-Two: ${prevLastTickBspTwoSubmittedProof}`);
+    it("BSP-Two still correctly responds to challenges with same forest root", async () => {
+      // Advance some blocks to allow the BSP to process the challenges and submit proofs.
+      for (let i = 0; i < 20; i++) {
         await userApi.sealBlock();
         await sleep(500);
-        await userApi.sealBlock();
-        await sleep(500);
-        await userApi.sealBlock();
-        await sleep(500);
-        await userApi.sealBlock();
-        await sleep(500);
-        await userApi.sealBlock();
-        await sleep(500);
-        await userApi.sealBlock();
-        await sleep(500);
-
-        // Advance to next challenge tick for BSP-Two.
-        // First we get the last tick for which the BSP submitted a proof.
-        const lastTickResult =
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
-        assert(lastTickResult.isOk);
-        const lastTickBspTwoSubmittedProof = lastTickResult.asOk.toNumber();
-        console.log(`Last tick BSP-Two: ${lastTickBspTwoSubmittedProof}`);
-        // Then we get the challenge period for the BSP.
-        const challengePeriodResult =
-          await userApi.call.proofsDealerApi.getChallengePeriod(BSP_TWO_ID);
-        assert(challengePeriodResult.isOk);
-        const challengePeriod = challengePeriodResult.asOk.toNumber();
-        // Then we calculate the next challenge tick.
-        const nextChallengeTick = lastTickBspTwoSubmittedProof + challengePeriod;
-        // Finally, advance to the next challenge tick.
-        await userApi.advanceToBlock(nextChallengeTick);
-
-        // There should be at least one pending submit proof transaction.
-        const submitProofsPending = await assertExtrinsicPresent(userApi, {
-          module: "proofsDealer",
-          method: "submitProof",
-          checkTxPool: true
-        });
-        assert(submitProofsPending.length > 0);
-
-        // Seal block and check that the transaction was successful.
-        const blockResult = await userApi.sealBlock();
-
-        // Assert for the event of the proof successfully submitted and verified.
-        const proofAcceptedEvents = assertEventMany(
-          userApi,
-          "proofsDealer",
-          "ProofAccepted",
-          blockResult.events
-        );
-        strictEqual(
-          proofAcceptedEvents.length,
-          submitProofsPending.length,
-          "All pending submit proof transactions should have been successful"
-        );
       }
-    );
+
+      // Advance to next challenge tick for BSP-Two.
+      // First we get the last tick for which the BSP submitted a proof.
+      const lastTickResult =
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
+      assert(lastTickResult.isOk);
+      const lastTickBspTwoSubmittedProof = lastTickResult.asOk.toNumber();
+      // Then we get the challenge period for the BSP.
+      const challengePeriodResult =
+        await userApi.call.proofsDealerApi.getChallengePeriod(BSP_TWO_ID);
+      assert(challengePeriodResult.isOk);
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
+      // Then we calculate the next challenge tick.
+      const nextChallengeTick = lastTickBspTwoSubmittedProof + challengePeriod;
+      // Finally, advance to the next challenge tick.
+      await userApi.advanceToBlock(nextChallengeTick);
+
+      // Wait for tasks to execute and for the BSPs to submit proofs.
+      await sleep(500);
+
+      // There should be at least one pending submit proof transaction.
+      const submitProofsPending = await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+      assert(submitProofsPending.length > 0);
+
+      // Seal block and check that the transaction was successful.
+      const blockResult = await userApi.sealBlock();
+
+      // Assert for the event of the proof successfully submitted and verified.
+      const proofAcceptedEvents = userApi.assert.assertEventMany(
+        userApi,
+        "proofsDealer",
+        "ProofAccepted",
+        blockResult.events
+      );
+      strictEqual(
+        proofAcceptedEvents.length,
+        submitProofsPending.length,
+        "All pending submit proof transactions should have been successful"
+      );
+    });
 
     it(
       "Custom challenge is added",
@@ -458,8 +424,7 @@ describeBspNet(
       );
 
       // Check for a file deletion request event.
-      assertEventPresent(
-        userApi,
+      userApi.assert.eventPresent(
         "fileSystem",
         "FileDeletionRequest",
         deleteFileExtrinsicResult.events
@@ -472,13 +437,12 @@ describeBspNet(
       const deletionRequestEnqueuedResult = await userApi.advanceToBlock(
         currentBlockNumber + deletionRequestTtl,
         {
-          waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
         }
       );
 
       // Check for a file deletion request event.
-      assertEventPresent(
-        userApi,
+      userApi.assert.eventPresent(
         "fileSystem",
         "PriorityChallengeForFileDeletionQueued",
         deletionRequestEnqueuedResult.events
@@ -497,13 +461,12 @@ describeBspNet(
       const checkpointChallengeBlockResult = await userApi.advanceToBlock(
         nextCheckpointChallengeBlock,
         {
-          waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
         }
       );
 
       // Check that the event for the priority challenge is emitted.
-      const newCheckpointChallengesEvent = assertEventPresent(
-        userApi,
+      const newCheckpointChallengesEvent = userApi.assert.eventPresent(
         "proofsDealer",
         "NewCheckpointChallenge",
         checkpointChallengeBlockResult.events
@@ -532,12 +495,13 @@ describeBspNet(
       // Calculate next challenge tick for the BSP that has the file.
       // We first get the last tick for which the BSP submitted a proof.
       const dummyBspLastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID);
       assert(dummyBspLastTickResult.isOk);
       const lastTickBspSubmittedProof = dummyBspLastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const dummyBspChallengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      const dummyBspChallengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(dummyBspChallengePeriodResult.isOk);
       const dummyBspChallengePeriod = dummyBspChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -550,12 +514,13 @@ describeBspNet(
       // Calculate next challenge tick for BSP-Two.
       // We first get the last tick for which the BSP submitted a proof.
       const bspTwoLastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.BSP_TWO_ID);
       assert(bspTwoLastTickResult.isOk);
       const bspTwoLastTickBspTwoSubmittedProof = bspTwoLastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const bspTwoChallengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(BSP_TWO_ID);
+      const bspTwoChallengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.BSP_TWO_ID
+      );
       assert(bspTwoChallengePeriodResult.isOk);
       const bspTwoChallengePeriod = bspTwoChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -566,50 +531,52 @@ describeBspNet(
       }
 
       const firstBspToRespond =
-        dummyBspNextChallengeTick < bspTwoNextChallengeTick ? DUMMY_BSP_ID : BSP_TWO_ID;
+        dummyBspNextChallengeTick < bspTwoNextChallengeTick
+          ? ShConsts.DUMMY_BSP_ID
+          : ShConsts.BSP_TWO_ID;
       const secondBspToRespond =
-        dummyBspNextChallengeTick < bspTwoNextChallengeTick ? BSP_TWO_ID : DUMMY_BSP_ID;
+        dummyBspNextChallengeTick < bspTwoNextChallengeTick
+          ? ShConsts.BSP_TWO_ID
+          : ShConsts.DUMMY_BSP_ID;
       const firstBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? dummyBspNextChallengeTick
           : bspTwoNextChallengeTick;
       const secondBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
-          ? bspTwoNextChallengeTick
-          : dummyBspNextChallengeTick;
+          ? bspTwoNextChallengeTick + bspTwoChallengePeriod
+          : dummyBspNextChallengeTick + dummyBspChallengePeriod;
 
-      // TODO: FIX THIS.
-      // TODO: The first challenge block is for BSP-Two, who as of now lags behind in proof
-      // TODO: submissions. We need to fix this.
-      // // Advance to first next challenge block.
-      // await userApi.advanceToBlock(firstBlockToAdvance, {
-      //   waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
-      // });
+      // Advance to first next challenge block.
+      await userApi.advanceToBlock(firstBlockToAdvance, {
+        waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+      });
 
-      // // Wait for BSP to generate the proof and advance one more block.
-      // await sleep(500);
-      // const firstChallengeBlockResult = await userApi.sealBlock();
+      // Wait for BSP to generate the proof and advance one more block.
+      await sleep(500);
+      const firstChallengeBlockResult = await userApi.sealBlock();
 
-      // // Check for a ProofAccepted event.
-      // const firstChallengeBlockEvents = assertEventPresent(
-      //   userApi,
-      //   "proofsDealer",
-      //   "ProofAccepted",
-      //   firstChallengeBlockResult.events
-      // );
-      // const firstChallengeBlockEventDataBlob =
-      //   userApi.events.proofsDealer.ProofAccepted.is(firstChallengeBlockEvents.event) &&
-      //   firstChallengeBlockEvents.event.data;
-      // assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
-      // strictEqual(
-      //   firstChallengeBlockEventDataBlob.provider.toString(),
-      //   firstBspToRespond,
-      //   "The BSP should be the one who submitted the proof."
-      // );
+      // Check for a ProofAccepted event.
+      const firstChallengeBlockEvents = userApi.assert.assertEventMany(
+        userApi,
+        "proofsDealer",
+        "ProofAccepted",
+        firstChallengeBlockResult.events
+      );
+
+      // Check that at least one of the `ProofAccepted` events belongs to `firstBspToRespond`.
+      const atLeastOneEventBelongsToFirstBsp = firstChallengeBlockEvents.some((eventRecord) => {
+        const firstChallengeBlockEventDataBlob =
+          userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
+        assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
+
+        return firstChallengeBlockEventDataBlob.provider.toString() === firstBspToRespond;
+      });
+      assert(atLeastOneEventBelongsToFirstBsp, "No ProofAccepted event belongs to the first BSP");
 
       // Advance to second next challenge block.
       await userApi.advanceToBlock(secondBlockToAdvance, {
-        waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
       // Wait for BSP to generate the proof and advance one more block.
@@ -617,21 +584,22 @@ describeBspNet(
       const secondChallengeBlockResult = await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const secondChallengeBlockEvents = assertEventPresent(
+      const secondChallengeBlockEvents = userApi.assert.assertEventMany(
         userApi,
         "proofsDealer",
         "ProofAccepted",
         secondChallengeBlockResult.events
       );
-      const secondChallengeBlockEventDataBlob =
-        userApi.events.proofsDealer.ProofAccepted.is(secondChallengeBlockEvents.event) &&
-        secondChallengeBlockEvents.event.data;
-      assert(secondChallengeBlockEventDataBlob, "Event doesn't match Type");
-      strictEqual(
-        secondChallengeBlockEventDataBlob.provider.toString(),
-        secondBspToRespond,
-        "The BSP should be the one who submitted the proof."
-      );
+
+      // Check that at least one of the `ProofAccepted` events belongs to `secondBspToRespond`.
+      const atLeastOneEventBelongsToSecondBsp = secondChallengeBlockEvents.some((eventRecord) => {
+        const secondChallengeBlockEventDataBlob =
+          userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
+        assert(secondChallengeBlockEventDataBlob, "Event doesn't match Type");
+
+        return secondChallengeBlockEventDataBlob.provider.toString() === secondBspToRespond;
+      });
+      assert(atLeastOneEventBelongsToSecondBsp, "No ProofAccepted event belongs to the second BSP");
     });
 
     it("File is removed from Forest by BSP", { skip: "Not implemented yet." }, async () => {
