@@ -16,6 +16,7 @@ import * as Files from "./fileHelpers";
 import * as NodeBspNet from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
+import { addBsp } from "./helpers";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -182,8 +183,10 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param events - Optional. The events to search through. If not provided, it will fetch the latest block's events.
        * @returns An array of matching events and their data.
        */
-      eventMany: (module: string, method: string, events?: EventRecord[]) =>
-        Assertions.assertEventMany(this._api, module, method, events),
+      eventMany: async (module: string, method: string, events?: EventRecord[]) => {
+        const evts = events ?? ((await this._api.query.system.events()) as EventRecord[]);
+        return Assertions.assertEventMany(this._api, module, method, evts);
+      },
       /**
        * Asserts that a specific extrinsic is present in the transaction pool or recent blocks.
        * @param options - Options specifying the extrinsic to search for.
@@ -225,19 +228,29 @@ export class BspNetTestApi implements AsyncDisposable {
        * Creates a new bucket.
        *
        * @param bucketName - The name of the bucket to be created.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string) => Files.createBucket(this._api, bucketName),
+      newBucket: (bucketName: string, owner?: KeyringPair) =>
+        Files.createBucket(this._api, bucketName, undefined, owner),
+
       /**
        * Creates a new bucket and submits a new storage request.
        *
        * @param source - The local path to the file to be uploaded.
        * @param location - The StorageHub "location" field of the file to be uploaded.
        * @param bucketName - The name of the bucket to be created.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to file metadata.
        */
-      newStorageRequest: (source: string, location: string, bucketName: string) =>
-        Files.sendNewStorageRequest(this._api, source, location, bucketName)
+      newStorageRequest: (
+        source: string,
+        location: string,
+        bucketName: string,
+        owner?: KeyringPair
+      ) => Files.sendNewStorageRequest(this._api, source, location, bucketName, undefined, owner)
     };
 
     /**
@@ -313,7 +326,17 @@ export class BspNetTestApi implements AsyncDisposable {
     };
 
     const remappedDockerNs = {
-      ...DockerBspNet
+      ...DockerBspNet,
+      onboardBsp: (options: {
+        bspSigner: KeyringPair;
+        name?: string;
+        rocksdb?: boolean;
+        bspKeySeed?: string;
+        bspId?: string;
+        bspStartingWeight?: bigint;
+        maxStorageCapacity?: number;
+        additionalArgs?: string[];
+      }) => addBsp(this._api, options.bspSigner, options)
     };
 
     return Object.assign(this._api, {
