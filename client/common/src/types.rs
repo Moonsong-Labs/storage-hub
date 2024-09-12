@@ -70,6 +70,7 @@ pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
+#[derive(Clone, Debug)]
 pub enum Proven<K, D: Debug> {
     Empty,
     ExactKey(Leaf<K, D>),
@@ -93,8 +94,10 @@ impl<K, D: Debug> Proven<K, D> {
 }
 
 /// Proof of file key(s) in the forest trie.
+#[derive(Clone, Encode, Decode, Debug)]
 pub struct ForestProof<T: TrieLayout> {
     /// The file key that was proven.
+    #[codec(skip)]
     pub proven: Vec<Proven<HasherOutT<T>, ()>>,
     /// The compact proof.
     pub proof: CompactProof,

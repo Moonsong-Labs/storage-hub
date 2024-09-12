@@ -8,6 +8,7 @@ use shc_common::types::{
 };
 use shc_forest_manager::traits::ForestStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
+use sp_core::Encode;
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{AccountId32, Deserialize, KeyTypeId, Serialize};
@@ -108,13 +109,14 @@ pub trait StorageHubClientApi {
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>>;
 
-    // TODO: Implement this method
-    /* #[method(name = "generateForestProof")]
+    // Note: this RPC method returns a Vec<u8> because the `ForestProof` struct is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateForestProof")]
     async fn generate_forest_proof(
         &self,
         key: Option<String>,
         challenged_file_keys: Vec<H256>,
-    ) -> RpcResult<ForestProof<StorageProofsMerkleTrieLayout>>; */
+    ) -> RpcResult<Vec<u8>>;
 
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
@@ -344,12 +346,11 @@ where
             .map_err(into_rpc_error)?)
     }
 
-    // TODO: Fix this implementation:
-    /* async fn generate_forest_proof(
+    async fn generate_forest_proof(
         &self,
         key: Option<String>,
         challenged_file_keys: Vec<H256>,
-    ) -> RpcResult<ForestProof<StorageProofsMerkleTrieLayout>> {
+    ) -> RpcResult<Vec<u8>> {
         let key = FSH::Key::from(key.unwrap_or_default());
 
         let fs =
@@ -358,10 +359,12 @@ where
             })?;
 
         let read_fs = fs.read().await;
-        Ok(read_fs
+        let forest_proof = read_fs
             .generate_proof(challenged_file_keys)
-            .map_err(into_rpc_error)?)
-    } */
+            .map_err(into_rpc_error)?;
+
+        Ok(forest_proof.encode())
+    }
 
     // If a seed is provided, we manually generate and persist it into the file system.
     // In the case a seed is not provided, we delegate generation and insertion to `sr25519_generate_new`, which

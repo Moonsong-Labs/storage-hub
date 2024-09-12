@@ -87,6 +87,21 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       ],
       type: "Option<FileMetadata>"
     },
+    generateForestProof: {
+      description:
+        "Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.",
+      params: [
+        {
+          name: "key",
+          type: "Option<String>"
+        },
+        {
+          name: "challenged_file_keys",
+          type: "Vec<H256>"
+        }
+      ],
+      type: "Vec<u8>"
+    },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [
