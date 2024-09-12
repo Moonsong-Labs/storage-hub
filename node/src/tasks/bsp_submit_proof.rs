@@ -1,15 +1,18 @@
+use std::{future::Future, pin::Pin, sync::Arc};
+
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
 
-use shc_actors_framework::event_bus::EventHandler;
+use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
     types::{RetryStrategy, SubmitProofRequest},
+    BlockchainService,
 };
 use shc_common::types::{
     BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
@@ -139,7 +142,7 @@ where
         // Check if this proof is the next one to be submitted.
         // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
         // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
-        self.check_if_proof_is_outdated(&event).await?;
+        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
@@ -224,8 +227,19 @@ where
             .await?
             .ok_or(anyhow!("Worst case slashable amount is None. Runtime no longer has this provider registered?"))?;
 
-        // TODO: Integrate with the new tip strategy.
-        //self.check_if_proof_is_outdated(&event).await?;
+        let cloned_blockchain = Arc::new(self.storage_hub_handler.blockchain.clone());
+        let cloned_event = Arc::new(event.clone());
+
+        let should_retry = move || {
+            let cloned_blockchain = Arc::clone(&cloned_blockchain);
+            let cloned_event = Arc::clone(&cloned_event);
+
+            Box::pin(async move {
+                Self::check_if_proof_is_outdated(&cloned_blockchain, &cloned_event)
+                    .await
+                    .is_ok()
+            }) as Pin<Box<dyn Future<Output = bool> + Send>>
+        };
 
         // Attempt to submit the extrinsic with retries and tip increase.
         self.storage_hub_handler
@@ -234,7 +248,8 @@ where
                 call,
                 RetryStrategy::default()
                     .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
-                    .with_max_tip(max_tip as f64),
+                    .with_max_tip(max_tip as f64)
+                    .with_should_retry(Some(Box::new(should_retry))),
             )
             .await
             .map_err(|e| {
@@ -435,13 +450,11 @@ where
     }
 
     async fn check_if_proof_is_outdated(
-        &self,
+        blockchain: &ActorHandle<BlockchainService>,
         event: &ProcessSubmitProofRequest,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
-        let next_challenge_tick = self
-            .storage_hub_handler
-            .blockchain
+        let next_challenge_tick = blockchain
             .get_next_challenge_tick_for_provider(event.data.provider_id)
             .await?;
 

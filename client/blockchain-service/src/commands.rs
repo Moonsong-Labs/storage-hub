@@ -634,6 +634,12 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
                 return Ok(());
             }
 
+            if let Some(ref should_retry) = retry_strategy.should_retry {
+                if !should_retry().await {
+                    return Err(anyhow::anyhow!("Exhausted retry strategy"));
+                }
+            }
+
             warn!(target: LOG_TARGET, "Failed to submit transaction, attempt #{}", retry_count + 1);
         }
 

@@ -4,7 +4,7 @@ use frame_system::EventRecord;
 use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMutation};
 use sp_core::H256;
 use sp_runtime::DispatchError;
-use std::{cmp::Ordering, time::Duration};
+use std::{cmp::Ordering, future::Future, pin::Pin, time::Duration};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -144,6 +144,8 @@ pub struct RetryStrategy {
     /// This is a constant value that is used to calculate the tip multiplier.
     /// A higher value will make tips grow faster.
     pub base_multiplier: f64,
+    /// An optional check function to determine if the extrinsic should be retried.
+    pub should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
 }
 
 impl RetryStrategy {
@@ -154,6 +156,7 @@ impl RetryStrategy {
             timeout,
             max_tip,
             base_multiplier,
+            should_retry: None,
         }
     }
 
@@ -169,6 +172,19 @@ impl RetryStrategy {
 
     pub fn with_max_tip(mut self, max_tip: f64) -> Self {
         self.max_tip = max_tip;
+        self
+    }
+
+    pub fn with_base_multiplier(mut self, base_multiplier: f64) -> Self {
+        self.base_multiplier = base_multiplier;
+        self
+    }
+
+    pub fn with_should_retry(
+        mut self,
+        should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
+    ) -> Self {
+        self.should_retry = should_retry;
         self
     }
 
@@ -197,6 +213,7 @@ impl Default for RetryStrategy {
             timeout: Duration::from_secs(30),
             max_tip: 0.0,
             base_multiplier: 2.0,
+            should_retry: None,
         }
     }
 }
