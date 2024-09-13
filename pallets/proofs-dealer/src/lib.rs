@@ -210,7 +210,7 @@ pub mod pallet {
         /// blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
         /// that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
         #[pallet::constant]
-        type MinimumNotFullBlocksRatio: Get<Perbill>;
+        type MinNotFullBlocksRatio: Get<Perbill>;
     }
 
     #[pallet::pallet]

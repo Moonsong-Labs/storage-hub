@@ -440,7 +440,7 @@ where
         weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
-        let min_non_full_blocks_ratio = T::MinimumNotFullBlocksRatio::get();
+        let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
         let min_non_full_blocks =
             min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
 
