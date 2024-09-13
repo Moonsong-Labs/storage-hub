@@ -400,7 +400,7 @@ where
                         > T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Increment the counter of blocks that are not full.
-                    NotFullBlocksCount::<T>::mutate(|n| n.saturating_add(1u32.into()));
+                    NotFullBlocksCount::<T>::mutate(|n| *n = n.saturating_add(1u32.into()));
                     weight.consume(T::DbWeight::get().reads_writes(1, 1));
                 }
             }
@@ -429,30 +429,34 @@ where
                         > T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Decrement the counter of blocks that are not full.
-                    NotFullBlocksCount::<T>::mutate(|n| n.saturating_sub(1u32.into()));
+                    NotFullBlocksCount::<T>::mutate(|n| *n = n.saturating_sub(1u32.into()));
                     weight.consume(T::DbWeight::get().reads_writes(1, 1));
                 }
             }
         }
 
         // At this point, we have an updated count of blocks that were not full in the past `BlockFullnessPeriod`.
-        let not_full_blocks_count = NotFullBlocksCount::<T>::get();
         weight.consume(T::DbWeight::get().reads_writes(1, 0));
+        if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get() {
+            // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
+            let not_full_blocks_count = NotFullBlocksCount::<T>::get();
+            weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
-        // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
-        let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
-        let min_non_full_blocks =
-            min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
+            // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
+            let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
+            let min_non_full_blocks =
+                min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
 
-        // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
-        if not_full_blocks_count > min_non_full_blocks {
-            // The network is NOT considered to be under a spam attack, so we resume the `ChallengesTicker`.
-            ChallengesTickerPaused::<T>::set(false);
-        } else {
-            // At this point, the network is presumably under a spam attack, so we pause the `ChallengesTicker`.
-            ChallengesTickerPaused::<T>::set(true);
+            // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
+            if not_full_blocks_count > min_non_full_blocks {
+                // The network is NOT considered to be under a spam attack, so we resume the `ChallengesTicker`.
+                ChallengesTickerPaused::<T>::set(false);
+            } else {
+                // At this point, the network is presumably under a spam attack, so we pause the `ChallengesTicker`.
+                ChallengesTickerPaused::<T>::set(true);
+            }
+            weight.consume(T::DbWeight::get().reads_writes(1, 1));
         }
-        weight.consume(T::DbWeight::get().reads_writes(1, 1));
     }
 
     /// Generate a new round of challenges, be it random or checkpoint.

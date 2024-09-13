@@ -1,26 +1,12 @@
-use std::collections::BTreeMap;
-use std::vec;
+use std::{collections::BTreeMap, vec};
 
-use crate::pallet::Event;
-use crate::types::{
-    ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
-    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
-    MaxSubmittersPerTickFor, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-    TargetTicksStorageOfSubmittersFor,
-};
-use crate::{mock::*, types::Proof};
-use crate::{
-    ChallengesTicker, LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor,
-    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
-    ValidProofSubmittersLastTicks,
-};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
     pallet_prelude::Weight,
     traits::{
         fungible::{Mutate, MutateHold},
-        OnIdle, OnPoll,
+        OnFinalize, OnIdle, OnPoll,
     },
     weights::WeightMeter,
     BoundedBTreeSet,
@@ -31,12 +17,29 @@ use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
 use sp_trie::CompactProof;
 
+use crate::{
+    mock::*,
+    pallet::Event,
+    types::{
+        ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
+        CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
+        MaxSubmittersPerTickFor, Proof, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, TargetTicksStorageOfSubmittersFor,
+    },
+    ChallengesTicker, LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor,
+    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
+    ValidProofSubmittersLastTicks,
+};
+
 fn run_to_block(n: u64) {
     while System::block_number() < n {
         System::set_block_number(System::block_number() + 1);
 
         // Trigger any on_poll hook execution.
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Trigger any on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
     }
 }
 

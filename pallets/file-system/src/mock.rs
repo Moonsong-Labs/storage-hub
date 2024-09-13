@@ -74,6 +74,7 @@ fn roll_one_block() -> BlockNumber {
     System::set_block_number(System::block_number() + 1);
     ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
     FileSystem::on_idle(System::block_number(), Weight::MAX);
+    ProofsDealer::on_finalize(System::block_number());
     System::block_number()
 }
 
