@@ -28,7 +28,10 @@ pub mod pallet {
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
         ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
     };
-    use sp_runtime::traits::{Convert, Saturating};
+    use sp_runtime::{
+        traits::{CheckedSub, Convert, Saturating},
+        Perbill,
+    };
     use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
 
@@ -188,6 +191,26 @@ pub mod pallet {
         /// cleared from storage.
         #[pallet::constant]
         type BlockFullnessPeriod: Get<BlockNumberFor<Self>>;
+
+        /// The minimum unused weight that a block must have to be considered _not_ full.
+        ///
+        /// This is used as part of the criteria for checking if the network is presumably under a spam attack.
+        /// For example, this can be set to the benchmarked weight of a `submit_proof` extrinsic, which would
+        /// mean that a block is not considered full if a `submit_proof` extrinsic could have still fit in it.
+        #[pallet::constant]
+        type BlockFullnessHeadroom: Get<Weight>;
+
+        /// The minimum ratio (or percentage if you will) of blocks that must be considered _not_ full,
+        /// from the total number of [`Config::BlockFullnessPeriod`] blocks taken into account.
+        ///
+        /// If less than this percentage of blocks are not full, the networks is considered to be presumably
+        /// under a spam attack.
+        /// This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
+        /// if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+        /// blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
+        /// that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+        #[pallet::constant]
+        type MinimumNotFullBlocksRatio: Get<Perbill>;
     }
 
     #[pallet::pallet]
@@ -341,7 +364,6 @@ pub mod pallet {
     ///
     /// This is used to check if the network is presumably under a spam attack.
     /// It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
-    /// The oldest block number is stored in [`OldestBlockNumberWeightRegistered`].
     #[pallet::storage]
     #[pallet::getter(fn past_blocks_fullness)]
     pub type PastBlocksWeight<T: Config> =
@@ -352,15 +374,7 @@ pub mod pallet {
     /// This is used to check if the network is presumably under a spam attack.
     #[pallet::storage]
     #[pallet::getter(fn not_full_blocks_count)]
-    pub type NotFullBlocksCount<T: Config> = StorageValue<_, u32, ValueQuery>;
-
-    /// The oldest block number for which the block weight was registered.
-    ///
-    /// This is used to clear the storage of past blocks.
-    #[pallet::storage]
-    #[pallet::getter(fn oldest_block_fullness_number)]
-    pub type OldestBlockNumberWeightRegistered<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NotFullBlocksCount<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -660,7 +674,7 @@ pub mod pallet {
         /// let block builders know how much weight to reserve for it
         /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
         fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
-            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 3)
+            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(0, 2)
         }
 
         fn on_finalize(block_number: BlockNumberFor<T>) {
@@ -672,18 +686,14 @@ pub mod pallet {
             PastBlocksWeight::<T>::insert(block_number, weight_used_for_class);
 
             // Get the oldest block weight registered.
-            let oldest_block_fullness_number = OldestBlockNumberWeightRegistered::<T>::get();
             let block_fullness_period = T::BlockFullnessPeriod::get();
 
-            // Check if the oldest block weight registered is older than `BlockFullnessPeriod` + 1.
-            if block_number.saturating_sub(oldest_block_fullness_number)
-                > block_fullness_period.saturating_add(1u32.into())
+            // Clear the storage for block at `current_block` - (`BlockFullnessPeriod` + 1).
+            if let Some(oldest_block_fullness_number) =
+                block_number.checked_sub(&block_fullness_period.saturating_add(1u32.into()))
             {
                 // If it is older than `BlockFullnessPeriod` + 1, we clear the storage.
                 PastBlocksWeight::<T>::remove(oldest_block_fullness_number);
-                OldestBlockNumberWeightRegistered::<T>::put(
-                    oldest_block_fullness_number.saturating_add(1u32.into()),
-                );
             }
         }
 

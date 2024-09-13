@@ -1,7 +1,7 @@
 use codec::Encode;
 use frame_support::{
     ensure,
-    pallet_prelude::DispatchResult,
+    pallet_prelude::{DispatchClass, DispatchResult},
     traits::{fungible::Mutate, tokens::Preservation, Get, Randomness},
     weights::{Weight, WeightMeter},
     BoundedBTreeSet,
@@ -36,10 +36,10 @@ use crate::{
         RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
-    ChallengesQueue, ChallengesTicker, Error, Event, LastCheckpointTick, LastDeletedTick,
-    LastTickProviderSubmittedAProofFor, Pallet, PriorityChallengesQueue, SlashableProviders,
-    TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
-    ValidProofSubmittersLastTicks,
+    ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
+    LastDeletedTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
+    PastBlocksWeight, PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed,
+    TickToCheckpointChallenges, TickToProvidersDeadlines, ValidProofSubmittersLastTicks,
 };
 
 macro_rules! expect_or_err {
@@ -364,6 +364,95 @@ where
         }
 
         Ok(())
+    }
+
+    /// Check if the network is presumably under a spam attack.
+    ///
+    /// The function looks at the weight used in the past `BlockFullnessPeriod` blocks, comparing it
+    /// with the maximum allowed weight (`max_weight_for_class`) for the dispatch class of `submit_proof` extrinsics.
+    /// The idea is to track blocks that have not been filled to capacity within a
+    /// specific period (`BlockFullnessPeriod`) and determine if there is enough "headroom"
+    /// (unused block capacity) to consider the network not under spam.
+    pub fn do_check_spamming_condition(weight: &mut WeightMeter) {
+        // Get the maximum weight for the dispatch class of `submit_proof` extrinsics.
+        let weights = T::BlockWeights::get();
+        let max_weight_for_class = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+
+        let current_block = frame_system::Pallet::<T>::block_number();
+
+        // This would only be `None` if the block number is 0, so this should be safe.
+        if let Some(prev_block) = current_block.checked_sub(&1u32.into()) {
+            // Get the weight usage in the previous block.
+            weight.consume(T::DbWeight::get().reads_writes(1, 0));
+            if let Some(weight_used_in_prev_block) = PastBlocksWeight::<T>::get(prev_block) {
+                // Check how much weight was left in the previous block, compared to the maximum weight.
+                // This is computed both for proof size and ref time.
+                let weight_left_in_prev_block =
+                    max_weight_for_class.saturating_sub(weight_used_in_prev_block);
+
+                // If the weight left in the previous block is more than the headroom, for both proof size or ref time,
+                // we consider the previous block to be NOT full and count it as such.
+                if weight_left_in_prev_block.ref_time() > T::BlockFullnessHeadroom::get().ref_time()
+                    && weight_left_in_prev_block.proof_size()
+                        > T::BlockFullnessHeadroom::get().proof_size()
+                {
+                    // Increment the counter of blocks that are not full.
+                    NotFullBlocksCount::<T>::mutate(|n| n.saturating_add(1u32.into()));
+                    weight.consume(T::DbWeight::get().reads_writes(1, 1));
+                }
+            }
+        }
+
+        // This would be `None` during the first `BlockFullnessPeriod` + 1 blocks.
+        if let Some(oldest_block_fullness_number) =
+            current_block.checked_sub(&T::BlockFullnessPeriod::get().saturating_add(1u32.into()))
+        {
+            // Get the weight usage in the oldest registered block.
+            weight.consume(T::DbWeight::get().reads_writes(1, 0));
+            if let Some(weight_used_in_oldest_block) =
+                PastBlocksWeight::<T>::get(oldest_block_fullness_number)
+            {
+                // Check how much weight was left in the oldest block, compared to the maximum weight.
+                // This is computed both for proof size and ref time.
+                let weight_left_in_oldest_block =
+                    max_weight_for_class.saturating_sub(weight_used_in_oldest_block);
+
+                // If the weight left in the oldest block is more than the headroom, for both proof size or ref time,
+                // we consider the oldest block to be NOT full. If that is the case, we have to remove it from the
+                // count as it is now out of the `BlockFullnessPeriod` of blocks taken into account.
+                if weight_left_in_oldest_block.ref_time()
+                    > T::BlockFullnessHeadroom::get().ref_time()
+                    && weight_left_in_oldest_block.proof_size()
+                        > T::BlockFullnessHeadroom::get().proof_size()
+                {
+                    // Decrement the counter of blocks that are not full.
+                    NotFullBlocksCount::<T>::mutate(|n| n.saturating_sub(1u32.into()));
+                    weight.consume(T::DbWeight::get().reads_writes(1, 1));
+                }
+            }
+        }
+
+        // At this point, we have an updated count of blocks that were not full in the past `BlockFullnessPeriod`.
+        let not_full_blocks_count = NotFullBlocksCount::<T>::get();
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
+        // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
+        let min_non_full_blocks_ratio = T::MinimumNotFullBlocksRatio::get();
+        let min_non_full_blocks =
+            min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
+
+        // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
+        if not_full_blocks_count > min_non_full_blocks {
+            // The network is NOT considered to be under a spam attack, so we resume the `ChallengesTicker`.
+            ChallengesTickerPaused::<T>::set(false);
+        } else {
+            // At this point, the network is presumably under a spam attack, so we pause the `ChallengesTicker`.
+            ChallengesTickerPaused::<T>::set(true);
+        }
+        weight.consume(T::DbWeight::get().reads_writes(1, 1));
     }
 
     /// Generate a new round of challenges, be it random or checkpoint.
