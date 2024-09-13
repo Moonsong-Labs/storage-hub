@@ -1409,6 +1409,10 @@ declare module "@polkadot/api-base/types/events" {
     };
     proofsDealer: {
       /**
+       * The [`ChallengesTicker`] has been paused or unpaused.
+       **/
+      ChallengesTickerSet: AugmentedEvent<ApiType, [paused: bool], { paused: bool }>;
+      /**
        * A set of mutations has been applied to the Forest.
        **/
       MutationsApplied: AugmentedEvent<

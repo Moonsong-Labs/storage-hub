@@ -171,9 +171,11 @@ export async function runToNextChallengePeriodBlock(
   nextChallengeTick: number,
   provider: string
 ): Promise<number> {
-  const challengeTickToChallengedProviders =
-    await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeTick, provider);
-  strictEqual(challengeTickToChallengedProviders.isSome, true);
+  const tickToProvidersDeadlines = await api.query.proofsDealer.tickToProvidersDeadlines(
+    nextChallengeTick,
+    provider
+  );
+  strictEqual(tickToProvidersDeadlines.isSome, true);
 
   const blockNumber = await api.query.system.number();
   for (let i = blockNumber.toNumber(); i < nextChallengeTick - 1; i++) {
