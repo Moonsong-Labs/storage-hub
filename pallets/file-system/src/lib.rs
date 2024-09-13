@@ -703,8 +703,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let maybe_collection_id =
-                Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id)?;
+            Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id)?;
 
             Self::deposit_event(Event::MoveBucketRequested {
                 who,
