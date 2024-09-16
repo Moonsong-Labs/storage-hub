@@ -25,7 +25,7 @@ import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
 import * as ShConsts from "./consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
 import invariant from "tiny-invariant";
-import * as fs from "fs";
+import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 
 const exec = util.promisify(child_process.exec);
