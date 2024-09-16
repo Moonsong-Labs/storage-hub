@@ -1,3 +1,4 @@
+use codec::{Decode, Encode};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::debug;
@@ -344,9 +345,11 @@ where
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        for file_key in &file_keys {
-            trie.insert(file_key.as_ref(), b"")
-                .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
+        // Batch insert all keys
+        for file_metadata in files_metadata {
+            let file_key = file_metadata.file_key::<T::Hash>();
+            trie.insert(file_key.as_ref(), file_metadata.encode().as_slice())
+                .map_err(|_| ForestStorageError::FailedToInsertFileKey(file_key))?;
         }
 
         // Drop trie to free `self`.
@@ -357,6 +360,22 @@ where
         self.commit()?;
 
         Ok(file_keys)
+    }
+
+    fn get_file_metadata(
+        &self,
+        file_key: &HasherOutT<T>,
+    ) -> Result<Option<FileMetadata>, ErrorT<T>> {
+        let db = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
+        let encoded_metadata = trie.get(file_key.as_ref())?;
+        match encoded_metadata {
+            Some(data) => {
+                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
+                Ok(Some(decoded_metadata))
+            }
+            None => Ok(None),
+        }
     }
 
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
@@ -470,6 +489,35 @@ mod tests {
     fn test_remove_non_existent_file_key() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
         assert!(forest_storage.delete_file_key(&[0u8; 32].into()).is_ok());
+    }
+
+    #[test]
+    fn test_get_file_metadata() {
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
+
+        let mut keys = Vec::new();
+        for i in 0..50 {
+            let file_metadata = FileMetadata {
+                bucket_id: "bucket".as_bytes().to_vec(),
+                location: "location".as_bytes().to_vec(),
+                owner: "Alice".as_bytes().to_vec(),
+                file_size: i,
+                fingerprint: Fingerprint::default(),
+            };
+
+            let file_key = forest_storage
+                .insert_files_metadata(&[file_metadata])
+                .unwrap();
+
+            keys.push(*file_key.first().unwrap());
+        }
+
+        let file_metadata = forest_storage.get_file_metadata(&keys[0]).unwrap().unwrap();
+        assert_eq!(file_metadata.file_size, 0);
+        assert_eq!(file_metadata.bucket_id, "bucket".as_bytes());
+        assert_eq!(file_metadata.location, "location".as_bytes());
+        assert_eq!(file_metadata.owner, "Alice".as_bytes());
+        assert_eq!(file_metadata.fingerprint, Fingerprint::default());
     }
 
     #[test]
