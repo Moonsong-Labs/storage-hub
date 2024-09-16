@@ -43,6 +43,21 @@ fn run_to_block(n: u64) {
     }
 }
 
+fn run_to_block_spammed(n: u64) {
+    while System::block_number() < n {
+        System::set_block_number(System::block_number() + 1);
+
+        // Trigger any on_poll hook execution.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Fill up block.
+        // TODO: Set block weight.
+
+        // Trigger any on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+    }
+}
+
 #[test]
 fn challenge_submit_succeed() {
     new_test_ext().execute_with(|| {
@@ -3351,6 +3366,18 @@ fn challenges_ticker_paused_works() {
         assert_eq!(ChallengesTicker::<Test>::get(), current_tick + 10);
     });
 }
+
+#[test]
+fn challenges_ticker_paused_only_after_tolerance_blocks() {}
+
+#[test]
+fn challenges_ticker_paused_when_half_blocks_are_full() {}
+
+#[test]
+fn challenges_ticker_not_paused_when_more_than_half_blocks_are_not_full() {}
+
+#[test]
+fn challenges_ticker_not_paused_when_blocks_dont_run_on_poll() {}
 
 mod on_idle_hook_tests {
     use super::*;
