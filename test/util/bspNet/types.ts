@@ -156,6 +156,11 @@ export type BspNetConfig = {
   capacity?: bigint;
 
   /**
+   * Optional parameter to set the timeout interval for submit extrinsic retries.
+   */
+  extrinsicRetryTimeout?: number;
+
+  /**
    * Optional parameter to set the weight of the BSP.
    * Measured in bytes.
    */
@@ -253,6 +258,8 @@ export type TestOptions = {
   capacity?: bigint;
   /** Set a custom BSP weight */
   bspStartingWeight?: bigint;
+  /** Set a custom timeout interval for submit extrinsic retries */
+  extrinsicRetryTimeout?: number;
 };
 
 /**

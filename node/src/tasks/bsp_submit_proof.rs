@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
@@ -249,6 +249,7 @@ where
                 RetryStrategy::default()
                     .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
                     .with_max_tip(max_tip as f64)
+                    .with_timeout(Duration::from_secs(self.storage_hub_handler.provider_config.extrinsic_retry_timeout))
                     .with_should_retry(Some(Box::new(should_retry))),
             )
             .await

@@ -50,6 +50,7 @@ export async function describeBspNet<
   for (const bspNetConfig of bspNetConfigCases) {
     bspNetConfig.capacity = options.capacity;
     bspNetConfig.bspStartingWeight = options.bspStartingWeight;
+    bspNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 

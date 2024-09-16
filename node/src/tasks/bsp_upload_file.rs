@@ -388,7 +388,12 @@ where
                 call,
                 RetryStrategy::default()
                     .with_max_retries(MAX_CONFIRM_STORING_REQUEST_TRY_COUNT)
-                    .with_max_tip(MAX_CONFIRM_STORING_REQUEST_TIP as f64),
+                    .with_max_tip(MAX_CONFIRM_STORING_REQUEST_TIP as f64)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
             )
             .await?;
 

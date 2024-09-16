@@ -32,6 +32,8 @@ pub struct ProviderOptions {
     pub max_storage_capacity: Option<StorageDataUnit>,
     /// Jump capacity (bytes).
     pub jump_capacity: Option<StorageDataUnit>,
+    /// Extrinsic retry timeout in seconds.
+    pub extrinsic_retry_timeout: u64,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

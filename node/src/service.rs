@@ -211,6 +211,7 @@ where
             storage_path,
             max_storage_capacity,
             jump_capacity,
+            extrinsic_retry_timeout,
             ..
         }) => {
             info!(
@@ -235,7 +236,12 @@ where
                 )
                 .await;
 
-            storage_hub_builder.setup(storage_path.clone(), *max_storage_capacity, *jump_capacity);
+            storage_hub_builder.setup(
+                storage_path.clone(),
+                *max_storage_capacity,
+                *jump_capacity,
+                *extrinsic_retry_timeout,
+            );
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 

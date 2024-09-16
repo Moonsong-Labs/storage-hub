@@ -17,6 +17,8 @@ use shc_forest_manager::{
 };
 use shc_rpc::StorageHubClientRpcConfig;
 
+const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 30;
+
 use super::{
     forest_storage::{ForestStorageCaching, ForestStorageSingle},
     handler::{ProviderConfig, StorageHubHandler},
@@ -104,6 +106,7 @@ where
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
     max_storage_capacity: Option<StorageDataUnit>,
     jump_capacity: Option<StorageDataUnit>,
+    extrinsic_retry_timeout: u64,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -121,6 +124,7 @@ where
             forest_storage_handler: None,
             max_storage_capacity: None,
             jump_capacity: None,
+            extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
         }
     }
 
@@ -154,6 +158,11 @@ where
 
     pub fn with_jump_capacity(&mut self, jump_capacity: Option<StorageDataUnit>) -> &mut Self {
         self.jump_capacity = jump_capacity;
+        self
+    }
+
+    pub fn with_retry_timeout(&mut self, extrinsic_retry_timeout: u64) -> &mut Self {
+        self.extrinsic_retry_timeout = extrinsic_retry_timeout;
         self
     }
 
@@ -306,6 +315,7 @@ where
                     .max_storage_capacity
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
         )
     }
@@ -348,6 +358,7 @@ where
                     .max_storage_capacity
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
         )
     }
@@ -388,6 +399,7 @@ where
             ProviderConfig {
                 max_storage_capacity: 0,
                 jump_capacity: 0,
+                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
         )
     }
@@ -399,6 +411,7 @@ pub trait RequiredStorageProviderSetup {
         storage_path: Option<String>,
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
+        extrinsic_retry_timeout: u64,
     );
 }
 
@@ -412,6 +425,7 @@ where
         storage_path: Option<String>,
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
+        extrinsic_retry_timeout: u64,
     ) {
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
@@ -419,6 +433,7 @@ where
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
+        self.with_retry_timeout(extrinsic_retry_timeout);
     }
 }
 
@@ -432,6 +447,7 @@ where
         storage_path: Option<String>,
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
+        extrinsic_retry_timeout: u64,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -442,6 +458,7 @@ where
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
+        self.with_retry_timeout(extrinsic_retry_timeout);
     }
 }
 
@@ -455,6 +472,7 @@ where
         storage_path: Option<String>,
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
+        extrinsic_retry_timeout: u64,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -465,6 +483,7 @@ where
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
+        self.with_retry_timeout(extrinsic_retry_timeout);
     }
 }
 
@@ -478,6 +497,7 @@ where
         storage_path: Option<String>,
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
+        extrinsic_retry_timeout: u64,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -488,6 +508,7 @@ where
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
+        self.with_retry_timeout(extrinsic_retry_timeout);
     }
 }
 
@@ -501,8 +522,10 @@ where
         _storage_path: Option<String>,
         _max_storage_capacity: Option<StorageDataUnit>,
         _jump_capacity: Option<StorageDataUnit>,
+        extrinsic_retry_timeout: u64,
     ) {
         self.setup_storage_layer(None);
+        self.with_retry_timeout(extrinsic_retry_timeout);
     }
 }
 
