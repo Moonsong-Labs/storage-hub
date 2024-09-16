@@ -724,18 +724,26 @@ pub trait CommitmentVerifier {
 }
 
 /// Enum representing the type of mutation (addition or removal of a key).
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug)]
+#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug)]
 pub enum TrieMutation {
     Add(TrieAddMutation),
     Remove(TrieRemoveMutation),
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
-pub struct TrieAddMutation;
+#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct TrieAddMutation {
+    pub value: Vec<u8>,
+}
 
 impl Into<TrieMutation> for TrieAddMutation {
     fn into(self) -> TrieMutation {
         TrieMutation::Add(self)
+    }
+}
+
+impl TrieAddMutation {
+    pub fn new(value: Vec<u8>) -> Self {
+        Self { value }
     }
 }
 
@@ -762,7 +770,14 @@ pub trait TrieProofDeltaApplier<H: sp_core::Hasher> {
         root: &Self::Key,
         mutations: &[(Self::Key, TrieMutation)],
         proof: &Self::Proof,
-    ) -> Result<(sp_trie::MemoryDB<H>, Self::Key), DispatchError>;
+    ) -> Result<
+        (
+            sp_trie::MemoryDB<H>,
+            Self::Key,
+            Vec<(Self::Key, Option<Vec<u8>>)>,
+        ),
+        DispatchError,
+    >;
 }
 
 /// Interface used by the file system pallet in order to read storage from NFTs pallet (avoiding tight coupling).

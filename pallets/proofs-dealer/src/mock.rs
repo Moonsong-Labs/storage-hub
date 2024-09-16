@@ -243,13 +243,20 @@ where
         _root: &Self::Key,
         mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
-    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+    ) -> Result<
+        (
+            MemoryDB<T::Hash>,
+            Self::Key,
+            Vec<(Self::Key, Option<Vec<u8>>)>,
+        ),
+        DispatchError,
+    > {
         let last_key = mutations.last().unwrap().0;
 
         let db = MemoryDB::<T::Hash>::default();
 
         // Return default db and the last key in mutations, so it is deterministic for testing.
-        Ok((db, last_key))
+        Ok((db, last_key, Vec::new()))
     }
 }
 
