@@ -14,7 +14,7 @@ import {
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
-  { initialised: false },
+  { initialised: false, bspStartingWeight: 5n },
   ({ before, it, createUserApi, beforeEach }) => {
     let api: EnrichedBspApi;
 
@@ -86,14 +86,14 @@ describeBspNet(
       console.log(`Reputation increased from ${repBefore} to ${repAfter}`);
     });
 
-    it("zero reputation can still volunteer and be accepted", async () => {
+    it("lower reputation can still volunteer and be accepted", async () => {
       // Create a new BSP and onboard with no reputation
       await addBsp(api, bspDownKey, {
         name: "sh-bsp-down",
         bspKeySeed: bspDownSeed,
         bspId: ShConsts.BSP_DOWN_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-down"],
-        bspStartingWeight: 0n
+        bspStartingWeight: 1n
       });
       await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 1)));
 
@@ -117,9 +117,8 @@ describeBspNet(
       await api.docker.stopBspContainer("sh-bsp-down");
     });
 
-    // Not sure if this is good test? the times are very dependent on threshold created
     it("BSP two eventually volunteers after threshold curve is met", async () => {
-      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 10)));
+      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 20)));
 
       await addBsp(api, bspTwoKey, {
         name: "sh-bsp-two",
@@ -128,15 +127,29 @@ describeBspNet(
         additionalArgs: ["--keystore-path=/keystore/bsp-two"]
       });
 
-      await api.file.newStorageRequest("res/cloud.jpg", "test/cloud.jpg", "bucket-2"); // T0
-      await api.sealBlock(); // T1
-      await api.sealBlock(); // T2
-      await api.wait.bspVolunteer(); // T3
-      await api.wait.bspStored(); // T4
+      const { fileKey } = await api.file.newStorageRequest(
+        "res/cloud.jpg",
+        "test/cloud.jpg",
+        "bucket-2"
+      ); // T0
+      const bsp1VolunteerBlock = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerBlock(ShConsts.DUMMY_BSP_ID, fileKey)
+      ).asOk.toNumber();
+      const bsp2VolunteerBlock = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerBlock(ShConsts.BSP_TWO_ID, fileKey)
+      ).asOk.toNumber();
 
-      await api.sealBlock(); // T5
-      await api.wait.bspVolunteer(); // T6
-      await api.wait.bspStored(); // T7
+      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp1VolunteerBlock) {
+        await api.advanceToBlock(bsp1VolunteerBlock);
+      }
+      await api.wait.bspVolunteer();
+      await api.wait.bspStored();
+
+      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerBlock) {
+        await api.advanceToBlock(bsp2VolunteerBlock);
+      }
+      await api.wait.bspVolunteer();
+      await api.wait.bspStored();
 
       await api.docker.stopBspContainer("sh-bsp-two");
     });
@@ -165,7 +178,7 @@ describeBspNet(
           ShConsts.BSP_THREE_ID
       );
 
-      // Verify that the BSP with reputation is prioritised over the zero reputation
+      // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
       assert(filtered.length === 1, "BSP with reputation should be prioritised");
       await api.docker.stopBspContainer("sh-bsp-three");
     });
