@@ -251,7 +251,7 @@ where
 
         // Check if the bucket is already stored by the new MSP.
         ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+            !<T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
                 &new_msp_id,
                 &bucket_id
             ),
@@ -271,6 +271,7 @@ where
 
         // Register the move bucket request.
         <PendingMoveBucketRequests<T>>::insert(&new_msp_id, bucket_id, sender);
+        <PendingBucketsToMove<T>>::insert(&bucket_id, ());
 
         let expiration_item = ExpirationItem::MoveBucketRequest((new_msp_id, bucket_id));
         Self::enqueue_expiration_item(expiration_item)?;
@@ -324,6 +325,8 @@ where
             &msp_id,
             bucket_size,
         )?;
+
+        <PendingBucketsToMove<T>>::remove(&bucket_id);
 
         Ok(msp_id)
     }
@@ -1630,7 +1633,6 @@ where
 }
 
 mod hooks {
-    use crate::MoveBucketRequestExpirations;
     use crate::{
         pallet,
         types::MerkleHash,
@@ -1639,6 +1641,7 @@ mod hooks {
         PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
         StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
+    use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
     use shp_traits::TrieRemoveMutation;
@@ -1818,6 +1821,7 @@ mod hooks {
             }
 
             PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
+            PendingBucketsToMove::<T>::remove(&bucket_id);
 
             remaining_weight.saturating_reduce(potential_weight);
 
