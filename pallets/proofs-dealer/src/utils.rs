@@ -556,11 +556,12 @@ where
                 let weight_left_in_prev_block =
                     max_weight_for_class.saturating_sub(weight_used_in_prev_block);
 
-                // If the weight left in the previous block is more than the headroom, for both proof size or ref time,
+                // If the weight left in the previous block is greater or equal than the headroom, for both proof size or ref time,
                 // we consider the previous block to be NOT full and count it as such.
-                if weight_left_in_prev_block.ref_time() > T::BlockFullnessHeadroom::get().ref_time()
+                if weight_left_in_prev_block.ref_time()
+                    >= T::BlockFullnessHeadroom::get().ref_time()
                     && weight_left_in_prev_block.proof_size()
-                        > T::BlockFullnessHeadroom::get().proof_size()
+                        >= T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Increment the counter of blocks that are not full.
                     NotFullBlocksCount::<T>::mutate(|n| *n = n.saturating_add(1u32.into()));
@@ -583,13 +584,13 @@ where
                 let weight_left_in_oldest_block =
                     max_weight_for_class.saturating_sub(weight_used_in_oldest_block);
 
-                // If the weight left in the oldest block is more than the headroom, for both proof size or ref time,
+                // If the weight left in the oldest block is greater or equal than the headroom, for both proof size or ref time,
                 // we consider the oldest block to be NOT full. If that is the case, we have to remove it from the
                 // count as it is now out of the `BlockFullnessPeriod` of blocks taken into account.
                 if weight_left_in_oldest_block.ref_time()
-                    > T::BlockFullnessHeadroom::get().ref_time()
+                    >= T::BlockFullnessHeadroom::get().ref_time()
                     && weight_left_in_oldest_block.proof_size()
-                        > T::BlockFullnessHeadroom::get().proof_size()
+                        >= T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Decrement the counter of blocks that are not full.
                     NotFullBlocksCount::<T>::mutate(|n| *n = n.saturating_sub(1u32.into()));
