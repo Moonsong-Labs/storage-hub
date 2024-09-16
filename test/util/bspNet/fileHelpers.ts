@@ -5,6 +5,7 @@ import { shUser } from "../pjsKeyring";
 import * as ShConsts from "./consts";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
+import type { HexString } from "@polkadot/util/types";
 
 export const sendNewStorageRequest = async (
   api: ApiPromise,
@@ -60,10 +61,14 @@ export const sendNewStorageRequest = async (
   };
 };
 
-export const createBucket = async (api: ApiPromise, bucketName: string) => {
+export const createBucket = async (
+  api: ApiPromise,
+  bucketName: string,
+  mspId: HexString = ShConsts.DUMMY_MSP_ID
+) => {
   const createBucketResult = await sealBlock(
     api,
-    api.tx.fileSystem.createBucket(ShConsts.DUMMY_MSP_ID, bucketName, false),
+    api.tx.fileSystem.createBucket(mspId, bucketName, false),
     shUser
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
