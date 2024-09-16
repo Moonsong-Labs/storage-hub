@@ -164,7 +164,8 @@ export class BspNetTestApi implements AsyncDisposable {
 
   private enrichApi() {
     const remappedAssertNs = {
-      ...Assertions,
+      fetchEventData: Assertions.fetchEventData,
+
       /**
        * Asserts that a specific event is present in the given events or the latest block.
        * @param module - The module name of the event.
@@ -204,22 +205,22 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for waiting on specific events or conditions in the BSP network.
      */
     const remappedWaitsNs = {
-      ...Waits,
       /**
        * Waits for a BSP to volunteer for a storage request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: () => Waits.waitForBspVolunteer(this._api),
+      bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
 
       /**
        * Waits for a BSP to confirm storing a file.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: () => Waits.waitForBspStored(this._api)
+      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts)
     };
 
     const remappedFileNs = {
-      ...Files,
       /**
        * Creates a new bucket.
        *
@@ -244,7 +245,6 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for manipulating and interacting with blocks in the BSP network.
      */
     const remappedBlockNs = {
-      ...BspNetBlock,
       /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.
