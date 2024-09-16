@@ -113,6 +113,9 @@ importers:
       tsx:
         specifier: 4.19.0
         version: 4.19.0
+      yaml:
+        specifier: ^2.5.1
+        version: 2.5.1
     devDependencies:
       '@biomejs/biome':
         specifier: 1.8.3
@@ -1983,13 +1986,8 @@ packages:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
 
-  yaml@2.4.5:
-    resolution: {integrity: sha512-aBx2bnqDzVOyNKfsysjA2ms5ZlnjSAW2eG3/L5G/CSujfjLJTJsEw1bGw8kCf04KodQWk1pxlGnZ56CRxiawmg==}
-    engines: {node: '>= 14'}
-    hasBin: true
-
-  yaml@2.5.0:
-    resolution: {integrity: sha512-2wWLbGbYDiSqqIKoPjar3MPgB94ErzCtrNE1FdqGuaO0pi2JGjmE8aW8TDZwzU7vuxcGRdL/4gPQwQ7hD5AMSw==}
+  yaml@2.5.1:
+    resolution: {integrity: sha512-bLQOjaX/ADgQ20isPJRvF0iRUHIxVhYvr53Of7wGcWlO2jvtUlH5m87DsmulFVxRpNLOnI4tB6p/oh8D7kpn9Q==}
     engines: {node: '>= 14'}
     hasBin: true
 
@@ -2802,7 +2800,7 @@ snapshots:
       peer-id: 0.16.0
       tmp-promise: 3.0.3
       typescript: 5.5.4
-      yaml: 2.5.0
+      yaml: 2.5.1
     transitivePeerDependencies:
       - '@polkadot/util'
       - '@swc/core'
@@ -3142,7 +3140,7 @@ snapshots:
 
   docker-compose@0.24.8:
     dependencies:
-      yaml: 2.4.5
+      yaml: 2.5.1
 
   docker-modem@3.0.8:
     dependencies:
@@ -4113,9 +4111,7 @@ snapshots:
 
   y18n@5.0.8: {}
 
-  yaml@2.4.5: {}
-
-  yaml@2.5.0: {}
+  yaml@2.5.1: {}
 
   yargs-parser@20.2.9: {}
 
