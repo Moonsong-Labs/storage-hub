@@ -26,11 +26,11 @@ use crate::{
     mock::*,
     pallet::Event,
     types::{
-        BlockFullnessPeriodFor, ChallengeHistoryLengthFor, ChallengeTicksToleranceFor,
-        ChallengesQueueLengthFor, CheckpointChallengePeriodFor, KeyProof,
-        MaxCustomChallengesPerBlockFor, MaxSubmittersPerTickFor, MinNotFullBlocksRatioFor, Proof,
-        ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-        TargetTicksStorageOfSubmittersFor,
+        BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
+        ChallengeTicksToleranceFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor,
+        KeyProof, MaxCustomChallengesPerBlockFor, MaxSubmittersPerTickFor,
+        MinNotFullBlocksRatioFor, Proof, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, TargetTicksStorageOfSubmittersFor,
     },
     ChallengesTicker, ChallengesTickerPaused, LastCheckpointTick, LastDeletedTick,
     LastTickProviderSubmittedAProofFor, NotFullBlocksCount, SlashableProviders,
@@ -42,7 +42,7 @@ fn run_to_block(n: u64) {
     while System::block_number() < n {
         System::set_block_number(System::block_number() + 1);
 
-        // Trigger any on_poll hook execution.
+        // Trigger on_poll hook execution.
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
 
         // Set weight used to be zero.
@@ -53,7 +53,7 @@ fn run_to_block(n: u64) {
         });
         BlockWeight::<Test>::set(zero_block_weight);
 
-        // Trigger any on_finalize hook execution.
+        // Trigger on_finalize hook execution.
         ProofsDealer::on_finalize(System::block_number());
     }
 }
@@ -62,7 +62,7 @@ fn run_to_block_spammed(n: u64) {
     while System::block_number() < n {
         System::set_block_number(System::block_number() + 1);
 
-        // Trigger any on_poll hook execution.
+        // Trigger on_poll hook execution.
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
 
         // Fill up block.
@@ -78,7 +78,7 @@ fn run_to_block_spammed(n: u64) {
         });
         BlockWeight::<Test>::set(block_weight);
 
-        // Trigger any on_finalize hook execution.
+        // Trigger on_finalize hook execution.
         ProofsDealer::on_finalize(System::block_number());
     }
 }
@@ -3393,13 +3393,159 @@ fn challenges_ticker_paused_works() {
 }
 
 #[test]
-fn challenges_ticker_block_considered_full_with_max_normal_weight() {}
+fn challenges_ticker_block_considered_full_with_max_normal_weight() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate a full block.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set normal weight used to be the maximum.
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal,
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should NOT be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full);
+    });
+}
 
 #[test]
-fn challenges_ticker_block_considered_full_with_weight_left_smaller_than_headroom() {}
+fn challenges_ticker_block_considered_full_with_weight_left_smaller_than_headroom() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate an almost full block.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to NOT leave headroom.
+        let headroom_weight = BlockFullnessHeadroomFor::<Test>::get();
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal - headroom_weight + Weight::from_parts(1, 0),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should NOT be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full);
+    });
+}
 
 #[test]
-fn challenges_ticker_block_considered_not_full_with_weight_left_greater_than_headroom() {}
+fn challenges_ticker_block_considered_not_full_with_weight_left_equal_to_headroom() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate a block with exactly headroom weight left.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to leave headroom.
+        let headroom_weight = BlockFullnessHeadroomFor::<Test>::get();
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal.saturating_sub(headroom_weight),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_block_considered_not_full_with_weight_left_greater_than_headroom() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate a not-full block.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to leave headroom.
+        let headroom_weight = BlockFullnessHeadroomFor::<Test>::get();
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal.saturating_sub(headroom_weight.mul(2)),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+    });
+}
 
 #[test]
 fn challenges_ticker_paused_only_after_tolerance_blocks() {
