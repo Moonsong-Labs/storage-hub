@@ -34,9 +34,9 @@ use crate::{
         MerkleHash, MultiAddresses, PeerIds, ProviderIdFor, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata,
     },
-    BlockRangeToMaximumThreshold, Error, Event, Pallet, PendingFileDeletionRequests,
-    PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps,
-    StorageRequests,
+    BlockRangeToMaximumThreshold, BucketsWithStorageRequests, Error, Event, Pallet,
+    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -228,6 +228,10 @@ where
         Ok((bucket_id, maybe_collection_id))
     }
 
+    /// This does not guarantee that the MSP will have enough storage capacity to store the entire bucket. Therefore,
+    /// between the creation of the request and its expiration, the MSP can increase its capacity before accepting the request.
+    ///
+    /// Forcing the MSP to have enough capacity before the request is created would not enable MSPs to automatically scale based on demand.
     pub(crate) fn do_request_move_bucket(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
@@ -254,6 +258,17 @@ where
             Error::<T>::MspAlreadyStoringBucket
         );
 
+        if <PendingBucketsToMove<T>>::contains_key(&bucket_id) {
+            return Err(Error::<T>::BucketIsBeingMoved.into());
+        }
+
+        // Check if there are any open storage requests for the bucket.
+        // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
+        ensure!(
+            !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id).any(|(_, _)| true),
+            Error::<T>::StorageRequestExists
+        );
+
         // Register the move bucket request.
         <PendingMoveBucketRequests<T>>::insert(&new_msp_id, bucket_id, sender);
 
@@ -261,6 +276,56 @@ where
         Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(())
+    }
+
+    pub(crate) fn do_msp_accept_move_bucket_request(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
+            .ok_or(Error::<T>::NotAMsp)?;
+
+        // Check if the sender is the MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check if the move bucket request exists for MSP and bucket.
+        let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
+        ensure!(
+            move_bucket_requester.is_some(),
+            Error::<T>::MoveBucketRequestNotFound
+        );
+
+        let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
+
+        // Decrease the used capacity of the current MSP.
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+
+        // Check if MSP has enough available capacity to store the bucket.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
+                >= bucket_size,
+            Error::<T>::InsufficientAvailableCapacity
+        );
+
+        // Change the MSP that stores the bucket.
+        <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
+
+        // Decrease the used capacity of the previous MSP.
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &previous_msp_id,
+            bucket_size,
+        )?;
+
+        // Increase the used capacity of the new MSP.
+        <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
+
+        Ok(msp_id)
     }
 
     /// Update the privacy of a bucket.
@@ -364,6 +429,13 @@ where
             Error::<T>::NotBucketOwner
         );
 
+        // Check that the bucket is not being moved.
+        // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
+        ensure!(
+            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            Error::<T>::BucketIsBeingMoved
+        );
+
         // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
         let msp = if let Some(ref msp_id) = msp_id {
             // Check that the received Provider ID corresponds to a valid MSP.
@@ -431,6 +503,8 @@ where
 
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+
+        <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
         let expiration_item = ExpirationItem::StorageRequest(file_key);
         Self::enqueue_expiration_item(expiration_item)?;
@@ -530,6 +604,12 @@ where
         <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
             bucket_id,
             new_bucket_root,
+        )?;
+
+        // Increase size of the bucket.
+        <T::Providers as MutateBucketsInterface>::increase_bucket_size(
+            &bucket_id,
+            storage_request_metadata.size,
         )?;
 
         // Increase the used capacity of the MSP
@@ -916,6 +996,9 @@ where
         // Remove storage request.
         <StorageRequests<T>>::remove(&file_key);
 
+        // A revoked storage request is not considered active anymore.
+        <BucketsWithStorageRequests<T>>::remove(&storage_request_metadata.bucket_id, &file_key);
+
         Ok(())
     }
 
@@ -1193,6 +1276,9 @@ where
                 Error::<T>::MspNotStoringBucket
             );
 
+            // Decrease size of the bucket.
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+
             // Get the Bucket's root
             let bucket_root =
                 <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
@@ -1310,6 +1396,9 @@ where
                     &file_key,
                     Some(TrieRemoveMutation),
                 )?;
+
+                // Decrease size of the bucket.
+                <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
                 // Emit event.
                 Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
@@ -1585,15 +1674,15 @@ mod hooks {
 
         fn process_block_expired_items(block: BlockNumberFor<T>, remaining_weight: &mut Weight) {
             let db_weight = T::DbWeight::get();
-            let minimum_required_weight = db_weight.reads_writes(1, 1);
+            let minimum_required_weight_processing_expired_items = db_weight.reads_writes(1, 1);
 
-            if !remaining_weight.all_gte(minimum_required_weight) {
+            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
                 return;
             }
 
             // Remove expired storage requests if any existed and process them.
             let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&block);
-            remaining_weight.saturating_reduce(minimum_required_weight);
+            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
             // TODO: process all the expired storage requests. If not, we should return early.
@@ -1607,10 +1696,15 @@ mod hooks {
                 remaining_weight.saturating_reduce(db_weight.writes(1));
             }
 
+            // Check if there is enough remaining weight to process the expired file deletion requests.
+            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+                return;
+            }
+
             // Remove expired file deletion requests if any existed and process them.
             let mut expired_file_deletion_requests =
                 FileDeletionRequestExpirations::<T>::take(&block);
-            remaining_weight.saturating_reduce(minimum_required_weight);
+            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
             // TODO: process all the expired file deletion requests. If not, we should return early.
@@ -1624,12 +1718,23 @@ mod hooks {
                 remaining_weight.saturating_reduce(db_weight.writes(1));
             }
 
+            // Check if there is enough remaining weight to process expired move bucket requests
+            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+                return;
+            }
+
             // Remove expired move bucket requests if any existed and process them.
             let mut expired_move_bucket_requests = MoveBucketRequestExpirations::<T>::take(&block);
-            remaining_weight.saturating_reduce(minimum_required_weight);
+            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
 
             while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
                 Self::process_expired_move_bucket_request(msp_id, bucket_id, remaining_weight);
+            }
+
+            // If there are remaining items which were not processed, put them back in storage
+            if !expired_move_bucket_requests.is_empty() {
+                MoveBucketRequestExpirations::<T>::insert(&block, expired_move_bucket_requests);
+                remaining_weight.saturating_reduce(db_weight.writes(1));
             }
         }
 
@@ -1691,7 +1796,6 @@ mod hooks {
                     file_key,
                 });
             });
-
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
                 user: user.clone(),
@@ -1707,7 +1811,7 @@ mod hooks {
             remaining_weight: &mut Weight,
         ) {
             let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(2, 3);
+            let potential_weight = db_weight.reads_writes(0, 1);
 
             if !remaining_weight.all_gte(potential_weight) {
                 return;

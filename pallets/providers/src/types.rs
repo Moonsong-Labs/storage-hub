@@ -58,6 +58,7 @@ pub struct Bucket<T: Config> {
     pub msp_id: MainStorageProviderId<T>,
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
+    pub size: StorageDataUnit<T>,
 }
 
 /// Enum that represents a Storage Provider. It holds either a BackupStorageProvider or a MainStorageProvider,

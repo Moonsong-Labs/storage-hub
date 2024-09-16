@@ -476,6 +476,8 @@ pub mod pallet {
         NewCapacityCantBeZero,
         /// Error thrown when a SP tries to change its capacity but it has not been enough time since the last time it changed it.
         NotEnoughTimePassed,
+        /// Error thrown when a SP tries to change its capacity but the new capacity is not enough to store the used storage.
+        NewUsedCapacityExceedsStorageCapacity,
 
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
