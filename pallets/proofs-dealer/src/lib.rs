@@ -660,14 +660,18 @@ pub mod pallet {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
-            // Check if the network is presumably under a spam attack.
-            // If so, `ChallengesTicker` will be paused.
-            Self::do_check_spamming_condition(weight);
-
             // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.
             if !ChallengesTickerPaused::<T>::get() {
                 Self::do_new_challenges_round(weight);
             }
+
+            // Check if the network is presumably under a spam attack.
+            // If so, `ChallengesTicker` will be paused.
+            // This check is done "a posteriori", meaning that we first increment the `ChallengesTicker`, send out challenges
+            // and slash Providers if in the last block we didn't consider the network to be under spam.
+            // Then if at this block we consider the network to be under spam, we pause the `ChallengesTicker`, which will not
+            // be incremented in the next block.
+            Self::do_check_spamming_condition(weight);
         }
 
         /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
