@@ -1,13 +1,7 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import {
-  describeBspNet,
-  sleep,
-  fetchEventData,
-  ShConsts,
-  type EnrichedBspApi
-} from "../../../util";
+import { describeBspNet, fetchEventData, ShConsts, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
