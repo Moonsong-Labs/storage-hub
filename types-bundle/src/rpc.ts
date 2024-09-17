@@ -43,7 +43,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       description: "Get the root of the forest trie.",
       params: [
         {
-          name: "key",
+          name: "forest_key",
           type: "Option<String>"
         }
       ],
@@ -53,7 +53,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       description: "Check if a file is in the forest.",
       params: [
         {
-          name: "key",
+          name: "forest_key",
           type: "Option<String>"
         },
         {
@@ -74,10 +74,10 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       type: "bool"
     },
     getFileMetadata: {
-      description: "Get the metadata of a file.",
+      description: "Get the metadata of a file from the Forest storage.",
       params: [
         {
-          name: "key",
+          name: "forest_key",
           type: "Option<String>"
         },
         {
@@ -92,7 +92,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
         "Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.",
       params: [
         {
-          name: "key",
+          name: "forest_key",
           type: "Option<String>"
         },
         {

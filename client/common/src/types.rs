@@ -96,7 +96,7 @@ impl<K, D: Debug> Proven<K, D> {
 /// Proof of file key(s) in the forest trie.
 #[derive(Clone, Encode, Decode, Debug)]
 pub struct ForestProof<T: TrieLayout> {
-    /// The file key that was proven.
+    /// The file keys that were proven.
     #[codec(skip)]
     pub proven: Vec<Proven<HasherOutT<T>, ()>>,
     /// The compact proof.

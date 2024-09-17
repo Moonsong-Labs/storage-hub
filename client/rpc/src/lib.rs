@@ -94,10 +94,14 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<SaveFileToDisk>;
 
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256>;
+    async fn get_forest_root(&self, forest_key: Option<String>) -> RpcResult<H256>;
 
     #[method(name = "isFileInForest")]
-    async fn is_file_in_forest(&self, key: Option<String>, file_key: H256) -> RpcResult<bool>;
+    async fn is_file_in_forest(
+        &self,
+        forest_key: Option<String>,
+        file_key: H256,
+    ) -> RpcResult<bool>;
 
     #[method(name = "isFileInFileStorage")]
     async fn is_file_in_file_storage(&self, file_key: H256) -> RpcResult<bool>;
@@ -105,7 +109,7 @@ pub trait StorageHubClientApi {
     #[method(name = "getFileMetadata")]
     async fn get_file_metadata(
         &self,
-        key: Option<String>,
+        forest_key: Option<String>,
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>>;
 
@@ -114,7 +118,7 @@ pub trait StorageHubClientApi {
     #[method(name = "generateForestProof")]
     async fn generate_forest_proof(
         &self,
-        key: Option<String>,
+        forest_key: Option<String>,
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>>;
 
@@ -285,24 +289,34 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256> {
-        let key = FSH::Key::from(key.unwrap_or_default());
+    async fn get_forest_root(&self, forest_key: Option<String>) -> RpcResult<H256> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
 
-        let fs =
-            self.forest_storage_handler.get(&key).await.ok_or_else(|| {
-                into_rpc_error(format!("Forest storage not found for key {:?}", key))
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
             })?;
 
         let read_fs = fs.read().await;
         Ok(read_fs.root())
     }
 
-    async fn is_file_in_forest(&self, key: Option<String>, file_key: H256) -> RpcResult<bool> {
-        let key = FSH::Key::from(key.unwrap_or_default());
+    async fn is_file_in_forest(
+        &self,
+        forest_key: Option<String>,
+        file_key: H256,
+    ) -> RpcResult<bool> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
 
-        let fs =
-            self.forest_storage_handler.get(&key).await.ok_or_else(|| {
-                into_rpc_error(format!("Forest storage not found for key {:?}", key))
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
             })?;
 
         let read_fs = fs.read().await;
@@ -330,15 +344,16 @@ where
     // metadata from this method until that's fixed.
     async fn get_file_metadata(
         &self,
-        key: Option<String>,
+        forest_key: Option<String>,
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>> {
-        let key = FSH::Key::from(key.unwrap_or_default());
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
 
-        let fs =
-            self.forest_storage_handler.get(&key).await.ok_or_else(|| {
-                into_rpc_error(format!("Forest storage not found for key {:?}", key))
-            })?;
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| into_rpc_error(format!("Forest storage not found for key {:?}", forest_key)))?;
 
         let read_fs = fs.read().await;
         Ok(read_fs
@@ -348,14 +363,14 @@ where
 
     async fn generate_forest_proof(
         &self,
-        key: Option<String>,
+        forest_key: Option<String>,
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>> {
-        let key = FSH::Key::from(key.unwrap_or_default());
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
 
         let fs =
-            self.forest_storage_handler.get(&key).await.ok_or_else(|| {
-                into_rpc_error(format!("Forest storage not found for key {:?}", key))
+            self.forest_storage_handler.get(&forest_key).await.ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
             })?;
 
         let read_fs = fs.read().await;
