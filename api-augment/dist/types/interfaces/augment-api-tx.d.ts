@@ -12,6 +12,7 @@ import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
+  PalletFileSystemBucketMoveRequestResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -638,6 +639,18 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, ShpFileKeyVerifierFileKeyProof, SpTrieStorageProofCompactProof]
       >;
+      mspRespondMoveBucketRequest: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          response:
+            | PalletFileSystemBucketMoveRequestResponse
+            | "Accepted"
+            | "Rejected"
+            | number
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, PalletFileSystemBucketMoveRequestResponse]
+      >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
           user: AccountId32 | string | Uint8Array,
@@ -652,6 +665,13 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [AccountId32, H256, H256, SpTrieStorageProofCompactProof]
+      >;
+      requestMoveBucket: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          newMspId: H256 | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256]
       >;
       /**
        * Revoke storage request

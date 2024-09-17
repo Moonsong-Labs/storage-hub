@@ -29,10 +29,10 @@ use shp_traits::{
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameFor, CollectionConfigFor, CollectionIdFor, ExpirationItem,
-        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
-        MerkleHash, MultiAddresses, PeerIds, ProviderIdFor, ReplicationTargetType, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata,
+        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
+        CollectionIdFor, ExpirationItem, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
+        KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses, PeerIds, ProviderIdFor,
+        ReplicationTargetType, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     BlockRangeToMaximumThreshold, BucketsWithStorageRequests, Error, Event, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
@@ -279,10 +279,11 @@ where
         Ok(())
     }
 
-    pub(crate) fn do_msp_accept_move_bucket_request(
+    pub(crate) fn do_msp_respond_move_bucket_request(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        response: BucketMoveRequestResponse,
+    ) -> DispatchResult {
         let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
@@ -298,6 +299,16 @@ where
             move_bucket_requester.is_some(),
             Error::<T>::MoveBucketRequestNotFound
         );
+
+        if response == BucketMoveRequestResponse::Rejected {
+            <PendingBucketsToMove<T>>::remove(&bucket_id);
+            <PendingMoveBucketRequests<T>>::remove(&msp_id, bucket_id);
+
+            // deposit event
+            Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
+
+            return Ok(());
+        }
 
         let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
 
@@ -328,7 +339,9 @@ where
 
         <PendingBucketsToMove<T>>::remove(&bucket_id);
 
-        Ok(msp_id)
+        Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
+
+        Ok(())
     }
 
     /// Update the privacy of a bucket.
@@ -445,12 +458,6 @@ where
             ensure!(
                 <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
                 Error::<T>::NotAMsp
-            );
-
-            // Check that the MSP has enough available capacity to store the file.
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::available_capacity(msp_id) >= size,
-                Error::<T>::InsufficientAvailableCapacity
             );
 
             // Check that the MSP received is the one storing the bucket.
@@ -621,11 +628,33 @@ where
             storage_request_metadata.size,
         )?;
 
-        // Set as confirmed the MSP in the storage request metadata.
-        storage_request_metadata.msp = Some((request_msp_id, true));
+        // Check if all BSPs have confirmed storing the file.
+        if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
+            // Remove storage request metadata.
+            <StorageRequests<T>>::remove(&file_key);
+            <BucketsWithStorageRequests<T>>::remove(&bucket_id, &file_key);
 
-        // Update storage request metadata.
-        <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
+            // Remove storage request bsps
+            let removed =
+                <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
+
+            // Make sure that the expected number of bsps were removed.
+            expect_or_err!(
+                storage_request_metadata.bsps_volunteered == removed.into(),
+                "Number of volunteered bsps for storage request should have been removed",
+                Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
+                bool
+            );
+
+            // Notify that the storage request has been fulfilled.
+            Self::deposit_event(Event::StorageRequestFulfilled { file_key: file_key });
+        } else {
+            // Set as confirmed the MSP in the storage request metadata.
+            storage_request_metadata.msp = Some((request_msp_id, true));
+
+            // Update storage request metadata.
+            <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
+        }
 
         Ok((sp_id, new_bucket_root, storage_request_metadata))
     }
@@ -781,6 +810,13 @@ where
             let mut storage_request_metadata =
                 <StorageRequests<T>>::get(&file_key.0).ok_or(Error::<T>::StorageRequestNotFound)?;
 
+            if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
+                // Since BSPs need to race one another to confirm storage requests, it is entirely possible that a BSP confirms a storage request
+                // after the storage request has been fulfilled within the same block.
+                // TODO: Accumulate a list of storage requests that have been skipped for the BSP to confirm what it can.
+                continue;
+            }
+
             expect_or_err!(
                 storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
                 "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
@@ -859,11 +895,18 @@ where
                 storage_request_metadata.size,
             )?;
 
-            // Remove storage request if we reached the required number of bsps.
-            if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
-                // TODO: we should only delete if the MSP also confirmed to store the file (this is not implemented yet).
+            // Remove storage request if we reached the required number of bsps and the MSP has confirmed storing the file.
+            if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required
+                && storage_request_metadata
+                    .msp
+                    .map_or(false, |(_, confirmed)| confirmed)
+            {
                 // Remove storage request metadata.
                 <StorageRequests<T>>::remove(&file_key.0);
+                <BucketsWithStorageRequests<T>>::remove(
+                    &storage_request_metadata.bucket_id,
+                    &file_key.0,
+                );
 
                 // Remove storage request bsps
                 let removed =

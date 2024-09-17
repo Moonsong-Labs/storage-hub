@@ -34,7 +34,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       events
     );
     assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
-    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0f000000"); // NotRegistered
+    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x10000000"); // NotRegistered
 
     const totalCapacityAfter = await api.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await api.query.providers.backupStorageProviders(

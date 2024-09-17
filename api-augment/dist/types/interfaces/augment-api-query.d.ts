@@ -285,6 +285,18 @@ declare module "@polkadot/api-base/types/storage" {
       blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * Bookkeeping of the buckets containing open storage requests.
+       **/
+      bucketsWithStorageRequests: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * A map of blocks to expired file deletion requests.
        **/
       fileDeletionRequestExpirations: AugmentedQuery<
@@ -294,11 +306,31 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * A map of blocks to expired move bucket requests.
+       **/
+      moveBucketRequestExpirations: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
+      /**
        * A pointer to the earliest available block to insert a new file deletion request expiration.
        *
        * This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
        **/
       nextAvailableFileDeletionRequestExpirationBlock: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the earliest available block to insert a new move bucket request expiration.
+       *
+       * This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
+       **/
+      nextAvailableMoveBucketRequestExpirationBlock: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
@@ -325,6 +357,15 @@ declare module "@polkadot/api-base/types/storage" {
       nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * Bookkeeping of buckets that are pending to be moved to a new MSP.
+       **/
+      pendingBucketsToMove: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Null>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * Pending file deletion requests.
        *
        * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
@@ -335,6 +376,21 @@ declare module "@polkadot/api-base/types/storage" {
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
+      /**
+       * Pending move bucket requests.
+       *
+       * A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
+       * The value is the user who requested the move.
+       **/
+      pendingMoveBucketRequests: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<AccountId32>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
        * Pending file stop storing requests.
        *

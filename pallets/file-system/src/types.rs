@@ -195,6 +195,13 @@ impl<T: Config> ExpirationItem<T> {
     }
 }
 
+/// Bucket privacy settings.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+pub enum BucketMoveRequestResponse {
+    Accepted,
+    Rejected,
+}
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;

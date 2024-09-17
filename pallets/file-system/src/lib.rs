@@ -579,7 +579,12 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
         },
         /// Notifies that a bucket has been moved to a new MSP.
-        MoveBucketSuccess {
+        MoveBucketAccepted {
+            bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+        },
+        /// Notifies that a bucket move request has been rejected by the MSP.
+        MoveBucketRejected {
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
         },
@@ -750,15 +755,14 @@ pub mod pallet {
 
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn msp_accept_move_bucket_request(
+        pub fn msp_respond_move_bucket_request(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
+            response: BucketMoveRequestResponse,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let msp_id = Self::do_msp_accept_move_bucket_request(who.clone(), bucket_id)?;
-
-            Self::deposit_event(Event::MoveBucketSuccess { bucket_id, msp_id });
+            Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response)?;
 
             Ok(())
         }

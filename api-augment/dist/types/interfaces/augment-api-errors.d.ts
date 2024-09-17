@@ -183,6 +183,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspsRequiredExceedsMax: AugmentedError<ApiType>;
       /**
+       * Action not allowed while the bucket is being moved.
+       **/
+      BucketIsBeingMoved: AugmentedError<ApiType>;
+      /**
        * Bucket is not private. Call `update_bucket_privacy` to make it private.
        **/
       BucketIsNotPrivate: AugmentedError<ApiType>;
@@ -264,9 +268,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MinWaitForStopStoringNotReached: AugmentedError<ApiType>;
       /**
+       * Move bucket request not found in storage.
+       **/
+      MoveBucketRequestNotFound: AugmentedError<ApiType>;
+      /**
        * The MSP is trying to confirm to store a file from a storage request that it has already confirmed to store.
        **/
       MspAlreadyConfirmed: AugmentedError<ApiType>;
+      /**
+       * The MSP is already storing the bucket.
+       **/
+      MspAlreadyStoringBucket: AugmentedError<ApiType>;
       /**
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
@@ -328,6 +340,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageRequestBspsRequiredFulfilled: AugmentedError<ApiType>;
       /**
+       * Opertion not allowed while the storage request exists.
+       **/
+      StorageRequestExists: AugmentedError<ApiType>;
+      /**
        * No slot available found in blocks to insert storage request expiration time.
        **/
       StorageRequestExpiredNoSlotAvailable: AugmentedError<ApiType>;
@@ -339,6 +355,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Storage request not registered for the given file.
        **/
       StorageRequestNotFound: AugmentedError<ApiType>;
+      /**
+       * Operation not allowed while the storage request is not being revoked.
+       **/
+      StorageRequestNotRevoked: AugmentedError<ApiType>;
       /**
        * Arithmetic error in threshold calculation.
        **/
@@ -962,6 +982,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to change its capacity to less than its used storage.
        **/
       NewCapacityLessThanUsedStorage: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a SP tries to change its capacity but the new capacity is not enough to store the used storage.
+       **/
+      NewUsedCapacityExceedsStorageCapacity: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to get a root from a MSP without passing a Bucket ID.
        **/

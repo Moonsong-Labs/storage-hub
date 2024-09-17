@@ -67,6 +67,7 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletCollatorSelectionError,
   PalletCollatorSelectionEvent,
+  PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
   PalletFileSystemError,
   PalletFileSystemEvent,
@@ -313,6 +314,7 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionCandidateInfo: PalletCollatorSelectionCandidateInfo;
     PalletCollatorSelectionError: PalletCollatorSelectionError;
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
+    PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
