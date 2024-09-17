@@ -133,13 +133,11 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       shUser
     );
 
-    await sleep(500); // wait for the bsp to volunteer
-    const volunteerPending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      volunteerPending.length,
-      1,
-      "There should be one pending extrinsic from BSP (volunteer)"
-    );
+    await userApi.assert.extrinsicPresent({
+      module: "fileSystem",
+      method: "bspVolunteer",
+      checkTxPool: true
+    });
 
     await userApi.sealBlock();
     const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] =
@@ -160,12 +158,11 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     strictEqual(resSize.toBigInt(), file_size.toBigInt());
 
     await sleep(5000); // wait for the bsp to download the file
-    const confirm_pending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      confirm_pending.length,
-      1,
-      "There should be one pending extrinsic from BSP (confirm store)"
-    );
+    await userApi.assert.extrinsicPresent({
+      module: "fileSystem",
+      method: "bspConfirmStoring",
+      checkTxPool: true
+    });
 
     await userApi.sealBlock();
     const [_bspConfirmRes_who, bspConfirmRes_bspId, bspConfirmRes_fileKeys, bspConfirmRes_newRoot] =
@@ -194,118 +191,124 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
   });
 });
 
-describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserApi, it }) => {
-  let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
+describeBspNet(
+  "Multiple BSPs volunteer ",
+  { keepAlive: false },
+  ({ before, createBspApi, createUserApi, it }) => {
+    let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
 
-  before(async () => {
-    userApi = await createUserApi();
-    bspApi = await createBspApi();
-  });
+    before(async () => {
+      userApi = await createUserApi();
+      bspApi = await createBspApi();
+    });
 
-  it("bsp volunteers multiple files properly", async () => {
-    const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
-    const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
-    const bucketName = "nothingmuch-3";
+    it("bsp volunteers multiple files properly", async () => {
+      const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
+      const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
+      const bucketName = "nothingmuch-3";
 
-    const newBucketEventEvent = await userApi.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      const newBucketEventEvent = await userApi.createBucket(bucketName);
+      const newBucketEventDataBlob =
+        userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+      if (!newBucketEventDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
 
-    const txs = [];
-    for (let i = 0; i < source.length; i++) {
-      const { fingerprint, file_size, location } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source[i],
-          destination[i],
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
+      const txs = [];
+      for (let i = 0; i < source.length; i++) {
+        const { fingerprint, file_size, location } =
+          await userApi.rpc.storagehubclient.loadFileInStorage(
+            source[i],
+            destination[i],
+            userApi.shConsts.NODE_INFOS.user.AddressId,
+            newBucketEventDataBlob.bucketId
+          );
+
+        txs.push(
+          userApi.tx.fileSystem.issueStorageRequest(
+            newBucketEventDataBlob.bucketId,
+            location,
+            fingerprint,
+            file_size,
+            userApi.shConsts.DUMMY_MSP_ID,
+            [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          )
         );
+      }
 
-      txs.push(
-        userApi.tx.fileSystem.issueStorageRequest(
-          newBucketEventDataBlob.bucketId,
-          location,
-          fingerprint,
-          file_size,
-          userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
-        )
+      await userApi.sealBlock(txs, shUser);
+
+      //There should be pending extrinsics for all files from BSP (volunteer)
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: source.length
+      });
+
+      await userApi.sealBlock();
+
+      await sleep(5000); // wait for the bsp to download the files
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkTxPool: true,
+        assertLength: 1,
+        timeout: 10000
+      });
+
+      await userApi.sealBlock();
+      const [
+        _bspConfirmRes_who,
+        _bspConfirmRes_bspId,
+        bspConfirmRes_fileKeys,
+        bspConfirmRes_newRoot
+      ] = userApi.assert.fetchEventData(
+        userApi.events.fileSystem.BspConfirmedStoring,
+        await userApi.query.system.events()
       );
-    }
 
-    await userApi.sealBlock(txs, shUser);
+      // Here we expect only 1 file to be confirmed since we always prefer smallest possible latency.
+      strictEqual(bspConfirmRes_fileKeys.length, 1);
 
-    await sleep(500); // wait for the bsp to volunteer
-    const volunteerPending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      volunteerPending.length,
-      source.length,
-      "There should be pending extrinsics for all files from BSP (volunteer)"
-    );
+      await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
+      const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
 
-    await userApi.sealBlock();
+      // This block should trigger the next file to be confirmed.
+      await userApi.sealBlock();
 
-    await sleep(5000); // wait for the bsp to download the files
-    const confirmPending1 = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      confirmPending1.length,
-      1,
-      "There should be one pending extrinsic from BSP (confirm store) for the first file"
-    );
+      // Even though we didn't sent a new file, the BSP client should process the rest of the files.
+      // We wait for the BSP to send the confirm transaction.
+      await sleep(500);
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkTxPool: true,
+        assertLength: 1,
+        timeout: 10000
+      });
 
-    await userApi.sealBlock();
-    const [
-      _bspConfirmRes_who,
-      _bspConfirmRes_bspId,
-      bspConfirmRes_fileKeys,
-      bspConfirmRes_newRoot
-    ] = userApi.assert.fetchEventData(
-      userApi.events.fileSystem.BspConfirmedStoring,
-      await userApi.query.system.events()
-    );
+      await userApi.sealBlock();
 
-    // Here we expect only 1 file to be confirmed since we always prefer smallest possible latency.
-    strictEqual(bspConfirmRes_fileKeys.length, 1);
+      const [
+        _bspConfirm2Res_who,
+        _bspConfirm2Res_bspId,
+        bspConfirm2Res_fileKeys,
+        bspConfirm2Res_newRoot
+      ] = userApi.assert.fetchEventData(
+        userApi.events.fileSystem.BspConfirmedStoring,
+        await userApi.query.system.events()
+      );
 
-    await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-    const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
-    strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
+      // Here we expect 2 batched files to be confirmed.
+      strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
-    // This block should trigger the next file to be confirmed.
-    await userApi.sealBlock();
-
-    // Even though we didn't sent a new file, the BSP client should process the rest of the files.
-    // We wait for the BSP to send the confirm transaction.
-    await sleep(500);
-    const confirmPending2 = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      confirmPending2.length,
-      1,
-      "There should be one pending extrinsic from BSP (confirm store) for the second file"
-    );
-
-    await userApi.sealBlock();
-
-    const [
-      _bspConfirm2Res_who,
-      _bspConfirm2Res_bspId,
-      bspConfirm2Res_fileKeys,
-      bspConfirm2Res_newRoot
-    ] = userApi.assert.fetchEventData(
-      userApi.events.fileSystem.BspConfirmedStoring,
-      await userApi.query.system.events()
-    );
-
-    // Here we expect 2 batched files to be confirmed.
-    strictEqual(bspConfirm2Res_fileKeys.length, 2);
-
-    await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-    const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot(null);
-    strictEqual(bspForestRootAfterConfirm2.toString(), bspConfirm2Res_newRoot.toString());
-  });
-});
+      await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
+      const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(bspForestRootAfterConfirm2.toString(), bspConfirm2Res_newRoot.toString());
+    });
+  }
+);

@@ -174,8 +174,10 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param events - Optional. The events to search through. If not provided, it will fetch the latest block's events.
        * @returns The matching event and its data.
        */
-      eventPresent: (module: string, method: string, events?: EventRecord[]) =>
-        Assertions.assertEventPresent(this._api, module, method, events),
+      eventPresent: async (module: string, method: string, events?: EventRecord[]) => {
+        const evts = events ?? ((await this._api.query.system.events()) as EventRecord[]);
+        return Assertions.assertEventPresent(this._api, module, method, evts);
+      },
       /**
        * Asserts that multiple instances of a specific event are present.
        * @param module - The module name of the event.

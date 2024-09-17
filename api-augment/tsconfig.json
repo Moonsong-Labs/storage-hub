@@ -11,7 +11,7 @@
 			],
 			"@polkadot/api/augment": [
 				"src/interfaces/augment-api.ts"
-			],
+			],F
 			"@polkadot/types/augment": [
 				"src/interfaces/augment-types.ts"
 			],

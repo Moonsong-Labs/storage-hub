@@ -46,12 +46,10 @@ describeBspNet(
     });
 
     it("Shouldn't be able to setGlobalParams without sudo", async () => {
-      const { extSuccess, events } = await api.sealBlock(
-        api.tx.fileSystem.setGlobalParameters(13, 37)
-      );
+      const { extSuccess } = await api.sealBlock(api.tx.fileSystem.setGlobalParameters(13, 37));
 
       strictEqual(extSuccess, false, "Extrinsic should be unsuccessful");
-      const { data } = api.assert.eventPresent("system", "ExtrinsicFailed", events);
+      const { data } = await api.assert.eventPresent("system", "ExtrinsicFailed");
       const error = data[0].toString();
       strictEqual(error, "BadOrigin", "Extrinsic should fail with BadOrigin");
 

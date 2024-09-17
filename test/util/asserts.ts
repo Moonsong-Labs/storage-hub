@@ -19,8 +19,11 @@ export type AssertExtrinsicOptions = {
   method: string;
   /** If true, skips the validation check for the module.method existence in the API metadata. */
   ignoreParamCheck?: boolean;
+  /** If provided, asserts that the number of extrinsics found matches this value. */
+  assertLength?: number;
+  /**If provided, will not throw until this timeout is reached. */
+  timeout?: number;
 };
-
 /**
  * Asserts that a specific extrinsic (module.method) is present in a blockchain block or transaction pool.
  *
@@ -41,57 +44,81 @@ export const assertExtrinsicPresent = async (
     extIndex: number;
   }[]
 > => {
+  const startTime = Date.now();
+  const timeoutMs = options.timeout || 5000; // Default timeout of 5 seconds
+
+  // Perform invariant checks outside the loop to fail fast on critical errors
   if (options.ignoreParamCheck !== true) {
     invariant(
       options.module in api.tx,
-
       `Module ${options.module} not found in API metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
     );
     invariant(
       options.method in api.tx[options.module],
-
       `Method ${options.module}.${options.method} not found in metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
     );
   }
 
-  const blockHash = options?.blockHash
-    ? options.blockHash
-    : options?.blockHeight
-      ? await api.rpc.chain.getBlockHash(options?.blockHeight)
-      : await api.rpc.chain.getBlockHash();
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const blockHash = options?.blockHash
+        ? options.blockHash
+        : options?.blockHeight
+          ? await api.rpc.chain.getBlockHash(options?.blockHeight)
+          : await api.rpc.chain.getBlockHash();
 
-  const extrinsics = !options.checkTxPool
-    ? await (async () => {
-        const response = await api.rpc.chain.getBlock(blockHash);
+      const extrinsics = !options.checkTxPool
+        ? await (async () => {
+            const response = await api.rpc.chain.getBlock(blockHash);
 
-        if (!options.blockHeight && !options.blockHash) {
-          console.log(
-            `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+            if (!options.blockHeight && !options.blockHash) {
+              console.log(
+                `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+              );
+            }
+            return response.block.extrinsics;
+          })()
+        : await api.rpc.author.pendingExtrinsics();
+
+      const transformed = extrinsics.map(({ method: { method, section } }, index) => {
+        return { module: section, method, extIndex: index };
+      });
+
+      const matches = transformed.filter(
+        ({ method, module }) => method === options?.method && module === options?.module
+      );
+
+      if (matches.length > 0) {
+        if (options?.assertLength !== undefined) {
+          invariant(
+            matches.length === options.assertLength,
+            `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
           );
         }
-        return response.block.extrinsics;
-      })()
-    : await api.rpc.author.pendingExtrinsics();
-  const transformed = extrinsics.map(({ method: { method, section } }, index) => {
-    return { module: section, method, extIndex: index };
-  });
 
-  const matches = transformed.filter(
-    ({ method, module }) => method === options?.method && module === options?.module
-  );
+        if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {
+          const events = await (await api.at(blockHash)).query.system.events();
+          assertEventPresent(api, "system", "ExtrinsicSuccess", events);
+        }
 
-  invariant(
-    matches.length > 0,
+        return matches;
+      }
 
-    `No extrinsics matching ${options?.module}.${options?.method} found. \n Extrinsics in block ${options.blockHeight || blockHash}: ${extrinsics.map(({ method: { method, section } }) => `${section}.${method}`).join(" | ")}`
-  );
-
-  if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {
-    const events = await (await api.at(blockHash)).query.system.events();
-    assertEventPresent(api, "system", "ExtrinsicSuccess", events);
+      // If no matches found, wait for a short time before retrying
+      await sleep(100);
+    } catch (error) {
+      if (Date.now() - startTime >= timeoutMs) {
+        throw error;
+      }
+      // If the timeout hasn't been reached, continue the loop
+      await sleep(100);
+    }
   }
 
-  return matches;
+  // If the loop completes without finding a match, throw an error
+  throw new Error(
+    `No extrinsics matching ${options?.module}.${options?.method} found within the timeout period.`
+  );
 };
 
 /**

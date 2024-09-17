@@ -64,15 +64,12 @@ describeBspNet(
       // Finally, advance to the next challenge tick.
       await userApi.advanceToBlock(nextChallengeTick);
 
-      // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(1000);
-      // Check that there are 3 pending extrinsics from BSPs (proof submission).
-      const submitProofPending = await userApi.rpc.author.pendingExtrinsics();
-      strictEqual(
-        submitProofPending.length,
-        3,
-        "There should be three pending extrinsics from BSPs (proof submission)"
-      );
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true,
+        assertLength: 3
+      });
 
       // Seal one more block with the pending extrinsics.
       const blockResult = await userApi.sealBlock();
@@ -434,7 +431,7 @@ describeBspNet(
       );
 
       // Check that the event for the priority challenge is emitted.
-      const newCheckpointChallengesEvent = userApi.assert.eventPresent(
+      const newCheckpointChallengesEvent = await userApi.assert.eventPresent(
         "proofsDealer",
         "NewCheckpointChallenge",
         checkpointChallengeBlockResult.events
