@@ -44,16 +44,17 @@ where
     let next = iter.next().transpose()?;
     let prev = iter.next_back().transpose()?;
 
-    // This is just done to allow the `apply_delta` function to remove files from the trie without failing because of an incomplete database.
-    iter.next().transpose()?;
-    iter.next_back().transpose()?;
-
     match (prev, next) {
         // Scenario 1: Exact match
-        (_, Some((key, _))) if challenged_file_key.as_ref() == key => Ok(Proven::new_exact_key(
-            convert_raw_bytes_to_hasher_out::<T>(key)?,
-            (),
-        )),
+        (_, Some((key, _))) if challenged_file_key.as_ref() == key => {
+            // This is just done to allow the `apply_delta` function to remove files from the trie without failing because of an incomplete database.
+            iter.next().transpose()?;
+            iter.next_back().transpose()?;
+            Ok(Proven::new_exact_key(
+                convert_raw_bytes_to_hasher_out::<T>(key)?,
+                (),
+            ))
+        }
         // Scenario 2: Between two keys
         (Some((prev_key, _)), Some((next_key, _)))
             if prev_key < challenged_file_key.as_ref().to_vec()

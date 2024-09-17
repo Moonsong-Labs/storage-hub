@@ -35,3 +35,7 @@ sp-state-machine = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 
 shc-common = { workspace = true }
+
+[dev-dependencies]
+shp-forest-verifier = { workspace = true }
+shp-traits = { workspace = true }

@@ -388,7 +388,10 @@ mod tests {
 
     use super::*;
     use kvdb_memorydb::InMemory;
-    use shc_common::types::{FileMetadata, Fingerprint, Proven};
+    use shc_common::types::{FileMetadata, Fingerprint, Proven, TrieMutation, TrieRemoveMutation};
+    use shp_forest_verifier::ForestVerifier;
+    use shp_traits::TrieProofDeltaApplier;
+    use sp_core::Hasher;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
@@ -567,6 +570,20 @@ mod tests {
                 &root,
                 &proof.proof.encoded_nodes,
                 included_keys_values
+            )
+            .is_ok()
+        );
+
+        // Since key 9 and 10 share a prefix, they are under a nibbled branch, which means `apply_delta` removing
+        // key 9 would fail if it wasn't for the proof generation fix we added in `generate_proof`.
+        let proof = forest_storage.generate_proof(vec![keys[9]]).unwrap();
+        let proof = proof.proof;
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(keys[9], TrieRemoveMutation::default().into())];
+
+        assert!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
             )
             .is_ok()
         );
