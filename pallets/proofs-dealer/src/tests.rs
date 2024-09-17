@@ -3662,13 +3662,44 @@ fn challenges_ticker_not_paused_when_more_than_min_not_full_blocks_ratio_are_not
 }
 
 #[test]
-fn challenges_ticker_paused_when_half_blocks_are_full_odd_period() {}
+fn challenges_ticker_not_paused_when_blocks_dont_run_on_poll() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
 
-#[test]
-fn challenges_ticker_not_paused_when_more_than_half_blocks_are_not_full_odd_period() {}
+        // Simulate multiple non-spammed blocks that don't run on `on_poll`.
+        // Like multi block migrations.
+        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        for _ in 1..block_fullness_period {
+            System::set_block_number(System::block_number() + 1);
 
-#[test]
-fn challenges_ticker_not_paused_when_blocks_dont_run_on_poll() {}
+            // Set weight used to zero (not-spammed).
+            let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+                DispatchClass::Normal => Zero::zero(),
+                DispatchClass::Operational => Zero::zero(),
+                DispatchClass::Mandatory => Zero::zero(),
+            });
+            BlockWeight::<Test>::set(max_block_weight);
+
+            // Trigger on_finalize hook execution.
+            ProofsDealer::on_finalize(System::block_number());
+        }
+
+        // Get the current count of non-full blocks. Should be zero as `on_poll` was only run
+        // once in `run_to_block(1)`, taking into account the genesis block. In other words, not
+        // adding anything.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        assert_eq!(blocks_not_full, 0);
+
+        // Current ticker should be 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+    });
+}
 
 #[test]
 fn challenges_ticker_unpaused_after_spam_finishes() {
