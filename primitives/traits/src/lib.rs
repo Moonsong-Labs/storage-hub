@@ -459,6 +459,12 @@ pub trait MutateChallengeableProvidersInterface {
 
     /// Update the root for a registered challengeable Provider.
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
+
+    /// Update the information of a registered challengeable Provider after a successful trie element removal.
+    fn update_provider_after_key_removal(
+        who: &Self::ProviderId,
+        removed_trie_value: &Vec<u8>,
+    ) -> DispatchResult;
 }
 
 /// A trait to read information about generic Providers, such as their ID, owner, root, stake, etc.
@@ -891,6 +897,12 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::DynamicRatePaymentStream>;
+
+    /// Get the amount provided of a dynamic-rate payment stream between a User and a Provider
+    fn get_dynamic_rate_payment_stream_amount_provided(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::Units>;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.

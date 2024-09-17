@@ -271,13 +271,43 @@ where
                     // Add mutation to list of mutations applied.
                     mutations_applied.push((mutation.0, mutation.1.clone()));
 
-                    <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+                    // Apply the mutation to the Forest.
+                    let apply_delta_result = <T::ForestVerifier as TrieProofDeltaApplier<
+                        T::MerkleTrieHashing,
+                    >>::apply_delta(
                         &acc_root,
                         &[(mutation.0, mutation.1.clone().into())],
                         forest_proof,
                     )
-                    .map(|(_, new_root, _)| new_root)
-                    .map_err(|_| Error::<T>::FailedToApplyDelta)
+                    .map_err(|_| Error::<T>::FailedToApplyDelta);
+
+                    // If the mutation was correctly applied, update the Provider's info and return the new root.
+                    match apply_delta_result {
+                        Ok((_, new_root, mutated_keys_and_values)) => {
+                            // Check that the mutated key is the same as the mutation (and is the only one).
+                            ensure!(
+                                mutated_keys_and_values.len() == 1,
+                                Error::<T>::FailedToApplyDelta
+                            );
+                            ensure!(
+                                mutated_keys_and_values[0].0 == mutation.0,
+                                Error::<T>::FailedToApplyDelta
+                            );
+
+                            // Use the interface exposed by the Providers pallet to update the submitting Provider
+                            // after the key removal if the key had a value.
+                            let removed_trie_value = &mutated_keys_and_values[0].1;
+                            if let Some(trie_value) = removed_trie_value {
+                                ProvidersPalletFor::<T>::update_provider_after_key_removal(
+                                    submitter, trie_value,
+                                )
+                                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+                            }
+
+                            Ok(new_root)
+                        }
+                        Err(err) => Err(err),
+                    }
                 })?;
 
                 // Emit event of mutation applied.

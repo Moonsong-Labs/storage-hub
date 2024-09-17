@@ -1329,6 +1329,15 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         // Return the payment stream information
         DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
     }
+
+    fn get_dynamic_rate_payment_stream_amount_provided(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::Units> {
+        // Return the amount provided by the user in the dynamic-rate payment stream
+        DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
+            .map(|stream| stream.amount_provided)
+    }
 }
 
 impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {

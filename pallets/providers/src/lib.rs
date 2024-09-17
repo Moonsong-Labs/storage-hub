@@ -45,7 +45,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::ProofSubmittersInterface;
+    use shp_traits::{PaymentStreamsInterface, ProofSubmittersInterface};
     use sp_runtime::traits::{Bounded, CheckedDiv};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -56,6 +56,14 @@ pub mod pallet {
 
         /// Type to access randomness to salt AccountIds and get the corresponding HashId
         type ProvidersRandomness: Randomness<HashId<Self>, BlockNumberFor<Self>>;
+
+        /// Trait that allows the pallet to update payment streams of its Providers and Users
+        type PaymentStreams: PaymentStreamsInterface<
+            Balance = Self::NativeBalance,
+            AccountId = Self::AccountId,
+            ProviderId = HashId<Self>,
+            Units = Self::StorageDataUnit,
+        >;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
@@ -494,6 +502,12 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+
+        // Payment streams interface errors:
+        /// Error thrown when failing to decode the metadata from a received trie value that was removed.
+        InvalidEncodedFileMetadata,
+        /// Error thrown when trying to update a payment stream that does not exist.
+        PaymentStreamNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

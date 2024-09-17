@@ -1,5 +1,5 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
-use codec::Encode;
+use codec::{Decode, Encode};
 use frame_support::dispatch::{DispatchResultWithPostInfo, Pays};
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
@@ -18,11 +18,12 @@ use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
     QueryStorageProviderCapacityError,
 };
+use shp_file_metadata::FileMetadata;
 use shp_traits::{
     MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, ProofSubmittersInterface, ReadBucketsInterface,
-    ReadChallengeableProvidersInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    SystemMetricsInterface,
+    MutateStorageProvidersInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    ReadBucketsInterface, ReadChallengeableProvidersInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface, SystemMetricsInterface,
 };
 use types::{ProviderId, StorageProviderId};
 
@@ -1349,6 +1350,34 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
+        Ok(())
+    }
+
+    fn update_provider_after_key_removal(
+        who: &Self::ProviderId,
+        removed_trie_value: &Vec<u8>,
+    ) -> DispatchResult {
+        // Get the removed file's metadata
+        let file_metadata = FileMetadata::decode(&mut removed_trie_value.as_slice())
+            .map_err(|_| Error::<T>::InvalidEncodedFileMetadata)?;
+
+        // Decrease the used capacity of the provider
+        Self::decrease_capacity_used(who, file_metadata.file_size)?;
+
+        // Update the provider's payment stream with the user
+        let previous_amount_provided =
+            <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+                who,
+                file_metadata.owner,
+            )
+            .ok_or(Error::<T>::PaymentStreamNotFound)?;
+        let new_amount_provided = previous_amount_provided.saturating_sub(file_metadata.file_size);
+        <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+            who,
+            file_metadata.owner,
+            &new_amount_provided,
+        )?;
+
         Ok(())
     }
 }
