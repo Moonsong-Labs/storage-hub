@@ -41,6 +41,7 @@ import type {
   PalletBalancesIdAmount,
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
+  PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -395,7 +396,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg1: H256 | string | Uint8Array,
           arg2: H256 | string | Uint8Array
-        ) => Observable<Option<AccountId32>>,
+        ) => Observable<Option<PalletFileSystemMoveBucketRequestMetadata>>,
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;

@@ -202,6 +202,16 @@ pub enum BucketMoveRequestResponse {
     Rejected,
 }
 
+/// Move bucket request metadata
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MoveBucketRequestMetadata<T: Config> {
+    /// The user who requested to move the bucket.
+    pub requester: T::AccountId,
+    /// List of storage providers that can serve the data that is requested to be stored.
+    pub data_servers_sps: BoundedVec<ProviderIdFor<T>, MaxDataServersPerMoveBucketRequest<T>>,
+}
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
@@ -220,6 +230,10 @@ pub type FileKeyHasher<T> =
 
 /// Alias for the `MaxBspsPerStorageRequest` type used in the FileSystem pallet.
 pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
+
+/// Alias for the `MaxDataServersPerMoveBucketRequest` type used in the FileSystem pallet.
+pub type MaxDataServersPerMoveBucketRequest<T> =
+    <T as crate::Config>::MaxDataServersPerMoveBucketRequest;
 
 /// Alias for the `MaxFilePathSize` type used in the FileSystem pallet.
 pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;

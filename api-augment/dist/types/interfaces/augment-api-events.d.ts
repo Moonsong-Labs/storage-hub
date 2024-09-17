@@ -557,6 +557,17 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a data server has been registered for a move bucket request.
+       **/
+      DataServerRegisteredForMoveBucket: AugmentedEvent<
+        ApiType,
+        [bspId: H256, bucketId: H256],
+        {
+          bspId: H256;
+          bucketId: H256;
+        }
+      >;
+      /**
        * Notifies that a priority challenge failed to be queued for pending file deletion.
        **/
       FailedToQueuePriorityChallenge: AugmentedEvent<

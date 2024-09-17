@@ -473,6 +473,16 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
+       * Add yourself as a data server for providing the files of the bucket requested to be moved.
+       **/
+      bspAddDataServerForMoveBucketRequest: AugmentedSubmittable<
+        (
+          mspId: H256 | string | Uint8Array,
+          bucketId: H256 | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256]
+      >;
+      /**
        * Executed by a BSP to confirm to stop storing a file.
        *
        * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.

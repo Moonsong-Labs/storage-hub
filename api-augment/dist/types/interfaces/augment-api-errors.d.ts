@@ -167,9 +167,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
       /**
+       * BSP is already a data server for the move bucket request.
+       **/
+      BspAlreadyDataServer: AugmentedError<ApiType>;
+      /**
        * BSP already volunteered to store the given file.
        **/
       BspAlreadyVolunteered: AugmentedError<ApiType>;
+      /**
+       * Too many registered data servers for the move bucket request.
+       **/
+      BspDataServersExceeded: AugmentedError<ApiType>;
       /**
        * BSP has not confirmed storing the given file.
        **/

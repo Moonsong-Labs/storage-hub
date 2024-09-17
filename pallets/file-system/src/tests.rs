@@ -1,9 +1,10 @@
 use crate::{
     mock::*,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileLocation, PeerIds,
-        PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl, ThresholdType,
+        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileLocation,
+        MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestTtl,
+        ThresholdType,
     },
     BlockRangeToMaximumThreshold, Config, Error, Event, PendingBucketsToMove,
     PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
@@ -412,7 +413,7 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(owner.clone()));
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone(), data_servers_sps: BoundedVec::default() }));
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -480,7 +481,7 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(owner.clone()));
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone(), data_servers_sps: BoundedVec::default() }));
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -549,7 +550,7 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(owner.clone()));
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone(), data_servers_sps: BoundedVec::default() }));
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -618,7 +619,7 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(owner.clone()));
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone(), data_servers_sps: BoundedVec::default() }));
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -642,6 +643,132 @@ mod request_move_bucket {
 
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
                 assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+            });
+        }
+    }
+}
+
+mod bsp_add_data_server_for_move_bucket_request {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn not_a_bsp() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp_dave = Keyring::Dave.to_account_id();
+                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let bucket_id = H256::zero();
+
+                assert_noop!(
+                    FileSystem::bsp_add_data_server_for_move_bucket_request(
+                        origin,
+                        msp_dave_id,
+                        bucket_id
+                    ),
+                    Error::<Test>::NotABsp
+                );
+            });
+        }
+
+        #[test]
+        fn no_move_bucket_request_found() {
+            new_test_ext().execute_with(|| {
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let origin = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp_dave = Keyring::Dave.to_account_id();
+                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let bucket_id = H256::zero();
+
+                assert_ok!(bsp_sign_up(origin.clone(), 1000));
+
+                assert_noop!(
+                    FileSystem::bsp_add_data_server_for_move_bucket_request(
+                        origin,
+                        msp_dave_id,
+                        bucket_id
+                    ),
+                    Error::<Test>::MoveBucketRequestNotFound
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn add_bsp_as_data_server() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp_charlie = Keyring::Charlie.to_account_id();
+                let msp_dave = Keyring::Dave.to_account_id();
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                assert_ok!(bsp_sign_up(RuntimeOrigin::signed(bsp_account_id.clone()), 1000));
+
+                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
+                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+
+                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+
+                // Check bucket is stored by Charlie
+                assert!(
+                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::request_move_bucket(
+                    origin.clone(),
+                    bucket_id,
+                    msp_dave_id
+                ));
+
+                let pending_move_bucket =
+                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone(), data_servers_sps: BoundedVec::default() }));
+
+                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MoveBucketRequested {
+                        who: owner.clone(),
+                        bucket_id,
+                        new_msp_id: msp_dave_id,
+                    }
+                    .into(),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::bsp_add_data_server_for_move_bucket_request(
+                    RuntimeOrigin::signed(bsp_account_id.clone()),
+                    msp_dave_id,
+                    bucket_id,
+                ));
+
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id,
+                    )
+                        .unwrap();
+
+                let pending_move_bucket =
+                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner, data_servers_sps: BoundedVec::try_from(vec![bsp_id]).unwrap() }));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::DataServerRegisteredForMoveBucket {
+                        bsp_id,
+                        bucket_id,
+                    }
+                    .into(),
+                );
             });
         }
     }
@@ -1157,7 +1284,7 @@ mod request_storage {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(owner.clone()));
+                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone(), data_servers_sps: BoundedVec::default() }));
 
                 assert_noop!(
                     FileSystem::issue_storage_request(

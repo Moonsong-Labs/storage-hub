@@ -60,6 +60,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
       /**
+       * Maximum number of data servers that can be registered for a move bucket request.
+       **/
+      maxDataServersPerMoveBucketRequest: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum number of expired items (per type) to clean up in a single block.
        **/
       maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;

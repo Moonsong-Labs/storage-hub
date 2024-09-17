@@ -31,8 +31,9 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, ExpirationItem, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
-        KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses, PeerIds, ProviderIdFor,
-        ReplicationTargetType, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        KeyProof, MaxBspsPerStorageRequest, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
+        PeerIds, ProviderIdFor, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata,
     },
     BlockRangeToMaximumThreshold, BucketsWithStorageRequests, Error, Event, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
@@ -270,13 +271,57 @@ where
         );
 
         // Register the move bucket request.
-        <PendingMoveBucketRequests<T>>::insert(&new_msp_id, bucket_id, sender);
+        <PendingMoveBucketRequests<T>>::insert(
+            &new_msp_id,
+            bucket_id,
+            MoveBucketRequestMetadata {
+                requester: sender.clone(),
+                data_servers_sps: BoundedVec::default(),
+            },
+        );
         <PendingBucketsToMove<T>>::insert(&bucket_id, ());
 
         let expiration_item = ExpirationItem::MoveBucketRequest((new_msp_id, bucket_id));
         Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(())
+    }
+
+    pub(crate) fn do_bsp_add_data_server_for_move_bucket_request(
+        sender: T::AccountId,
+        msp_id: ProviderIdFor<T>,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
+            .ok_or(Error::<T>::NotABsp)?;
+
+        // Check if the sender is a Storage Provider.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
+            Error::<T>::NotABsp
+        );
+
+        let mut move_bucket_request_metadata =
+            <PendingMoveBucketRequests<T>>::get(&msp_id, bucket_id)
+                .ok_or(Error::<T>::MoveBucketRequestNotFound)?;
+
+        // Check if the BSP is already a data server for the move bucket request.
+        ensure!(
+            !move_bucket_request_metadata
+                .data_servers_sps
+                .contains(&bsp_id),
+            Error::<T>::BspAlreadyDataServer
+        );
+
+        // Add the data server to the move bucket request.
+        move_bucket_request_metadata
+            .data_servers_sps
+            .try_push(bsp_id)
+            .map_err(|_| Error::<T>::BspDataServersExceeded)?;
+
+        <PendingMoveBucketRequests<T>>::insert(&msp_id, bucket_id, move_bucket_request_metadata);
+
+        Ok(bsp_id)
     }
 
     pub(crate) fn do_msp_respond_move_bucket_request(
