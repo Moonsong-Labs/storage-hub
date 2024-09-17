@@ -3723,8 +3723,8 @@ fn challenges_ticker_unpaused_after_spam_finishes() {
         assert!(ChallengesTickerPaused::<Test>::get() == true);
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
-        // Getting how many blocks have been considered full from the last `BlockFullnessPeriod`.
-        // We need to decrease that number so that it is smaller or equal to`BlockFullnessPeriod * MinNotFullBlocksRatio`.
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
+        // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
         let blocks_not_full = NotFullBlocksCount::<Test>::get();
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
         let min_non_full_blocks: u64 =
@@ -3769,7 +3769,7 @@ fn challenges_ticker_paused_twice() {
         assert!(ChallengesTickerPaused::<Test>::get() == true);
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
-        // Getting how many blocks have been considered full from the last `BlockFullnessPeriod`.
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
         // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
         let blocks_not_full = NotFullBlocksCount::<Test>::get();
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
@@ -3791,7 +3791,7 @@ fn challenges_ticker_paused_twice() {
         assert!(ChallengesTickerPaused::<Test>::get() == false);
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
 
-        // Getting how many blocks have been considered full from the last `BlockFullnessPeriod`.
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
         // We need to decrease that number so that it is smaller or equal to`BlockFullnessPeriod * MinNotFullBlocksRatio`.
         let mut blocks_not_full = NotFullBlocksCount::<Test>::get();
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
@@ -3830,7 +3830,167 @@ fn challenges_ticker_paused_twice() {
 }
 
 #[test]
-fn challenges_ticker_provider_not_slashed_if_network_spammed() {}
+fn challenges_ticker_provider_not_slashed_if_network_spammed() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Go beyond `BlockFullnessPeriod` blocks, with not spammed blocks, to simulate
+        // an operational scenario already.
+        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        run_to_block(block_fullness_period + 1);
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+            },
+        );
+
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let prev_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
+            &provider_id,
+            prev_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Check that Provider is not in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+
+        // Up until this point, all blocks have been not-spammed, so the `NotFullBlocksCount`
+        // should be equal to `BlockFullnessPeriod`.
+        let current_not_full_blocks_count = NotFullBlocksCount::<Test>::get();
+        assert_eq!(current_not_full_blocks_count, block_fullness_period);
+
+        // Advance until the next challenge period block without spammed blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_period);
+
+        // Advance to the deadline block for this Provider, but with spammed blocks.
+        run_to_block_spammed(prev_deadline);
+
+        // Check that Provider is NOT in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
+        // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
+        let mut blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let min_non_full_blocks: u64 =
+            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+
+        let current_ticker = ChallengesTicker::<Test>::get();
+        while blocks_not_full <= min_non_full_blocks {
+            let current_block = System::block_number();
+            run_to_block(current_block + 1);
+            blocks_not_full = NotFullBlocksCount::<Test>::get();
+        }
+
+        // Now the `ChallengesTicker` shouldn't be paused. But current ticker should be the same.
+        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
+
+        // Advancing one more block should increase the `ChallengesTicker` by one.
+        let current_block = System::block_number();
+        run_to_block(current_block + 1);
+        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
+
+        // Get how many blocks until the deadline tick.
+        let current_ticker = ChallengesTicker::<Test>::get();
+        let blocks_to_advance = prev_deadline - current_ticker;
+        let current_block = System::block_number();
+        run_to_block(current_block + blocks_to_advance);
+
+        // Check event of provider being marked as slashable.
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: provider_id,
+                next_challenge_deadline: prev_deadline + challenge_period,
+            }
+            .into(),
+        );
+
+        // Check that Provider is in the SlashableProviders storage map.
+        assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(
+            SlashableProviders::<Test>::get(&provider_id),
+            Some(<Test as crate::Config>::RandomChallengesPerBlock::get())
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let current_tick_provider_submitted_proof =
+            prev_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(
+            current_tick_provider_submitted_proof,
+            new_last_tick_provider_submitted_proof
+        );
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
+            None
+        );
+        let new_deadline =
+            new_last_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
+            Some(()),
+        );
+    });
+}
 
 mod on_idle_hook_tests {
     use super::*;
