@@ -59,6 +59,8 @@ export const assertExtrinsicPresent = async (
     );
   }
 
+  let lastError: Error | null = null;
+
   for (let i = 0; i < iterations + 1; i++) {
     try {
       const blockHash = options?.blockHash
@@ -104,18 +106,17 @@ export const assertExtrinsicPresent = async (
         return matches;
       }
 
-      // If no matches found, wait for a short time before retrying
-      await sleep(100);
+      throw new Error(`No matching extrinsic found for ${options.module}.${options.method}`);
     } catch (error) {
+      lastError = error as Error;
       if (i === iterations) {
-        throw error;
+        break;
       }
-      // If the timeout hasn't been reached, continue the loop
       await sleep(100);
     }
   }
 
-  throw new Error("This should not be reached, this is a bug. Please raise.");
+  throw new Error(`Failed to find matching extrinsic after ${timeoutMs}ms: ${lastError?.message}`);
 };
 
 /**

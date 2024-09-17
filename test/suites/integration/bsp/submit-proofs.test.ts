@@ -295,7 +295,7 @@ describeBspNet(
             checkTxPool: true
           });
         },
-        /No extrinsics matching fileSystem\.bspVolunteer found/,
+        /No matching extrinsic found for fileSystem\.bspVolunteer/,
         "There should be no pending volunteer transactions"
       );
     });
