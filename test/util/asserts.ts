@@ -44,8 +44,8 @@ export const assertExtrinsicPresent = async (
     extIndex: number;
   }[]
 > => {
-  const startTime = Date.now();
   const timeoutMs = options.timeout || 5000; // Default timeout of 5 seconds
+  const iterations = Math.floor(timeoutMs / 100);
 
   // Perform invariant checks outside the loop to fail fast on critical errors
   if (options.ignoreParamCheck !== true) {
@@ -59,7 +59,7 @@ export const assertExtrinsicPresent = async (
     );
   }
 
-  while (Date.now() - startTime < timeoutMs) {
+  for (let i = 0; i < iterations + 1; i++) {
     try {
       const blockHash = options?.blockHash
         ? options.blockHash
@@ -107,7 +107,7 @@ export const assertExtrinsicPresent = async (
       // If no matches found, wait for a short time before retrying
       await sleep(100);
     } catch (error) {
-      if (Date.now() - startTime >= timeoutMs) {
+      if (i === iterations) {
         throw error;
       }
       // If the timeout hasn't been reached, continue the loop
@@ -115,10 +115,7 @@ export const assertExtrinsicPresent = async (
     }
   }
 
-  // If the loop completes without finding a match, throw an error
-  throw new Error(
-    `No extrinsics matching ${options?.module}.${options?.method} found within the timeout period.`
-  );
+  throw new Error("This should not be reached, this is a bug. Please raise.");
 };
 
 /**

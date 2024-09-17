@@ -23,7 +23,6 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
     api = await createUserApi();
   });
 
-  // Test below seems to be failing. sh-bsp isn't volunteering to requests even though logs claim to
   it("multiple BSPs volunteer to multiple requests", async () => {
     // Replicate to 3 BSPs, 1 block to maxthreshold (i.e. instant acceptance)
     await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(3, 1)));

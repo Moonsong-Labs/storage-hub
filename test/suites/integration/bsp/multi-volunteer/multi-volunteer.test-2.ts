@@ -19,7 +19,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
     api = await createUserApi();
   });
 
-  it("multiple BSPs race to volunteer ", async () => {
+  it("multiple BSPs race to volunteer for single file", async () => {
     // Replicate to 1 BSPs, 1 block to maxthreshold (i.e. instant acceptance)
     await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, 1)));
 
@@ -64,11 +64,20 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       .signAsync(shUser);
 
     await api.sealBlock(signedExt);
-    await api.wait.bspVolunteer();
+
+    // Waits for all three BSPs to volunteer
+    await api.assert.extrinsicPresent({
+      module: "fileSystem",
+      method: "bspVolunteer",
+      checkTxPool: true,
+      assertLength: 3,
+      timeout: 5000
+    });
+    await api.sealBlock();
+
+    // Wait for a bsp to confirm storage, and check that the other BSPs failed the race
     await api.wait.bspStored();
-
     const matchedEvents = await api.assert.eventMany("system", "ExtrinsicFailed");
-
     strictEqual(matchedEvents.length, 2, "Expected 2 ExtrinsicFailed events from the losing BSPs");
 
     const matched = matchedEvents
