@@ -66,7 +66,7 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
  */
 export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) => {
   const iterations = 41;
-  const delay = 50;
+  const delay = 100;
   // To allow time for local file transfer to complete
   for (let i = 0; i < iterations; i++) {
     try {

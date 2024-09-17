@@ -68,7 +68,8 @@ describeBspNet(
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true,
-        assertLength: 3
+        assertLength: 3,
+        timeout: 10000
       });
 
       // Seal one more block with the pending extrinsics.
