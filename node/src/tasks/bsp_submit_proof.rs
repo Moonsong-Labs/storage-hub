@@ -161,8 +161,6 @@ where
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
-            info!(target: LOG_TARGET, "Forest root of BSP: {:?}", fs.read().await.root());
-
             let p = fs
                 .read()
                 .await
@@ -193,11 +191,6 @@ where
                 }
             }
         }
-        info!(
-            target: LOG_TARGET,
-            "Proven file keys: {:?}",
-            proven_keys
-        );
 
         // Construct key challenges and generate key proofs for them.
         let mut key_proofs = KeyProofs::new();
@@ -215,12 +208,6 @@ where
             forest_proof: proven_file_keys.proof,
             key_proofs,
         };
-
-        info!(
-            target: LOG_TARGET,
-            "Full proof to send to the runtime: {:?}",
-            proof
-        );
 
         // Submit proof to the runtime.
         // Provider is `None` since we're submitting with the account linked to the BSP.
