@@ -602,19 +602,29 @@ mod tests {
             .is_ok()
         );
 
-        // Since key 9 and 10 share a prefix, they are under a nibbled branch, which means `apply_delta` removing
-        // key 9 would fail if it wasn't for the proof generation fix we added in `generate_proof`.
-        let proof = forest_storage.generate_proof(vec![keys[9]]).unwrap();
-        let proof = proof.proof;
-        let mutations: Vec<(H256, TrieMutation)> =
-            vec![(keys[9], TrieRemoveMutation::default().into())];
+        // Probabilistically, two of the 50 generated keys should share the same prefix and as such should be neighbors.
+        // So, we test that any generated proof is able to be used to remove any key from the trie.
+        // Spoiler alert: with the current parameters, the first two keys are neighbors.
+        for key in keys.iter() {
+            println!("Trying to remove key: {:?}", key.as_bytes());
+            let proof = forest_storage.generate_proof(vec![*key]).unwrap();
+            let proof = proof.proof;
+            let mutations: Vec<(H256, TrieMutation)> =
+                vec![(*key, TrieRemoveMutation::default().into())];
 
-        assert!(
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
-                &root, &mutations, &proof,
-            )
-            .is_ok()
-        );
+            let apply_delta_result =
+                ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                    &root, &mutations, &proof,
+                );
+            assert!(apply_delta_result.is_ok());
+            assert!(apply_delta_result
+                .unwrap()
+                .2
+                .into_iter()
+                .map(|(key, _)| key)
+                .collect::<Vec<H256>>()
+                .contains(key));
+        }
     }
 
     #[test]
