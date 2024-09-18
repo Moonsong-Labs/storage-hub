@@ -100,7 +100,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw `Error fetching peerId from ${url}`;
 };
 
-export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
+export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = false) => {
   let userApi: EnrichedBspApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
@@ -125,16 +125,12 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     );
 
     if (bspNetConfig.noisy) {
-      console.log(`toxiproxy IP: ${bspIp}`);
+      verbose && console.log(`toxiproxy IP: ${bspIp}`);
     } else {
-      console.log(`sh-bsp IP: ${bspIp}`);
+      verbose && console.log(`sh-bsp IP: ${bspIp}`);
     }
 
-    const bspPeerId = await getContainerPeerId(
-      `http://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`,
-      true
-    );
-    console.log(`sh-bsp Peer ID: ${bspPeerId}`);
+    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
 
     process.env.BSP_IP = bspIp;
     process.env.BSP_PEER_ID = bspPeerId;
@@ -152,7 +148,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     const peerIDUser = await getContainerPeerId(
       `http://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`
     );
-    console.log(`sh-user Peer ID: ${peerIDUser}`);
+    verbose && console.log(`sh-user Peer ID: ${peerIDUser}`);
 
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
