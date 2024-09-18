@@ -360,7 +360,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageRequestBspsRequiredFulfilled: AugmentedError<ApiType>;
       /**
-       * Opertion not allowed while the storage request exists.
+       * Operation not allowed while the storage request exists.
        **/
       StorageRequestExists: AugmentedError<ApiType>;
       /**

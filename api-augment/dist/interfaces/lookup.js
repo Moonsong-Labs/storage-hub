@@ -3127,7 +3127,6 @@ export default {
         fileKey: "H256"
       },
       bsp_add_data_server_for_move_bucket_request: {
-        mspId: "H256",
         bucketId: "H256"
       },
       msp_accept_storage_request: {
@@ -3948,8 +3947,7 @@ export default {
    * Lookup412: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
-    requester: "AccountId32",
-    dataServersSps: "Vec<H256>"
+    requester: "AccountId32"
   },
   /**
    * Lookup413: pallet_file_system::pallet::Error<T>
@@ -4008,12 +4006,12 @@ export default {
       "NotSelectedMsp",
       "MspAlreadyConfirmed",
       "RequestWithoutMsp",
-      "FileMetadataProcessingQueueFull",
       "MspAlreadyStoringBucket",
       "MoveBucketRequestNotFound",
       "BucketIsBeingMoved",
       "BspAlreadyDataServer",
-      "BspDataServersExceeded"
+      "BspDataServersExceeded",
+      "FileMetadataProcessingQueueFull"
     ]
   },
   /**

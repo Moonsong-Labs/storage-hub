@@ -3080,7 +3080,6 @@ declare const _default: {
         fileKey: string;
       };
       bsp_add_data_server_for_move_bucket_request: {
-        mspId: string;
         bucketId: string;
       };
       msp_accept_storage_request: {
@@ -3805,7 +3804,6 @@ declare const _default: {
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: string;
-    dataServersSps: string;
   };
   /**
    * Lookup413: pallet_file_system::pallet::Error<T>

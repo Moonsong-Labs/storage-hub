@@ -201,10 +201,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBspsPerStorageRequest: Get<u32>;
 
-        /// Maximum number of data servers that can be registered for a move bucket request.
-        #[pallet::constant]
-        type MaxDataServersPerMoveBucketRequest: Get<u32>;
-
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
@@ -402,6 +398,18 @@ pub mod pallet {
         Blake2_128Concat,
         BucketIdFor<T>,
         MoveBucketRequestMetadata<T>,
+    >;
+
+    /// BSP data servers for move bucket requests.
+    #[pallet::storage]
+    #[pallet::getter(fn data_servers_for_move_bucket)]
+    pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        BucketIdFor<T>,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        (),
     >;
 
     /// Bookkeeping of buckets that are pending to be moved to a new MSP.
@@ -608,7 +616,7 @@ pub mod pallet {
         StorageRequestNotFound,
         /// Operation not allowed while the storage request is not being revoked.
         StorageRequestNotRevoked,
-        /// Opertion not allowed while the storage request exists.
+        /// Operation not allowed while the storage request exists.
         StorageRequestExists,
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
@@ -777,7 +785,17 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response)?;
+            let msp_id =
+                Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response.clone())?;
+
+            match response {
+                BucketMoveRequestResponse::Accepted => {
+                    Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
+                }
+                BucketMoveRequestResponse::Rejected => {
+                    Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
+                }
+            }
 
             Ok(())
         }
@@ -891,16 +909,12 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_add_data_server_for_move_bucket_request(
             origin: OriginFor<T>,
-            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let bsp_id = Self::do_bsp_add_data_server_for_move_bucket_request(
-                who.clone(),
-                msp_id,
-                bucket_id,
-            )?;
+            let bsp_id =
+                Self::do_bsp_add_data_server_for_move_bucket_request(who.clone(), bucket_id)?;
 
             Self::deposit_event(Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id });
 

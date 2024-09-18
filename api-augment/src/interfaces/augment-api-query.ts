@@ -306,6 +306,18 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
+       * BSP data servers for move bucket requests.
+       **/
+      dataServersForMoveBucket: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * A map of blocks to expired file deletion requests.
        **/
       fileDeletionRequestExpirations: AugmentedQuery<

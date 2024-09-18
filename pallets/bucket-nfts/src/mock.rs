@@ -215,7 +215,6 @@ impl pallet_file_system::Config for Test {
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxDataServersPerMoveBucketRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;

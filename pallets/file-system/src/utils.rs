@@ -35,8 +35,8 @@ use crate::{
         PeerIds, ProviderIdFor, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
         StorageRequestMetadata,
     },
-    BlockRangeToMaximumThreshold, BucketsWithStorageRequests, Error, Event, Pallet,
-    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+    BlockRangeToMaximumThreshold, BucketsWithStorageRequests, DataServersForMoveBucket, Error,
+    Event, Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
 };
 
@@ -281,7 +281,9 @@ where
         // Check if there are any open storage requests for the bucket.
         // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
         ensure!(
-            !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id).any(|(_, _)| true),
+            !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id)
+                .next()
+                .is_some(),
             Error::<T>::StorageRequestExists
         );
 
@@ -291,7 +293,6 @@ where
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
-                data_servers_sps: BoundedVec::default(),
             },
         );
         <PendingBucketsToMove<T>>::insert(&bucket_id, ());
@@ -304,7 +305,6 @@ where
 
     pub(crate) fn do_bsp_add_data_server_for_move_bucket_request(
         sender: T::AccountId,
-        msp_id: ProviderIdFor<T>,
         bucket_id: BucketIdFor<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
@@ -316,25 +316,20 @@ where
             Error::<T>::NotABsp
         );
 
-        let mut move_bucket_request_metadata =
-            <PendingMoveBucketRequests<T>>::get(&msp_id, bucket_id)
-                .ok_or(Error::<T>::MoveBucketRequestNotFound)?;
+        // Check if the move bucket request exists.
+        ensure!(
+            <PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            Error::<T>::MoveBucketRequestNotFound,
+        );
 
         // Check if the BSP is already a data server for the move bucket request.
         ensure!(
-            !move_bucket_request_metadata
-                .data_servers_sps
-                .contains(&bsp_id),
+            !DataServersForMoveBucket::<T>::contains_key(&bucket_id, &bsp_id),
             Error::<T>::BspAlreadyDataServer
         );
 
         // Add the data server to the move bucket request.
-        move_bucket_request_metadata
-            .data_servers_sps
-            .try_push(bsp_id)
-            .map_err(|_| Error::<T>::BspDataServersExceeded)?;
-
-        <PendingMoveBucketRequests<T>>::insert(&msp_id, bucket_id, move_bucket_request_metadata);
+        DataServersForMoveBucket::<T>::insert(&bucket_id, &bsp_id, ());
 
         Ok(bsp_id)
     }
@@ -343,7 +338,7 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         response: BucketMoveRequestResponse,
-    ) -> DispatchResult {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
@@ -364,10 +359,7 @@ where
             <PendingBucketsToMove<T>>::remove(&bucket_id);
             <PendingMoveBucketRequests<T>>::remove(&msp_id, bucket_id);
 
-            // deposit event
-            Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
-
-            return Ok(());
+            return Ok(msp_id);
         }
 
         let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
@@ -401,7 +393,7 @@ where
 
         Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
 
-        Ok(())
+        Ok(msp_id)
     }
 
     /// Update the privacy of a bucket.
@@ -1760,9 +1752,9 @@ mod hooks {
         pallet,
         types::MerkleHash,
         utils::{BucketIdFor, ProviderIdFor},
-        Event, FileDeletionRequestExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
-        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        DataServersForMoveBucket, Event, FileDeletionRequestExpirations,
+        NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests,
+        ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_support::weights::Weight;
@@ -1853,6 +1845,8 @@ mod hooks {
             let mut expired_move_bucket_requests = MoveBucketRequestExpirations::<T>::take(&block);
             remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
 
+            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
+            // TODO: process all the expired move bucket requests. If not, we should return early.
             while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
                 Self::process_expired_move_bucket_request(msp_id, bucket_id, remaining_weight);
             }
@@ -1937,7 +1931,7 @@ mod hooks {
             remaining_weight: &mut Weight,
         ) {
             let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(0, 1);
+            let potential_weight = db_weight.reads_writes(0, 2);
 
             if !remaining_weight.all_gte(potential_weight) {
                 return;
@@ -1945,6 +1939,7 @@ mod hooks {
 
             PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
             PendingBucketsToMove::<T>::remove(&bucket_id);
+            DataServersForMoveBucket::<T>::drain_prefix(&bucket_id);
 
             remaining_weight.saturating_reduce(potential_weight);
 

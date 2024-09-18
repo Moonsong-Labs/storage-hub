@@ -3764,7 +3764,6 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isBspAddDataServerForMoveBucketRequest: boolean;
     readonly asBspAddDataServerForMoveBucketRequest: {
-      readonly mspId: H256;
       readonly bucketId: H256;
     } & Struct;
     readonly isMspAcceptStorageRequest: boolean;
@@ -4683,7 +4682,6 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletFileSystemMoveBucketRequestMetadata (412) */
   interface PalletFileSystemMoveBucketRequestMetadata extends Struct {
     readonly requester: AccountId32;
-    readonly dataServersSps: Vec<H256>;
   }
   /** @name PalletFileSystemError (413) */
   interface PalletFileSystemError extends Enum {
@@ -4798,12 +4796,12 @@ declare module "@polkadot/types/lookup" {
       | "NotSelectedMsp"
       | "MspAlreadyConfirmed"
       | "RequestWithoutMsp"
-      | "FileMetadataProcessingQueueFull"
       | "MspAlreadyStoringBucket"
       | "MoveBucketRequestNotFound"
       | "BucketIsBeingMoved"
       | "BspAlreadyDataServer"
-      | "BspDataServersExceeded";
+      | "BspDataServersExceeded"
+      | "FileMetadataProcessingQueueFull";
   }
   /** @name PalletProofsDealerError (419) */
   interface PalletProofsDealerError extends Enum {
