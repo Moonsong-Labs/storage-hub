@@ -1,4 +1,4 @@
-import _ from "lodash";
+import { isDeepStrictEqual } from "node:util";
 import {
   alice,
   bspKey,
@@ -26,7 +26,7 @@ async function main() {
 
   // Check if executor parameters are set
   const { executorParams } = (await resources.relayApi.query.configuration.activeConfig()).toJSON();
-  if (_.isEqual(executorParams, idealExecutorParams)) {
+  if (isDeepStrictEqual(executorParams, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
   } else {
     // @ts-expect-error - ApiAugment issue

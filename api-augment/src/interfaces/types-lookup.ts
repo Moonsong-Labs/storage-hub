@@ -4968,6 +4968,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketIsBeingMoved: boolean;
     readonly isBspAlreadyDataServer: boolean;
     readonly isBspDataServersExceeded: boolean;
+    readonly isFileMetadataProcessingQueueFull: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5021,11 +5022,7 @@ declare module "@polkadot/types/lookup" {
       | "NotSelectedMsp"
       | "MspAlreadyConfirmed"
       | "RequestWithoutMsp"
-      | "MspAlreadyStoringBucket"
-      | "MoveBucketRequestNotFound"
-      | "BucketIsBeingMoved"
-      | "BspAlreadyDataServer"
-      | "BspDataServersExceeded";
+      | "FileMetadataProcessingQueueFull";
   }
 
   /** @name PalletProofsDealerError (419) */

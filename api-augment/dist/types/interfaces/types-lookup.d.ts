@@ -4744,6 +4744,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketIsBeingMoved: boolean;
     readonly isBspAlreadyDataServer: boolean;
     readonly isBspDataServersExceeded: boolean;
+    readonly isFileMetadataProcessingQueueFull: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4797,6 +4798,7 @@ declare module "@polkadot/types/lookup" {
       | "NotSelectedMsp"
       | "MspAlreadyConfirmed"
       | "RequestWithoutMsp"
+      | "FileMetadataProcessingQueueFull"
       | "MspAlreadyStoringBucket"
       | "MoveBucketRequestNotFound"
       | "BucketIsBeingMoved"

@@ -4010,6 +4010,7 @@ export default {
       "NotSelectedMsp",
       "MspAlreadyConfirmed",
       "RequestWithoutMsp",
+      "FileMetadataProcessingQueueFull",
       "MspAlreadyStoringBucket",
       "MoveBucketRequestNotFound",
       "BucketIsBeingMoved",

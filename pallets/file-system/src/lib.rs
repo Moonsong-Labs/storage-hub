@@ -717,6 +717,8 @@ pub mod pallet {
         BspAlreadyDataServer,
         /// Too many registered data servers for the move bucket request.
         BspDataServersExceeded,
+        /// The bounded vector that holds file metadata to process it is full but there's still more to process.
+        FileMetadataProcessingQueueFull,
     }
 
     #[pallet::call]

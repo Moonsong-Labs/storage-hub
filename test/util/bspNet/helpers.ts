@@ -25,6 +25,8 @@ import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
 import * as ShConsts from "./consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
 import invariant from "tiny-invariant";
+import { sealBlock } from "./block.ts";
+import type { ApiPromise } from "@polkadot/api";
 
 const exec = util.promisify(child_process.exec);
 
@@ -392,7 +394,7 @@ export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string)
 };
 
 export const addBsp = async (
-  api: EnrichedBspApi,
+  api: ApiPromise,
   bspKey: KeyringPair,
   options?: {
     name?: string;
@@ -421,13 +423,14 @@ export const addBsp = async (
 
   //Give it some balance.
   const amount = 10000n * 10n ** 12n;
-  await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
+  await sealBlock(api, api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
 
   const bspIp = await getContainerIp(containerName);
   const multiAddressBsp = `/ip4/${bspIp}/tcp/${p2pPort}/p2p/${peerId}`;
 
   // Make BSP
-  await api.sealBlock(
+  await sealBlock(
+    api,
     api.tx.sudo.sudo(
       api.tx.providers.forceBspSignUp(
         bspKey.address,

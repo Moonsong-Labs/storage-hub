@@ -53,6 +53,29 @@ pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 
 [features]
+default = ["std"]
+std = [
+	"codec/std",
+	"frame-benchmarking/std",
+	"frame-system/std",
+	"sc-executor/std",
+	"sp-core/std",
+	"sp-trie/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"trie-db/std",
+	"polkadot-primitives/std",
+	"storage-hub-runtime/std",
+	"shp-constants/std",
+	"shp-file-key-verifier/std",
+	"shp-file-metadata/std",
+	"shp-forest-verifier/std",
+	"shp-traits/std",
+	"pallet-file-system/std",
+	"pallet-proofs-dealer/std",
+	"pallet-storage-providers/std",
+]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",

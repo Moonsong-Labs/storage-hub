@@ -13,6 +13,11 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
     fn root(&self) -> HasherOutT<T>;
     /// Check if the file key exists in the storage.
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>>;
+    /// Get the file metadata for a file key.
+    fn get_file_metadata(
+        &self,
+        file_key: &HasherOutT<T>,
+    ) -> Result<Option<FileMetadata>, ErrorT<T>>;
     /// Generate proof for file key(s).
     fn generate_proof(
         &self,
@@ -23,7 +28,7 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
         &mut self,
         files_metadata: &[FileMetadata],
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>>;
-    /// Delete a file key and generate a proof for it.
+    /// Delete a file key.
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>>;
 }
 

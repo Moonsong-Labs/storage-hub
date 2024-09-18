@@ -243,6 +243,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FileKeyNotPendingDeletion: AugmentedError<ApiType>;
       /**
+       * The bounded vector that holds file metadata to process it is full but there's still more to process.
+       **/
+      FileMetadataProcessingQueueFull: AugmentedError<ApiType>;
+      /**
        * File size cannot be zero.
        **/
       FileSizeCannotBeZero: AugmentedError<ApiType>;
