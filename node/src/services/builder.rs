@@ -17,7 +17,7 @@ use shc_forest_manager::{
 };
 use shc_rpc::StorageHubClientRpcConfig;
 
-const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 30;
+const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
 
 use super::{
     forest_storage::{ForestStorageCaching, ForestStorageSingle},
