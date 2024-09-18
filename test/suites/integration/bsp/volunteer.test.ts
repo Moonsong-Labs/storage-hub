@@ -57,7 +57,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       throw new Error("Event doesn't match Type");
     }
 
-    const issueStorageRequestResult = await userApi.sealBlock(
+    await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         destination,
@@ -70,11 +70,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     );
     await sleep(500); // wait for the bsp to volunteer
 
-    const { event } = userApi.assertEvent(
-      "fileSystem",
-      "NewStorageRequest",
-      issueStorageRequestResult.events
-    );
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
