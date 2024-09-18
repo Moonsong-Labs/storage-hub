@@ -476,7 +476,8 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
             .get_metadata(&file_key)
-            .map_err(|e| anyhow!("File metadata not found: {:?}", e))?;
+            .map_err(|e| anyhow!("Error retrieving file metadata: {:?}", e))?
+            .ok_or(anyhow!("File metadata not found!"))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 

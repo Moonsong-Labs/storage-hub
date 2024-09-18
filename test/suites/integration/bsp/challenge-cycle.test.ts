@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, sleep, type EnrichedBspApi, type SealedBlock } from "../../../util";
+import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
@@ -51,10 +51,10 @@ describeBspNet(
       // Wait for task to execute and seal one more block.
       // In this block, the BSP should have submitted a proof.
       await sleep(500);
-      const blockResult = await userApi.sealBlock();
+      await userApi.sealBlock();
 
       // Assert for the the event of the proof successfully submitted and verified.
-      userApi.assert.eventPresent("proofsDealer", "ProofAccepted", blockResult.events);
+      await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
     });
 
     it("BSP fails to submit proof and is marked as slashable", async () => {
@@ -86,13 +86,12 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const blocksToAdvance = nextDeadlineTick - currentBlockNumber;
-      let blockResult: SealedBlock | undefined;
       for (let i = 0; i < blocksToAdvance; i++) {
-        blockResult = await userApi.sealBlock();
+        await userApi.sealBlock();
       }
 
       // Check for event of slashable BSP.
-      userApi.assert.eventPresent("proofsDealer", "SlashableProvider", blockResult?.events);
+      await userApi.assert.eventPresent("proofsDealer", "SlashableProvider");
     });
 
     it(
@@ -145,10 +144,10 @@ describeBspNet(
         // Wait for task to execute and seal one more block.
         // In this block, the BSP should have submitted a proof.
         await sleep(500);
-        const blockResult = await userApi.block.seal();
+        await userApi.block.seal();
 
         // Assert for the the event of the proof successfully submitted and verified.
-        userApi.assert.eventPresent("proofsDealer", "ProofAccepted", blockResult.events);
+        await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
       }
     );
   }

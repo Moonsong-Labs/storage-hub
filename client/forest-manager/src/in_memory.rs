@@ -1,4 +1,5 @@
 use codec::{Decode, Encode};
+use codec::{Decode, Encode};
 use hash_db::Hasher;
 use shc_common::types::{FileMetadata, HasherOutT};
 use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
@@ -36,6 +37,21 @@ where
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
         Ok(trie.contains(file_key.as_ref())?)
+    }
+
+    fn get_file_metadata(
+        &self,
+        file_key: &HasherOutT<T>,
+    ) -> Result<Option<FileMetadata>, ErrorT<T>> {
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+        let encoded_metadata = trie.get(file_key.as_ref())?;
+        match encoded_metadata {
+            Some(data) => {
+                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
+                Ok(Some(decoded_metadata))
+            }
+            None => Ok(None),
+        }
     }
 
     fn generate_proof(

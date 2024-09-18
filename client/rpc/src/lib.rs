@@ -8,6 +8,7 @@ use shc_common::types::{
 };
 use shc_forest_manager::traits::ForestStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
+use sp_core::Encode;
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{AccountId32, Deserialize, KeyTypeId, Serialize};
@@ -93,7 +94,33 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<SaveFileToDisk>;
 
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256>;
+    async fn get_forest_root(&self, forest_key: Option<String>) -> RpcResult<H256>;
+
+    #[method(name = "isFileInForest")]
+    async fn is_file_in_forest(
+        &self,
+        forest_key: Option<String>,
+        file_key: H256,
+    ) -> RpcResult<bool>;
+
+    #[method(name = "isFileInFileStorage")]
+    async fn is_file_in_file_storage(&self, file_key: H256) -> RpcResult<bool>;
+
+    #[method(name = "getFileMetadata")]
+    async fn get_file_metadata(
+        &self,
+        forest_key: Option<String>,
+        file_key: H256,
+    ) -> RpcResult<Option<FileMetadata>>;
+
+    // Note: this RPC method returns a Vec<u8> because the `ForestProof` struct is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateForestProof")]
+    async fn generate_forest_proof(
+        &self,
+        forest_key: Option<String>,
+        challenged_file_keys: Vec<H256>,
+    ) -> RpcResult<Vec<u8>>;
 
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
@@ -218,10 +245,12 @@ where
         let read_file_storage = self.file_storage.read().await;
 
         // Retrieve file metadata from File Storage.
-        let file_metadata = match read_file_storage.get_metadata(&file_key) {
-            Ok(metadata) => metadata,
-            Err(FileStorageError::FileDoesNotExist) => return Ok(SaveFileToDisk::FileNotFound),
-            Err(e) => return Err(into_rpc_error(e)),
+        let file_metadata = match read_file_storage
+            .get_metadata(&file_key)
+            .map_err(into_rpc_error)?
+        {
+            None => return Ok(SaveFileToDisk::FileNotFound),
+            Some(metadata) => metadata,
         };
 
         // Check if file is incomplete.
@@ -260,16 +289,101 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256> {
-        let key = FSH::Key::from(key.unwrap_or_default());
+    async fn get_forest_root(&self, forest_key: Option<String>) -> RpcResult<H256> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
 
-        let fs =
-            self.forest_storage_handler.get(&key).await.ok_or_else(|| {
-                into_rpc_error(format!("Forest storage not found for key {:?}", key))
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
             })?;
 
         let read_fs = fs.read().await;
         Ok(read_fs.root())
+    }
+
+    async fn is_file_in_forest(
+        &self,
+        forest_key: Option<String>,
+        file_key: H256,
+    ) -> RpcResult<bool> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
+            })?;
+
+        let read_fs = fs.read().await;
+        Ok(read_fs
+            .contains_file_key(&file_key)
+            .map_err(into_rpc_error)?)
+    }
+
+    async fn is_file_in_file_storage(&self, file_key: H256) -> RpcResult<bool> {
+        // Acquire FileStorage read lock.
+        let read_file_storage = self.file_storage.read().await;
+
+        // See if the file metadata is in the File Storage.
+        match read_file_storage
+            .get_metadata(&file_key)
+            .map_err(into_rpc_error)?
+        {
+            None => return Ok(false),
+            Some(_) => Ok(true),
+        }
+    }
+
+    // Note: this method could use either the file storage or the forest storage, but it's using the forest storage.
+    // WARNING: Right now, forests don't have the file metadata saved to them, so don't expect to get the file
+    // metadata from this method until that's fixed.
+    async fn get_file_metadata(
+        &self,
+        forest_key: Option<String>,
+        file_key: H256,
+    ) -> RpcResult<Option<FileMetadata>> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
+            })?;
+
+        let read_fs = fs.read().await;
+        Ok(read_fs
+            .get_file_metadata(&file_key)
+            .map_err(into_rpc_error)?)
+    }
+
+    async fn generate_forest_proof(
+        &self,
+        forest_key: Option<String>,
+        challenged_file_keys: Vec<H256>,
+    ) -> RpcResult<Vec<u8>> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
+            })?;
+
+        let read_fs = fs.read().await;
+        let forest_proof = read_fs
+            .generate_proof(challenged_file_keys)
+            .map_err(into_rpc_error)?;
+
+        Ok(forest_proof.encode())
     }
 
     // If a seed is provided, we manually generate and persist it into the file system.

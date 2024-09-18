@@ -1,14 +1,7 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import {
-  describeBspNet,
-  sleep,
-  assertEventMany,
-  fetchEventData,
-  ShConsts,
-  type EnrichedBspApi
-} from "../../../util";
+import { describeBspNet, fetchEventData, ShConsts, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -116,15 +109,12 @@ describeBspNet(
         await userApi.sealBlock();
       }
 
-      // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(500);
-      // Check that there are 3 pending extrinsics from BSPs (proof submission).
-      const submitProofPending = await userApi.rpc.author.pendingExtrinsics();
-      strictEqual(
-        submitProofPending.length,
-        3,
-        "There should be three pending extrinsics from BSPs (proof submission)"
-      );
+      await userApi.assert.extrinsicPresent({
+        method: "submitProof",
+        module: "proofsDealer",
+        checkTxPool: true,
+        assertLength: 3
+      });
 
       // Check that no Providers have submitted a valid proof yet.
       currentBlock = await userApi.rpc.chain.getBlock();
@@ -134,15 +124,10 @@ describeBspNet(
       assert(providersWithProofs.isEmpty, "No Providers should have submitted a valid proof yet");
 
       // Seal one more block with the pending extrinsics.
-      let blockResult = await userApi.sealBlock();
+      await userApi.sealBlock();
 
       // Assert for the the event of the proof successfully submitted and verified.
-      const proofAcceptedEvents = assertEventMany(
-        userApi,
-        "proofsDealer",
-        "ProofAccepted",
-        blockResult.events
-      );
+      const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
       strictEqual(proofAcceptedEvents.length, 3, "There should be three proofs accepted events");
 
       // Check that the Providers were added to the list of Providers that have submitted proofs
@@ -166,14 +151,12 @@ describeBspNet(
       assert(lastChargeableInfo.priceIndex.toNumber() === 0);
 
       // Seal one more block to update the last chargeable info of the Provider
-      blockResult = await userApi.sealBlock();
+      await userApi.sealBlock();
 
       // Assert for the the event of the last chargeable info of the Providers being updated
-      const lastChargeableInfoUpdatedEvents = assertEventMany(
-        userApi,
+      const lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
         "paymentStreams",
-        "LastChargeableInfoUpdated",
-        blockResult.events
+        "LastChargeableInfoUpdated"
       );
       strictEqual(
         lastChargeableInfoUpdatedEvents.length,
@@ -207,32 +190,18 @@ describeBspNet(
       assert(usersWithDebtResult.asOk.length === 1);
       assert(usersWithDebtResult.asOk[0].toString() === alice);
 
-      // Wait for the BSP to realise that Alice owes it money
-      await sleep(500);
-
-      // Check that the charge payment stream extrinsic is now pending
-      const chargePaymentStreamPending = await userApi.rpc.author.pendingExtrinsics();
-      strictEqual(
-        chargePaymentStreamPending.length,
-        1,
-        "There should be one pending extrinsic for charging the payment stream"
-      );
-      strictEqual(
-        chargePaymentStreamPending[0].method.section,
-        "paymentStreams",
-        "The pending extrinsic should be for the paymentStreams module"
-      );
-      strictEqual(
-        chargePaymentStreamPending[0].method.method,
-        "chargePaymentStreams",
-        "The pending extrinsic should be for the chargePaymentStream method"
-      );
+      await userApi.assert.extrinsicPresent({
+        method: "chargePaymentStreams",
+        module: "paymentStreams",
+        checkTxPool: true,
+        assertLength: 1
+      });
 
       // Seal a block to allow the BSP to charge the payment stream
-      blockResult = await userApi.sealBlock();
+      await userApi.sealBlock();
 
       // Assert that event for the BSP charging its payment stream was emitted
-      userApi.assertEvent("paymentStreams", "PaymentStreamCharged", blockResult.events);
+      await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
     });
   }
 );
