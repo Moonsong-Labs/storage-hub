@@ -89,7 +89,6 @@ construct_runtime!(
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
         BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
         Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
-        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
     }
 );
 
@@ -177,6 +176,10 @@ impl pallet_nfts::Config for Test {
 }
 
 // Payment streams pallet:
+parameter_types! {
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
+}
+
 impl pallet_payment_streams::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -265,31 +268,6 @@ impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
         AccountId::new([0; 32])
     }
-}
-
-parameter_types! {
-    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
-}
-
-// Converter from the BlockNumber type to the Balance type for math
-pub struct BlockNumberToBalance;
-
-impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
-    fn convert(block_number: BlockNumberFor<Test>) -> Balance {
-        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
-    }
-}
-
-impl pallet_payment_streams::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type NativeBalance = Balances;
-    type ProvidersPallet = Providers;
-    type RuntimeHoldReason = RuntimeHoldReason;
-    type Units = u32;
-    type NewStreamDeposit = ConstU64<10>;
-    type UserWithoutFundsCooldown = ConstU64<100>;
-    type BlockNumberToBalance = BlockNumberToBalance;
-    type ProvidersProofSubmitters = MockSubmittingProviders;
 }
 
 impl pallet_proofs_dealer::Config for Test {
