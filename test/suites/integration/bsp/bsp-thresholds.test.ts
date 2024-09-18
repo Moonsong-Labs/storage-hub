@@ -46,12 +46,10 @@ describeBspNet(
     });
 
     it("Shouldn't be able to setGlobalParams without sudo", async () => {
-      const { extSuccess, events } = await api.sealBlock(
-        api.tx.fileSystem.setGlobalParameters(13, 37)
-      );
+      const { extSuccess } = await api.sealBlock(api.tx.fileSystem.setGlobalParameters(13, 37));
 
       strictEqual(extSuccess, false, "Extrinsic should be unsuccessful");
-      const { data } = api.assert.eventPresent("system", "ExtrinsicFailed", events);
+      const { data } = await api.assert.eventPresent("system", "ExtrinsicFailed");
       const error = data[0].toString();
       strictEqual(error, "BadOrigin", "Extrinsic should fail with BadOrigin");
 
@@ -100,8 +98,7 @@ describeBspNet(
       await api.file.newStorageRequest("res/smile.jpg", "test/smile.jpg", "bucket-1"); // T0
       await api.wait.bspVolunteer();
 
-      const events = await api.query.system.events();
-      const matchedEvents = api.assert.eventMany("fileSystem", "AcceptedBspVolunteer", events); // T1
+      const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
       assert(matchedEvents.length === 2, "Multiple BSPs should be able to volunteer");
 
@@ -171,8 +168,7 @@ describeBspNet(
       await api.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-3"); // T0
 
       await api.wait.bspVolunteer();
-      const events = await api.query.system.events();
-      const matchedEvents = api.assert.eventMany("fileSystem", "AcceptedBspVolunteer", events); // T1
+      const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
       const filtered = matchedEvents.filter(
         ({ event }) =>
