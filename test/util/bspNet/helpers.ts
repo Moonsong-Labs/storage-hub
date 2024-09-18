@@ -113,6 +113,9 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     if (bspNetConfig.rocksdb) {
       file = "local-dev-bsp-rocksdb-compose.yml";
     }
+    if (bspNetConfig.noisy) {
+      file = "noisy-bsp-compose.yml";
+    }
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const composeFile = fs.readFileSync(composeFilePath, "utf8");

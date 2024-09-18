@@ -1,10 +1,17 @@
+use std::{
+    cmp::{min, Ordering},
+    future::Future,
+    pin::Pin,
+    time::Duration,
+};
+
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
 use frame_system::EventRecord;
-use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMutation};
 use sp_core::H256;
 use sp_runtime::DispatchError;
-use std::{cmp::Ordering, future::Future, pin::Pin, time::Duration};
+
+use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMutation};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -131,7 +138,18 @@ pub type ExtrinsicHash = H256;
 /// Type alias for the tip.
 pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<storage_hub_runtime::Runtime>;
 
-/// A struct which defines a submit extrinsic retry strategy.
+/// A struct which defines a submit extrinsic retry strategy. This defines a simple strategy when
+/// sending and extrinsic. It will retry a maximum number of times ([Self::max_retries]).
+/// If the extrinsic is not included in a block within a certain time frame [`Self::timeout`] it is
+/// considered a failure.
+/// The tip will increase with each retry, up to a maximum tip of [`Self::max_tip`].
+/// The tip series (with the exception of the first try which is 0) is a geometric progression with
+/// a multiplier of [`Self::base_multiplier`].
+/// The final tip for each retry is calculated as:
+/// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
+/// ([`Self::base_multiplier`] - 1)).
+/// An optional check function can be provided to determine if the extrinsic should be retried,
+/// aborting early if the function returns false.
 pub struct RetryStrategy {
     /// Maximum number of retries after which the extrinsic submission will be considered failed.
     pub max_retries: u32,
@@ -140,11 +158,13 @@ pub struct RetryStrategy {
     /// Maximum tip to be paid for the extrinsic submission. The progression follows an exponential
     /// backoff strategy.
     pub max_tip: f64,
-    /// Base multiplier for the tip calculation.
-    /// This is a constant value that is used to calculate the tip multiplier.
+    /// Base multiplier for the tip calculation. This is the base of the geometric progression.
     /// A higher value will make tips grow faster.
     pub base_multiplier: f64,
     /// An optional check function to determine if the extrinsic should be retried.
+    /// If this is provided, the function will be called before each retry to determine if the
+    /// extrinsic should be retried or the submission should be considered failed. If this is not
+    /// provided, the extrinsic will be retried until [`Self::max_retries`] is reached.
     pub should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
 }
 
@@ -188,18 +208,20 @@ impl RetryStrategy {
         self
     }
 
-    /// Compute the exponential increase (multiplier) in tip at each retry.
-    /// A higher multiplier will make tips grow exponentially faster.
-    fn compute_tip_multiplier(&self) -> f64 {
-        (self.base_multiplier.ln() / self.max_retries as f64).exp()
-    }
-
+    /// Computes the tip for the given retry count.
+    /// The formula for the tip is:
+    /// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
+    /// ([`Self::base_multiplier`] - 1)).
     pub fn compute_tip(&self, retry_count: u32) -> f64 {
-        let multiplier = self.compute_tip_multiplier();
+        // Ensure the retry_count is within the bounds of max_retries
+        let retry_count = min(retry_count, self.max_retries);
 
-        // Calculate the geometric progression factor for each retry
-        let factor = (multiplier.powf(retry_count as f64) - 1.0)
-            / (multiplier.powf(self.max_retries as f64) - 1.0);
+        // Calculate the geometric progression factor for this retry_count
+        let factor = (self
+            .base_multiplier
+            .powf(retry_count as f64 / self.max_retries as f64)
+            - 1.0)
+            / (self.base_multiplier - 1.0);
 
         // Final tip formula for each retry, scaled to max_tip
         self.max_tip * factor

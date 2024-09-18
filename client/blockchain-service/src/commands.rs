@@ -1,6 +1,11 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use log::warn;
+use serde_json::Number;
+
+use pallet_file_system_runtime_api::{
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+};
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
@@ -9,13 +14,9 @@ use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
     QueryStorageProviderCapacityError,
 };
-use serde_json::Number;
 use sp_api::ApiError;
 use sp_core::H256;
 
-use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
-};
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
     BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId,
@@ -23,12 +24,12 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use crate::types::{RetryStrategy, Tip};
-
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
-    types::{ConfirmStoringRequest, Extrinsic, ExtrinsicResult, SubmitProofRequest},
+    types::{
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RetryStrategy, SubmitProofRequest, Tip,
+    },
 };
 
 const LOG_TARGET: &str = "blockchain-service-interface";
