@@ -71,6 +71,13 @@ pub enum SaveFileToDisk {
     IncompleteFile(IncompleteFileStatus),
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GetFileFromFileStorageResult {
+    FileNotFound,
+    IncompleteFile(IncompleteFileStatus),
+    Success(FileMetadata),
+}
+
 /// Provides an interface with the desired RPC method.
 /// Used by the `rpc` macro from `jsonrpsee`
 /// to generate the trait that is actually going to be implemented.
@@ -104,7 +111,10 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<bool>;
 
     #[method(name = "isFileInFileStorage")]
-    async fn is_file_in_file_storage(&self, file_key: H256) -> RpcResult<bool>;
+    async fn is_file_in_file_storage(
+        &self,
+        file_key: H256,
+    ) -> RpcResult<GetFileFromFileStorageResult>;
 
     #[method(name = "getFileMetadata")]
     async fn get_file_metadata(
@@ -325,7 +335,10 @@ where
             .map_err(into_rpc_error)?)
     }
 
-    async fn is_file_in_file_storage(&self, file_key: H256) -> RpcResult<bool> {
+    async fn is_file_in_file_storage(
+        &self,
+        file_key: H256,
+    ) -> RpcResult<GetFileFromFileStorageResult> {
         // Acquire FileStorage read lock.
         let read_file_storage = self.file_storage.read().await;
 
@@ -334,8 +347,24 @@ where
             .get_metadata(&file_key)
             .map_err(into_rpc_error)?
         {
-            None => return Ok(false),
-            Some(_) => Ok(true),
+            None => Ok(GetFileFromFileStorageResult::FileNotFound),
+            Some(file_metadata) => {
+                let stored_chunks = read_file_storage
+                    .stored_chunks_count(&file_key)
+                    .map_err(into_rpc_error)?;
+                let total_chunks = file_metadata.chunks_count();
+                if stored_chunks < total_chunks {
+                    Ok(GetFileFromFileStorageResult::IncompleteFile(
+                        IncompleteFileStatus {
+                            file_metadata,
+                            stored_chunks,
+                            total_chunks,
+                        },
+                    ))
+                } else {
+                    Ok(GetFileFromFileStorageResult::Success(file_metadata))
+                }
+            }
         }
     }
 

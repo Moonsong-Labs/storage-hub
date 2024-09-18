@@ -63,6 +63,16 @@ export interface GetCheckpointChallengesError extends Enum {
     | "InternalApiError";
 }
 
+/** @name GetFileFromFileStorageResult */
+export interface GetFileFromFileStorageResult extends Enum {
+  readonly isFileNotFound: boolean;
+  readonly isSuccess: boolean;
+  readonly asSuccess: FileMetadata;
+  readonly isIncompleteFile: boolean;
+  readonly asIncompleteFile: IncompleteFileStatus;
+  readonly type: "FileNotFound" | "Success" | "IncompleteFile";
+}
+
 /** @name GetLastTickProviderSubmittedProofError */
 export interface GetLastTickProviderSubmittedProofError extends Enum {
   readonly isProviderNotRegistered: boolean;
