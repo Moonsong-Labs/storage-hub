@@ -36,7 +36,9 @@ jobs:
         with:
           cache-on-failure: true
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: SKIP_WASM_BUILD=1 env -u RUSTFLAGS cargo clippy --features try-runtime,runtime-benchmarks --locked
         env:
           RUSTFLAGS: -D warnings
