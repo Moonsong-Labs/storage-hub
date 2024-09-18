@@ -9,7 +9,8 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     events::{
         LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
-        ProcessConfirmStoringRequest, ProcessSubmitProofRequest, SlashableProvider,
+        ProcessConfirmStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -204,5 +205,32 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         last_chargeable_info_updated_event_bus_listener.start();
+
+        // Subscribing to ProcessStopStoringForInsolventUserRequest event from the BlockchainService.
+        let process_stop_storing_for_insolvent_user_request_event_bus_listener: EventBusListener<
+            ProcessStopStoringForInsolventUserRequest,
+            _,
+        > = bsp_charge_fees_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        process_stop_storing_for_insolvent_user_request_event_bus_listener.start();
+
+        // Start deletion process for stored files owned by a user that has been declared as without funds and charge
+        // its payment stream afterwards, getting the owed tokens and deleting it.
+        let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
+            bsp_charge_fees_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        user_without_funds_event_bus_listener.start();
+
+        // Continue deletion process for stored files owned by a user that has been declared as without funds.
+        // Once the last file has been deleted, get the owed tokens and delete the payment stream.
+        let sp_stop_storing_insolvent_user_event_bus_listener: EventBusListener<
+            SpStopStoringInsolventUser,
+            _,
+        > = bsp_charge_fees_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        sp_stop_storing_insolvent_user_event_bus_listener.start();
     }
 }

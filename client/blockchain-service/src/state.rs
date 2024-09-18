@@ -5,13 +5,13 @@ use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use shc_common::types::BlockNumber;
 
 use crate::{
-    events::ProcessConfirmStoringRequestData,
+    events::{ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequestData},
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
         TypedDbContext, TypedRocksDB,
     },
-    types::ConfirmStoringRequest,
+    types::{ConfirmStoringRequest, StopStoringForInsolventUserRequest},
 };
 
 /// Last processed block number.
@@ -30,6 +30,15 @@ impl SingleScaleEncodedValueCf for OngoingProcessConfirmStoringRequestCf {
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_confirm_storing_request";
 }
 
+/// Current ongoing task which requires a forest write lock.
+pub struct OngoingProcessStopStoringForInsolventUserRequestCf;
+impl SingleScaleEncodedValueCf for OngoingProcessStopStoringForInsolventUserRequestCf {
+    type Value = ProcessStopStoringForInsolventUserRequestData;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "ongoing_process_stop_storing_for_insolvent_user_request";
+}
+
 /// Pending confirm storing requests.
 #[derive(Default)]
 pub struct PendingConfirmStoringRequestCf;
@@ -38,6 +47,16 @@ impl ScaleEncodedCf for PendingConfirmStoringRequestCf {
     type Value = ConfirmStoringRequest;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_confirm_storing_request";
+}
+
+/// Pending stop storing requests.
+#[derive(Default)]
+pub struct PendingStopStoringForInsolventUserRequestCf;
+impl ScaleEncodedCf for PendingStopStoringForInsolventUserRequestCf {
+    type Key = u64;
+    type Value = StopStoringForInsolventUserRequest;
+
+    const SCALE_ENCODED_NAME: &'static str = "pending_stop_storing_for_insolvent_user_request";
 }
 
 /// Pending submit proof requests left side (inclusive) index for the [`PendingConfirmStoringRequestCf`] CF.
@@ -60,12 +79,36 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestRightIndexCf {
         "pending_confirm_storing_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 5] = [
+/// Pending submit proof requests left side (inclusive) index for the [`PendingStopStoringForInsolventUserRequestCf`] CF.
+#[derive(Default)]
+pub struct PendingStopStoringForInsolventUserRequestLeftIndexCf;
+impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestLeftIndexCf {
+    type Value = u64;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "pending_stop_storing_for_insolvent_user_request_left_index";
+}
+
+/// Pending submit proof requests right side (exclusive) index for the [`PendingStopStoringForInsolventUserRequestCf`] CF.
+#[derive(Default)]
+pub struct PendingStopStoringForInsolventUserRequestRightIndexCf;
+impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestRightIndexCf {
+    type Value = u64;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "pending_stop_storing_for_insolvent_user_request_right_index";
+}
+
+const ALL_COLUMN_FAMILIES: [&str; 9] = [
     LastProcessedBlockNumberCf::NAME,
     OngoingProcessConfirmStoringRequestCf::NAME,
     PendingConfirmStoringRequestLeftIndexCf::NAME,
     PendingConfirmStoringRequestRightIndexCf::NAME,
     PendingConfirmStoringRequestCf::NAME,
+    OngoingProcessStopStoringForInsolventUserRequestCf::NAME,
+    PendingStopStoringForInsolventUserRequestLeftIndexCf::NAME,
+    PendingStopStoringForInsolventUserRequestRightIndexCf::NAME,
+    PendingStopStoringForInsolventUserRequestCf::NAME,
 ];
 
 /// A persistent blockchain service state store.
@@ -128,6 +171,14 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         }
     }
 
+    pub fn pending_stop_storing_for_insolvent_user_request_deque(
+        &'a self,
+    ) -> PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+        PendingStopStoringForInsolventUserRequestDequeAPI {
+            db_context: &self.db_context,
+        }
+    }
+
     /// Flushes the buffered writes to the DB.
     pub fn commit(self) {
         self.db_context.flush();
@@ -161,4 +212,23 @@ impl<'a> CFDequeAPI for PendingConfirmStoringRequestDequeAPI<'a> {
     type LeftIndexCF = PendingConfirmStoringRequestLeftIndexCf;
     type RightIndexCF = PendingConfirmStoringRequestRightIndexCf;
     type DataCF = PendingConfirmStoringRequestCf;
+}
+
+pub struct PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+    db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+}
+
+impl<'a> ProvidesDbContext for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+        &self.db_context
+    }
+}
+
+impl<'a> ProvidesTypedDbSingleAccess for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {}
+
+impl<'a> CFDequeAPI for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+    type Value = StopStoringForInsolventUserRequest;
+    type LeftIndexCF = PendingStopStoringForInsolventUserRequestLeftIndexCf;
+    type RightIndexCF = PendingStopStoringForInsolventUserRequestRightIndexCf;
+    type DataCF = PendingStopStoringForInsolventUserRequestCf;
 }
