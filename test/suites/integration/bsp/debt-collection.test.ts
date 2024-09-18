@@ -1,7 +1,7 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import { describeBspNet, fetchEventData, ShConsts, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, ShConsts, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -27,56 +27,27 @@ describeBspNet(
     });
 
     it("BSP correctly charges payment stream", async () => {
-      // Force create a dynamic payment stream from Alice to the Provider
-      const alice = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
-      const createDynamicRatePaymentStreamResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.createDynamicRatePaymentStream(
-            ShConsts.DUMMY_BSP_ID,
-            alice,
-            100
-          )
-        )
-      );
-
-      // Assert that event dynamic-rate payment stream creation was emitted
-      userApi.assertEvent(
-        "paymentStreams",
-        "DynamicRatePaymentStreamCreated",
-        createDynamicRatePaymentStreamResult.events
-      );
-
-      // Get the on-chain payment stream information
-      const [userAccount, providerId, amountProvided] = fetchEventData(
-        userApi.events.paymentStreams.DynamicRatePaymentStreamCreated,
-        await userApi.query.system.events()
-      );
-
-      // Assert that the information on-chain is correct
-      strictEqual(userAccount.toString(), alice);
-      strictEqual(providerId.toString(), ShConsts.DUMMY_BSP_ID.toString());
-      strictEqual(amountProvided.toNumber(), 100);
-
       // Make sure the payment stream between Alice and the DUMMY_BSP_ID actually exists
+      const user_address = ShConsts.NODE_INFOS.user.AddressId;
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
           ShConsts.DUMMY_BSP_ID
         );
-      // Check if the first element of the returned vector is alice
-      assert(paymentStreamExistsResult[0].toString() === alice);
+      // Check if the first element of the returned vector is the user
+      assert(paymentStreamExistsResult[0].toString() === user_address);
       assert(paymentStreamExistsResult.length === 1);
 
       // Seal one more block.
       await userApi.sealBlock();
 
-      // Check if Alice owes the provider.
+      // Check if the user owes the provider.
       let usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
         ShConsts.DUMMY_BSP_ID,
         0
       );
       assert(usersWithDebtResult.isOk);
       assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === alice);
+      assert(usersWithDebtResult.asOk[0].toString() === user_address);
 
       // Seal one more block with the pending extrinsics.
       await userApi.sealBlock();
@@ -169,10 +140,10 @@ describeBspNet(
         ShConsts.DUMMY_BSP_ID
       );
 
-      // Check the info of the payment stream between Alice and the DUMMY_BSP_ID
+      // Check the info of the payment stream between the user and the DUMMY_BSP_ID
       const paymentStreamInfo = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
         ShConsts.DUMMY_BSP_ID,
-        alice
+        user_address
       );
 
       // Check that the last chargeable price index of the dummy BSP is greater than the last charged price index of the payment stream
@@ -181,23 +152,25 @@ describeBspNet(
         paymentStreamInfo.unwrap().priceIndexWhenLastCharged.lt(lastChargeableInfo.priceIndex)
       );
 
-      // Check that Alice now owes the provider.
+      // Check that the user now owes the provider.
       usersWithDebtResult = await userApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
         ShConsts.DUMMY_BSP_ID,
         1
       );
       assert(usersWithDebtResult.isOk);
       assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === alice);
+      assert(usersWithDebtResult.asOk[0].toString() === user_address);
 
+      // Check that the three Providers have tried to charge the user
+      // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
         method: "chargePaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
-        assertLength: 1
+        assertLength: 3
       });
 
-      // Seal a block to allow the BSP to charge the payment stream
+      // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
 
       // Assert that event for the BSP charging its payment stream was emitted
