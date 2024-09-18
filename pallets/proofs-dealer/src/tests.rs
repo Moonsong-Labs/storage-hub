@@ -1378,8 +1378,8 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
-                capacity: Default::default(),
-                capacity_used: Default::default(),
+                capacity: 1000,
+                capacity_used: 100,
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
@@ -1389,6 +1389,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
+
+		// Increment the used capacity of BSPs in the Providers pallet.
+		pallet_storage_providers::UsedBspsCapacity::<Test>::set(100);
 
         // Hold some of the Provider's balance so it simulates it having a stake.
         assert_ok!(<Test as crate::Config>::NativeBalance::hold(
@@ -1404,6 +1407,18 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             &provider_id,
             |provider| {
                 provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+		// Create a dynamic-rate payment stream between the user and the Provider.
+		pallet_payment_streams::DynamicRatePaymentStreams::<Test>::insert(
+            &provider_id,
+			&1,
+            pallet_payment_streams::types::DynamicRatePaymentStream {
+                amount_provided: 10,
+				price_index_when_last_charged: pallet_payment_streams::AccumulatedPriceIndex::<Test>::get(),
+				user_deposit: 10 * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get() as u128 * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+				out_of_funds_tick: None,
             },
         );
 
@@ -2021,7 +2036,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
-                capacity: (2 * 100) as u32,
+                capacity: (2 * 100) as u64,
                 capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),

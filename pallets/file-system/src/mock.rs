@@ -89,6 +89,7 @@ construct_runtime!(
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
         BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
         Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
+        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
     }
 );
 
@@ -175,6 +176,26 @@ impl pallet_nfts::Config for Test {
     }
 }
 
+// Payment streams pallet:
+impl pallet_payment_streams::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type ProvidersPallet = Providers;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type Units = u64;
+    type NewStreamDeposit = ConstU64<10>;
+    type UserWithoutFundsCooldown = ConstU64<100>;
+    type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
+}
+// Converter from the BlockNumber type to the Balance type for math
+pub struct BlockNumberToBalance;
+impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
+    fn convert(block_number: BlockNumberFor<Test>) -> Balance {
+        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
+    }
+}
+
 parameter_types! {
     pub const MaxNumberOfPeerIds: u32 = 100;
     pub const MaxMultiAddressSize: u32 = 100;
@@ -191,9 +212,10 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
+    type PaymentStreams = PaymentStreams;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
@@ -202,9 +224,9 @@ impl pallet_storage_providers::Config for Test {
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<2>;
+    type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
-    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxFileSize = ConstU64<{ u64::MAX }>;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;

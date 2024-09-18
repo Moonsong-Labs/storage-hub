@@ -38,6 +38,7 @@ serde = { workspace = true }
 
 pallet-file-system = { workspace = true }
 pallet-storage-providers = { workspace = true }
+pallet-payment-streams = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
@@ -68,6 +69,7 @@ std = [
 	"pallet-file-system/std",
 	"pallet-nfts/std",
 	"pallet-storage-providers/std",
+	"pallet-payment-streams/std",
 	"scale-info/std",
 	"shp-file-metadata/std",
 	"shp-traits/std",

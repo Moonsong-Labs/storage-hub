@@ -85,7 +85,7 @@ use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
 
 /// Type representing the storage data units in StorageHub.
-pub type StorageDataUnit = u32;
+pub type StorageDataUnit = u64;
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -466,6 +466,7 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
+    type PaymentStreams = PaymentStreams;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
@@ -477,9 +478,9 @@ impl pallet_storage_providers::Config for Runtime {
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
-    type SpMinCapacity = ConstU32<2>;
+    type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
-    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxFileSize = ConstU64<{ u64::MAX }>;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -514,7 +515,7 @@ impl pallet_payment_streams::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type UserWithoutFundsCooldown = UserWithoutFundsCooldown; // Amount of blocks that a user will have to wait before being able to clear the out of funds flag
     type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
-    type Units = u32; // Storage unit
+    type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
 }
