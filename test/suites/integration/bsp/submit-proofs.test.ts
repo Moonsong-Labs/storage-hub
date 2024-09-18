@@ -9,8 +9,6 @@ import {
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
 
-let false = false
-
 describeBspNet(
   "Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
