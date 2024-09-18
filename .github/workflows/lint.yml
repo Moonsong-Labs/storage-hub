@@ -36,9 +36,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        uses: arduino/setup-protoc@v1
       - run: SKIP_WASM_BUILD=1 env -u RUSTFLAGS cargo clippy --features try-runtime,runtime-benchmarks --locked
         env:
           RUSTFLAGS: -D warnings
@@ -48,13 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: pnpm install
       - run: pnpm fmt
 
@@ -63,13 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: pnpm install
       - run: pnpm lint
 
@@ -78,14 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: pnpm install
       - run: |
           cd test
-          npm run typecheck
+          pnpm typecheck
