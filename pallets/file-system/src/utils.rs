@@ -1429,7 +1429,6 @@ where
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
-
         shp_file_metadata::FileMetadata::<
             { shp_constants::H_LENGTH },
             { shp_constants::FILE_CHUNK_SIZE },

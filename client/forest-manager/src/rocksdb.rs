@@ -378,22 +378,6 @@ where
         Ok(file_keys)
     }
 
-    fn get_file_metadata(
-        &self,
-        file_key: &HasherOutT<T>,
-    ) -> Result<Option<FileMetadata>, ErrorT<T>> {
-        let db = self.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
-        let encoded_metadata = trie.get(file_key.as_ref())?;
-        match encoded_metadata {
-            Some(data) => {
-                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
-                Ok(Some(decoded_metadata))
-            }
-            None => Ok(None),
-        }
-    }
-
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
         let mut root = self.root;
         let mut trie =
