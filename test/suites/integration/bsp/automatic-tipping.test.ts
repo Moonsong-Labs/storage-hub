@@ -35,7 +35,7 @@ describeBspNet(
 
       const txPool = await api.rpc.author.pendingExtrinsics();
 
-      let confirmStoringPendingExts = confirmStoringPendingMatches.map(
+      const confirmStoringPendingExts = confirmStoringPendingMatches.map(
         (match) => txPool[match.extIndex]
       );
 
