@@ -670,7 +670,7 @@ where
                 &non_inclusion_forest_proof,
             )?;
 
-        //
+        // Create a queue to store the file keys and metadata to be processed.
         let mut file_keys_and_metadatas: BoundedVec<
             (MerkleHash<T>, Vec<u8>),
             T::MaxBatchConfirmStorageRequests,

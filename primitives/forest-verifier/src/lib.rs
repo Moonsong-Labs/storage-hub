@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use scale_info::prelude::vec::Vec;
 use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier};
 use sp_std::collections::btree_set::BTreeSet;
+use sp_std::vec::Vec;
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
@@ -260,14 +260,15 @@ where
                         .map_err(|_| "Failed to remove key from trie.")?;
                     let previous_value = if let Some(node_value) = node_value {
                         match node_value {
-                            trie_db::Value::Inline(value) => Some(value.to_vec()),
+                            trie_db::Value::Inline(value) | trie_db::Value::NewNode(_, value) => {
+                                Some(value.to_vec())
+                            }
                             trie_db::Value::Node(value_hash) => {
                                 let value = trie
                                     .get(value_hash.as_ref())
                                     .map_err(|_| "Failed to get value from trie.")?;
                                 value.map(|v| v.to_vec())
                             }
-                            trie_db::Value::NewNode(_, value) => Some(value.to_vec()),
                         }
                     } else {
                         None
