@@ -840,6 +840,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type ProviderId = HashId<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
+    type StorageDataUnit = T::StorageDataUnit;
 
     fn bucket_exists(bucket_id: &Self::BucketId) -> bool {
         Buckets::<T>::contains_key(bucket_id)
@@ -899,6 +900,16 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash> {
         Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
     }
+
+    fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.size)
+    }
+
+    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.msp_id)
+    }
 }
 
 /// Implement the MutateBucketsInterface trait for the Storage Providers pallet.
@@ -908,6 +919,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ProviderId = HashId<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
+    type StorageDataUnit = T::StorageDataUnit;
 
     fn add_bucket(
         provider_id: Self::ProviderId,
@@ -950,6 +962,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id,
+            size: T::StorageDataUnit::zero(),
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
@@ -960,19 +973,22 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Ok(())
     }
 
+    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult {
+        Buckets::<T>::try_mutate(bucket_id, |bucket| {
+            let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.msp_id = *new_msp;
+
+            Ok(())
+        })
+    }
+
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
-        if let Some(bucket) = Buckets::<T>::get(&bucket_id) {
-            Buckets::<T>::insert(
-                &bucket_id,
-                Bucket {
-                    root: new_root,
-                    ..bucket
-                },
-            );
-        } else {
-            return Err(Error::<T>::NotRegistered.into());
-        }
-        Ok(())
+        Buckets::<T>::try_mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.root = new_root;
+
+            Ok(())
+        })
     }
 
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
@@ -1019,6 +1035,30 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
             bucket.read_access_group_id = maybe_read_access_group_id;
+
+            Ok(())
+        })
+    }
+
+    fn increase_bucket_size(
+        bucket_id: &Self::BucketId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.size = bucket.size.saturating_add(delta);
+
+            Ok(())
+        })
+    }
+
+    fn decrease_bucket_size(
+        bucket_id: &Self::BucketId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.size = bucket.size.saturating_sub(delta);
 
             Ok(())
         })
@@ -1141,7 +1181,12 @@ impl<T: pallet::Config> MutateStorageProvidersInterface for pallet::Pallet<T> {
         if MainStorageProviders::<T>::contains_key(&provider_id) {
             let mut msp =
                 MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
-            msp.capacity_used = msp.capacity_used.saturating_add(delta);
+
+            let new_used_capacity = msp.capacity_used.saturating_add(delta);
+            if msp.capacity < new_used_capacity {
+                return Err(Error::<T>::NewUsedCapacityExceedsStorageCapacity.into());
+            }
+            msp.capacity_used = new_used_capacity;
             MainStorageProviders::<T>::insert(&provider_id, msp);
         } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
             let mut bsp =

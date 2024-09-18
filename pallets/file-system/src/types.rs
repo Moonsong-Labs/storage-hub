@@ -13,7 +13,8 @@ use shp_traits::ReadProvidersInterface;
 use sp_runtime::{traits::CheckedAdd, DispatchError};
 
 use crate::{
-    Config, Error, FileDeletionRequestExpirations, NextAvailableFileDeletionRequestExpirationBlock,
+    Config, Error, FileDeletionRequestExpirations, MoveBucketRequestExpirations,
+    NextAvailableFileDeletionRequestExpirationBlock, NextAvailableMoveBucketRequestExpirationBlock,
     NextAvailableStorageRequestExpirationBlock, StorageRequestExpirations,
 };
 
@@ -120,6 +121,7 @@ pub enum BucketPrivacy {
 pub enum ExpirationItem<T: Config> {
     StorageRequest(MerkleHash<T>),
     PendingFileDeletionRequests((T::AccountId, MerkleHash<T>)),
+    MoveBucketRequest((ProviderIdFor<T>, BucketIdFor<T>)),
 }
 
 impl<T: Config> ExpirationItem<T> {
@@ -129,6 +131,7 @@ impl<T: Config> ExpirationItem<T> {
             ExpirationItem::PendingFileDeletionRequests(_) => {
                 T::PendingFileDeletionRequestTtl::get().into()
             }
+            ExpirationItem::MoveBucketRequest(_) => T::MoveBucketRequestTtl::get().into(),
         }
     }
 
@@ -141,6 +144,9 @@ impl<T: Config> ExpirationItem<T> {
             }
             ExpirationItem::PendingFileDeletionRequests(_) => {
                 NextAvailableFileDeletionRequestExpirationBlock::<T>::get()
+            }
+            ExpirationItem::MoveBucketRequest(_) => {
+                NextAvailableMoveBucketRequestExpirationBlock::<T>::get()
             }
         };
 
@@ -162,6 +168,9 @@ impl<T: Config> ExpirationItem<T> {
                     pending_file_deletion_requests.clone(),
                 )
             }
+            ExpirationItem::MoveBucketRequest(msp_bucket_id) => {
+                <MoveBucketRequestExpirations<T>>::try_append(next_expiration_block, *msp_bucket_id)
+            }
         } {
             next_expiration_block = next_expiration_block
                 .checked_add(&1u8.into())
@@ -179,8 +188,26 @@ impl<T: Config> ExpirationItem<T> {
             ExpirationItem::PendingFileDeletionRequests(_) => {
                 NextAvailableFileDeletionRequestExpirationBlock::<T>::set(next_expiration_block);
             }
+            ExpirationItem::MoveBucketRequest(_) => {
+                NextAvailableMoveBucketRequestExpirationBlock::<T>::set(next_expiration_block);
+            }
         }
     }
+}
+
+/// Possible responses to a move bucket request.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+pub enum BucketMoveRequestResponse {
+    Accepted,
+    Rejected,
+}
+
+/// Move bucket request metadata
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MoveBucketRequestMetadata<T: Config> {
+    /// The user who requested to move the bucket.
+    pub requester: T::AccountId,
 }
 
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.

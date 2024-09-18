@@ -64,6 +64,18 @@ pub trait ReadBucketsInterface {
         + MaxEncodedLen
         + FullCodec;
 
+    /// Type that represents the unit of storage data in which the capacity is measured.
+    type StorageDataUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u32>;
+
     /// Type of the root of the buckets.
     type MerkleHash: Parameter
         + Member
@@ -118,6 +130,12 @@ pub trait ReadBucketsInterface {
 
     /// Get the root of a bucket.
     fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash>;
+
+    /// Get bucket size.
+    fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError>;
+
+    /// Get the MSP of a bucket.
+    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError>;
 }
 
 /// A trait to change the state of buckets registered in the system, such as updating their privacy
@@ -157,6 +175,18 @@ pub trait MutateBucketsInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+
+    /// Type that represents the unit of storage data in which the capacity is measured.
+    type StorageDataUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u32>;
 
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
@@ -199,11 +229,26 @@ pub trait MutateBucketsInterface {
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
     ) -> DispatchResult;
 
+    /// Change MSP of a bucket.
+    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult;
+
     /// Change the root of a bucket.
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult;
 
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage.
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult;
+
+    /// Increase the size of a bucket.
+    fn increase_bucket_size(
+        bucket_id: &Self::BucketId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult;
+
+    /// Decrease the size of a bucket.
+    fn decrease_bucket_size(
+        bucket_id: &Self::BucketId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult;
 }
 
 /// A trait to read information about Storage Providers present in the
