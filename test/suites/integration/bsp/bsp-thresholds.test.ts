@@ -34,7 +34,7 @@ describeBspNet(
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
       strictEqual(
-        (await api.query.fileSystem.blockRangeToMaximumThreshold()).toNumber(),
+        (await api.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
         200,
         "Threshold should have changed"
       );
@@ -54,7 +54,7 @@ describeBspNet(
       strictEqual(error, "BadOrigin", "Extrinsic should fail with BadOrigin");
 
       strictEqual(
-        (await api.query.fileSystem.blockRangeToMaximumThreshold()).toNumber(),
+        (await api.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
         1,
         "Threshold should not have changed"
       );
@@ -131,10 +131,10 @@ describeBspNet(
         "bucket-2"
       ); // T0
       const bsp1VolunteerBlock = (
-        await api.call.fileSystemApi.queryEarliestFileVolunteerBlock(ShConsts.DUMMY_BSP_ID, fileKey)
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.DUMMY_BSP_ID, fileKey)
       ).asOk.toNumber();
       const bsp2VolunteerBlock = (
-        await api.call.fileSystemApi.queryEarliestFileVolunteerBlock(ShConsts.BSP_TWO_ID, fileKey)
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
       ).asOk.toNumber();
 
       if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp1VolunteerBlock) {
