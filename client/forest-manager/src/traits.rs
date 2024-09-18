@@ -28,7 +28,7 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
         &mut self,
         files_metadata: &[FileMetadata],
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>>;
-    /// Delete a file key and generate a proof for it.
+    /// Delete a file key.
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>>;
 }
 

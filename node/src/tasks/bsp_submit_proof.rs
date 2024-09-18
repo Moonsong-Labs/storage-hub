@@ -191,7 +191,6 @@ where
                 }
             }
         }
-        trace!(target: LOG_TARGET, "Proven file keys: {:?}", proven_keys);
 
         // Construct key challenges and generate key proofs for them.
         let mut key_proofs = KeyProofs::new();

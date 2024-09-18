@@ -610,6 +610,8 @@ pub mod pallet {
         MspAlreadyConfirmed,
         /// The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
         RequestWithoutMsp,
+        /// The bounded vector that holds file metadata to process it is full but there's still more to process.
+        FileMetadataProcessingQueueFull,
     }
 
     #[pallet::call]

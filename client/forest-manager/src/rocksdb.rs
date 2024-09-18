@@ -1,4 +1,4 @@
-use codec::Decode;
+use codec::{Decode, Encode};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::debug;
@@ -293,13 +293,13 @@ where
     ) -> Result<Option<FileMetadata>, ErrorT<T>> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
-        let data = trie.get(file_key.as_ref())?;
-        match data {
-            None => return Ok(None),
+        let encoded_metadata = trie.get(file_key.as_ref())?;
+        match encoded_metadata {
             Some(data) => {
-                let metadata = FileMetadata::decode(&mut &data[..])?;
-                Ok(Some(metadata))
+                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
+                Ok(Some(decoded_metadata))
             }
+            None => Ok(None),
         }
     }
 
@@ -361,9 +361,11 @@ where
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        for file_key in &file_keys {
-            trie.insert(file_key.as_ref(), b"")
-                .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
+        // Batch insert all keys
+        for file_metadata in files_metadata {
+            let file_key = file_metadata.file_key::<T::Hash>();
+            trie.insert(file_key.as_ref(), file_metadata.encode().as_slice())
+                .map_err(|_| ForestStorageError::FailedToInsertFileKey(file_key))?;
         }
 
         // Drop trie to free `self`.
@@ -407,12 +409,12 @@ mod tests {
     use kvdb_memorydb::InMemory;
     use shc_common::types::{FileMetadata, Fingerprint, Proven, TrieMutation, TrieRemoveMutation};
     use shp_forest_verifier::ForestVerifier;
-    use shp_traits::TrieProofDeltaApplier;
+    use shp_traits::{CommitmentVerifier, TrieProofDeltaApplier};
     use sp_core::Hasher;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
-    use trie_db::{proof::verify_proof, Trie};
+    use trie_db::Trie;
 
     // Reusable function to setup a new `StorageDb` and `RocksDBForestStorage`.
     fn setup_storage<T, DB>() -> Result<RocksDBForestStorage<T, InMemory>, ErrorT<T>>
@@ -493,6 +495,35 @@ mod tests {
     }
 
     #[test]
+    fn test_get_file_metadata() {
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
+
+        let mut keys = Vec::new();
+        for i in 0..50 {
+            let file_metadata = FileMetadata {
+                bucket_id: "bucket".as_bytes().to_vec(),
+                location: "location".as_bytes().to_vec(),
+                owner: "Alice".as_bytes().to_vec(),
+                file_size: i,
+                fingerprint: Fingerprint::default(),
+            };
+
+            let file_key = forest_storage
+                .insert_files_metadata(&[file_metadata])
+                .unwrap();
+
+            keys.push(*file_key.first().unwrap());
+        }
+
+        let file_metadata = forest_storage.get_file_metadata(&keys[0]).unwrap().unwrap();
+        assert_eq!(file_metadata.file_size, 0);
+        assert_eq!(file_metadata.bucket_id, "bucket".as_bytes());
+        assert_eq!(file_metadata.location, "location".as_bytes());
+        assert_eq!(file_metadata.owner, "Alice".as_bytes());
+        assert_eq!(file_metadata.fingerprint, Fingerprint::default());
+    }
+
+    #[test]
     fn test_generate_proof_exact_key() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
@@ -549,61 +580,51 @@ mod tests {
         let root = forest_storage.root;
 
         let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
-        let challenge_previous_with_value = (keys[0], Some(b"".as_ref()));
-        let challenge_with_value = (keys[1], Some(b"".as_ref()));
-        let challenge_next_with_value = (keys[2], Some(b"".as_ref()));
-        let included_keys_values = vec![
-            &challenge_previous_with_value,
-            &challenge_with_value,
-            &challenge_next_with_value,
-        ];
+        let included_keys = vec![keys[0], keys[1], keys[2]];
         assert!(
-            verify_proof::<LayoutV1<BlakeTwo256>, Vec<&(H256, Option<&[u8]>)>, H256, &[u8]>(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &proof.proof.encoded_nodes,
-                included_keys_values
+                included_keys.as_slice(),
+                &proof.proof
             )
             .is_ok()
         );
 
         let new_challenges = vec![keys[10], keys[40]];
         let proof = forest_storage.generate_proof(new_challenges).unwrap();
-        let first_challenge_previous_with_value = (keys[9], Some(b"".as_ref()));
-        let first_challenge_with_value = (keys[10], Some(b"".as_ref()));
-        let first_challenge_next_with_value = (keys[11], Some(b"".as_ref()));
-        let second_challenge_previous_with_value = (keys[39], Some(b"".as_ref()));
-        let second_challenge_with_value = (keys[40], Some(b"".as_ref()));
-        let second_challenge_next_with_value = (keys[41], Some(b"".as_ref()));
-        let included_keys_values = vec![
-            &first_challenge_previous_with_value,
-            &first_challenge_with_value,
-            &first_challenge_next_with_value,
-            &second_challenge_previous_with_value,
-            &second_challenge_with_value,
-            &second_challenge_next_with_value,
-        ];
+        let included_keys = vec![keys[9], keys[10], keys[11], keys[39], keys[40], keys[41]];
         assert!(
-            verify_proof::<LayoutV1<BlakeTwo256>, Vec<&(H256, Option<&[u8]>)>, H256, &[u8]>(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &proof.proof.encoded_nodes,
-                included_keys_values
+                included_keys.as_slice(),
+                &proof.proof
             )
             .is_ok()
         );
 
-        // Since key 9 and 10 share a prefix, they are under a nibbled branch, which means `apply_delta` removing
-        // key 9 would fail if it wasn't for the proof generation fix we added in `generate_proof`.
-        let proof = forest_storage.generate_proof(vec![keys[9]]).unwrap();
-        let proof = proof.proof;
-        let mutations: Vec<(H256, TrieMutation)> =
-            vec![(keys[9], TrieRemoveMutation::default().into())];
+        // Probabilistically, two of the 50 generated keys should share the same prefix and as such should be neighbors.
+        // So, we test that any generated proof is able to be used to remove any key from the trie.
+        // Spoiler alert: with the current parameters, the first two keys are neighbors.
+        for key in keys.iter() {
+            println!("Trying to remove key: {:?}", key.as_bytes());
+            let proof = forest_storage.generate_proof(vec![*key]).unwrap();
+            let proof = proof.proof;
+            let mutations: Vec<(H256, TrieMutation)> =
+                vec![(*key, TrieRemoveMutation::default().into())];
 
-        assert!(
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
-                &root, &mutations, &proof,
-            )
-            .is_ok()
-        );
+            let apply_delta_result =
+                ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                    &root, &mutations, &proof,
+                );
+            assert!(apply_delta_result.is_ok());
+            assert!(apply_delta_result
+                .unwrap()
+                .2
+                .into_iter()
+                .map(|(key, _)| key)
+                .collect::<Vec<H256>>()
+                .contains(key));
+        }
     }
 
     #[test]

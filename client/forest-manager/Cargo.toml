@@ -39,3 +39,13 @@ shc-common = { workspace = true }
 [dev-dependencies]
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+	"sp-core/std",
+	"sp-runtime/std",
+	"sp-state-machine/std",
+	"sp-trie/std",
+	"shc-common/std",
+]
