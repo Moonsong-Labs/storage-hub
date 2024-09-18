@@ -66,6 +66,21 @@ macro_rules! expect_or_err {
             }
         }
     }};
+    // Handle Result type
+    ($result:expr, $error_msg:expr, $error_type:path, result) => {{
+        match $result {
+            Ok(value) => value,
+            Err(_) => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
+            }
+        }
+    }};
 }
 
 impl<T> Pallet<T>
@@ -482,11 +497,15 @@ where
             &file_proof,
         )?;
 
+        // Get the file metadata to insert into the bucket under the file key.
+        let file_metadata = storage_request_metadata.clone().to_file_metadata();
+        let encoded_trie_value = file_metadata.encode();
+
         // Compute the new bucket root after inserting new file key in its forest partial trie.
         let new_bucket_root =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
                 &bucket_root,
-                &[(file_key, TrieAddMutation::default().into())],
+                &[(file_key, TrieAddMutation::new(encoded_trie_value).into())],
                 &non_inclusion_forest_proof,
             )?;
 
@@ -651,6 +670,12 @@ where
                 &non_inclusion_forest_proof,
             )?;
 
+        // Create a queue to store the file keys and metadata to be processed.
+        let mut file_keys_and_metadatas: BoundedVec<
+            (MerkleHash<T>, Vec<u8>),
+            T::MaxBatchConfirmStorageRequests,
+        > = BoundedVec::new();
+
         let mut seen_keys = BTreeSet::new();
         for file_key in file_keys_and_proofs.iter() {
             // Skip any duplicates.
@@ -740,6 +765,16 @@ where
                 storage_request_metadata.size,
             )?;
 
+            // Get the file metadata to insert into the Provider's trie under the file key.
+            let file_metadata = storage_request_metadata.clone().to_file_metadata();
+            let encoded_trie_value = file_metadata.encode();
+            expect_or_err!(
+                file_keys_and_metadatas.try_push((file_key.0, encoded_trie_value)),
+                "Failed to push file key and metadata",
+                Error::<T>::FileMetadataProcessingQueueFull,
+                result
+            );
+
             // Remove storage request if we reached the required number of bsps.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
                 // TODO: we should only delete if the MSP also confirmed to store the file (this is not implemented yet).
@@ -798,9 +833,9 @@ where
         // Compute new root after inserting new file keys in forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &bsp_id,
-            file_keys
+            file_keys_and_metadatas
                 .iter()
-                .map(|fk| (*fk, TrieAddMutation::default().into()))
+                .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
                 .collect::<Vec<_>>()
                 .as_slice(),
             &non_inclusion_forest_proof,

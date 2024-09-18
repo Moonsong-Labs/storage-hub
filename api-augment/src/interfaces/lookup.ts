@@ -3956,7 +3956,8 @@ export default {
       "UserNotInsolvent",
       "NotSelectedMsp",
       "MspAlreadyConfirmed",
-      "RequestWithoutMsp"
+      "RequestWithoutMsp",
+      "FileMetadataProcessingQueueFull"
     ]
   },
   /**

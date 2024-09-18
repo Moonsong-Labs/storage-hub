@@ -6,14 +6,17 @@ import * as ShConsts from "./consts";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
 import type { HexString } from "@polkadot/util/types";
+import type { KeyringPair } from "@polkadot/keyring/types";
 
 export const sendNewStorageRequest = async (
   api: ApiPromise,
   source: string,
   location: string,
-  bucketName: string
+  bucketName: string,
+  mspId?: HexString,
+  owner?: KeyringPair
 ): Promise<FileMetadata> => {
-  const newBucketEventEvent = await createBucket(api, bucketName);
+  const newBucketEventEvent = await createBucket(api, bucketName, mspId, owner);
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
@@ -33,10 +36,10 @@ export const sendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      ShConsts.DUMMY_MSP_ID,
+      mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId]
     ),
-    shUser
+    owner ?? shUser
   );
 
   const newStorageRequestEvent = assertEventPresent(
@@ -64,12 +67,13 @@ export const sendNewStorageRequest = async (
 export const createBucket = async (
   api: ApiPromise,
   bucketName: string,
-  mspId: HexString = ShConsts.DUMMY_MSP_ID
+  mspId: HexString = ShConsts.DUMMY_MSP_ID,
+  owner: KeyringPair = shUser
 ) => {
   const createBucketResult = await sealBlock(
     api,
     api.tx.fileSystem.createBucket(mspId, bucketName, false),
-    shUser
+    owner
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 

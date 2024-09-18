@@ -324,7 +324,7 @@ where
                     .generate_proof(&confirm_storing_request.file_key, &chunks_to_prove),
                 read_file_storage.get_metadata(&confirm_storing_request.file_key),
             ) {
-                (Ok(proof), Ok(metadata)) => {
+                (Ok(proof), Ok(Some(metadata))) => {
                     file_keys_and_proofs.push((confirm_storing_request.file_key, proof));
                     file_metadatas.push(metadata);
                 }

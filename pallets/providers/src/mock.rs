@@ -207,9 +207,16 @@ where
         root: &Self::Key,
         _mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
-    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+    ) -> Result<
+        (
+            MemoryDB<T::Hash>,
+            Self::Key,
+            Vec<(Self::Key, Option<Vec<u8>>)>,
+        ),
+        DispatchError,
+    > {
         // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root))
+        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
     }
 }
 
