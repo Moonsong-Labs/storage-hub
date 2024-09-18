@@ -43,11 +43,64 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       description: "Get the root of the forest trie.",
       params: [
         {
-          name: "key",
+          name: "forest_key",
           type: "Option<String>"
         }
       ],
       type: "H256"
+    },
+    isFileInForest: {
+      description: "Check if a file is in the forest.",
+      params: [
+        {
+          name: "forest_key",
+          type: "Option<String>"
+        },
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "bool"
+    },
+    isFileInFileStorage: {
+      description: "Check if a file is in the file storage.",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "bool"
+    },
+    getFileMetadata: {
+      description: "Get the metadata of a file from the Forest storage.",
+      params: [
+        {
+          name: "forest_key",
+          type: "Option<String>"
+        },
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "Option<FileMetadata>"
+    },
+    generateForestProof: {
+      description:
+        "Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.",
+      params: [
+        {
+          name: "forest_key",
+          type: "Option<String>"
+        },
+        {
+          name: "challenged_file_keys",
+          type: "Vec<H256>"
+        }
+      ],
+      type: "Vec<u8>"
     },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",

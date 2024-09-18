@@ -1068,16 +1068,47 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
+       * Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.
+       **/
+      generateForestProof: AugmentedRpc<
+        (
+          forest_key: Option<Text> | null | Uint8Array | Text | string,
+          challenged_file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
+        ) => Observable<Bytes>
+      >;
+      /**
+       * Get the metadata of a file from the Forest storage.
+       **/
+      getFileMetadata: AugmentedRpc<
+        (
+          forest_key: Option<Text> | null | Uint8Array | Text | string,
+          file_key: H256 | string | Uint8Array
+        ) => Observable<Option<FileMetadata>>
+      >;
+      /**
        * Get the root of the forest trie.
        **/
       getForestRoot: AugmentedRpc<
-        (key: Option<Text> | null | Uint8Array | Text | string) => Observable<H256>
+        (forest_key: Option<Text> | null | Uint8Array | Text | string) => Observable<H256>
       >;
       /**
        * Generate and insert new keys of type BCSV into the keystore.
        **/
       insertBcsvKeys: AugmentedRpc<
         (seed: Option<Text> | null | Uint8Array | Text | string) => Observable<Text>
+      >;
+      /**
+       * Check if a file is in the file storage.
+       **/
+      isFileInFileStorage: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<bool>>;
+      /**
+       * Check if a file is in the forest.
+       **/
+      isFileInForest: AugmentedRpc<
+        (
+          forest_key: Option<Text> | null | Uint8Array | Text | string,
+          file_key: H256 | string | Uint8Array
+        ) => Observable<bool>
       >;
       /**
        * Load a file in the local storage. This is the first step when uploading a file.
