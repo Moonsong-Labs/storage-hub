@@ -1341,24 +1341,24 @@ export default {
       MspRequestSignUpSuccess: {
         who: "AccountId32",
         multiaddresses: "Vec<Bytes>",
-        capacity: "u32",
+        capacity: "u64",
         valueProp: "PalletStorageProvidersValueProposition"
       },
       MspSignUpSuccess: {
         who: "AccountId32",
         multiaddresses: "Vec<Bytes>",
-        capacity: "u32",
+        capacity: "u64",
         valueProp: "PalletStorageProvidersValueProposition"
       },
       BspRequestSignUpSuccess: {
         who: "AccountId32",
         multiaddresses: "Vec<Bytes>",
-        capacity: "u32"
+        capacity: "u64"
       },
       BspSignUpSuccess: {
         who: "AccountId32",
         multiaddresses: "Vec<Bytes>",
-        capacity: "u32"
+        capacity: "u64"
       },
       SignUpRequestCanceled: {
         who: "AccountId32"
@@ -1371,8 +1371,8 @@ export default {
       },
       CapacityChanged: {
         who: "AccountId32",
-        oldCapacity: "u32",
-        newCapacity: "u32",
+        oldCapacity: "u64",
+        newCapacity: "u64",
         nextBlockWhenChangeAllowed: "u32"
       },
       Slashed: {
@@ -1386,7 +1386,7 @@ export default {
    **/
   PalletStorageProvidersValueProposition: {
     identifier: "H256",
-    dataLimit: "u32",
+    dataLimit: "u64",
     protocols: "Vec<Bytes>"
   },
   /**
@@ -1422,7 +1422,7 @@ export default {
         bucketId: "H256",
         location: "Bytes",
         fingerprint: "H256",
-        size_: "u32",
+        size_: "u64",
         peerIds: "Vec<Bytes>"
       },
       MspAcceptedStoring: {
@@ -1442,7 +1442,7 @@ export default {
         fingerprint: "H256",
         multiaddresses: "Vec<Bytes>",
         owner: "AccountId32",
-        size_: "u32"
+        size_: "u64"
       },
       BspConfirmedStoring: {
         who: "AccountId32",
@@ -1625,12 +1625,12 @@ export default {
       DynamicRatePaymentStreamCreated: {
         userAccount: "AccountId32",
         providerId: "H256",
-        amountProvided: "u32"
+        amountProvided: "u64"
       },
       DynamicRatePaymentStreamUpdated: {
         userAccount: "AccountId32",
         providerId: "H256",
-        newAmountProvided: "u32"
+        newAmountProvided: "u64"
       },
       DynamicRatePaymentStreamDeleted: {
         userAccount: "AccountId32",
@@ -3023,13 +3023,13 @@ export default {
   PalletStorageProvidersCall: {
     _enum: {
       request_msp_sign_up: {
-        capacity: "u32",
+        capacity: "u64",
         multiaddresses: "Vec<Bytes>",
         valueProp: "PalletStorageProvidersValueProposition",
         paymentAccount: "AccountId32"
       },
       request_bsp_sign_up: {
-        capacity: "u32",
+        capacity: "u64",
         multiaddresses: "Vec<Bytes>",
         paymentAccount: "AccountId32"
       },
@@ -3040,7 +3040,7 @@ export default {
       msp_sign_off: "Null",
       bsp_sign_off: "Null",
       change_capacity: {
-        newCapacity: "u32"
+        newCapacity: "u64"
       },
       add_value_prop: {
         newValueProp: "PalletStorageProvidersValueProposition"
@@ -3048,7 +3048,7 @@ export default {
       force_msp_sign_up: {
         who: "AccountId32",
         mspId: "H256",
-        capacity: "u32",
+        capacity: "u64",
         multiaddresses: "Vec<Bytes>",
         valueProp: "PalletStorageProvidersValueProposition",
         paymentAccount: "AccountId32"
@@ -3056,7 +3056,7 @@ export default {
       force_bsp_sign_up: {
         who: "AccountId32",
         bspId: "H256",
-        capacity: "u32",
+        capacity: "u64",
         multiaddresses: "Vec<Bytes>",
         paymentAccount: "AccountId32",
         weight: "Option<u32>"
@@ -3090,7 +3090,7 @@ export default {
         bucketId: "H256",
         location: "Bytes",
         fingerprint: "H256",
-        size_: "u32",
+        size_: "u64",
         mspId: "H256",
         peerIds: "Vec<Bytes>"
       },
@@ -3118,7 +3118,7 @@ export default {
         location: "Bytes",
         owner: "AccountId32",
         fingerprint: "H256",
-        size_: "u32",
+        size_: "u64",
         canServe: "bool",
         inclusionForestProof: "SpTrieStorageProofCompactProof"
       },
@@ -3135,7 +3135,7 @@ export default {
         location: "Bytes",
         owner: "AccountId32",
         fingerprint: "H256",
-        size_: "u32",
+        size_: "u64",
         inclusionForestProof: "SpTrieStorageProofCompactProof"
       },
       delete_file: {
@@ -3145,7 +3145,7 @@ export default {
         bucketId: "H256",
         fileKey: "H256",
         location: "Bytes",
-        size_: "u32",
+        size_: "u64",
         fingerprint: "H256",
         maybeInclusionForestProof: "Option<SpTrieStorageProofCompactProof>"
       },
@@ -3206,12 +3206,12 @@ export default {
       create_dynamic_rate_payment_stream: {
         providerId: "H256",
         userAccount: "AccountId32",
-        amountProvided: "u32"
+        amountProvided: "u64"
       },
       update_dynamic_rate_payment_stream: {
         providerId: "H256",
         userAccount: "AccountId32",
-        newAmountProvided: "u32"
+        newAmountProvided: "u64"
       },
       delete_dynamic_rate_payment_stream: {
         providerId: "H256",
@@ -3812,8 +3812,8 @@ export default {
    * Lookup391: pallet_storage_providers::types::BackupStorageProvider<T>
    **/
   PalletStorageProvidersBackupStorageProvider: {
-    capacity: "u32",
-    capacityUsed: "u32",
+    capacity: "u64",
+    capacityUsed: "u64",
     multiaddresses: "Vec<Bytes>",
     root: "H256",
     lastCapacityChange: "u32",
@@ -3826,8 +3826,8 @@ export default {
    **/
   PalletStorageProvidersMainStorageProvider: {
     buckets: "Vec<PalletStorageProvidersBucket>",
-    capacity: "u32",
-    capacityUsed: "u32",
+    capacity: "u64",
+    capacityUsed: "u64",
     multiaddresses: "Vec<Bytes>",
     valueProp: "PalletStorageProvidersValueProposition",
     lastCapacityChange: "u32",
@@ -3871,7 +3871,10 @@ export default {
       "BucketNotFound",
       "BucketAlreadyExists",
       "AppendBucketToMspFailed",
-      "ProviderNotSlashable"
+      "ProviderNotSlashable",
+      "InvalidEncodedFileMetadata",
+      "InvalidEncodedAccountId",
+      "PaymentStreamNotFound"
     ]
   },
   /**
@@ -3886,7 +3889,7 @@ export default {
     bucketId: "H256",
     location: "Bytes",
     fingerprint: "H256",
-    size_: "u32",
+    size_: "u64",
     msp: "Option<(H256,bool)>",
     userPeerIds: "Vec<Bytes>",
     dataServerSps: "Vec<H256>",
@@ -3901,7 +3904,7 @@ export default {
     confirmed: "bool"
   },
   /**
-   * Lookup410: pallet_file_system::pallet::Error<T>
+   * Lookup411: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: [
@@ -3959,7 +3962,7 @@ export default {
     ]
   },
   /**
-   * Lookup416: pallet_proofs_dealer::pallet::Error<T>
+   * Lookup417: pallet_proofs_dealer::pallet::Error<T>
    **/
   PalletProofsDealerError: {
     _enum: [
@@ -3983,11 +3986,12 @@ export default {
       "KeyProofNotFound",
       "KeyProofVerificationFailed",
       "FailedToApplyDelta",
+      "FailedToUpdateProviderAfterKeyRemoval",
       "TooManyValidProofSubmitters"
     ]
   },
   /**
-   * Lookup419: pallet_payment_streams::types::FixedRatePaymentStream<T>
+   * Lookup420: pallet_payment_streams::types::FixedRatePaymentStream<T>
    **/
   PalletPaymentStreamsFixedRatePaymentStream: {
     rate: "u128",
@@ -3996,23 +4000,23 @@ export default {
     outOfFundsTick: "Option<u32>"
   },
   /**
-   * Lookup420: pallet_payment_streams::types::DynamicRatePaymentStream<T>
+   * Lookup421: pallet_payment_streams::types::DynamicRatePaymentStream<T>
    **/
   PalletPaymentStreamsDynamicRatePaymentStream: {
-    amountProvided: "u32",
+    amountProvided: "u64",
     priceIndexWhenLastCharged: "u128",
     userDeposit: "u128",
     outOfFundsTick: "Option<u32>"
   },
   /**
-   * Lookup421: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+   * Lookup422: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
    **/
   PalletPaymentStreamsProviderLastChargeableInfo: {
     lastChargeableTick: "u32",
     priceIndex: "u128"
   },
   /**
-   * Lookup422: pallet_payment_streams::pallet::Error<T>
+   * Lookup423: pallet_payment_streams::pallet::Error<T>
    **/
   PalletPaymentStreamsError: {
     _enum: [
@@ -4035,7 +4039,7 @@ export default {
     ]
   },
   /**
-   * Lookup423: pallet_bucket_nfts::pallet::Error<T>
+   * Lookup424: pallet_bucket_nfts::pallet::Error<T>
    **/
   PalletBucketNftsError: {
     _enum: [
@@ -4046,7 +4050,7 @@ export default {
     ]
   },
   /**
-   * Lookup424: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
+   * Lookup425: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
    **/
   PalletNftsCollectionDetails: {
     owner: "AccountId32",
@@ -4057,13 +4061,13 @@ export default {
     attributes: "u32"
   },
   /**
-   * Lookup429: pallet_nfts::types::CollectionRole
+   * Lookup430: pallet_nfts::types::CollectionRole
    **/
   PalletNftsCollectionRole: {
     _enum: ["__Unused0", "Issuer", "Freezer", "__Unused3", "Admin"]
   },
   /**
-   * Lookup430: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
+   * Lookup431: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
    **/
   PalletNftsItemDetails: {
     owner: "AccountId32",
@@ -4071,42 +4075,42 @@ export default {
     deposit: "PalletNftsItemDeposit"
   },
   /**
-   * Lookup431: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup432: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemDeposit: {
     account: "AccountId32",
     amount: "u128"
   },
   /**
-   * Lookup436: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
+   * Lookup437: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
    **/
   PalletNftsCollectionMetadata: {
     deposit: "u128",
     data: "Bytes"
   },
   /**
-   * Lookup437: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
+   * Lookup438: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
    **/
   PalletNftsItemMetadata: {
     deposit: "PalletNftsItemMetadataDeposit",
     data: "Bytes"
   },
   /**
-   * Lookup438: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup439: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemMetadataDeposit: {
     account: "Option<AccountId32>",
     amount: "u128"
   },
   /**
-   * Lookup441: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup442: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeDeposit: {
     account: "Option<AccountId32>",
     amount: "u128"
   },
   /**
-   * Lookup445: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
+   * Lookup446: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
    **/
   PalletNftsPendingSwap: {
     desiredCollection: "u32",
@@ -4115,7 +4119,7 @@ export default {
     deadline: "u32"
   },
   /**
-   * Lookup447: pallet_nfts::types::PalletFeature
+   * Lookup448: pallet_nfts::types::PalletFeature
    **/
   PalletNftsPalletFeature: {
     _enum: [
@@ -4131,7 +4135,7 @@ export default {
     ]
   },
   /**
-   * Lookup448: pallet_nfts::pallet::Error<T, I>
+   * Lookup449: pallet_nfts::pallet::Error<T, I>
    **/
   PalletNftsError: {
     _enum: [
@@ -4183,39 +4187,39 @@ export default {
     ]
   },
   /**
-   * Lookup451: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+   * Lookup452: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
    **/
   FrameSystemExtensionsCheckNonZeroSender: "Null",
   /**
-   * Lookup452: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+   * Lookup453: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
    **/
   FrameSystemExtensionsCheckSpecVersion: "Null",
   /**
-   * Lookup453: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+   * Lookup454: frame_system::extensions::check_tx_version::CheckTxVersion<T>
    **/
   FrameSystemExtensionsCheckTxVersion: "Null",
   /**
-   * Lookup454: frame_system::extensions::check_genesis::CheckGenesis<T>
+   * Lookup455: frame_system::extensions::check_genesis::CheckGenesis<T>
    **/
   FrameSystemExtensionsCheckGenesis: "Null",
   /**
-   * Lookup457: frame_system::extensions::check_nonce::CheckNonce<T>
+   * Lookup458: frame_system::extensions::check_nonce::CheckNonce<T>
    **/
   FrameSystemExtensionsCheckNonce: "Compact<u32>",
   /**
-   * Lookup458: frame_system::extensions::check_weight::CheckWeight<T>
+   * Lookup459: frame_system::extensions::check_weight::CheckWeight<T>
    **/
   FrameSystemExtensionsCheckWeight: "Null",
   /**
-   * Lookup459: pallet_transaction_payment::ChargeTransactionPayment<T>
+   * Lookup460: pallet_transaction_payment::ChargeTransactionPayment<T>
    **/
   PalletTransactionPaymentChargeTransactionPayment: "Compact<u128>",
   /**
-   * Lookup460: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
+   * Lookup461: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
    **/
   CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: "Null",
   /**
-   * Lookup461: storage_hub_runtime::Runtime
+   * Lookup462: storage_hub_runtime::Runtime
    **/
   StorageHubRuntimeRuntime: "Null"
 };

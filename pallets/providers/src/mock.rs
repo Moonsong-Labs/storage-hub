@@ -199,7 +199,7 @@ impl pallet_payment_streams::Config for Test {
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type Units = u32;
+    type Units = u64;
     type NewStreamDeposit = ConstU64<10>;
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
@@ -219,7 +219,7 @@ impl crate::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
@@ -229,9 +229,9 @@ impl crate::Config for Test {
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<2>;
+    type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
-    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxFileSize = ConstU64<{ u64::MAX }>;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;

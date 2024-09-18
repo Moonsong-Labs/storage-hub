@@ -348,7 +348,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg1: H256 | string | Uint8Array,
           arg2: H256 | string | Uint8Array
-        ) => Observable<Option<ITuple<[u32, u32]>>>,
+        ) => Observable<Option<ITuple<[u32, u64]>>>,
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
@@ -1492,7 +1492,7 @@ declare module "@polkadot/api-base/types/storage" {
        * - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds the capacity of the registered Storage Provider to this storage if the account to confirm is a Backup Storage Provider.
        * - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
        **/
-      totalBspsCapacity: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      totalBspsCapacity: AugmentedQuery<ApiType, () => Observable<u64>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The total amount of storage capacity of BSPs that is currently in use.
@@ -1500,7 +1500,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to keep track of the total amount of storage capacity that is currently in use by users, which is useful for
        * system metrics and also to calculate the current price of storage.
        **/
-      usedBspsCapacity: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      usedBspsCapacity: AugmentedQuery<ApiType, () => Observable<u64>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query

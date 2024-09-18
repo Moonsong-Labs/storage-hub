@@ -8,7 +8,7 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-mod types;
+pub mod types;
 mod utils;
 
 #[cfg(feature = "runtime-benchmarks")]

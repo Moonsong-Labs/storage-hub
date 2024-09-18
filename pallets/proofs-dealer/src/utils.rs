@@ -266,8 +266,6 @@ where
                     // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
                     forest_keys_proven.remove(&mutation.0);
 
-                    // TODO: Reduce the storage used by the Provider with some interface exposed by the Providers pallet.
-
                     // Add mutation to list of mutations applied.
                     mutations_applied.push((mutation.0, mutation.1.clone()));
 

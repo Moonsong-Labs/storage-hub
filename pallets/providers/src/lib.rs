@@ -92,7 +92,10 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact
             + Into<BalanceOf<Self>>
-            + Into<u32>;
+            + Into<u64>
+            // Note: this is the same as just making it a u64, but since we need to interact with the FileMetadata type which is a u64,
+            // we kinda have no clean way to achieve this (at least, not one that comes to mind).
+            + From<u64>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -506,6 +509,8 @@ pub mod pallet {
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
         InvalidEncodedFileMetadata,
+        /// Error thrown when failing to decode the owner Account ID from the received metadata.
+        InvalidEncodedAccountId,
         /// Error thrown when trying to update a payment stream that does not exist.
         PaymentStreamNotFound,
     }

@@ -87,7 +87,7 @@ mod sign_up {
                     let deposit_for_storage_amount: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -186,7 +186,7 @@ mod sign_up {
                     let deposit_for_storage_amount: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -281,7 +281,7 @@ mod sign_up {
                     let deposit_for_storage_amount: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -385,7 +385,7 @@ mod sign_up {
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_alice - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_alice - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -395,7 +395,7 @@ mod sign_up {
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_bob - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_bob - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -570,7 +570,7 @@ mod sign_up {
                     let deposit_for_storage_amount: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -665,7 +665,7 @@ mod sign_up {
                     let deposit_for_storage_amount: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -768,7 +768,7 @@ mod sign_up {
                     let deposit_for_storage_amount: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -880,7 +880,7 @@ mod sign_up {
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_alice - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_alice - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -890,7 +890,7 @@ mod sign_up {
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_bob - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_bob - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -1069,7 +1069,7 @@ mod sign_up {
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_alice - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_alice - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -1079,7 +1079,7 @@ mod sign_up {
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_bob - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_bob - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -1557,7 +1557,7 @@ mod sign_up {
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_alice - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_alice - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -1567,7 +1567,7 @@ mod sign_up {
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
                         <SpMinDeposit as Get<u128>>::get().saturating_add(
                             <DepositPerData as Get<u128>>::get().saturating_mul(
-                                (storage_amount_bob - <SpMinCapacity as Get<u32>>::get()).into(),
+                                (storage_amount_bob - <SpMinCapacity as Get<u64>>::get()).into(),
                             ),
                         );
 
@@ -2740,7 +2740,7 @@ mod change_capacity {
                     >>::get(
                     )
                     .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
-                        (increased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                        (increased_storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                     ));
 
                     // Check the new free and held balance of Alice
@@ -2808,7 +2808,7 @@ mod change_capacity {
                     >>::get(
                     )
                     .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
-                        (decreased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                        (decreased_storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                     ));
 
                     // Check the new free and held balance of Alice
@@ -2845,7 +2845,7 @@ mod change_capacity {
                     let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageDataUnit<Test> = 500;
                     let minimum_storage_amount: StorageDataUnit<Test> =
-                        <SpMinCapacity as Get<u32>>::get();
+                        <SpMinCapacity as Get<u64>>::get();
                     let (old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -2950,7 +2950,7 @@ mod change_capacity {
                     >>::get(
                     )
                     .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
-                        (increased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                        (increased_storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                     ));
 
                     // Check the new free and held balance of Alice
@@ -3030,7 +3030,7 @@ mod change_capacity {
                     >>::get(
                     )
                     .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
-                        (decreased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                        (decreased_storage_amount - <SpMinCapacity as Get<u64>>::get()).into(),
                     ));
 
                     // Check the new free and held balance of Alice
@@ -3073,7 +3073,7 @@ mod change_capacity {
                     let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageDataUnit<Test> = 500;
                     let minimum_storage_amount: StorageDataUnit<Test> =
-                        <SpMinCapacity as Get<u32>>::get();
+                        <SpMinCapacity as Get<u64>>::get();
                     let (old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -4286,7 +4286,7 @@ fn register_account_as_msp(
     let deposit_for_storage_amount: BalanceOf<Test> = <SpMinDeposit as Get<u128>>::get()
         .saturating_add(
             <DepositPerData as Get<u128>>::get()
-                .saturating_mul((storage_amount - <SpMinCapacity as Get<u32>>::get()).into()),
+                .saturating_mul((storage_amount - <SpMinCapacity as Get<u64>>::get()).into()),
         );
 
     // Check the balance of the account to make sure it has more than the deposit amount needed
@@ -4371,7 +4371,7 @@ fn register_account_as_bsp(
     let deposit_for_storage_amount: BalanceOf<Test> = <SpMinDeposit as Get<u128>>::get()
         .saturating_add(
             <DepositPerData as Get<u128>>::get()
-                .saturating_mul((storage_amount - <SpMinCapacity as Get<u32>>::get()).into()),
+                .saturating_mul((storage_amount - <SpMinCapacity as Get<u64>>::get()).into()),
         );
 
     // Check the balance of the account to make sure it has more than the deposit amount needed

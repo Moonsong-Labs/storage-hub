@@ -1429,7 +1429,6 @@ where
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
-        let size: u32 = size.into();
 
         shp_file_metadata::FileMetadata::<
             { shp_constants::H_LENGTH },
