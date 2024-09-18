@@ -892,6 +892,18 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::DynamicRatePaymentStream>;
+
+    /// Get the amount provided of a dynamic-rate payment stream between a User and a Provider
+    fn get_dynamic_rate_payment_stream_amount_provided(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::Units>;
+
+    /// Check if a user has an active payment stream with a provider.
+    fn has_active_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> bool;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.

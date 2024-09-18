@@ -7048,6 +7048,7 @@ dependencies = [
  "pallet-bucket-nfts",
  "pallet-file-system-runtime-api",
  "pallet-nfts",
+ "pallet-payment-streams",
  "pallet-proofs-dealer",
  "pallet-storage-providers",
  "parity-scale-codec",

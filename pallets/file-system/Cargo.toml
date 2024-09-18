@@ -33,6 +33,7 @@ sp-trie = { workspace = true }
 
 # Local
 pallet-file-system-runtime-api = { workspace = true }
+pallet-payment-streams = { workspace = true }
 
 shp-constants = { workspace = true }
 shp-file-metadata = { workspace = true }
@@ -61,6 +62,7 @@ std = [
 	"pallet-bucket-nfts/std",
 	"pallet-file-system-runtime-api/std",
 	"pallet-nfts/std",
+	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",

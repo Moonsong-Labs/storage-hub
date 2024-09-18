@@ -21,9 +21,9 @@ use pallet_file_system_runtime_api::{
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
-    TrieAddMutation, TrieRemoveMutation,
+    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::{
@@ -765,6 +765,27 @@ where
                 storage_request_metadata.size,
             )?;
 
+            // Check if a payment stream between the user and provider already exists.
+            // If it does not, create it. If it does, update it.
+            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
+				Some(previous_amount_provided) => {
+					// Update the payment stream.
+					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&(previous_amount_provided + storage_request_metadata.size),
+					)?;
+				},
+				None => {
+					// Create the payment stream.
+					<T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&storage_request_metadata.size,
+					)?;
+				}
+			}
+
             // Get the file metadata to insert into the Provider's trie under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
@@ -1152,9 +1173,13 @@ where
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotASp)?;
 
-        // Check that the owner of the file has been flagged as insolvent
+        // Check that the owner of the file has been flagged as insolvent OR that the Provider does not
+        // have any active payment streams with the user.
         ensure!(
-            <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner),
+            <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner)
+                || !<T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(
+                    &sp_id, &owner
+                ),
             Error::<T>::UserNotInsolvent
         );
 
