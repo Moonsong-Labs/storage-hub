@@ -623,7 +623,7 @@ describeBspNet(
       if (secondBspToRespond === ShConsts.DUMMY_BSP_ID) {
         const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
-          "MutationsApplied",
+          "MutationsApplied"
         );
         strictEqual(
           mutationsAppliedEvents.length,
