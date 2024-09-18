@@ -48,13 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'pnpm'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install
       - run: pnpm fmt
 
@@ -63,13 +64,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'pnpm'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install
       - run: pnpm lint
 
@@ -78,13 +80,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'pnpm'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+
       - run: pnpm install
       - run: |
           cd test
