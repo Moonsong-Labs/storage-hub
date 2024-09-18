@@ -65,10 +65,10 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
 export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) => {
-  const iterations = 41;
+  // To allow time for local file transfer to complete (5s)
+  const iterations = 50;
   const delay = 100;
-  // To allow time for local file transfer to complete
-  for (let i = 0; i < iterations; i++) {
+  for (let i = 0; i < iterations + 1; i++) {
     try {
       await sleep(delay);
       const matches = await assertExtrinsicPresent(api, {
@@ -82,15 +82,14 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) 
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
         );
       }
+      const { events } = await sealBlock(api);
+      assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
       break;
     } catch {
       invariant(
-        i < iterations - 1,
+        i !== iterations,
         `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
       );
     }
   }
-
-  const { events } = await sealBlock(api);
-  assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 };
