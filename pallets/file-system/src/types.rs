@@ -21,11 +21,11 @@ use crate::{
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMetadata<T: Config> {
-    /// Block number at which the storage request was made.
+    /// Tick number at which the storage request was made.
     ///
     /// Used primarily for tracking the age of the request which is useful for
     /// cleaning up old requests.
-    pub requested_at: BlockNumberFor<T>,
+    pub requested_at: TickNumber<T>,
 
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
@@ -283,3 +283,7 @@ pub type FileDeletionRequestExpirationItem<T> =
 
 /// Alias for the `ThresholdType` used in the FileSystem pallet.
 pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
+
+/// Alias for the `TickNumber` used in the ProofsDealer pallet.
+pub type TickNumber<T> =
+    <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;

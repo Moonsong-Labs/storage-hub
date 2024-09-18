@@ -5,8 +5,8 @@ use crate::{
         ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestTtl, ThresholdType,
     },
-    BlockRangeToMaximumThreshold, Config, Error, Event, PendingStopStoringRequests,
-    ReplicationTarget, StorageRequestExpirations, StorageRequests,
+    Config, Error, Event, PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations,
+    StorageRequests, TickRangeToMaximumThreshold,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -922,9 +922,6 @@ mod request_storage {
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
                 let expiration_block = System::block_number() + storage_request_ttl;
 
-                // Assert that the next starting block to clean up is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
-
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
                     FileSystem::next_available_storage_request_expiration_block(),
@@ -1069,9 +1066,6 @@ mod request_storage {
                 let expected_expiration_block_number: BlockNumberFor<Test> =
                     expected_expiration_block_number.into();
 
-                // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
-
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
                     FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
@@ -1089,9 +1083,6 @@ mod request_storage {
                     FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
                     max_storage_request_expiry as usize
                 );
-
-                // Assert that the `NextExpirationInsertionBlockNumber` storage did not update
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
                 // Go to block number after which the storage request expirations should be removed
                 roll_to(expected_expiration_block_number + 1);
@@ -1213,9 +1204,6 @@ mod revoke_storage_request {
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
                 let expiration_block = System::block_number() + storage_request_ttl;
-
-                // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
@@ -3165,9 +3153,8 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -4419,7 +4406,7 @@ mod set_global_parameters_tests {
 
                 assert_noop!(
                     FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0)),
-                    Error::<Test>::BlockRangeToMaximumThresholdCannotBeZero
+                    Error::<Test>::TickRangeToMaximumThresholdCannotBeZero
                 );
             });
         }
@@ -4442,7 +4429,7 @@ mod set_global_parameters_tests {
 
                 // Assert that the global parameters were set correctly
                 assert_eq!(ReplicationTarget::<Test>::get(), 3);
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
     }
@@ -5010,7 +4997,7 @@ mod compute_threshold {
     mod success {
         use super::*;
         #[test]
-        fn query_earliest_file_volunteer_block() {
+        fn query_earliest_file_volunteer_tick() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
@@ -5059,7 +5046,7 @@ mod compute_threshold {
                     )
                         .unwrap();
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number = FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 assert!(frame_system::Pallet::<Test>::block_number() <= block_number);
             });
@@ -5119,14 +5106,14 @@ mod compute_threshold {
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
 
                 assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number = FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the BlockRangeToMaximumThreshold is 1
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -5138,14 +5125,14 @@ mod compute_threshold {
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1000000000);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1000000000);
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
 
                 assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number = FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP can only volunteer after some number of blocks have passed.
                 assert!(block_number > frame_system::Pallet::<Test>::block_number());
@@ -5167,7 +5154,7 @@ mod compute_threshold {
                 assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number = FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -5238,14 +5225,14 @@ mod compute_threshold {
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
 
                 assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number = FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -5309,9 +5296,8 @@ mod stop_storing_for_insolvent_user {
             // Dispatch BSP volunteer.
             assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-            // In this case, the tick number is going to be equal to the current block number
-            // minus one (on_poll hook not executed in first block)
-            let tick_when_confirming = System::block_number() - 1;
+            // Get the current tick number.
+            let tick_when_confirming = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
             // Dispatch BSP confirm storing.
             assert_ok!(FileSystem::bsp_confirm_storing(
@@ -5532,9 +5518,8 @@ mod stop_storing_for_insolvent_user {
             // Dispatch BSP volunteer.
             assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-            // In this case, the tick number is going to be equal to the current block number
-            // minus one (on_poll hook not executed in first block)
-            let tick_when_confirming = System::block_number() - 1;
+            // Get the current tick number.
+            let tick_when_confirming = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
             // Dispatch BSP confirm storing.
             assert_ok!(FileSystem::bsp_confirm_storing(
@@ -5733,9 +5718,8 @@ mod stop_storing_for_insolvent_user {
             // Dispatch BSP volunteer.
             assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-            // In this case, the tick number is going to be equal to the current block number
-            // minus one (on_poll hook not executed in first block)
-            let tick_when_confirming = System::block_number() - 1;
+            // Get the current tick number.
+            let tick_when_confirming = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
             // Dispatch BSP confirm storing.
             assert_ok!(FileSystem::bsp_confirm_storing(

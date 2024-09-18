@@ -9,7 +9,10 @@ use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating};
+use sp_runtime::traits::{
+    AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One, Saturating,
+    Zero,
+};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
@@ -621,7 +624,22 @@ pub trait ProofsDealerInterface {
     /// The type that represents the randomness output.
     type RandomnessOutput: Parameter + Member + Debug;
     /// The numerical type used to represent ticks.
-    type TickNumber: Parameter + Member + AtLeast32BitUnsigned + Debug + Default + Copy;
+    type TickNumber: Parameter
+        + Member
+        + AtLeast32BitUnsigned
+        + Debug
+        + Default
+        + Copy
+        + MaxEncodedLen
+        + FullCodec
+        + MaybeSerializeDeserialize
+        + Zero
+        + One
+        + CheckedAdd
+        + CheckedSub
+        + CheckedDiv
+        + CheckedMul
+        + Saturating;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///

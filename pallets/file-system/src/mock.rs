@@ -358,7 +358,7 @@ impl crate::Config for Test {
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
+    type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
@@ -401,7 +401,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     crate::GenesisConfig::<Test> {
         replication_target: 2,
-        block_range_to_maximum_threshold: 1,
+        tick_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -419,7 +419,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     .unwrap();
 
     let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| System::set_block_number(1));
+    ext.execute_with(|| roll_one_block());
     ext
 }
 

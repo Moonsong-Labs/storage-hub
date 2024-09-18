@@ -44,7 +44,7 @@ pub use sp_runtime::{MultiAddress, Perbill, Permill};
 use sp_std::prelude::Vec;
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
@@ -537,8 +537,8 @@ impl_runtime_apis! {
     }
 
     impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
-        fn query_earliest_file_volunteer_block(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
-            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
+        fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
+            FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key)
         }
 
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {

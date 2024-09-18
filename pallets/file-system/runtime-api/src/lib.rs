@@ -5,9 +5,9 @@ use scale_info::prelude::vec::Vec;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-/// Error type for the `query_earliest_file_volunteer_block` runtime API call.
+/// Error type for the `query_earliest_file_volunteer_tick` runtime API call.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum QueryFileEarliestVolunteerBlockError {
+pub enum QueryFileEarliestVolunteerTickError {
     FailedToEncodeFingerprint,
     FailedToEncodeBsp,
     ThresholdArithmeticError,
@@ -24,14 +24,14 @@ pub enum QueryBspConfirmChunksToProveForFileError {
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait FileSystemApi<ProviderId, FileKey, BlockNumber, ChunkId>
+    pub trait FileSystemApi<ProviderId, FileKey, TickNumber, ChunkId>
     where
         ProviderId: Codec,
         FileKey: Codec,
-        BlockNumber: Codec,
+        TickNumber: Codec,
         ChunkId: Codec,
     {
-        fn query_earliest_file_volunteer_block(bsp_id: ProviderId, file_key: FileKey) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
+        fn query_earliest_file_volunteer_tick(bsp_id: ProviderId, file_key: FileKey) -> Result<TickNumber, QueryFileEarliestVolunteerTickError>;
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: ProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
     }
 }

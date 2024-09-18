@@ -132,6 +132,7 @@ impl ProofsDealerInterface for MockProofsDealer {
     type MerkleHash = H256;
     type RandomnessOutput = H256;
     type MerkleHashing = BlakeTwo256;
+    type TickNumber = BlockNumber;
 
     fn challenge(_key_challenged: &Self::MerkleHash) -> frame_support::dispatch::DispatchResult {
         Ok(())
@@ -197,6 +198,10 @@ impl ProofsDealerInterface for MockProofsDealer {
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
+
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
 }
 
 impl pallet_file_system::Config for Test {
@@ -207,7 +212,7 @@ impl pallet_file_system::Config for Test {
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
+    type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
