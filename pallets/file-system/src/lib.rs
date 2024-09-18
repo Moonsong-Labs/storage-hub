@@ -87,12 +87,14 @@ pub mod pallet {
                 MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
+                StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             > + shp_traits::MutateBucketsInterface<
                 AccountId = Self::AccountId,
                 BucketId = <Self::Providers as shp_traits::ReadBucketsInterface>::BucketId,
                 MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
+                StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             >;
 
         /// The trait for issuing challenges and verifying proofs.
@@ -224,7 +226,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxDataServerMultiAddresses: Get<u32>;
 
-        /// Maximum number of expired storage requests to clean up in a single block.
+        /// Maximum number of expired items (per type) to clean up in a single block.
         #[pallet::constant]
         type MaxExpiredItemsInBlock: Get<u32>;
 
@@ -232,13 +234,21 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.        
+        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
         #[pallet::constant]
         type PendingFileDeletionRequestTtl: Get<u32>;
+
+        /// Time-to-live for a move bucket request, after which the request is considered expired.
+        #[pallet::constant]
+        type MoveBucketRequestTtl: Get<u32>;
 
         /// Maximum number of file deletion requests a user can have pending.
         #[pallet::constant]
         type MaxUserPendingDeletionRequests: Get<u32>;
+
+        /// Maximum number of move bucket requests a user can have pending.
+        #[pallet::constant]
+        type MaxUserPendingMoveBucketRequests: Get<u32>;
 
         /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
@@ -271,6 +281,19 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    /// Bookkeeping of the buckets containing open storage requests.
+    #[pallet::storage]
+    #[pallet::getter(fn storage_request_buckets)]
+    pub type BucketsWithStorageRequests<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        BucketIdFor<T>,
+        Blake2_128Concat,
+        MerkleHash<T>,
+        (),
+        OptionQuery,
+    >;
+
     /// A map of blocks to expired storage requests.
     #[pallet::storage]
     #[pallet::getter(fn storage_request_expirations)]
@@ -293,6 +316,17 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// A map of blocks to expired move bucket requests.
+    #[pallet::storage]
+    #[pallet::getter(fn move_bucket_request_expirations)]
+    pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BlockNumberFor<T>,
+        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInBlock>,
+        ValueQuery,
+    >;
+
     /// A pointer to the earliest available block to insert a new storage request expiration.
     ///
     /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
@@ -307,6 +341,14 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn next_available_file_deletion_request_expiration_block)]
     pub type NextAvailableFileDeletionRequestExpirationBlock<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    /// A pointer to the earliest available block to insert a new move bucket request expiration.
+    ///
+    /// This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
+    #[pallet::storage]
+    #[pallet::getter(fn next_available_move_bucket_request_expiration_block)]
+    pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A pointer to the starting block to clean up expired storage requests.
@@ -347,6 +389,39 @@ pub mod pallet {
         MerkleHash<T>,
         (BlockNumberFor<T>, StorageData<T>),
     >;
+
+    /// Pending move bucket requests.
+    ///
+    /// A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
+    /// The value is the user who requested the move.
+    #[pallet::storage]
+    #[pallet::getter(fn pending_move_bucket_requests)]
+    pub type PendingMoveBucketRequests<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        Blake2_128Concat,
+        BucketIdFor<T>,
+        MoveBucketRequestMetadata<T>,
+    >;
+
+    /// BSP data servers for move bucket requests.
+    #[pallet::storage]
+    #[pallet::getter(fn data_servers_for_move_bucket)]
+    pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        BucketIdFor<T>,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        (),
+    >;
+
+    /// Bookkeeping of buckets that are pending to be moved to a new MSP.
+    #[pallet::storage]
+    #[pallet::getter(fn pending_buckets_to_move)]
+    pub type PendingBucketsToMove<T: Config> =
+        StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
     /// Number of BSPs required to fulfill a storage request
     ///
@@ -400,6 +475,12 @@ pub mod pallet {
             name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
+        },
+        /// Notifies that a bucket is being moved to a new MSP.
+        MoveBucketRequested {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            new_msp_id: ProviderIdFor<T>,
         },
         /// Notifies that a bucket's privacy has been updated.
         BucketPrivacyUpdated {
@@ -508,6 +589,26 @@ pub mod pallet {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
         },
+        /// Notifies that a move bucket request has expired.
+        MoveBucketRequestExpired {
+            msp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
+        },
+        /// Notifies that a bucket has been moved to a new MSP.
+        MoveBucketAccepted {
+            bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+        },
+        /// Notifies that a bucket move request has been rejected by the MSP.
+        MoveBucketRejected {
+            bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+        },
+        /// Notifies that a data server has been registered for a move bucket request.
+        DataServerRegisteredForMoveBucket {
+            bsp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -517,6 +618,10 @@ pub mod pallet {
         StorageRequestAlreadyRegistered,
         /// Storage request not registered for the given file.
         StorageRequestNotFound,
+        /// Operation not allowed while the storage request is not being revoked.
+        StorageRequestNotRevoked,
+        /// Operation not allowed while the storage request exists.
+        StorageRequestExists,
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
@@ -612,6 +717,18 @@ pub mod pallet {
         MspAlreadyConfirmed,
         /// The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
         RequestWithoutMsp,
+        /// The MSP is already storing the bucket.
+        MspAlreadyStoringBucket,
+        /// Move bucket request not found in storage.
+        MoveBucketRequestNotFound,
+        /// Action not allowed while the bucket is being moved.
+        BucketIsBeingMoved,
+        /// BSP is already a data server for the move bucket request.
+        BspAlreadyDataServer,
+        /// Too many registered data servers for the move bucket request.
+        BspDataServersExceeded,
+        /// The bounded vector that holds file metadata to process it is full but there's still more to process.
+        FileMetadataProcessingQueueFull,
     }
 
     #[pallet::call]
@@ -643,6 +760,50 @@ pub mod pallet {
 
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn request_move_bucket(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+            new_msp_id: ProviderIdFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id)?;
+
+            Self::deposit_event(Event::MoveBucketRequested {
+                who,
+                bucket_id,
+                new_msp_id,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn msp_respond_move_bucket_request(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+            response: BucketMoveRequestResponse,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let msp_id =
+                Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response.clone())?;
+
+            match response {
+                BucketMoveRequestResponse::Accepted => {
+                    Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
+                }
+                BucketMoveRequestResponse::Rejected => {
+                    Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
+                }
+            }
+
+            Ok(())
+        }
+
+        #[pallet::call_index(3)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn update_bucket_privacy(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -664,7 +825,7 @@ pub mod pallet {
         }
 
         /// Create and associate a collection with a bucket.
-        #[pallet::call_index(2)]
+        #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn create_and_associate_collection_with_bucket(
             origin: OriginFor<T>,
@@ -685,7 +846,7 @@ pub mod pallet {
         }
 
         /// Issue a new storage request for a file
-        #[pallet::call_index(3)]
+        #[pallet::call_index(5)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
@@ -727,7 +888,7 @@ pub mod pallet {
         }
 
         /// Revoke storage request
-        #[pallet::call_index(4)]
+        #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
@@ -745,13 +906,30 @@ pub mod pallet {
             Ok(())
         }
 
+        /// Add yourself as a data server for providing the files of the bucket requested to be moved.
+        #[pallet::call_index(7)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn bsp_add_data_server_for_move_bucket_request(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let bsp_id =
+                Self::do_bsp_add_data_server_for_move_bucket_request(who.clone(), bucket_id)?;
+
+            Self::deposit_event(Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id });
+
+            Ok(())
+        }
+
         /// Used by a MSP to confirm storing a file that was assigned to it.
         ///
         /// The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
         /// in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
         /// the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
-        #[pallet::call_index(5)]
+        #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_accept_storage_request(
             origin: OriginFor<T>,
@@ -789,7 +967,7 @@ pub mod pallet {
         /// so a BSP is strongly advised to check beforehand. Another reason for failure is
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
-        #[pallet::call_index(6)]
+        #[pallet::call_index(9)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
@@ -814,7 +992,7 @@ pub mod pallet {
         }
 
         /// Used by a BSP to confirm they are storing data of a storage request.
-        #[pallet::call_index(7)]
+        #[pallet::call_index(10)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
@@ -843,7 +1021,7 @@ pub mod pallet {
         /// the BSP gets that data is up to it. One example could be from the assigned MSP.
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
-        #[pallet::call_index(8)]
+        #[pallet::call_index(11)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_request_stop_storing(
             origin: OriginFor<T>,
@@ -887,7 +1065,7 @@ pub mod pallet {
         /// It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
         /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
         /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(12)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_stop_storing(
             origin: OriginFor<T>,
@@ -916,7 +1094,7 @@ pub mod pallet {
         /// it won't be getting paid for it anymore.
         /// The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
         /// wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
-        #[pallet::call_index(10)]
+        #[pallet::call_index(13)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn stop_storing_for_insolvent_user(
             origin: OriginFor<T>,
@@ -954,7 +1132,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(11)]
+        #[pallet::call_index(14)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
@@ -988,7 +1166,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(12)]
+        #[pallet::call_index(15)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
@@ -1018,7 +1196,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(13)]
+        #[pallet::call_index(16)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn set_global_parameters(
             origin: OriginFor<T>,

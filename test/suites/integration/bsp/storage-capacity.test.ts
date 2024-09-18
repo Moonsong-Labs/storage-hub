@@ -34,7 +34,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       events
     );
     assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
-    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0f000000"); // NotRegistered
+    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x10000000"); // NotRegistered
 
     const totalCapacityAfter = await api.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await api.query.providers.backupStorageProviders(
@@ -83,7 +83,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await api.sealBlock();
 
     // Assert that the capacity has changed.
-    api.assert.eventPresent("providers", "CapacityChanged", await api.query.system.events());
+    await api.assert.eventPresent("providers", "CapacityChanged");
 
     // Allow BSP enough time to send call to volunteer for the storage request.
     await sleep(500);
@@ -98,7 +98,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await api.sealBlock();
 
     // Assert that the BSP was accepted as a volunteer.
-    api.assert.eventPresent("fileSystem", "AcceptedBspVolunteer", await api.query.system.events());
+    await api.assert.eventPresent("fileSystem", "AcceptedBspVolunteer");
   });
 
   it("Total capacity updated when single BSP capacity updated", async () => {

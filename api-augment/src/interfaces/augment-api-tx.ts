@@ -18,6 +18,7 @@ import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
+  PalletFileSystemBucketMoveRequestResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -400,6 +401,13 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
+       * Add yourself as a data server for providing the files of the bucket requested to be moved.
+       **/
+      bspAddDataServerForMoveBucketRequest: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
+      /**
        * Executed by a BSP to confirm to stop storing a file.
        *
        * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
@@ -550,6 +558,18 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, ShpFileKeyVerifierFileKeyProof, SpTrieStorageProofCompactProof]
       >;
+      mspRespondMoveBucketRequest: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          response:
+            | PalletFileSystemBucketMoveRequestResponse
+            | "Accepted"
+            | "Rejected"
+            | number
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, PalletFileSystemBucketMoveRequestResponse]
+      >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
           user: AccountId32 | string | Uint8Array,
@@ -558,6 +578,13 @@ declare module "@polkadot/api-base/types/submittable" {
           forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [AccountId32, H256, H256, SpTrieStorageProofCompactProof]
+      >;
+      requestMoveBucket: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          newMspId: H256 | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256]
       >;
       /**
        * Revoke storage request

@@ -16,6 +16,7 @@ import * as Files from "./fileHelpers";
 import * as NodeBspNet from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
+import { addBsp } from "./helpers";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -164,7 +165,8 @@ export class BspNetTestApi implements AsyncDisposable {
 
   private enrichApi() {
     const remappedAssertNs = {
-      ...Assertions,
+      fetchEventData: Assertions.fetchEventData,
+
       /**
        * Asserts that a specific event is present in the given events or the latest block.
        * @param module - The module name of the event.
@@ -172,8 +174,10 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param events - Optional. The events to search through. If not provided, it will fetch the latest block's events.
        * @returns The matching event and its data.
        */
-      eventPresent: (module: string, method: string, events?: EventRecord[]) =>
-        Assertions.assertEventPresent(this._api, module, method, events),
+      eventPresent: async (module: string, method: string, events?: EventRecord[]) => {
+        const evts = events ?? ((await this._api.query.system.events()) as EventRecord[]);
+        return Assertions.assertEventPresent(this._api, module, method, evts);
+      },
       /**
        * Asserts that multiple instances of a specific event are present.
        * @param module - The module name of the event.
@@ -181,8 +185,10 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param events - Optional. The events to search through. If not provided, it will fetch the latest block's events.
        * @returns An array of matching events and their data.
        */
-      eventMany: (module: string, method: string, events?: EventRecord[]) =>
-        Assertions.assertEventMany(this._api, module, method, events),
+      eventMany: async (module: string, method: string, events?: EventRecord[]) => {
+        const evts = events ?? ((await this._api.query.system.events()) as EventRecord[]);
+        return Assertions.assertEventMany(this._api, module, method, evts);
+      },
       /**
        * Asserts that a specific extrinsic is present in the transaction pool or recent blocks.
        * @param options - Options specifying the extrinsic to search for.
@@ -204,39 +210,49 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for waiting on specific events or conditions in the BSP network.
      */
     const remappedWaitsNs = {
-      ...Waits,
       /**
        * Waits for a BSP to volunteer for a storage request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: () => Waits.waitForBspVolunteer(this._api),
+      bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
 
       /**
        * Waits for a BSP to confirm storing a file.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: () => Waits.waitForBspStored(this._api)
+      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts)
     };
 
     const remappedFileNs = {
-      ...Files,
       /**
        * Creates a new bucket.
        *
        * @param bucketName - The name of the bucket to be created.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string) => Files.createBucket(this._api, bucketName),
+      newBucket: (bucketName: string, owner?: KeyringPair) =>
+        Files.createBucket(this._api, bucketName, undefined, owner),
+
       /**
        * Creates a new bucket and submits a new storage request.
        *
        * @param source - The local path to the file to be uploaded.
        * @param location - The StorageHub "location" field of the file to be uploaded.
        * @param bucketName - The name of the bucket to be created.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to file metadata.
        */
-      newStorageRequest: (source: string, location: string, bucketName: string) =>
-        Files.sendNewStorageRequest(this._api, source, location, bucketName)
+      newStorageRequest: (
+        source: string,
+        location: string,
+        bucketName: string,
+        owner?: KeyringPair
+      ) => Files.sendNewStorageRequest(this._api, source, location, bucketName, undefined, owner)
     };
 
     /**
@@ -244,7 +260,6 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for manipulating and interacting with blocks in the BSP network.
      */
     const remappedBlockNs = {
-      ...BspNetBlock,
       /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.
@@ -313,7 +328,17 @@ export class BspNetTestApi implements AsyncDisposable {
     };
 
     const remappedDockerNs = {
-      ...DockerBspNet
+      ...DockerBspNet,
+      onboardBsp: (options: {
+        bspSigner: KeyringPair;
+        name?: string;
+        rocksdb?: boolean;
+        bspKeySeed?: string;
+        bspId?: string;
+        bspStartingWeight?: bigint;
+        maxStorageCapacity?: number;
+        additionalArgs?: string[];
+      }) => addBsp(this._api, options.bspSigner, options)
     };
 
     return Object.assign(this._api, {

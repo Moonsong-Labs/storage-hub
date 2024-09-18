@@ -276,7 +276,7 @@ where
                         &[(mutation.0, mutation.1.clone().into())],
                         forest_proof,
                     )
-                    .map(|(_, new_root)| new_root)
+                    .map(|(_, new_root, _)| new_root)
                     .map_err(|_| Error::<T>::FailedToApplyDelta)
                 })?;
 

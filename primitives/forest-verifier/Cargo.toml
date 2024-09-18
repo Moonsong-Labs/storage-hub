@@ -43,24 +43,24 @@ sp-runtime = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-    "frame-support/runtime-benchmarks",
-    "shp-traits/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"shp-traits/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
 ]
 std = [
-    "codec/std",
-    "frame-support/std",
-    "scale-info/std",
-    "shp-traits/std",
-    "sp-core/std",
-    "sp-io/std",
-    "sp-runtime/std",
-    "sp-std/std",
-    "sp-trie/std",
-    "trie-db/std",
+	"codec/std",
+	"frame-support/std",
+	"scale-info/std",
+	"shp-traits/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-trie/std",
+	"trie-db/std",
 ]
 try-runtime = [
-    "frame-support/try-runtime",
-    "shp-traits/try-runtime",
-    "sp-runtime/try-runtime",
+	"frame-support/try-runtime",
+	"shp-traits/try-runtime",
+	"sp-runtime/try-runtime",
 ]

@@ -132,6 +132,7 @@ std = [
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
 	"pallet-payment-streams/std",
+	"pallet-payment-streams-runtime-api/std",
 	"pallet-proofs-dealer/std",
 	"pallet-randomness/std",
 	"pallet-bucket-nfts/std",

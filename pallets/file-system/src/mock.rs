@@ -331,9 +331,16 @@ where
         root: &Self::Key,
         _mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
-    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+    ) -> Result<
+        (
+            MemoryDB<T::Hash>,
+            Self::Key,
+            Vec<(Self::Key, Option<Vec<u8>>)>,
+        ),
+        DispatchError,
+    > {
         // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root))
+        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
     }
 }
 
@@ -374,7 +381,9 @@ impl crate::Config for Test {
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
+    type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 

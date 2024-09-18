@@ -73,7 +73,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    const issueStorageRequestResult = await userApi.sealBlock(
+    await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         location,
@@ -88,11 +88,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
     // wait for the bsp to volunteer
     await sleep(500);
 
-    const { event } = userApi.assertEvent(
-      "fileSystem",
-      "NewStorageRequest",
-      issueStorageRequestResult.events
-    );
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
@@ -176,7 +172,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    const issueStorageRequestResult = await userApi.sealBlock(
+    await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         destination,
@@ -191,11 +187,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
     // wait for the bsp to volunteer
     await sleep(500);
 
-    const { event } = userApi.assertEvent(
-      "fileSystem",
-      "NewStorageRequest",
-      issueStorageRequestResult.events
-    );
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
