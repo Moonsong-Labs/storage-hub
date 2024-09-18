@@ -13,7 +13,7 @@
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
-    "typecheck": "pnpm tsc --noEmit",
+    "typecheck": "pnpm tsc --version && pnpm tsc --noEmit",
     "crossbuild:mac": "pnpm tsx scripts/crossBuildMac.ts",
     "docker:build": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildLocalDocker.ts",
     "docker:start": "docker compose -f ../docker/local-node-compose.yml  -p sh_dev_node up -d",
