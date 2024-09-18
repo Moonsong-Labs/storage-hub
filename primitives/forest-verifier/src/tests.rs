@@ -1539,12 +1539,14 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
-        let (memdb, new_root) =
+        let (memdb, new_root, mutated_keys_and_values) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
+        // Check that the key was added to the trie with an empty value
+        assert!(mutated_keys_and_values.contains(&(challenge_key, Some(Vec::new()))));
         assert_key_in_trie(&memdb, &new_root, &challenge_key);
     }
 
@@ -1569,7 +1571,7 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
-        let (memdb, new_root) =
+        let (memdb, new_root, _mutated_keys_and_values) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
@@ -1612,13 +1614,14 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys);
 
-        let (memdb, new_root) =
+        let (memdb, new_root, mutated_keys_and_values) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
         for challenge_key in &challenge_keys {
+            assert!(mutated_keys_and_values.contains(&(*challenge_key, Some(Vec::new()))));
             assert_key_in_trie(&memdb, &new_root, &challenge_key);
         }
     }
@@ -1733,11 +1736,11 @@ mod mutate_root_tests {
         } */
 
         // Execute mutations to remove the selected keys and generate the new root.
-        let (partial_trie_memdb, new_root) = ForestVerifier::<
-            LayoutV1<BlakeTwo256>,
-            { BlakeTwo256::LENGTH },
-        >::apply_delta(&root, &mutations, &proof)
-        .expect("Failed to mutate root");
+        let (partial_trie_memdb, new_root, _mutated_keys_and_values) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            )
+            .expect("Failed to mutate root");
 
         // Check that none of the deleted keys are still in the generated partial trie.
         for challenge_key in &challenge_keys {
@@ -1807,7 +1810,7 @@ mod mutate_root_tests {
             &mutations.iter().map(|(key, _)| *key).collect::<Vec<H256>>(),
         );
 
-        let (memdb, new_root) =
+        let (memdb, new_root, _mutated_keys_and_values) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )

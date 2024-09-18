@@ -14,16 +14,19 @@ describeBspNet(
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
     let bspTwoApi: EnrichedBspApi;
     let bspThreeApi: EnrichedBspApi;
     let fileData: FileMetadata;
     let oneBspFileData: FileMetadata;
+    let rootBeforeDeletion: string;
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
       assert(launchResponse, "BSPNet failed to initialise");
       fileData = launchResponse.fileData;
       userApi = await createUserApi();
+      bspApi = await createBspApi();
       bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
       bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
     });
@@ -36,10 +39,7 @@ describeBspNet(
     it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
-
-      const bspApi = await createBspApi();
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-      await bspApi.disconnect();
       strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
     });
 
@@ -184,6 +184,49 @@ describeBspNet(
         //   ),
         //   bspThreeKey
         // );
+      }
+    );
+
+    it(
+      "BSP can correctly delete a file from its forest and runtime correctly updates its root",
+      { skip: "Not implemented yet. Needs RPC method to build proofs." },
+      async () => {
+        // TODO: Setup a BSP that has two files which lie under the same NibbledBranch in the forest.
+        // TODO: Generate the proof to delete one of the files.
+        /* let inclusionForestProof = bspThreeApi.rpc.storagehubclient.buildForestRoot(fileData.fileKey); */
+        // TODO: Request the deletion of the file:
+        /* const fileDeletionRequestResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+            fileData.fileKey,
+            fileData.bucketId,
+            fileData.location,
+            fileData.owner,
+            fileData.fingerprint,
+            fileData.fileSize,
+            false,
+            inclusion_forest_proof: ForestProof<T>,
+        ); */
+        // Wait enough blocks for the deletion to be allowed.
+        /* const currentBlock = await bspThreeApi.rpc.chain.getBlock();
+		const currentBlockNumber = currentBlock.block.header.number.toNumber();
+		const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+		await bspThreeApi.advanceToBlock(cooldown); */
+        // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
+        /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
+				fileData.fileKey,
+				inclusionForestProof,
+			)); 
+			// Check for the confirm stopped storing event.
+      		let confirmStopStoringEvent = bspThreeApi.assert.eventPresent(
+        		"fileSystem",
+       			"BspConfirmStoppedStoring",
+        		fileDeletionConfirmResult.events
+      		);
+			// Make sure the new root was updated correctly.
+			bspThreeApi.rpc.storagehubclient.deleteFile(fileData.fileKey); // Not sure if this is the correct way to do it.
+			const newRoot = bspThreeApi.rpc.storagehubclient.getForestRoot();
+			const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
+			assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
+		*/
       }
     );
 
@@ -363,6 +406,22 @@ describeBspNet(
     );
 
     it("File is deleted by user", async () => {
+      // Get the root of the BSP that has the file before deletion.
+      const bspMetadata = await userApi.query.providers.backupStorageProviders(
+        ShConsts.DUMMY_BSP_ID
+      );
+      assert(bspMetadata, "BSP metadata should exist");
+      assert(bspMetadata.isSome, "BSP metadata should be Some");
+      const bspMetadataBlob = bspMetadata.unwrap();
+      rootBeforeDeletion = bspMetadataBlob.root.toHex();
+      // Make sure it matches the one of the actual merkle forest.
+      const actualRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(
+        rootBeforeDeletion,
+        actualRoot.toHex(),
+        "The root of the BSP should match the actual merkle forest root."
+      );
+
       // User sends file deletion request.
       await userApi.sealBlock(
         userApi.tx.fileSystem.deleteFile(
@@ -510,6 +569,31 @@ describeBspNet(
       });
       assert(atLeastOneEventBelongsToFirstBsp, "No ProofAccepted event belongs to the first BSP");
 
+      // If the first BSP is the one removing the file, assert for the event of the mutations successfully applied in the runtime.
+      if (firstBspToRespond === ShConsts.DUMMY_BSP_ID) {
+        const mutationsAppliedEvents = userApi.assert.eventMany(
+          "proofsDealer",
+          "MutationsApplied",
+          firstChallengeBlockResult.events
+        );
+        strictEqual(
+          mutationsAppliedEvents.length,
+          1,
+          "There should be one mutations applied event"
+        );
+
+        // Check that the mutations applied event belongs to the dummy BSP.
+        const mutationsAppliedEventDataBlob =
+          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
+          mutationsAppliedEvents[0].event.data;
+        assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
+        strictEqual(
+          mutationsAppliedEventDataBlob.provider.toString(),
+          ShConsts.DUMMY_BSP_ID,
+          "The mutations applied event should belong to the dummy BSP"
+        );
+      }
+
       // Advance to second next challenge block.
       await userApi.advanceToBlock(secondBlockToAdvance, {
         waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
@@ -535,10 +619,53 @@ describeBspNet(
         return secondChallengeBlockEventDataBlob.provider.toString() === secondBspToRespond;
       });
       assert(atLeastOneEventBelongsToSecondBsp, "No ProofAccepted event belongs to the second BSP");
+
+      // If the second BSP is the one removing the file, assert for the event of the mutations successfully applied in the runtime.
+      if (secondBspToRespond === ShConsts.DUMMY_BSP_ID) {
+        const mutationsAppliedEvents = userApi.assert.eventMany(
+          "proofsDealer",
+          "MutationsApplied",
+          firstChallengeBlockResult.events
+        );
+        strictEqual(
+          mutationsAppliedEvents.length,
+          1,
+          "There should be one mutations applied event"
+        );
+
+        // Check that the mutations applied event belongs to the dummy BSP.
+        const mutationsAppliedEventDataBlob =
+          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
+          mutationsAppliedEvents[0].event.data;
+        assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
+        strictEqual(
+          mutationsAppliedEventDataBlob.provider.toString(),
+          ShConsts.DUMMY_BSP_ID,
+          "The mutations applied event should belong to the dummy BSP"
+        );
+      }
     });
 
-    it("File is removed from Forest by BSP", { skip: "Not implemented yet." }, async () => {
-      // TODO: Check that file is deleted by BSP, and no longer is in the Forest.
+    it("File is removed from Forest by BSP", async () => {
+      // Make sure the root was updated in the runtime
+      const bspMetadataAfterDeletion = await userApi.query.providers.backupStorageProviders(
+        ShConsts.DUMMY_BSP_ID
+      );
+      assert(bspMetadataAfterDeletion, "BSP metadata should exist");
+      assert(bspMetadataAfterDeletion.isSome, "BSP metadata should be Some");
+      const bspMetadataAfterDeletionBlob = bspMetadataAfterDeletion.unwrap();
+      assert(
+        bspMetadataAfterDeletionBlob.root.toHex() !== rootBeforeDeletion,
+        "The root should have been updated on chain"
+      );
+
+      // Check that the runtime root matches the forest root of the BSP.
+      const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(
+        bspMetadataAfterDeletionBlob.root.toString(),
+        forestRoot.toString(),
+        "The runtime root should match the forest root of the BSP"
+      );
     });
 
     it(
@@ -546,7 +673,7 @@ describeBspNet(
       { skip: "Not implemented yet." },
       async () => {
         // TODO: Finalise block with mutations.
-        // TODO: Check that file is removed from File Storage.
+        // TODO: Check that file is removed from File Storage. Need a RPC method for this.
       }
     );
   }
