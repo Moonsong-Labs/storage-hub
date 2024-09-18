@@ -884,6 +884,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type MerkleHash = T::MerkleTrieHash;
     type MerkleHashing = T::MerkleTrieHashing;
     type RandomnessOutput = RandomnessOutputFor<T>;
+    type TickNumber = BlockNumberFor<T>;
 
     fn verify_forest_proof(
         provider_id: &Self::ProviderId,
@@ -1041,6 +1042,10 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         });
 
         Ok(())
+    }
+
+    fn get_current_tick() -> Self::TickNumber {
+        ChallengesTicker::<T>::get()
     }
 }
 

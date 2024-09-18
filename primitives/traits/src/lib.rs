@@ -620,6 +620,8 @@ pub trait ProofsDealerInterface {
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
     /// The type that represents the randomness output.
     type RandomnessOutput: Parameter + Member + Debug;
+    /// The numerical type used to represent ticks.
+    type TickNumber: Parameter + Member + AtLeast32BitUnsigned + Debug + Default + Copy;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -699,6 +701,12 @@ pub trait ProofsDealerInterface {
     /// deadline for submitting a proof to the current tick + the Provider's period (based on its
     /// stake) + the challenges tick tolerance.
     fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
+
+    /// Get the current tick.
+    ///
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time.
+    fn get_current_tick() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
