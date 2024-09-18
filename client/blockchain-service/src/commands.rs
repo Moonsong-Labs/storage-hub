@@ -1,5 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use pallet_file_system_runtime_api::{
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
+};
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
@@ -9,17 +12,13 @@ use pallet_storage_providers_runtime_api::{
     QueryStorageProviderCapacityError,
 };
 use serde_json::Number;
-use sp_api::ApiError;
-use sp_core::H256;
-
-use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
-};
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId,
+    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId, TickNumber,
     TrieRemoveMutation,
 };
+use sp_api::ApiError;
+use sp_core::H256;
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::{
@@ -47,11 +46,16 @@ pub enum BlockchainServiceCommand {
         block_number: BlockNumber,
         callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
     },
-    QueryFileEarliestVolunteerBlock {
+    WaitForTick {
+        tick_number: TickNumber,
+        callback:
+            tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), ApiError>>>,
+    },
+    QueryFileEarliestVolunteerTick {
         bsp_id: ProviderId,
         file_key: H256,
         callback:
-            tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>,
+            tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerTickError>>,
     },
     QueryEarliestChangeCapacityBlock {
         bsp_id: ProviderId,
@@ -165,12 +169,15 @@ pub trait BlockchainServiceInterface {
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
 
-    /// Query the earliest block number that a file was volunteered for storage.
-    async fn query_file_earliest_volunteer_block(
+    /// Wait for a tick number.
+    async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError>;
+
+    /// Query the earliest tick number that a file was volunteered for storage.
+    async fn query_file_earliest_volunteer_tick(
         &self,
         bsp_id: ProviderId,
         file_key: H256,
-    ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
+    ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError>;
 
     async fn query_earliest_change_capacity_block(
         &self,
@@ -355,14 +362,26 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         Ok(())
     }
 
-    async fn query_file_earliest_volunteer_block(
+    async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::WaitForTick {
+            tick_number,
+            callback,
+        };
+        self.send(message).await;
+        let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
+        rx.await.expect("Failed to wait for tick")
+    }
+
+    async fn query_file_earliest_volunteer_tick(
         &self,
         bsp_id: ProviderId,
         file_key: H256,
-    ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+    ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
-        let message = BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+        let message = BlockchainServiceCommand::QueryFileEarliestVolunteerTick {
             bsp_id,
             file_key,
             callback,
