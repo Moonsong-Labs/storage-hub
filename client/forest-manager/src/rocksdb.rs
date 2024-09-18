@@ -293,13 +293,13 @@ where
     ) -> Result<Option<FileMetadata>, ErrorT<T>> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
-        let data = trie.get(file_key.as_ref())?;
-        match data {
-            None => return Ok(None),
+        let encoded_metadata = trie.get(file_key.as_ref())?;
+        match encoded_metadata {
             Some(data) => {
-                let metadata = FileMetadata::decode(&mut &data[..])?;
-                Ok(Some(metadata))
+                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
+                Ok(Some(decoded_metadata))
             }
+            None => Ok(None),
         }
     }
 
@@ -378,22 +378,6 @@ where
         Ok(file_keys)
     }
 
-    fn get_file_metadata(
-        &self,
-        file_key: &HasherOutT<T>,
-    ) -> Result<Option<FileMetadata>, ErrorT<T>> {
-        let db = self.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
-        let encoded_metadata = trie.get(file_key.as_ref())?;
-        match encoded_metadata {
-            Some(data) => {
-                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
-                Ok(Some(decoded_metadata))
-            }
-            None => Ok(None),
-        }
-    }
-
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
         let mut root = self.root;
         let mut trie =
@@ -425,12 +409,12 @@ mod tests {
     use kvdb_memorydb::InMemory;
     use shc_common::types::{FileMetadata, Fingerprint, Proven, TrieMutation, TrieRemoveMutation};
     use shp_forest_verifier::ForestVerifier;
-    use shp_traits::TrieProofDeltaApplier;
+    use shp_traits::{CommitmentVerifier, TrieProofDeltaApplier};
     use sp_core::Hasher;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
-    use trie_db::{proof::verify_proof, Trie};
+    use trie_db::Trie;
 
     // Reusable function to setup a new `StorageDb` and `RocksDBForestStorage`.
     fn setup_storage<T, DB>() -> Result<RocksDBForestStorage<T, InMemory>, ErrorT<T>>
@@ -596,44 +580,24 @@ mod tests {
         let root = forest_storage.root;
 
         let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
-        let challenge_previous_with_value = (keys[0], Some(b"".as_ref()));
-        let challenge_with_value = (keys[1], Some(b"".as_ref()));
-        let challenge_next_with_value = (keys[2], Some(b"".as_ref()));
-        let included_keys_values = vec![
-            &challenge_previous_with_value,
-            &challenge_with_value,
-            &challenge_next_with_value,
-        ];
+        let included_keys = vec![keys[0], keys[1], keys[2]];
         assert!(
-            verify_proof::<LayoutV1<BlakeTwo256>, Vec<&(H256, Option<&[u8]>)>, H256, &[u8]>(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &proof.proof.encoded_nodes,
-                included_keys_values
+                included_keys.as_slice(),
+                &proof.proof
             )
             .is_ok()
         );
 
         let new_challenges = vec![keys[10], keys[40]];
         let proof = forest_storage.generate_proof(new_challenges).unwrap();
-        let first_challenge_previous_with_value = (keys[9], Some(b"".as_ref()));
-        let first_challenge_with_value = (keys[10], Some(b"".as_ref()));
-        let first_challenge_next_with_value = (keys[11], Some(b"".as_ref()));
-        let second_challenge_previous_with_value = (keys[39], Some(b"".as_ref()));
-        let second_challenge_with_value = (keys[40], Some(b"".as_ref()));
-        let second_challenge_next_with_value = (keys[41], Some(b"".as_ref()));
-        let included_keys_values = vec![
-            &first_challenge_previous_with_value,
-            &first_challenge_with_value,
-            &first_challenge_next_with_value,
-            &second_challenge_previous_with_value,
-            &second_challenge_with_value,
-            &second_challenge_next_with_value,
-        ];
+        let included_keys = vec![keys[9], keys[10], keys[11], keys[39], keys[40], keys[41]];
         assert!(
-            verify_proof::<LayoutV1<BlakeTwo256>, Vec<&(H256, Option<&[u8]>)>, H256, &[u8]>(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &proof.proof.encoded_nodes,
-                included_keys_values
+                included_keys.as_slice(),
+                &proof.proof
             )
             .is_ok()
         );

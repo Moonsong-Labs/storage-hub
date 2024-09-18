@@ -43,13 +43,13 @@ where
         file_key: &HasherOutT<T>,
     ) -> Result<Option<FileMetadata>, ErrorT<T>> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
-        let data = trie.get(file_key.as_ref())?;
-        match data {
-            None => return Ok(None),
+        let encoded_metadata = trie.get(file_key.as_ref())?;
+        match encoded_metadata {
             Some(data) => {
-                let metadata = FileMetadata::decode(&mut &data[..])?;
-                Ok(Some(metadata))
+                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
+                Ok(Some(decoded_metadata))
             }
+            None => Ok(None),
         }
     }
 
@@ -113,21 +113,6 @@ where
         }
 
         Ok(file_keys)
-    }
-
-    fn get_file_metadata(
-        &self,
-        file_key: &HasherOutT<T>,
-    ) -> Result<Option<FileMetadata>, ErrorT<T>> {
-        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
-        let encoded_metadata = trie.get(file_key.as_ref())?;
-        match encoded_metadata {
-            Some(data) => {
-                let decoded_metadata = FileMetadata::decode(&mut &data[..])?;
-                Ok(Some(decoded_metadata))
-            }
-            None => Ok(None),
-        }
     }
 
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
