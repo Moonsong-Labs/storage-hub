@@ -571,10 +571,9 @@ describeBspNet(
 
       // If the first BSP is the one removing the file, assert for the event of the mutations successfully applied in the runtime.
       if (firstBspToRespond === ShConsts.DUMMY_BSP_ID) {
-        const mutationsAppliedEvents = userApi.assert.eventMany(
+        const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
-          "MutationsApplied",
-          firstChallengeBlockResult.events
+          "MutationsApplied"
         );
         strictEqual(
           mutationsAppliedEvents.length,
@@ -622,10 +621,9 @@ describeBspNet(
 
       // If the second BSP is the one removing the file, assert for the event of the mutations successfully applied in the runtime.
       if (secondBspToRespond === ShConsts.DUMMY_BSP_ID) {
-        const mutationsAppliedEvents = userApi.assert.eventMany(
+        const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
           "MutationsApplied",
-          firstChallengeBlockResult.events
         );
         strictEqual(
           mutationsAppliedEvents.length,
