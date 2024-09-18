@@ -4896,7 +4896,6 @@ declare module "@polkadot/types/lookup" {
     readonly isNotSelectedMsp: boolean;
     readonly isMspAlreadyConfirmed: boolean;
     readonly isRequestWithoutMsp: boolean;
-    readonly isFileMetadataProcessingQueueFull: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4947,8 +4946,7 @@ declare module "@polkadot/types/lookup" {
       | "UserNotInsolvent"
       | "NotSelectedMsp"
       | "MspAlreadyConfirmed"
-      | "RequestWithoutMsp"
-      | "FileMetadataProcessingQueueFull";
+      | "RequestWithoutMsp";
   }
 
   /** @name PalletProofsDealerError (416) */
