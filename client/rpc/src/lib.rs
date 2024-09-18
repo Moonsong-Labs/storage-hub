@@ -353,7 +353,9 @@ where
             .forest_storage_handler
             .get(&forest_key)
             .await
-            .ok_or_else(|| into_rpc_error(format!("Forest storage not found for key {:?}", forest_key)))?;
+            .ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
+            })?;
 
         let read_fs = fs.read().await;
         Ok(read_fs
@@ -368,8 +370,11 @@ where
     ) -> RpcResult<Vec<u8>> {
         let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
 
-        let fs =
-            self.forest_storage_handler.get(&forest_key).await.ok_or_else(|| {
+        let fs = self
+            .forest_storage_handler
+            .get(&forest_key)
+            .await
+            .ok_or_else(|| {
                 into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
             })?;
 
