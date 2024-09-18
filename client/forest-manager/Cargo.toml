@@ -40,7 +40,6 @@ shc-common = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
 
-
 [features]
 default = ["std"]
 std = [
