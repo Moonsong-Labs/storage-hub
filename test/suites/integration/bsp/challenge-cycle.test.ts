@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, sleep, type EnrichedBspApi, type SealedBlock } from "../../../util";
+import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
@@ -86,9 +86,8 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const blocksToAdvance = nextDeadlineTick - currentBlockNumber;
-      let blockResult: SealedBlock | undefined;
       for (let i = 0; i < blocksToAdvance; i++) {
-        blockResult = await userApi.sealBlock();
+        await userApi.sealBlock();
       }
 
       // Check for event of slashable BSP.

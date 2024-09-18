@@ -55,7 +55,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
       - run: pnpm install
       - run: pnpm fmt
 
@@ -71,7 +70,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
       - run: pnpm install
       - run: pnpm lint
 
@@ -87,8 +85,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
-
       - run: pnpm install
       - run: |
           cd test
