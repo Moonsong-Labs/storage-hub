@@ -218,11 +218,11 @@ where
         Ok(())
     }
 
-    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
-        self.metadata
-            .get(file_key)
-            .cloned()
-            .ok_or(FileStorageError::FileDoesNotExist)
+    fn get_metadata(
+        &self,
+        file_key: &HasherOutT<T>,
+    ) -> Result<Option<FileMetadata>, FileStorageError> {
+        Ok(self.metadata.get(file_key).cloned())
     }
 
     fn insert_file(
@@ -541,8 +541,10 @@ mod tests {
 
         assert!(file_storage.delete_file(&key).is_ok());
 
-        // Should panic here when trying to get File Metadata.
-        assert!(file_storage.get_metadata(&key).is_err());
+        // Should get a None option here when trying to get File Metadata.
+        assert!(file_storage
+            .get_metadata(&key)
+            .is_ok_and(|metadata| metadata.is_none()));
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_err());

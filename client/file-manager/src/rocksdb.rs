@@ -480,7 +480,9 @@ where
         key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
-        let metadata = self.get_metadata(key)?;
+        let metadata = self
+            .get_metadata(key)?
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
@@ -518,7 +520,8 @@ where
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
         let metadata = self
             .get_metadata(key)
-            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?;
+            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
+            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
@@ -631,7 +634,9 @@ where
     }
 
     fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
-        let metadata = self.get_metadata(key)?;
+        let metadata = self
+            .get_metadata(key)?
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
@@ -642,22 +647,21 @@ where
         file_trie.stored_chunks_count()
     }
 
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
-        let raw_metadata = self
-            .storage
-            .read(METADATA_COLUMN, *key)
-            .map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
-
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError> {
+        let raw_metadata = self.storage.read(METADATA_COLUMN, *key).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToParseFileMetadata
+            FileStorageError::FailedToReadStorage
         })?;
-
-        Ok(metadata)
+        match raw_metadata {
+            None => return Ok(None),
+            Some(metadata) => {
+                let metadata: FileMetadata = serde_json::from_slice(&metadata).map_err(|e| {
+                    error!(target: LOG_TARGET,"{:?}", e);
+                    FileStorageError::FailedToParseFileMetadata
+                })?;
+                Ok(Some(metadata))
+            }
+        }
     }
 
     fn generate_proof(
@@ -665,7 +669,9 @@ where
         key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
-        let metadata = self.get_metadata(key)?;
+        let metadata = self
+            .get_metadata(key)?
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
@@ -713,7 +719,9 @@ where
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let metadata = self.get_metadata(key)?;
+        let metadata = self
+            .get_metadata(key)?
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).map_err(|e| {
@@ -1075,8 +1083,10 @@ mod tests {
 
         assert!(file_storage.delete_file(&key).is_ok());
 
-        // Should panic here when trying to get File Metadata.
-        assert!(file_storage.get_metadata(&key).is_err());
+        // Should get a None option here when trying to get File Metadata.
+        assert!(file_storage
+            .get_metadata(&key)
+            .is_ok_and(|metadata| metadata.is_none()));
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_err());

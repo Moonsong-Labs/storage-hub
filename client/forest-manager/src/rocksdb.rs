@@ -1,3 +1,4 @@
+use codec::Decode;
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::debug;
@@ -284,6 +285,22 @@ where
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         Ok(trie.contains(file_key.as_ref())?)
+    }
+
+    fn get_file_metadata(
+        &self,
+        file_key: &HasherOutT<T>,
+    ) -> Result<Option<FileMetadata>, ErrorT<T>> {
+        let db = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
+        let data = trie.get(file_key.as_ref())?;
+        match data {
+            None => return Ok(None),
+            Some(data) => {
+                let metadata = FileMetadata::decode(&mut &data[..])?;
+                Ok(Some(metadata))
+            }
+        }
     }
 
     fn generate_proof(
