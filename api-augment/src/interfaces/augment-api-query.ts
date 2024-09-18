@@ -289,11 +289,6 @@ declare module "@polkadot/api-base/types/storage" {
     };
     fileSystem: {
       /**
-       * Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-       **/
-      blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
-      /**
        * Bookkeeping of the buckets containing open storage requests.
        **/
       bucketsWithStorageRequests: AugmentedQuery<
@@ -470,6 +465,11 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+       **/
+      tickRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/
