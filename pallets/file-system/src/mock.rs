@@ -1,11 +1,13 @@
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    construct_runtime, derive_impl,
+    dispatch::DispatchClass,
+    parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
     weights::{constants::RocksDbWeight, Weight, WeightMeter},
     BoundedBTreeSet,
 };
-use frame_system as system;
+use frame_system::{self as system, limits::BlockWeights, BlockWeight, ConsumedWeight};
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
@@ -16,7 +18,7 @@ use shp_traits::{
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify, Zero},
     BuildStorage, DispatchError, MultiSignature, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
@@ -58,21 +60,53 @@ impl Randomness<H256, BlockNumber> for MockRandomness {
     }
 }
 
-/// Rolls to the desired block. Returns the number of blocks played.
+/// Rolls to the desired block, with non-spammed blocks. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
     let mut num_blocks = 0;
     let mut block = System::block_number();
     while block < n {
-        block = roll_one_block();
+        block = roll_one_block(false);
         num_blocks += 1;
     }
     num_blocks
 }
 
-// Rolls forward one block. Returns the new block number.
-fn roll_one_block() -> BlockNumber {
+/// Rolls to the desired block with spammed blocks. Returns the number of blocks played.
+pub(crate) fn roll_to_spammed(n: BlockNumber) -> BlockNumber {
+    let mut num_blocks = 0;
+    let mut block = System::block_number();
+    while block < n {
+        block = roll_one_block(true);
+        num_blocks += 1;
+    }
+    num_blocks
+}
+
+/// Rolls forward one block. Returns the new block number.
+///
+/// It can be configured whether the block is spammed or not.
+/// A spammed block is one where there is no weight left for other transactions.
+fn roll_one_block(spammed: bool) -> BlockNumber {
     System::set_block_number(System::block_number() + 1);
     ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+    // Set block weight usage.
+    let normal_weight = if spammed {
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block)
+    } else {
+        Zero::zero()
+    };
+    let block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+        DispatchClass::Normal => normal_weight,
+        DispatchClass::Operational => Zero::zero(),
+        DispatchClass::Mandatory => Zero::zero(),
+    });
+    BlockWeight::<Test>::set(block_weight);
+
     FileSystem::on_idle(System::block_number(), Weight::MAX);
     ProofsDealer::on_finalize(System::block_number());
     System::block_number()
@@ -428,7 +462,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     .unwrap();
 
     let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| roll_one_block());
+    ext.execute_with(|| roll_one_block(false));
     ext
 }
 

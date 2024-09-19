@@ -3401,6 +3401,83 @@ mod bsp_volunteer {
         }
 
         #[test]
+        fn bsp_volunteer_above_threshold_high_fail_even_with_spamming() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                // Get BSP ID.
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id.clone(),
+                    )
+                        .unwrap();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Compute the file key to volunteer for.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Set a somewhat high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(40)
+                ));
+
+                // Calculate how many ticks until this BSP can volunteer for the file.
+                let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let tick_when_bsp_can_volunteer =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
+                let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                let current_block = System::block_number();
+
+                // Advance by the number of ticks until this BSP can volunteer for the file.
+                // In the process, this BSP will spam the chain to prevent others from volunteering and confirming.
+                roll_to_spammed(current_block + ticks_to_advance);
+
+                // Dispatch BSP volunteer.
+                assert_noop!(
+                    FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
+                    Error::<Test>::AboveThreshold
+                );
+            });
+        }
+
+        #[test]
         fn bsp_volunteer_with_insufficient_capacity() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
@@ -3540,6 +3617,103 @@ mod bsp_volunteer {
                         fingerprint,
                         multiaddresses: create_sp_multiaddresses(),
                         owner,
+                        size,
+                    }
+                        .into(),
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_volunteer_succeeds_after_waiting_enough_blocks_without_spam() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                // Get BSP ID.
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id.clone(),
+                    )
+                        .unwrap();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Compute the file key to volunteer for.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Set a somewhat high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(40)
+                ));
+
+                // Calculate how many ticks until this BSP can volunteer for the file.
+                let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let tick_when_bsp_can_volunteer =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
+                let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                let current_block = System::block_number();
+
+                // Advance by the number of ticks until this BSP can volunteer for the file.
+                roll_to(current_block + ticks_to_advance);
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Assert that the RequestStorageBsps has the correct value
+                assert_eq!(
+                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: false,
+                        _phantom: Default::default()
+                    }
+                );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::AcceptedBspVolunteer {
+                        bsp_id,
+                        bucket_id,
+                        location,
+                        fingerprint,
+                        multiaddresses: create_sp_multiaddresses(),
+                        owner: owner_account_id,
                         size,
                     }
                         .into(),
