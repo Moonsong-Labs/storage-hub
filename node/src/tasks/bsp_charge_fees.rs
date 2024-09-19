@@ -267,7 +267,7 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing StopStoringRequest for user: {:?}",
+            "Processing StopStoringForInsolventUserRequest for user: {:?}",
             event.data.who,
         );
 

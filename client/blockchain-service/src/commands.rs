@@ -26,7 +26,8 @@ use crate::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, StopStoringForInsolventUserRequest, SubmitProofRequest,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, StopStoringForInsolventUserRequest,
+        SubmitProofRequest,
     },
 };
 
@@ -199,8 +200,11 @@ pub trait BlockchainServiceInterface {
     // Queue a ConfirmBspRequest to be processed.
     async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()>;
 
-    // Queue a BspStopStoringRequest to be processed.
-    async fn queue_stop_storing_for_insolvent_user_request(&self, request: StopStoringForInsolventUserRequest) -> Result<()>;
+    // Queue a BspStopStoringForInsolventUserRequest to be processed.
+    async fn queue_stop_storing_for_insolvent_user_request(
+        &self,
+        request: StopStoringForInsolventUserRequest,
+    ) -> Result<()>;
 
     /// Query the challenges that a Provider needs to submit for a given seed.
     async fn query_challenges_from_seed(
@@ -430,9 +434,13 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
-    async fn queue_stop_storing_for_insolvent_user_request(&self, request: StopStoringForInsolventUserRequest) -> Result<()> {
+    async fn queue_stop_storing_for_insolvent_user_request(
+        &self,
+        request: StopStoringForInsolventUserRequest,
+    ) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let message = BlockchainServiceCommand::QueueStopStoringForInsolventUserRequest { request, callback };
+        let message =
+            BlockchainServiceCommand::QueueStopStoringForInsolventUserRequest { request, callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

@@ -208,6 +208,7 @@ where
                 Error::<T>::PaymentStreamNotFound
             );
             payment_stream.rate = new_rate;
+            payment_stream.user_deposit = new_deposit;
             Ok::<(), DispatchError>(())
         })?;
 
@@ -444,6 +445,7 @@ where
                 Error::<T>::PaymentStreamNotFound
             );
             payment_stream.amount_provided = new_amount_provided;
+            payment_stream.user_deposit = new_deposit;
             Ok::<(), DispatchError>(())
         })?;
 
