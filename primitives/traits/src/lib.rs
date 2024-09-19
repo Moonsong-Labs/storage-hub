@@ -76,7 +76,7 @@ pub trait ReadBucketsInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Type of the root of the buckets.
     type MerkleHash: Parameter
@@ -188,7 +188,7 @@ pub trait MutateBucketsInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
