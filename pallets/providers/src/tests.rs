@@ -3850,6 +3850,7 @@ mod add_bucket {
                         msp_id,
                         private: false,
                         read_access_group_id: None,
+                        size: 0,
                     }
                 );
             });

@@ -224,7 +224,9 @@ impl pallet_file_system::Config for Test {
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
+    type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
