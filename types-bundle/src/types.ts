@@ -23,8 +23,9 @@ export const ALL_TYPES: RegistryTypes = {
   GetFileFromFileStorageResult: {
     _enum: {
       FileNotFound: null,
-      Success: "FileMetadata",
-      IncompleteFile: "IncompleteFileStatus"
+      FileFound: "FileMetadata",
+      IncompleteFile: "IncompleteFileStatus",
+      FileFoundWithInconsistency: "FileMetadata"
     }
   },
   ProviderId: "H256",

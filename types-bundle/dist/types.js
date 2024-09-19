@@ -21,8 +21,9 @@ export const ALL_TYPES = {
   GetFileFromFileStorageResult: {
     _enum: {
       FileNotFound: null,
-      Success: "FileMetadata",
-      IncompleteFile: "IncompleteFileStatus"
+      FileFound: "FileMetadata",
+      IncompleteFile: "IncompleteFileStatus",
+      FileFoundWithInconsistency: "FileMetadata"
     }
   },
   ProviderId: "H256",

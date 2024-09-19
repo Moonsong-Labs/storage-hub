@@ -66,11 +66,13 @@ export interface GetCheckpointChallengesError extends Enum {
 /** @name GetFileFromFileStorageResult */
 export interface GetFileFromFileStorageResult extends Enum {
   readonly isFileNotFound: boolean;
-  readonly isSuccess: boolean;
-  readonly asSuccess: FileMetadata;
+  readonly isFileFound: boolean;
+  readonly asFileFound: FileMetadata;
   readonly isIncompleteFile: boolean;
   readonly asIncompleteFile: IncompleteFileStatus;
-  readonly type: "FileNotFound" | "Success" | "IncompleteFile";
+  readonly isFileFoundWithInconsistency: boolean;
+  readonly asFileFoundWithInconsistency: FileMetadata;
+  readonly type: "FileNotFound" | "FileFound" | "IncompleteFile" | "FileFoundWithInconsistency";
 }
 
 /** @name GetLastTickProviderSubmittedProofError */

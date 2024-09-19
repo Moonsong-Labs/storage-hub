@@ -75,7 +75,8 @@ pub enum SaveFileToDisk {
 pub enum GetFileFromFileStorageResult {
     FileNotFound,
     IncompleteFile(IncompleteFileStatus),
-    Success(FileMetadata),
+    FileFound(FileMetadata),
+    FileFoundWithInconsistency(FileMetadata),
 }
 
 /// Provides an interface with the desired RPC method.
@@ -361,8 +362,12 @@ where
                             total_chunks,
                         },
                     ))
+                } else if stored_chunks > total_chunks {
+                    Ok(GetFileFromFileStorageResult::FileFoundWithInconsistency(
+                        file_metadata,
+                    ))
                 } else {
-                    Ok(GetFileFromFileStorageResult::Success(file_metadata))
+                    Ok(GetFileFromFileStorageResult::FileFound(file_metadata))
                 }
             }
         }
