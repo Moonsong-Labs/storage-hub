@@ -60,7 +60,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum number of expired storage requests to clean up in a single block.
+       * Maximum number of expired items (per type) to clean up in a single block.
        **/
       maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
       /**
@@ -80,9 +80,17 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
       /**
+       * Maximum number of move bucket requests a user can have pending.
+       **/
+      maxUserPendingMoveBucketRequests: u32 & AugmentedConst<ApiType>;
+      /**
        * Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
+      /**
+       * Time-to-live for a move bucket request, after which the request is considered expired.
+       **/
+      moveBucketRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
        * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
        **/

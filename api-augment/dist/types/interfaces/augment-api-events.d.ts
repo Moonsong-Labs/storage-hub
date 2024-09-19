@@ -557,6 +557,17 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a data server has been registered for a move bucket request.
+       **/
+      DataServerRegisteredForMoveBucket: AugmentedEvent<
+        ApiType,
+        [bspId: H256, bucketId: H256],
+        {
+          bspId: H256;
+          bucketId: H256;
+        }
+      >;
+      /**
        * Notifies that a priority challenge failed to be queued for pending file deletion.
        **/
       FailedToQueuePriorityChallenge: AugmentedEvent<
@@ -579,6 +590,51 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256;
           mspId: H256;
           proofOfInclusion: bool;
+        }
+      >;
+      /**
+       * Notifies that a bucket has been moved to a new MSP.
+       **/
+      MoveBucketAccepted: AugmentedEvent<
+        ApiType,
+        [bucketId: H256, mspId: H256],
+        {
+          bucketId: H256;
+          mspId: H256;
+        }
+      >;
+      /**
+       * Notifies that a bucket move request has been rejected by the MSP.
+       **/
+      MoveBucketRejected: AugmentedEvent<
+        ApiType,
+        [bucketId: H256, mspId: H256],
+        {
+          bucketId: H256;
+          mspId: H256;
+        }
+      >;
+      /**
+       * Notifies that a bucket is being moved to a new MSP.
+       **/
+      MoveBucketRequested: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bucketId: H256, newMspId: H256],
+        {
+          who: AccountId32;
+          bucketId: H256;
+          newMspId: H256;
+        }
+      >;
+      /**
+       * Notifies that a move bucket request has expired.
+       **/
+      MoveBucketRequestExpired: AugmentedEvent<
+        ApiType,
+        [mspId: H256, bucketId: H256],
+        {
+          mspId: H256;
+          bucketId: H256;
         }
       >;
       /**
