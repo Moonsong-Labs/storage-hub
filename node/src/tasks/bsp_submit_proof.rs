@@ -219,12 +219,9 @@ where
             },
         );
 
-        let max_tip = self
-            .storage_hub_handler
-            .blockchain
-            .query_worst_case_scenario_slashable_amount(event.data.provider_id)
-            .await?
-            .ok_or(anyhow!("Worst case slashable amount is None. Runtime no longer has this provider registered?"))?;
+        let max_tip = <storage_hub_runtime::Runtime as pallet_storage_providers::Config>::SlashAmountPerMaxFileSize::get()
+            .saturating_mul(event.data.forest_challenges.len() as u128)
+            .saturating_mul(2u32.into());
 
         let cloned_blockchain = Arc::new(self.storage_hub_handler.blockchain.clone());
         let cloned_event = Arc::new(event.clone());
