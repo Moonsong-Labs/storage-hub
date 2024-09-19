@@ -11,7 +11,7 @@ use crate::{
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
         TypedDbContext, TypedRocksDB,
     },
-    types::ConfirmStoringRequest,
+    types::{ConfirmStoringRequest, RespondStorageRequest},
 };
 
 /// Last processed block number.
@@ -60,12 +60,45 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestRightIndexCf {
         "pending_confirm_storing_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 5] = [
+/// Pending respond storage requests.
+#[derive(Default)]
+pub struct PendingMspRespondStorageRequestCf;
+impl ScaleEncodedCf for PendingMspRespondStorageRequestCf {
+    type Key = u64;
+    type Value = RespondStorageRequest;
+
+    const SCALE_ENCODED_NAME: &'static str = "pending_msp_respond_storage_request";
+}
+
+/// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
+#[derive(Default)]
+pub struct PendingMspRespondStorageRequestLeftIndexCf;
+impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
+    type Value = u64;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "pending_msp_respond_storage_request_left_index";
+}
+
+/// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
+#[derive(Default)]
+pub struct PendingMspRespondStorageRequestRightIndexCf;
+impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
+    type Value = u64;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "pending_msp_respond_storage_request_right_index";
+}
+
+const ALL_COLUMN_FAMILIES: [&str; 8] = [
     LastProcessedBlockNumberCf::NAME,
     OngoingProcessConfirmStoringRequestCf::NAME,
     PendingConfirmStoringRequestLeftIndexCf::NAME,
     PendingConfirmStoringRequestRightIndexCf::NAME,
     PendingConfirmStoringRequestCf::NAME,
+    PendingMspRespondStorageRequestLeftIndexCf::NAME,
+    PendingMspRespondStorageRequestRightIndexCf::NAME,
+    PendingMspRespondStorageRequestCf::NAME,
 ];
 
 /// A persistent blockchain service state store.
@@ -128,6 +161,14 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         }
     }
 
+    pub fn pending_msp_respond_storage_request_deque(
+        &'a self,
+    ) -> PendingMspRespondStorageRequestDequeAPI<'a> {
+        PendingMspRespondStorageRequestDequeAPI {
+            db_context: &self.db_context,
+        }
+    }
+
     /// Flushes the buffered writes to the DB.
     pub fn commit(self) {
         self.db_context.flush();
@@ -161,4 +202,23 @@ impl<'a> CFDequeAPI for PendingConfirmStoringRequestDequeAPI<'a> {
     type LeftIndexCF = PendingConfirmStoringRequestLeftIndexCf;
     type RightIndexCF = PendingConfirmStoringRequestRightIndexCf;
     type DataCF = PendingConfirmStoringRequestCf;
+}
+
+pub struct PendingMspRespondStorageRequestDequeAPI<'a> {
+    db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+}
+
+impl<'a> ProvidesDbContext for PendingMspRespondStorageRequestDequeAPI<'a> {
+    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+        &self.db_context
+    }
+}
+
+impl<'a> ProvidesTypedDbSingleAccess for PendingMspRespondStorageRequestDequeAPI<'a> {}
+
+impl<'a> CFDequeAPI for PendingMspRespondStorageRequestDequeAPI<'a> {
+    type Value = RespondStorageRequest;
+    type LeftIndexCF = PendingMspRespondStorageRequestLeftIndexCf;
+    type RightIndexCF = PendingMspRespondStorageRequestRightIndexCf;
+    type DataCF = PendingMspRespondStorageRequestCf;
 }

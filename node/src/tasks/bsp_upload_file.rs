@@ -250,10 +250,9 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken.\nThis is a critical bug. Please report it to the StorageHub team.");
-                return Err(anyhow!(
-                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. Please report it to the StorageHub team."
-                ));
+                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow!(err_msg));
             }
         };
 
@@ -266,10 +265,9 @@ where
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
-                    error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
-                    return Err(anyhow!(
-                        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID."
-                    ));
+                    let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
                 }
                 StorageProviderId::BackupStorageProvider(id) => id,
             },
@@ -430,16 +428,16 @@ where
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
-                    error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
-                    return Err(anyhow!(
-                        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID."
-                    ));
+                    let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
                 }
                 StorageProviderId::BackupStorageProvider(id) => id,
             },
             None => {
-                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
-                return Err(anyhow!("Failed to get own BSP ID."));
+                let err_msg = "Failed to get own BSP ID.";
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow!(err_msg));
             }
         };
 
@@ -449,11 +447,12 @@ where
             .query_available_storage_capacity(own_bsp_id)
             .await
             .map_err(|e| {
+                let err_msg = format!("Failed to query available storage capacity: {:?}", e);
                 error!(
                     target: LOG_TARGET,
-                    "Failed to query available storage capacity: {:?}", e
+                    err_msg
                 );
-                anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                anyhow::anyhow!(err_msg)
             })?;
 
         // Increase storage capacity if the available capacity is less than the file size.
@@ -470,11 +469,12 @@ where
                 .query_storage_provider_capacity(own_bsp_id)
                 .await
                 .map_err(|e| {
+                    let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
                     error!(
                         target: LOG_TARGET,
-                        "Failed to query storage provider capacity: {:?}", e
+                        err_msg
                     );
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                    anyhow::anyhow!(err_msg)
                 })?;
 
             let max_storage_capacity = self
@@ -502,11 +502,13 @@ where
                 .query_earliest_change_capacity_block(own_bsp_id)
                 .await
                 .map_err(|e| {
+                    let err_msg =
+                        format!("Failed to query earliest change capacity block: {:?}", e);
                     error!(
                         target: LOG_TARGET,
-                        "Failed to query storage provider capacity: {:?}", e
+                        err_msg
                     );
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                    anyhow::anyhow!(err_msg)
                 })?;
 
             // Wait for the earliest block where the capacity can be changed.
@@ -535,11 +537,12 @@ where
                 .query_available_storage_capacity(own_bsp_id)
                 .await
                 .map_err(|e| {
+                    let err_msg = format!("Failed to query available storage capacity: {:?}", e);
                     error!(
                         target: LOG_TARGET,
-                        "Failed to query available storage capacity: {:?}", e
+                        err_msg
                     );
-                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                    anyhow::anyhow!(err_msg)
                 })?;
 
             // Skip volunteering if the new available capacity is still less than the file size.
@@ -588,13 +591,10 @@ where
         // BSP has registered the file and peer ID in the file transfer service.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
-                Ok(str_slice) => {
-                    let owned_string = str_slice.to_string();
-                    PeerId::from_str(owned_string.as_str()).map_err(|e| {
-                        error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
-                        e
-                    })?
-                }
+                Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
+                    e
+                })?,
                 Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
             };
             self.storage_hub_handler

@@ -19,6 +19,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
+  PalletFileSystemMspStorageRequestResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -534,30 +535,6 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, H256, u32, H256, Vec<Bytes>]
       >;
-      /**
-       * Used by a MSP to confirm storing a file that was assigned to it.
-       *
-       * The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-       * in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-       * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
-       * wasn't storing it before.
-       **/
-      mspAcceptStorageRequest: AugmentedSubmittable<
-        (
-          fileKey: H256 | string | Uint8Array,
-          fileProof:
-            | ShpFileKeyVerifierFileKeyProof
-            | { fileMetadata?: any; proof?: any }
-            | string
-            | Uint8Array,
-          nonInclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | { encodedNodes?: any }
-            | string
-            | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, ShpFileKeyVerifierFileKeyProof, SpTrieStorageProofCompactProof]
-      >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
@@ -569,6 +546,26 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [H256, PalletFileSystemBucketMoveRequestResponse]
+      >;
+      /**
+       * Used by a MSP to confirm storing a file that was assigned to it.
+       *
+       * The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
+       * in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
+       * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
+       * wasn't storing it before.
+       **/
+      mspRespondStorageRequest: AugmentedSubmittable<
+        (
+          fileKey: H256 | string | Uint8Array,
+          response:
+            | PalletFileSystemMspStorageRequestResponse
+            | { Accepted: any }
+            | { Rejected: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, PalletFileSystemMspStorageRequestResponse]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (

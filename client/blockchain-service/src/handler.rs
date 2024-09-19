@@ -610,6 +610,21 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_msp_respond_storage_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
                     // The strategy used here is to replace the request in the set with the new request.
                     // This is because new insertions are presumed to be done with more information of the current state of the chain,

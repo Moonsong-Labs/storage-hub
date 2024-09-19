@@ -25,7 +25,10 @@ use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 use crate::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
-    types::{ConfirmStoringRequest, Extrinsic, ExtrinsicResult, SubmitProofRequest},
+    types::{
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest,
+        SubmitProofRequest,
+    },
 };
 
 /// Commands that can be sent to the BlockchainService actor.
@@ -75,6 +78,10 @@ pub enum BlockchainServiceCommand {
     },
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    QueueMspRespondStorageRequest {
+        request: RespondStorageRequest,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
     QueryChallengesFromSeed {
@@ -187,11 +194,15 @@ pub trait BlockchainServiceInterface {
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 
-    // Queue a SubmitProofRequest to be processed.
+    /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
 
-    // Queue a ConfirmBspRequest to be processed.
+    /// Queue a ConfirmBspRequest to be processed.
     async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()>;
+
+    /// Queue a RespondStoringRequest to be processed.
+    async fn queue_msp_respond_storage_request(&self, request: RespondStorageRequest)
+        -> Result<()>;
 
     /// Query the challenges that a Provider needs to submit for a given seed.
     async fn query_challenges_from_seed(
@@ -417,6 +428,16 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueueConfirmBspRequest { request, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn queue_msp_respond_storage_request(
+        &self,
+        request: RespondStorageRequest,
+    ) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

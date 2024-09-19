@@ -901,6 +901,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
     }
 
+    fn get_bucket_owner(bucket_id: &Self::BucketId) -> Result<Self::AccountId, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.user_id)
+    }
+
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(bucket.size)

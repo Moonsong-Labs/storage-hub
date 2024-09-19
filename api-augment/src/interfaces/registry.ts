@@ -67,11 +67,15 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletCollatorSelectionError,
   PalletCollatorSelectionEvent,
+  PalletFileSystemAcceptedStorageRequestParameters,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
+  PalletFileSystemEitherAccountIdOrProviderId,
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -315,11 +319,15 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionCandidateInfo: PalletCollatorSelectionCandidateInfo;
     PalletCollatorSelectionError: PalletCollatorSelectionError;
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
+    PalletFileSystemAcceptedStorageRequestParameters: PalletFileSystemAcceptedStorageRequestParameters;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
+    PalletFileSystemEitherAccountIdOrProviderId: PalletFileSystemEitherAccountIdOrProviderId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
+    PalletFileSystemMspStorageRequestResponse: PalletFileSystemMspStorageRequestResponse;
+    PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
     PalletMessageQueueBookState: PalletMessageQueueBookState;

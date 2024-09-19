@@ -3,7 +3,9 @@ use std::cmp::Ordering;
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
 use frame_system::EventRecord;
-use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMutation};
+use shc_common::types::{
+    BlockNumber, ProviderId, RandomnessOutput, RejectedStorageRequestReason, TrieRemoveMutation,
+};
 use sp_core::H256;
 use sp_runtime::DispatchError;
 
@@ -69,6 +71,33 @@ impl ConfirmStoringRequest {
     pub fn new(file_key: H256) -> Self {
         Self {
             file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum MspResponse {
+    Accept,
+    Reject(RejectedStorageRequestReason),
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RespondStorageRequest {
+    pub file_key: H256,
+    pub response: MspResponse,
+    pub try_count: u32,
+}
+
+impl RespondStorageRequest {
+    pub fn new(file_key: H256, response: MspResponse) -> Self {
+        Self {
+            file_key,
+            response,
             try_count: 0,
         }
     }

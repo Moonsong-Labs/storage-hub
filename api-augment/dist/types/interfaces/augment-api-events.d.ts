@@ -20,6 +20,8 @@ import type {
   FrameSupportDispatchDispatchInfo,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
@@ -652,6 +654,26 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a MSP has rejected to store a file.
+       **/
+      MspRejectedStoring: AugmentedEvent<
+        ApiType,
+        [
+          fileKey: H256,
+          mspId: H256,
+          bucketId: H256,
+          owner: AccountId32,
+          reason: PalletFileSystemRejectedStorageRequestReason
+        ],
+        {
+          fileKey: H256;
+          mspId: H256;
+          bucketId: H256;
+          owner: AccountId32;
+          reason: PalletFileSystemRejectedStorageRequestReason;
+        }
+      >;
+      /**
        * Notifies that a new bucket has been created.
        **/
       NewBucket: AugmentedEvent<
@@ -714,9 +736,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       PriorityChallengeForFileDeletionQueued: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256],
+        [issuer: PalletFileSystemEitherAccountIdOrProviderId, fileKey: H256],
         {
-          user: AccountId32;
+          issuer: PalletFileSystemEitherAccountIdOrProviderId;
           fileKey: H256;
         }
       >;
