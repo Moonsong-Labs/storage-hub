@@ -14,7 +14,7 @@ import {
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
-  { initialised: false, bspStartingWeight: 5n },
+  { initialised: false, bspStartingWeight: 5n, networkConfig: "standard" },
   ({ before, it, createUserApi, beforeEach }) => {
     let api: EnrichedBspApi;
 
@@ -115,35 +115,6 @@ describeBspNet(
       await api.docker.stopBspContainer("sh-bsp-down");
     });
 
-    it("BSP with reputation is prioritised", async () => {
-      await addBsp(api, bspThreeKey, {
-        name: "sh-bsp-three",
-        bspKeySeed: bspThreeSeed,
-        bspId: ShConsts.BSP_THREE_ID,
-        additionalArgs: ["--keystore-path=/keystore/bsp-three"],
-        bspStartingWeight: 800_000n
-      });
-
-      // Set global params to small numbers
-      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 10)));
-
-      // Create a new storage request
-      await api.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-4"); // T0
-
-      await api.wait.bspVolunteer();
-      const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
-
-      const filtered = matchedEvents.filter(
-        ({ event }) =>
-          (api.events.fileSystem.AcceptedBspVolunteer.is(event) && event.data.bspId.toString()) ===
-          ShConsts.BSP_THREE_ID
-      );
-
-      // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
-      assert(filtered.length === 1, "BSP with reputation should be prioritised");
-      await api.docker.stopBspContainer("sh-bsp-three");
-    });
-
     it("BSP two eventually volunteers after threshold curve is met", async () => {
       await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 20)));
 
@@ -177,6 +148,35 @@ describeBspNet(
       }
       await api.wait.bspVolunteer();
       await api.wait.bspStored();
+    });
+
+    it("BSP with reputation is prioritised", async () => {
+      await addBsp(api, bspThreeKey, {
+        name: "sh-bsp-three",
+        bspKeySeed: bspThreeSeed,
+        bspId: ShConsts.BSP_THREE_ID,
+        additionalArgs: ["--keystore-path=/keystore/bsp-three"],
+        bspStartingWeight: 800_000n
+      });
+
+      // Set global params to small numbers
+      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 10)));
+
+      // Create a new storage request
+      await api.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-4"); // T0
+
+      await api.wait.bspVolunteer();
+      const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
+
+      const filtered = matchedEvents.filter(
+        ({ event }) =>
+          (api.events.fileSystem.AcceptedBspVolunteer.is(event) && event.data.bspId.toString()) ===
+          ShConsts.BSP_THREE_ID
+      );
+
+      // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
+      assert(filtered.length === 1, "BSP with reputation should be prioritised");
+      await api.docker.stopBspContainer("sh-bsp-three");
     });
 
     it("BSP two cannot spam the chain to volunteer first", async () => {
