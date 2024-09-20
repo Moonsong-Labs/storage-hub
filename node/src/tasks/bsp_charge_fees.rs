@@ -302,7 +302,7 @@ where
 
         if !user_files.is_empty() {
             let (file_key, metadata) = user_files.first().expect("User files is not empty");
-            let bucket_id = sp_core::H256::from_slice(metadata.bucket_id.as_ref());
+            let bucket_id = H256::from_slice(metadata.bucket_id.as_ref());
             let location = sp_runtime::BoundedVec::truncate_from(metadata.location.clone());
             let owner = insolvent_user.clone();
             let fingerprint = H256(metadata.fingerprint.into());
@@ -331,7 +331,7 @@ where
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(stop_storing_for_insolvent_user_call.clone())
+                .send_extrinsic(stop_storing_for_insolvent_user_call)
                 .await?
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
