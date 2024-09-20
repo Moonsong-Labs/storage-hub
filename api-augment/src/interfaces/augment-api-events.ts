@@ -27,6 +27,7 @@ import type {
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemMspRespondStorageRequestsResult,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
@@ -515,6 +516,14 @@ declare module "@polkadot/api-base/types/events" {
           owner: AccountId32;
           reason: PalletFileSystemRejectedStorageRequestReason;
         }
+      >;
+      /**
+       * Notifies that a MSP has responded to storage request(s).
+       **/
+      MspRespondedToStorageRequests: AugmentedEvent<
+        ApiType,
+        [results: PalletFileSystemMspRespondStorageRequestsResult],
+        { results: PalletFileSystemMspRespondStorageRequestsResult }
       >;
       /**
        * Notifies that a new bucket has been created.

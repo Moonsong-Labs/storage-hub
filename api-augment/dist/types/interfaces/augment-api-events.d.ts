@@ -21,6 +21,7 @@ import type {
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemMspRespondStorageRequestsResult,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
@@ -671,6 +672,16 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256;
           owner: AccountId32;
           reason: PalletFileSystemRejectedStorageRequestReason;
+        }
+      >;
+      /**
+       * Notifies that a MSP has responded to storage request(s).
+       **/
+      MspRespondedToStorageRequests: AugmentedEvent<
+        ApiType,
+        [results: PalletFileSystemMspRespondStorageRequestsResult],
+        {
+          results: PalletFileSystemMspRespondStorageRequestsResult;
         }
       >;
       /**

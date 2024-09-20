@@ -380,6 +380,14 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ThresholdBelowAsymptote: AugmentedError<ApiType>;
       /**
+       * Too many batch responses to process.
+       **/
+      TooManyBatchResponses: AugmentedError<ApiType>;
+      /**
+       * Too many storage request responses.
+       **/
+      TooManyStorageRequestResponses: AugmentedError<ApiType>;
+      /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
       UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;

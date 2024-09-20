@@ -555,17 +555,28 @@ declare module "@polkadot/api-base/types/submittable" {
        * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
        * wasn't storing it before.
        **/
-      mspRespondStorageRequest: AugmentedSubmittable<
+      mspRespondStorageRequests: AugmentedSubmittable<
         (
-          fileKey: H256 | string | Uint8Array,
-          response:
-            | PalletFileSystemMspStorageRequestResponse
-            | { Accepted: any }
-            | { Rejected: any }
-            | string
-            | Uint8Array
+          fileKeyResponses:
+            | Vec<ITuple<[H256, Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]>>
+            | [
+                H256 | string | Uint8Array,
+                (
+                  | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
+                  | [
+                      H256 | string | Uint8Array,
+                      (
+                        | PalletFileSystemMspStorageRequestResponse
+                        | { Accept: any }
+                        | { Reject: any }
+                        | string
+                        | Uint8Array
+                      )
+                    ][]
+                )
+              ][]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, PalletFileSystemMspStorageRequestResponse]
+        [Vec<ITuple<[H256, Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]>>]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (

@@ -2,7 +2,8 @@ use crate::{
     mock::*,
     types::{
         AcceptedStorageRequestParameters, BatchResponses, BucketIdFor, BucketMoveRequestResponse,
-        BucketNameFor, FileLocation, MoveBucketRequestMetadata, MspFailedBatchStorageRequests,
+        BucketNameFor, FileKeyResponsesInput, FileLocation, MerkleHash, MoveBucketRequestMetadata,
+        MspFailedBatchStorageRequests, MspRejectedBatchStorageRequests,
         MspRespondStorageRequestsResult, MspStorageRequestResponse, PeerIds,
         PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
         StorageRequestMetadata, StorageRequestTtl, ThresholdType,
@@ -28,6 +29,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get},
     BoundedVec, DispatchError,
 };
+use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 
 mod create_bucket_tests {
@@ -2113,12 +2115,12 @@ mod msp_respond_storage_request {
     use super::*;
 
     mod success {
+        use super::*;
         use crate::types::{
             AcceptedStorageRequestParameters, MspAcceptedBatchStorageRequests,
-            MspStorageRequestResponse,
+            MspStorageRequestResponse, RejectedStorageRequestReason,
         };
-
-        use super::*;
+        use sp_core::crypto::AccountId32;
 
         #[test]
         fn msp_respond_storage_request_works() {
@@ -2753,6 +2755,248 @@ mod msp_respond_storage_request {
                 // Storage request should be removed
                 assert!(FileSystem::storage_requests(file_key).is_none());
                 assert!(FileSystem::storage_request_buckets(bucket_id, file_key).is_none());
+            });
+        }
+
+        struct StorageRequestParams {
+            owner_account_id: AccountId32,
+            bucket_name: Vec<u8>,
+            location: Vec<u8>,
+            size: u32,
+            fingerprint: H256,
+            peer_ids: PeerIds<Test>,
+        }
+
+        fn generate_storage_requests(
+            params_list: Vec<StorageRequestParams>,
+            msp_id: ProviderIdFor<Test>,
+        ) -> Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> {
+            let mut results = Vec::new();
+
+            for params in params_list {
+                // Create bucket if not already created
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &params.owner_account_id.clone().try_into().unwrap(),
+                    params.bucket_name.clone().try_into().unwrap(),
+                );
+
+                if !<Test as crate::Config>::Providers::bucket_exists(&bucket_id) {
+                    create_bucket(
+                        &params.owner_account_id.clone(),
+                        params.bucket_name.clone().try_into().unwrap(),
+                        msp_id,
+                    );
+                }
+
+                // Compute file key
+                let file_key = FileSystem::compute_file_key(
+                    params.owner_account_id.clone(),
+                    bucket_id,
+                    FileLocation::<Test>::try_from(params.location.clone()).unwrap(),
+                    params.size,
+                    params.fingerprint,
+                );
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(params.owner_account_id.clone()),
+                    bucket_id,
+                    FileLocation::<Test>::try_from(params.location).unwrap(),
+                    params.fingerprint,
+                    params.size,
+                    msp_id,
+                    params.peer_ids.clone(),
+                ));
+
+                results.push((bucket_id, file_key, params.owner_account_id.clone()));
+            }
+
+            results
+        }
+
+        fn generate_msp_responses_and_results(
+            storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)>,
+            msp_id: ProviderIdFor<Test>,
+        ) -> (
+            FileKeyResponsesInput<Test>,
+            MspRespondStorageRequestsResult<Test>,
+        ) {
+            let mut responses: BTreeMap<
+                BucketIdFor<Test>,
+                Vec<(MerkleHash<Test>, MspStorageRequestResponse<Test>)>,
+            > = BTreeMap::new();
+            let mut batch_responses: Vec<BatchResponses<Test>> = Vec::new();
+
+            for (bucket_id, file_key, owner_account_id) in storage_requests {
+                if file_key.as_ref()[0] % 2 == 0 {
+                    // Accepted response
+                    let accept_response =
+                        MspStorageRequestResponse::Accept(AcceptedStorageRequestParameters {
+                            file_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        });
+
+                    responses
+                        .entry(bucket_id)
+                        .or_default()
+                        .push((file_key, accept_response.clone()));
+
+                    if let Some(BatchResponses::Accepted(ref mut accepted)) = batch_responses.iter_mut().find(|br| matches!(br, BatchResponses::Accepted(a) if a.bucket_id == bucket_id)) {
+                        accepted.file_keys.try_push(file_key).unwrap();
+                    } else {
+                        batch_responses.push(BatchResponses::Accepted(MspAcceptedBatchStorageRequests {
+                            file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                            bucket_id,
+                            new_bucket_root: H256::zero(),
+                            owner: owner_account_id,
+                        }));
+                    }
+                } else {
+                    // Rejected response
+                    let reject_response = MspStorageRequestResponse::Reject(
+                        RejectedStorageRequestReason::InternalError,
+                    );
+
+                    responses
+                        .entry(bucket_id)
+                        .or_default()
+                        .push((file_key, reject_response.clone()));
+
+                    if let Some(BatchResponses::Rejected(ref mut rejected)) = batch_responses.iter_mut().find(|br| matches!(br, BatchResponses::Rejected(r) if r.bucket_id == bucket_id)) {
+                        rejected.file_keys.try_push((file_key, RejectedStorageRequestReason::InternalError)).unwrap();
+                    } else {
+                        batch_responses.push(BatchResponses::Rejected(MspRejectedBatchStorageRequests {
+                            file_keys: BoundedVec::try_from(vec![(file_key, RejectedStorageRequestReason::InternalError)]).unwrap(),
+                            bucket_id,
+                            owner: owner_account_id,
+                        }));
+                    }
+                }
+            }
+
+            let responses: FileKeyResponsesInput<Test> = responses
+                .into_iter()
+                .map(|(bucket_id, responses)| {
+                    (
+                        bucket_id,
+                        BoundedVec::try_from(responses)
+                            .expect("Should not exceed MaxBatchConfirmStorageRequests"),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("Should not exceed MaxBatchConfirmStorageRequests");
+
+            let results = MspRespondStorageRequestsResult {
+                msp_id,
+                responses: BoundedVec::try_from(batch_responses).unwrap(),
+            };
+
+            println!("Generated results: {:?}", results);
+
+            (responses, results)
+        }
+
+        #[test]
+        fn msp_respond_storage_request_accepts_and_rejects_failed_mixed_responses() {
+            new_test_ext().execute_with(|| {
+                // Create accounts
+                let msp_account_id = Keyring::Charlie.to_account_id();
+
+                // Register the MSP.
+                let msp_id = add_msp_to_provider_storage(&msp_account_id);
+
+                // Define storage request parameters
+                let storage_request_params = vec![
+                    StorageRequestParams {
+                        owner_account_id: Keyring::Alice.to_account_id(),
+                        bucket_name: b"first bucket".to_vec(),
+                        location: b"test".to_vec(),
+                        size: 4,
+                        fingerprint: H256::zero(),
+                        peer_ids: BoundedVec::try_from(
+                            vec![BoundedVec::try_from(vec![1]).unwrap()],
+                        )
+                        .unwrap(),
+                    },
+                    StorageRequestParams {
+                        owner_account_id: Keyring::Bob.to_account_id(),
+                        bucket_name: b"second bucket".to_vec(),
+                        location: b"never/go/to/a/second/location".to_vec(),
+                        size: 8,
+                        fingerprint: H256::random(),
+                        peer_ids: BoundedVec::try_from(
+                            vec![BoundedVec::try_from(vec![2]).unwrap()],
+                        )
+                        .unwrap(),
+                    },
+                    StorageRequestParams {
+                        owner_account_id: Keyring::Bob.to_account_id(),
+                        bucket_name: b"second bucket".to_vec(),
+                        location: b"never/go/to/a/second/location2".to_vec(),
+                        size: 8,
+                        fingerprint: H256::random(),
+                        peer_ids: BoundedVec::try_from(
+                            vec![BoundedVec::try_from(vec![2]).unwrap()],
+                        )
+                        .unwrap(),
+                    },
+                ];
+
+                // Generate storage requests
+                let storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> =
+                    generate_storage_requests(storage_request_params, msp_id);
+
+                let (responses, expected_results) =
+                    generate_msp_responses_and_results(storage_requests, msp_id);
+
+                // Use `responses` to call the extrinsic
+                FileSystem::msp_respond_storage_requests(
+                    RuntimeOrigin::signed(msp_account_id),
+                    responses,
+                )
+                .unwrap();
+
+                let expected_results = MspRespondStorageRequestsResult {
+                    msp_id,
+                    responses: {
+                        let updated_responses: Vec<_> = expected_results
+                            .responses
+                            .into_iter()
+                            .map(|batch_response| match batch_response {
+                                BatchResponses::Accepted(mut accepted) => {
+                                    accepted.new_bucket_root =
+                                        <Test as crate::Config>::Providers::get_root_bucket(
+                                            &accepted.bucket_id,
+                                        )
+                                        .expect("Root bucket should exist");
+                                    BatchResponses::Accepted(accepted)
+                                }
+                                BatchResponses::Rejected(rejected) => {
+                                    BatchResponses::Rejected(rejected)
+                                }
+                                BatchResponses::Failed(_) => {
+                                    panic!("Unexpected failed batch response")
+                                }
+                            })
+                            .collect();
+
+                        BoundedVec::try_from(updated_responses)
+                            .expect("Number of responses should not exceed the bound")
+                    },
+                };
+
+                System::assert_last_event(
+                    Event::MspRespondedToStorageRequests {
+                        results: expected_results,
+                    }
+                    .into(),
+                );
             });
         }
     }

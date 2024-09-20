@@ -32,7 +32,7 @@ use crate::{
         BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrProviderId, ExpirationItem, FileKeyHasher,
         FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchConfirmStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
+        MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
         MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult,
         MspStorageRequestResponse, MultiAddresses, PeerIds, ProviderIdFor,
@@ -594,8 +594,10 @@ where
         );
 
         // Initialize batch responses
-        let mut batch_responses: BoundedVec<BatchResponses<T>, MaxBatchConfirmStorageRequests<T>> =
-            BoundedVec::default();
+        let mut batch_responses: BoundedVec<
+            BatchResponses<T>,
+            MaxBatchMspRespondStorageRequests<T>,
+        > = BoundedVec::default();
 
         // Preliminary check to ensure that the MSP is the one storing each bucket in the responses
         for (bucket_id, _) in bucket_file_key_responses.iter() {
@@ -621,15 +623,15 @@ where
             // Initialize accepted, rejected, and failed file keys
             let mut accepted_file_keys: BoundedVec<
                 MerkleHash<T>,
-                T::MaxBatchConfirmStorageRequests,
+                T::MaxBatchMspRespondStorageRequests,
             > = BoundedVec::default();
             let mut rejected_file_keys: BoundedVec<
                 (MerkleHash<T>, RejectedStorageRequestReason),
-                T::MaxBatchConfirmStorageRequests,
+                T::MaxBatchMspRespondStorageRequests,
             > = BoundedVec::default();
             let mut failed_file_keys: BoundedVec<
                 (MerkleHash<T>, DispatchError),
-                T::MaxBatchConfirmStorageRequests,
+                T::MaxBatchMspRespondStorageRequests,
             > = BoundedVec::default();
 
             // Process each response for the bucket
@@ -644,6 +646,11 @@ where
                         continue;
                     }
                 };
+
+                ensure!(
+                    storage_request_metadata.bucket_id == bucket_id,
+                    Error::<T>::InvalidBucketIdFileKeyPair
+                );
 
                 match response {
                     MspStorageRequestResponse::Accept(params) => {
