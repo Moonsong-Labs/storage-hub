@@ -140,18 +140,14 @@ where
             .await
             .get_metadata(&event.file_key.into())
         {
-            Ok(metadata) => {
-                match metadata {
-                    Some(metadata) => {
-                        H256(metadata.bucket_id.try_into().unwrap())
-                    }
-                    None => {
-                        let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
-                        error!(target: LOG_TARGET, err_msg);
-                        return Err(anyhow!(err_msg));
-                    }
+            Ok(metadata) => match metadata {
+                Some(metadata) => H256(metadata.bucket_id.try_into().unwrap()),
+                None => {
+                    let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
                 }
-            }
+            },
             Err(e) => {
                 let err_msg = format!("Failed to get file metadata: {:?}", e);
                 error!(target: LOG_TARGET, err_msg);
@@ -175,7 +171,7 @@ where
                                     RejectedStorageRequestReason::ReceivedInvalidProof,
                                 )
                             )]
-                        )]
+                        )],
                     },
                 );
 
@@ -228,7 +224,7 @@ where
                                         RejectedStorageRequestReason::InternalError,
                                     ),
                                 )]
-                            )]
+                            )],
                         },
                     );
 
@@ -267,7 +263,7 @@ where
                                         RejectedStorageRequestReason::InternalError,
                                     ),
                                 )]
-                        )]
+                            )],
                         },
                     );
 
@@ -301,7 +297,7 @@ where
                                         RejectedStorageRequestReason::InternalError,
                                     ),
                                 )]
-                            )]
+                            )],
                         },
                     );
 
@@ -335,7 +331,7 @@ where
                                         RejectedStorageRequestReason::InternalError,
                                     ),
                                 )]
-                            )]
+                            )],
                         },
                     );
 
@@ -522,7 +518,7 @@ where
                                     RejectedStorageRequestReason::ReachedMaximumCapacity,
                                 )
                             )]
-                        )]
+                        )],
                     },
                 );
 

@@ -600,7 +600,9 @@ where
         // Preliminary check to ensure that the MSP is the one storing each bucket in the responses
         for (bucket_id, _) in bucket_file_key_responses.iter() {
             ensure!(
-                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
+                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                    &msp_id, &bucket_id
+                ),
                 Error::<T>::MspNotStoringBucket
             );
         }

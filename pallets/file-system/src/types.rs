@@ -110,7 +110,9 @@ pub enum MspStorageRequestResponse<T: Config> {
 impl<T: Config> Debug for MspStorageRequestResponse<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            MspStorageRequestResponse::Accept(params) => write!(f, "Accepted: {:?}", params.encode()),
+            MspStorageRequestResponse::Accept(params) => {
+                write!(f, "Accepted: {:?}", params.encode())
+            }
             MspStorageRequestResponse::Reject(reason) => {
                 write!(f, "Rejected: {:?}", reason)
             }
