@@ -14,7 +14,7 @@ import {
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
-  { initialised: false, bspStartingWeight: 5n, only: true, networkConfig: "standard" },
+  { initialised: false, bspStartingWeight: 5n },
   ({ before, it, createUserApi, beforeEach }) => {
     let api: EnrichedBspApi;
 
