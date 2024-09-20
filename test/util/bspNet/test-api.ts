@@ -225,6 +225,10 @@ export class BspNetTestApi implements AsyncDisposable {
       bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts)
     };
 
+    /**
+     * File operations namespace
+     * Contains methods for interacting with StorageHub file system.
+     */
     const remappedFileNs = {
       /**
        * Creates a new bucket.
@@ -291,15 +295,21 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       skipTo: (
         blockNumber: number,
-        options?: { waitBetweenBlocks?: number | boolean; waitForBspProofs?: string[] }
+        options?: {
+          waitBetweenBlocks?: number | boolean;
+          waitForBspProofs?: string[];
+          spam?: boolean;
+          verbose?: boolean;
+        }
       ) =>
         BspNetBlock.advanceToBlock(
           this._api,
           blockNumber,
           options?.waitBetweenBlocks,
-          options?.waitForBspProofs
+          options?.waitForBspProofs,
+          options?.spam,
+          options?.verbose
         ),
-
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.

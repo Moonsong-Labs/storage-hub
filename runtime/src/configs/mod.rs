@@ -531,8 +531,8 @@ pub struct BlockFullnessHeadroom;
 impl Get<Weight> for BlockFullnessHeadroom {
     fn get() -> Weight {
         // TODO: Change this to the benchmarked weight of a `submit_proof` extrinsic or more.
-        Weight::from_parts(10_000, 0)
-            + <Runtime as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+        // TODO: Right now, it is set to the weight of a `transfer_keep_alive` extrinsic.
+        Weight::from_parts(297_297_000, 308)
     }
 }
 
