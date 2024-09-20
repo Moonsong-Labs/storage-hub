@@ -95,6 +95,7 @@ pub mod pallet {
             + Into<u64>
             // Note: this is the same as just making it a u64, but since we need to interact with the FileMetadata type which is a u64,
             // we kinda have no clean way to achieve this (at least, not one that comes to mind).
+            // TODO: Remove this and create a FileMetadata trait that implements `decode`, `encode`, `file_key` and `get_size`.
             + From<u64>;
 
         /// Type that represents the total number of registered Storage Providers.
