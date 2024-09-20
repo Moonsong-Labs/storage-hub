@@ -99,6 +99,7 @@ import type {
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   FileMetadata,
+  GetFileFromFileStorageResult,
   SaveFileToDisk
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
@@ -1058,7 +1059,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Check if a file is in the file storage.
        **/
-      isFileInFileStorage: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<bool>>;
+      isFileInFileStorage: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<GetFileFromFileStorageResult>
+      >;
       /**
        * Check if a file is in the forest.
        **/

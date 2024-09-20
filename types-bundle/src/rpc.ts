@@ -71,7 +71,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
           type: "H256"
         }
       ],
-      type: "bool"
+      type: "GetFileFromFileStorageResult"
     },
     getFileMetadata: {
       description: "Get the metadata of a file from the Forest storage.",
