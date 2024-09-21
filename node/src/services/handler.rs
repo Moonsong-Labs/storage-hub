@@ -37,6 +37,8 @@ pub struct ProviderConfig {
     ///
     /// Storage capacity increases in jumps of this size.
     pub jump_capacity: StorageDataUnit,
+    /// The time in seconds to wait before retrying an extrinsic.
+    pub extrinsic_retry_timeout: u64,
 }
 
 /// Represents the handler for the Storage Hub service.

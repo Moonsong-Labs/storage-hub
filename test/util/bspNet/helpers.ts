@@ -25,6 +25,8 @@ import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
 import * as ShConsts from "./consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
 import invariant from "tiny-invariant";
+import * as fs from "node:fs";
+import { parse, stringify } from "yaml";
 import { sealBlock } from "./block.ts";
 import type { ApiPromise } from "@polkadot/api";
 
@@ -115,12 +117,25 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       file = "noisy-bsp-compose.yml";
     }
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
-
-    if (bspNetConfig.noisy) {
-      await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
+    const cwd = path.resolve(process.cwd(), "..", "docker");
+    const composeFile = fs.readFileSync(composeFilePath, "utf8");
+    const composeYaml = parse(composeFile);
+    if (bspNetConfig.extrinsicRetryTimeout) {
+      composeYaml.services["sh-bsp"].command.push(
+        `--extrinsic-retry-timeout=${bspNetConfig.extrinsicRetryTimeout}`
+      );
+      composeYaml.services["sh-user"].command.push(
+        `--extrinsic-retry-timeout=${bspNetConfig.extrinsicRetryTimeout}`
+      );
     }
 
-    await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
+    const updatedCompose = stringify(composeYaml);
+
+    if (bspNetConfig.noisy) {
+      await compose.upOne("toxiproxy", { cwd: cwd, configAsString: updatedCompose, log: true });
+    }
+
+    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: updatedCompose, log: true });
 
     const bspIp = await getContainerIp(
       bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
@@ -142,7 +157,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     process.env.BSP_PEER_ID = bspPeerId;
 
     await compose.upOne("sh-user", {
-      config: composeFilePath,
+      cwd: cwd,
+      configAsString: updatedCompose,
       log: true,
       env: {
         ...process.env,
@@ -403,11 +419,15 @@ export const addBsp = async (
     bspId?: string;
     bspStartingWeight?: bigint;
     maxStorageCapacity?: number;
+    extrinsicRetryTimeout?: number;
     additionalArgs?: string[];
   }
 ) => {
   // Launch a BSP node.
   const additionalArgs = options?.additionalArgs ?? [];
+  if (options?.extrinsicRetryTimeout) {
+    additionalArgs.push(`--extrinsic-retry-timeout=${options.extrinsicRetryTimeout}`);
+  }
   if (options?.rocksdb) {
     additionalArgs.push("--storage-layer=rocks-db");
   }

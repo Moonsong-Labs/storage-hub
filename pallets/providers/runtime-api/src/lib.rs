@@ -6,7 +6,7 @@ use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit>
+    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance>
     where
         BlockNumber: Codec,
         BspId: Codec,
@@ -15,12 +15,14 @@ sp_api::decl_runtime_apis! {
         ProviderId: Codec,
         StorageProviderId: Codec,
         StorageDataUnit: Codec,
+        Balance: Codec,
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId>;
         fn query_storage_provider_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
         fn query_available_storage_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
         fn query_earliest_change_capacity_block(who: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
+        fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
     }
 }
 

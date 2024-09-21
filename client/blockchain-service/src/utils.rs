@@ -36,7 +36,7 @@ use crate::{
     handler::LOG_TARGET,
     state::OngoingProcessConfirmStoringRequestCf,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{EventsVec, Extrinsic},
+    types::{EventsVec, Extrinsic, Tip},
     BlockchainService,
 };
 
@@ -126,6 +126,7 @@ impl BlockchainService {
     pub(crate) async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
+        tip: Tip,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
@@ -134,7 +135,7 @@ impl BlockchainService {
         let nonce = self.nonce_counter;
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce);
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, tip);
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -184,6 +185,7 @@ impl BlockchainService {
         client: Arc<ParachainClient>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
         nonce: u32,
+        tip: Tip,
     ) -> UncheckedExtrinsic {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
@@ -196,26 +198,22 @@ impl BlockchainService {
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
-        // TODO: Consider tipping the transaction.
-        let tip = 0;
         let extra: SignedExtra = (
-        frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
-            period,
-            current_block,
-        )),
-        frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<storage_hub_runtime::Runtime>::from(
+            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
+                period,
+                current_block,
+            )),
+            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
+            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
             tip,
-        ),
-        cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-            storage_hub_runtime::Runtime,
-        >::new(),
-    );
+            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
+                storage_hub_runtime::Runtime,
+            >::new(),
+        );
 
         let raw_payload = SignedPayload::from_raw(
             function.clone(),
