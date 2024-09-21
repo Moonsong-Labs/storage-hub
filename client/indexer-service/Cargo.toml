@@ -1,7 +1,7 @@
 [package]
-name = "shc-blockchain-service"
+name = "shc-indexer-service"
 version = "0.1.0"
-description = "The blockchain service for StorageHub. Responsible for listening to the blockchain and interacting with the StorageHub runtime."
+description = "Storage Hub Indexer Service."
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
@@ -25,7 +25,9 @@ futures = { workspace = true }
 serde_json = { workspace = true }
 codec = { workspace = true }
 serde = { workspace = true, default-features = true }
-rocksdb = { workspace = true }
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+thiserror = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -38,7 +40,7 @@ sc-utils = { workspace = true }
 sc-tracing = { workspace = true }
 sp-api = { workspace = true }
 sp-core = { workspace = true, default-features = true }
-sp-keystore = { workspace = true }
+sp-blockchain = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 substrate-frame-rpc-system = { workspace = true }
 
@@ -54,8 +56,7 @@ cumulus-primitives-storage-weight-reclaim = { workspace = true }
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
-shp-file-key-verifier = { workspace = true }
-shp-file-metadata = { workspace = true }
+shc-indexer-db = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }
