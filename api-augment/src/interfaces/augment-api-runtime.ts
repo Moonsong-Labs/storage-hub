@@ -459,6 +459,13 @@ declare module "@polkadot/api-base/types/calls" {
         (who: AccountId | string | Uint8Array) => Observable<Option<StorageProviderId>>
       >;
       /**
+       * Get the worst case scenario slashable amount for a provider.
+       **/
+      getWorstCaseScenarioSlashableAmount: AugmentedCall<
+        ApiType,
+        (providerId: ProviderId | string | Uint8Array) => Observable<Option<Balance>>
+      >;
+      /**
        * Query the available storage capacity.
        **/
       queryAvailableStorageCapacity: AugmentedCall<

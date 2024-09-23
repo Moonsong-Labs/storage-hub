@@ -297,7 +297,11 @@ where
                             1,
                             Fingerprint::default().into(),
                         );
-                        Some(file_metadata.encode())
+                        if key.as_ref() != [0; H_LENGTH] {
+                            Some(file_metadata.encode())
+                        } else {
+                            Some(vec![1, 2, 3, 4, 5, 6]) // We make it so the metadata is invalid for the empty key
+                        }
                     }
                 };
                 (*key, value)

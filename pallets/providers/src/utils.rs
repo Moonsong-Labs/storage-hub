@@ -1510,4 +1510,10 @@ where
             .ok_or(QueryEarliestChangeCapacityBlockError::ProviderNotRegistered)?;
         Ok(bsp.last_capacity_change + T::MinBlocksBetweenCapacityChanges::get())
     }
+
+    pub fn get_worst_case_scenario_slashable_amount(
+        provider_id: &ProviderId<T>,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        Self::compute_worst_case_scenario_slashable_amount(provider_id)
+    }
 }

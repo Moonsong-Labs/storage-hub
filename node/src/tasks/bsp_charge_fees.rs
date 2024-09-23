@@ -4,6 +4,7 @@ use pallet_storage_providers::types::StorageProviderId;
 use std::time::Duration;
 
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
@@ -181,7 +182,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call)
+                .send_extrinsic(call, Tip::from(0))
                 .await;
 
             match charging_result {
