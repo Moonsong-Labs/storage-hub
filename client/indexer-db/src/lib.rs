@@ -1,5 +1,3 @@
-use std::env;
-
 use diesel::ConnectionError;
 use diesel_async::{
     pooled_connection::{
@@ -20,13 +18,9 @@ pub type DbConnection<'a> = PooledConnection<'a, AsyncPgConnection>;
 pub enum DbSetupError {
     #[error("Failed to connect to the database: {0}")]
     ConnectionError(#[from] ConnectionError),
-    #[error("Failed to read DATABASE_URL environment variable: {0}")]
-    EnvVarError(#[from] env::VarError),
 }
 
-pub async fn setup_db_pool() -> Result<DbPool, DbSetupError> {
-    let database_url = env::var("DATABASE_URL")?;
-
+pub async fn setup_db_pool(database_url: String) -> Result<DbPool, DbSetupError> {
     let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
     let pool = Pool::builder()
         .build(config)
