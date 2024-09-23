@@ -239,6 +239,10 @@ declare module "@polkadot/api-base/types/consts" {
        * This is the amount of blocks from the past, for which the block fullness has been checked
        * and is stored. Blocks older than `current_block` - [`Config::BlockFullnessPeriod`] are
        * cleared from storage.
+       *
+       * This constant should be equal or smaller than the [`Config::ChallengeTicksTolerance`] constant,
+       * if the goal is to prevent spamming attacks that would prevent honest Providers from submitting
+       * their proofs in time.
        **/
       blockFullnessPeriod: u32 & AugmentedConst<ApiType>;
       /**
