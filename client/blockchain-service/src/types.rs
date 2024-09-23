@@ -9,7 +9,7 @@ use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
 use frame_system::EventRecord;
 use sp_core::H256;
-use sp_runtime::DispatchError;
+use sp_runtime::{AccountId32, DispatchError};
 
 use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMutation};
 
@@ -81,6 +81,21 @@ impl ConfirmStoringRequest {
 
     pub fn increment_try_count(&mut self) {
         self.try_count += 1;
+    }
+}
+
+/// A struct that holds the information to stop storing all files from an insolvent user.
+/// (Which is only the user's account ID).
+///
+/// This struct is used as an item in the `pending_stop_storing_for_insolvent_user_requests` queue.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct StopStoringForInsolventUserRequest {
+    pub user: AccountId32,
+}
+
+impl StopStoringForInsolventUserRequest {
+    pub fn new(user: AccountId32) -> Self {
+        Self { user }
     }
 }
 

@@ -31,10 +31,14 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::OngoingProcessConfirmStoringRequestCf,
+    state::{
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+    },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{EventsVec, Extrinsic, Tip},
     BlockchainService,
@@ -441,7 +445,7 @@ impl BlockchainService {
     }
 
     /// Check if there are any pending requests to update the forest root on the runtime, and process them.
-    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest`.
+    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest` over `StopStoringForInsolventUserRequest`.
     /// This function is called every time a new block is imported and after each request is queued.
     pub(crate) fn check_pending_forest_root_writes(&mut self) {
         if let Some(mut rx) = self.forest_root_write_lock.take() {
@@ -460,6 +464,9 @@ impl BlockchainService {
                     state_store_context
                         .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                        .delete();
                     state_store_context.commit();
                 }
                 Err(TryRecvError::Closed) => {
@@ -467,6 +474,9 @@ impl BlockchainService {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
                         .access_value(&OngoingProcessConfirmStoringRequestCf)
+                        .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -540,6 +550,18 @@ impl BlockchainService {
                 );
             }
         }
+
+        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending stop storing for insolvent user requests.
+        if next_event_data.is_none() {
+            if let Some(request) = state_store_context
+                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pop_front()
+            {
+                next_event_data = Some(
+                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
+                );
+            }
+        }
         state_store_context.commit();
 
         if let Some(event_data) = next_event_data {
@@ -553,13 +575,23 @@ impl BlockchainService {
 
         let data = data.into();
 
-        // If this is a confirm storing request, we need to store it in the state store.
-        if let ForestWriteLockTaskData::ConfirmStoringRequest(data) = &data {
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            state_store_context
-                .access_value(&OngoingProcessConfirmStoringRequestCf)
-                .write(data);
-            state_store_context.commit();
+        // If this is a confirm storing request or a stop storing for insolvent user request, we need to store it in the state store.
+        match &data {
+            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            _ => {}
         }
 
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
@@ -576,6 +608,12 @@ impl BlockchainService {
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 self.emit(ProcessConfirmStoringRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
                     forest_root_write_tx,
                 });

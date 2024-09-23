@@ -45,15 +45,15 @@ use crate::{
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
-        SlashableProvider,
+        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
-        OngoingProcessConfirmStoringRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::SubmitProofRequest,
+    types::{StopStoringForInsolventUserRequest, SubmitProofRequest},
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -631,6 +631,24 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueStopStoringForInsolventUserRequest {
+                    request,
+                    callback,
+                } => {
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_stop_storing_for_insolvent_user_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryStorageProviderId {
                     maybe_node_pub_key,
                     callback,
@@ -789,6 +807,23 @@ impl BlockchainService {
                     .push_back(request);
             }
         }
+
+        // Check if there was an ongoing process stop storing task.
+        let maybe_ongoing_process_stop_storing_for_insolvent_user_request = state_store_context
+            .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+            .read();
+
+        // If there was an ongoing process stop storing task, we need to re-queue the requests.
+        if let Some(process_stop_storing_for_insolvent_user_request) =
+            maybe_ongoing_process_stop_storing_for_insolvent_user_request
+        {
+            state_store_context
+                .pending_stop_storing_for_insolvent_user_request_deque()
+                .push_back(StopStoringForInsolventUserRequest::new(
+                    process_stop_storing_for_insolvent_user_request.who,
+                ));
+        }
+
         state_store_context.commit();
 
         // Catch up to proofs that this node might have missed.
@@ -898,6 +933,32 @@ impl BlockchainService {
                                     provider_id: provider_id,
                                     last_chargeable_tick: last_chargeable_tick,
                                     last_chargeable_price_index: last_chargeable_price_index,
+                                })
+                            }
+                        }
+                        // A user has been flagged as without funds in the runtime
+                        RuntimeEvent::PaymentStreams(
+                            pallet_payment_streams::Event::UserWithoutFunds { who },
+                        ) => {
+                            self.emit(UserWithoutFunds { who });
+                        }
+                        // A file was correctly deleted from a user without funds
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::SpStopStoringInsolventUser {
+                                sp_id,
+                                file_key,
+                                owner,
+                                location,
+                                new_root,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&sp_id) {
+                                self.emit(SpStopStoringInsolventUser {
+                                    sp_id,
+                                    file_key: file_key.into(),
+                                    owner,
+                                    location,
+                                    new_root,
                                 })
                             }
                         }

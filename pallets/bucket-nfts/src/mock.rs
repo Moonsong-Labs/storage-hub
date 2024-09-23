@@ -204,6 +204,7 @@ impl pallet_file_system::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = MockProofsDealer;
+    type PaymentStreams = PaymentStreams;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;

@@ -86,9 +86,9 @@ construct_runtime!(
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
         Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
+        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
         BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
         Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
-        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
     }
 );
 
@@ -176,6 +176,10 @@ impl pallet_nfts::Config for Test {
 }
 
 // Payment streams pallet:
+parameter_types! {
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
+}
+
 impl pallet_payment_streams::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -364,6 +368,7 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type PaymentStreams = PaymentStreams;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;

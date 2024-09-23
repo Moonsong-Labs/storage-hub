@@ -951,6 +951,12 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::Units>;
+
+    /// Check if a user has an active payment stream with a provider.
+    fn has_active_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> bool;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.
