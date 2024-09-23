@@ -100,7 +100,7 @@ Proof verification, which happens in the `submit_proof` extrinsic, follows the n
 
 ### Tick-Stopping Anti-Spam Mechanism
 
-This pallet implements a mechanism to prevent a spamming attack that would allow a malicious actor to spam the network with tipped transactions, preventing honest BSPs from submitting their proofs in time.
+This pallet implements a mechanism to prevent a spamming attack that would allow a malicious actor to spam the network with tipped transactions, preventing honest Providers from submitting their proofs in time.
 
 Essentially, the mechanism consists in stopping the tick counter, when the network is presumably under a spam attack. Stopping the tick counter has the following effects:
 
