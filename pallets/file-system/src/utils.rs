@@ -21,9 +21,9 @@ use pallet_file_system_runtime_api::{
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
-    TrieAddMutation, TrieRemoveMutation,
+    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::{
@@ -964,6 +964,27 @@ where
                 storage_request_metadata.size,
             )?;
 
+            // Check if a payment stream between the user and provider already exists.
+            // If it does not, create it. If it does, update it.
+            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
+				Some(previous_amount_provided) => {
+					// Update the payment stream.
+					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&(previous_amount_provided + storage_request_metadata.size),
+					)?;
+				},
+				None => {
+					// Create the payment stream.
+					<T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&storage_request_metadata.size,
+					)?;
+				}
+			}
+
             // Get the file metadata to insert into the Provider's trie under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
@@ -1361,9 +1382,15 @@ where
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotASp)?;
 
-        // Check that the owner of the file has been flagged as insolvent
+        // Check that the owner of the file has been flagged as insolvent OR that the Provider does not
+        // have any active payment streams with the user. The rationale here is that if there is a
+        // user who cannot pay, or is just not paying anymore, the SP has the right to stop storing files for them
+        // without having to pay any penalty.
         ensure!(
-            <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner),
+            <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner)
+                || !<T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(
+                    &sp_id, &owner
+                ),
             Error::<T>::UserNotInsolvent
         );
 
@@ -1384,12 +1411,31 @@ where
 
         // Verify the proof of inclusion.
         // If the Provider is a BSP, the proof is verified against the BSP's forest.
-        let proven_keys = if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+        let new_root = if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
+            let proven_keys =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                    &sp_id,
+                    &[file_key],
+                    &inclusion_forest_proof,
+                )?;
+
+            // Ensure that the file key IS part of the BSP's forest.
+            ensure!(
+                proven_keys.contains(&file_key),
+                Error::<T>::ExpectedInclusionProof
+            );
+
+            // Compute new root after removing file key from forest partial trie.
+            let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
                 &sp_id,
-                &[file_key],
+                &[(file_key, TrieRemoveMutation::default().into())],
                 &inclusion_forest_proof,
-            )?
+            )?;
+
+            // Update root of the BSP.
+            <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
+
+            new_root
         } else {
             // If the Provider is a MSP, the proof is verified against the Bucket's root.
 
@@ -1409,28 +1455,34 @@ where
                 <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
                     .ok_or(Error::<T>::BucketNotFound)?;
 
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
-                &bucket_root,
-                &[file_key],
-                &inclusion_forest_proof,
-            )?
+            let proven_keys =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                    &bucket_root,
+                    &[file_key],
+                    &inclusion_forest_proof,
+                )?;
+
+            // Ensure that the file key IS part of the Bucket's trie.
+            ensure!(
+                proven_keys.contains(&file_key),
+                Error::<T>::ExpectedInclusionProof
+            );
+
+            // Compute new root after removing file key from forest partial trie.
+            let new_root =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
+                    &bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &inclusion_forest_proof,
+                )?;
+
+            // Update root of the Bucket.
+            <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
+                bucket_id, new_root,
+            )?;
+
+            new_root
         };
-
-        // Ensure that the file key IS part of the SP's forest.
-        ensure!(
-            proven_keys.contains(&file_key),
-            Error::<T>::ExpectedInclusionProof
-        );
-
-        // Compute new root after removing file key from forest partial trie.
-        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &sp_id,
-            &[(file_key, TrieRemoveMutation::default().into())],
-            &inclusion_forest_proof,
-        )?;
-
-        // Update root of SP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
 
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
@@ -1644,8 +1696,6 @@ where
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
-        let size: u32 = size.into();
-
         shp_file_metadata::FileMetadata::<
             { shp_constants::H_LENGTH },
             { shp_constants::FILE_CHUNK_SIZE },

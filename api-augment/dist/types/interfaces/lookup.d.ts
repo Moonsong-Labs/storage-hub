@@ -3806,13 +3806,13 @@ declare const _default: {
     confirmed: string;
   };
   /**
-   * Lookup412: pallet_file_system::types::MoveBucketRequestMetadata<T>
+   * Lookup413: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: string;
   };
   /**
-   * Lookup413: pallet_file_system::pallet::Error<T>
+   * Lookup414: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: string[];

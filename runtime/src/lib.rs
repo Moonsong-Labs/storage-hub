@@ -599,7 +599,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit, Balance> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
@@ -618,6 +618,10 @@ impl_runtime_apis! {
 
         fn query_earliest_change_capacity_block(provider_id: &BackupStorageProviderId<Runtime>) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError> {
             Providers::query_earliest_change_capacity_block(provider_id)
+        }
+
+        fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
+            Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
         }
     }
 }

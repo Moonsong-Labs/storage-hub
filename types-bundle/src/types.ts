@@ -20,6 +20,14 @@ export const ALL_TYPES: RegistryTypes = {
       IncompleteFile: "IncompleteFileStatus"
     }
   },
+  GetFileFromFileStorageResult: {
+    _enum: {
+      FileNotFound: null,
+      FileFound: "FileMetadata",
+      IncompleteFile: "IncompleteFileStatus",
+      FileFoundWithInconsistency: "FileMetadata"
+    }
+  },
   ProviderId: "H256",
   Key: "H256",
   RandomnessOutput: "H256",

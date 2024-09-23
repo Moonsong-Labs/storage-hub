@@ -375,7 +375,7 @@ declare module "@polkadot/api-base/types/consts" {
        *
        * Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
        **/
-      maxFileSize: u32 & AugmentedConst<ApiType>;
+      maxFileSize: u64 & AugmentedConst<ApiType>;
       /**
        * The maximum amount of multiaddresses that a Storage Provider can have.
        **/
@@ -399,7 +399,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
        **/
-      spMinCapacity: u32 & AugmentedConst<ApiType>;
+      spMinCapacity: u64 & AugmentedConst<ApiType>;
       /**
        * The minimum amount that an account has to deposit to become a storage provider.
        **/

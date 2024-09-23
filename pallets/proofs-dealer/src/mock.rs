@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 
+use codec::Encode;
 use core::marker::PhantomData;
 use frame_support::{
     derive_impl,
@@ -10,6 +11,7 @@ use frame_support::{
     BoundedBTreeSet,
 };
 use frame_system as system;
+use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
 };
@@ -62,6 +64,7 @@ frame_support::construct_runtime!(
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: crate::{Pallet, Call, Storage, Event<T>},
+        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
     }
 );
 
@@ -129,12 +132,34 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
+// Payment streams pallet:
+impl pallet_payment_streams::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type ProvidersPallet = Providers;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type Units = u64;
+    type NewStreamDeposit = ConstU64<10>;
+    type UserWithoutFundsCooldown = ConstU64<100>;
+    type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
+}
+// Converter from the BlockNumber type to the Balance type for math
+pub struct BlockNumberToBalance;
+impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
+    fn convert(block_number: BlockNumberFor<Test>) -> Balance {
+        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
+    }
+}
+
+// Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
+    type PaymentStreams = PaymentStreams;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
@@ -143,9 +168,9 @@ impl pallet_storage_providers::Config for Test {
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
-    type SpMinCapacity = ConstU32<2>;
+    type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
-    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxFileSize = ConstU64<{ u64::MAX }>;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -273,8 +298,37 @@ where
 
         let db = MemoryDB::<T::Hash>::default();
 
-        // Return default db and the last key in mutations, so it is deterministic for testing.
-        Ok((db, last_key, Vec::new()))
+        let mutated_keys_and_values = mutations
+            .iter()
+            .map(|(key, mutation)| {
+                let value = match mutation {
+                    TrieMutation::Add(add_mutation) => Some(add_mutation.value.clone()),
+                    TrieMutation::Remove(_) => {
+                        let file_metadata: FileMetadata<
+                            { shp_constants::H_LENGTH },
+                            { shp_constants::FILE_CHUNK_SIZE },
+                            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+                        > = FileMetadata::new(
+                            1_u64.encode(),
+                            blake2_256(b"bucket").as_ref().to_vec(),
+                            b"path/to/file".to_vec(),
+                            1,
+                            Fingerprint::default().into(),
+                        );
+                        if key.as_ref() != [0; H_LENGTH] {
+                            Some(file_metadata.encode())
+                        } else {
+                            Some(vec![1, 2, 3, 4, 5, 6]) // We make it so the metadata is invalid for the empty key
+                        }
+                    }
+                };
+                (*key, value)
+            })
+            .collect();
+
+        // Return default db, the last key in mutations as the new root, and a
+        // vector holding the supposedly mutated keys and values, so it is deterministic for testing.
+        Ok((db, last_key, mutated_keys_and_values))
     }
 }
 

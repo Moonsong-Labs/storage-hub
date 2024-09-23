@@ -545,7 +545,7 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           owner: AccountId32 | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
-          size: u32 | AnyNumber | Uint8Array,
+          size: u64 | AnyNumber | Uint8Array,
           canServe: bool | boolean | Uint8Array,
           inclusionForestProof:
             | SpTrieStorageProofCompactProof
@@ -555,7 +555,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]
+        [H256, H256, Bytes, AccountId32, H256, u64, bool, SpTrieStorageProofCompactProof]
       >;
       /**
        * Used by a BSP to volunteer for storing a file.
@@ -589,7 +589,7 @@ declare module "@polkadot/api-base/types/submittable" {
           bucketId: H256 | string | Uint8Array,
           fileKey: H256 | string | Uint8Array,
           location: Bytes | string | Uint8Array,
-          size: u32 | AnyNumber | Uint8Array,
+          size: u64 | AnyNumber | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           maybeInclusionForestProof:
             | Option<SpTrieStorageProofCompactProof>
@@ -601,7 +601,7 @@ declare module "@polkadot/api-base/types/submittable" {
               }
             | string
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, u32, H256, Option<SpTrieStorageProofCompactProof>]
+        [H256, H256, Bytes, u64, H256, Option<SpTrieStorageProofCompactProof>]
       >;
       /**
        * Issue a new storage request for a file
@@ -611,11 +611,11 @@ declare module "@polkadot/api-base/types/submittable" {
           bucketId: H256 | string | Uint8Array,
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
-          size: u32 | AnyNumber | Uint8Array,
+          size: u64 | AnyNumber | Uint8Array,
           mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u32, H256, Vec<Bytes>]
+        [H256, Bytes, H256, u64, H256, Vec<Bytes>]
       >;
       /**
        * Used by a MSP to confirm storing a file that was assigned to it.
@@ -709,7 +709,7 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           owner: AccountId32 | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
-          size: u32 | AnyNumber | Uint8Array,
+          size: u64 | AnyNumber | Uint8Array,
           inclusionForestProof:
             | SpTrieStorageProofCompactProof
             | {
@@ -718,7 +718,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, AccountId32, H256, u32, SpTrieStorageProofCompactProof]
+        [H256, H256, Bytes, AccountId32, H256, u64, SpTrieStorageProofCompactProof]
       >;
       updateBucketPrivacy: AugmentedSubmittable<
         (
@@ -2314,9 +2314,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           providerId: H256 | string | Uint8Array,
           userAccount: AccountId32 | string | Uint8Array,
-          amountProvided: u32 | AnyNumber | Uint8Array
+          amountProvided: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, AccountId32, u32]
+        [H256, AccountId32, u64]
       >;
       /**
        * Dispatchable extrinsic that allows root to add a fixed-rate payment stream from a User to a Provider.
@@ -2437,9 +2437,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           providerId: H256 | string | Uint8Array,
           userAccount: AccountId32 | string | Uint8Array,
-          newAmountProvided: u32 | AnyNumber | Uint8Array
+          newAmountProvided: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, AccountId32, u32]
+        [H256, AccountId32, u64]
       >;
       /**
        * Dispatchable extrinsic that allows root to update an existing fixed-rate payment stream between a User and a Provider.
@@ -3244,8 +3244,8 @@ declare module "@polkadot/api-base/types/submittable" {
        * Emits `CapacityChanged` event when successful.
        **/
       changeCapacity: AugmentedSubmittable<
-        (newCapacity: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [u32]
+        (newCapacity: u64 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [u64]
       >;
       /**
        * Dispatchable extrinsic that allows users to confirm their sign up as a Storage Provider, either MSP or BSP.
@@ -3303,12 +3303,12 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           who: AccountId32 | string | Uint8Array,
           bspId: H256 | string | Uint8Array,
-          capacity: u32 | AnyNumber | Uint8Array,
+          capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           paymentAccount: AccountId32 | string | Uint8Array,
           weight: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u32, Vec<Bytes>, AccountId32, Option<u32>]
+        [AccountId32, H256, u64, Vec<Bytes>, AccountId32, Option<u32>]
       >;
       /**
        * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
@@ -3338,7 +3338,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           who: AccountId32 | string | Uint8Array,
           mspId: H256 | string | Uint8Array,
-          capacity: u32 | AnyNumber | Uint8Array,
+          capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           valueProp:
             | PalletStorageProvidersValueProposition
@@ -3351,7 +3351,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u32, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [AccountId32, H256, u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
@@ -3397,11 +3397,11 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       requestBspSignUp: AugmentedSubmittable<
         (
-          capacity: u32 | AnyNumber | Uint8Array,
+          capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u32, Vec<Bytes>, AccountId32]
+        [u64, Vec<Bytes>, AccountId32]
       >;
       /**
        * Dispatchable extrinsic that allows users to request to sign up as a Main Storage Provider.
@@ -3433,7 +3433,7 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       requestMspSignUp: AugmentedSubmittable<
         (
-          capacity: u32 | AnyNumber | Uint8Array,
+          capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           valueProp:
             | PalletStorageProvidersValueProposition
@@ -3446,7 +3446,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u32, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
       >;
       /**
        * Dispatchable extrinsic to slash a _slashable_ Storage Provider.

@@ -529,6 +529,9 @@ pub mod pallet {
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
 
+        /// Failed to update the provider after a key removal mutation.
+        FailedToUpdateProviderAfterKeyRemoval,
+
         /// The limit of Providers that can submit a proof in a single tick has been reached.
         TooManyValidProofSubmitters,
     }

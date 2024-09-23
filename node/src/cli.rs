@@ -110,6 +110,10 @@ pub struct ProviderConfigurations {
     /// Storage location in the file system
     #[clap(long, required_if_eq("storage_layer", "rocks-db"))]
     pub storage_path: Option<String>,
+
+    /// Extrinsic retry timeout in seconds.
+    #[clap(long, default_value = "60")]
+    pub extrinsic_retry_timeout: u64,
 }
 
 impl ProviderConfigurations {
@@ -126,8 +130,9 @@ impl ProviderConfigurations {
             storage_path: self.storage_path.clone(),
             // We can default since the clap would have errored out if it was not provided when required.
             // In any other case, max_storage_capacity is not required and can be set to default.
-            max_storage_capacity: self.max_storage_capacity.clone(),
-            jump_capacity: self.jump_capacity.clone(),
+            max_storage_capacity: self.max_storage_capacity,
+            jump_capacity: self.jump_capacity,
+            extrinsic_retry_timeout: self.extrinsic_retry_timeout,
         }
     }
 }

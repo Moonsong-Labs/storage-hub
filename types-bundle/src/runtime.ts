@@ -152,6 +152,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
     ],
     type: "Option<StorageProviderId>"
   },
+  get_worst_case_scenario_slashable_amount: {
+    description: "Get the worst case scenario slashable amount for a provider.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Option<Balance>"
+  },
   query_storage_provider_capacity: {
     description: "Query the storage provider capacity.",
     params: [

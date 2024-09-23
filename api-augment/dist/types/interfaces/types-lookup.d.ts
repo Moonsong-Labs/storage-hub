@@ -1711,27 +1711,27 @@ declare module "@polkadot/types/lookup" {
     readonly asMspRequestSignUpSuccess: {
       readonly who: AccountId32;
       readonly multiaddresses: Vec<Bytes>;
-      readonly capacity: u32;
+      readonly capacity: u64;
       readonly valueProp: PalletStorageProvidersValueProposition;
     } & Struct;
     readonly isMspSignUpSuccess: boolean;
     readonly asMspSignUpSuccess: {
       readonly who: AccountId32;
       readonly multiaddresses: Vec<Bytes>;
-      readonly capacity: u32;
+      readonly capacity: u64;
       readonly valueProp: PalletStorageProvidersValueProposition;
     } & Struct;
     readonly isBspRequestSignUpSuccess: boolean;
     readonly asBspRequestSignUpSuccess: {
       readonly who: AccountId32;
       readonly multiaddresses: Vec<Bytes>;
-      readonly capacity: u32;
+      readonly capacity: u64;
     } & Struct;
     readonly isBspSignUpSuccess: boolean;
     readonly asBspSignUpSuccess: {
       readonly who: AccountId32;
       readonly multiaddresses: Vec<Bytes>;
-      readonly capacity: u32;
+      readonly capacity: u64;
     } & Struct;
     readonly isSignUpRequestCanceled: boolean;
     readonly asSignUpRequestCanceled: {
@@ -1748,8 +1748,8 @@ declare module "@polkadot/types/lookup" {
     readonly isCapacityChanged: boolean;
     readonly asCapacityChanged: {
       readonly who: AccountId32;
-      readonly oldCapacity: u32;
-      readonly newCapacity: u32;
+      readonly oldCapacity: u64;
+      readonly newCapacity: u64;
       readonly nextBlockWhenChangeAllowed: u32;
     } & Struct;
     readonly isSlashed: boolean;
@@ -1771,7 +1771,7 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletStorageProvidersValueProposition (128) */
   interface PalletStorageProvidersValueProposition extends Struct {
     readonly identifier: H256;
-    readonly dataLimit: u32;
+    readonly dataLimit: u64;
     readonly protocols: Vec<Bytes>;
   }
   /** @name PalletFileSystemEvent (130) */
@@ -1811,7 +1811,7 @@ declare module "@polkadot/types/lookup" {
       readonly bucketId: H256;
       readonly location: Bytes;
       readonly fingerprint: H256;
-      readonly size_: u32;
+      readonly size_: u64;
       readonly peerIds: Vec<Bytes>;
     } & Struct;
     readonly isMspAcceptedStoring: boolean;
@@ -1830,7 +1830,7 @@ declare module "@polkadot/types/lookup" {
       readonly fingerprint: H256;
       readonly multiaddresses: Vec<Bytes>;
       readonly owner: AccountId32;
-      readonly size_: u32;
+      readonly size_: u64;
     } & Struct;
     readonly isBspConfirmedStoring: boolean;
     readonly asBspConfirmedStoring: {
@@ -2071,13 +2071,13 @@ declare module "@polkadot/types/lookup" {
     readonly asDynamicRatePaymentStreamCreated: {
       readonly userAccount: AccountId32;
       readonly providerId: H256;
-      readonly amountProvided: u32;
+      readonly amountProvided: u64;
     } & Struct;
     readonly isDynamicRatePaymentStreamUpdated: boolean;
     readonly asDynamicRatePaymentStreamUpdated: {
       readonly userAccount: AccountId32;
       readonly providerId: H256;
-      readonly newAmountProvided: u32;
+      readonly newAmountProvided: u64;
     } & Struct;
     readonly isDynamicRatePaymentStreamDeleted: boolean;
     readonly asDynamicRatePaymentStreamDeleted: {
@@ -3666,14 +3666,14 @@ declare module "@polkadot/types/lookup" {
   interface PalletStorageProvidersCall extends Enum {
     readonly isRequestMspSignUp: boolean;
     readonly asRequestMspSignUp: {
-      readonly capacity: u32;
+      readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
       readonly valueProp: PalletStorageProvidersValueProposition;
       readonly paymentAccount: AccountId32;
     } & Struct;
     readonly isRequestBspSignUp: boolean;
     readonly asRequestBspSignUp: {
-      readonly capacity: u32;
+      readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
       readonly paymentAccount: AccountId32;
     } & Struct;
@@ -3686,7 +3686,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspSignOff: boolean;
     readonly isChangeCapacity: boolean;
     readonly asChangeCapacity: {
-      readonly newCapacity: u32;
+      readonly newCapacity: u64;
     } & Struct;
     readonly isAddValueProp: boolean;
     readonly asAddValueProp: {
@@ -3696,7 +3696,7 @@ declare module "@polkadot/types/lookup" {
     readonly asForceMspSignUp: {
       readonly who: AccountId32;
       readonly mspId: H256;
-      readonly capacity: u32;
+      readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
       readonly valueProp: PalletStorageProvidersValueProposition;
       readonly paymentAccount: AccountId32;
@@ -3705,7 +3705,7 @@ declare module "@polkadot/types/lookup" {
     readonly asForceBspSignUp: {
       readonly who: AccountId32;
       readonly bspId: H256;
-      readonly capacity: u32;
+      readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
       readonly paymentAccount: AccountId32;
       readonly weight: Option<u32>;
@@ -3759,7 +3759,7 @@ declare module "@polkadot/types/lookup" {
       readonly bucketId: H256;
       readonly location: Bytes;
       readonly fingerprint: H256;
-      readonly size_: u32;
+      readonly size_: u64;
       readonly mspId: H256;
       readonly peerIds: Vec<Bytes>;
     } & Struct;
@@ -3793,7 +3793,7 @@ declare module "@polkadot/types/lookup" {
       readonly location: Bytes;
       readonly owner: AccountId32;
       readonly fingerprint: H256;
-      readonly size_: u32;
+      readonly size_: u64;
       readonly canServe: bool;
       readonly inclusionForestProof: SpTrieStorageProofCompactProof;
     } & Struct;
@@ -3809,7 +3809,7 @@ declare module "@polkadot/types/lookup" {
       readonly location: Bytes;
       readonly owner: AccountId32;
       readonly fingerprint: H256;
-      readonly size_: u32;
+      readonly size_: u64;
       readonly inclusionForestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly isDeleteFile: boolean;
@@ -3817,7 +3817,7 @@ declare module "@polkadot/types/lookup" {
       readonly bucketId: H256;
       readonly fileKey: H256;
       readonly location: Bytes;
-      readonly size_: u32;
+      readonly size_: u64;
       readonly fingerprint: H256;
       readonly maybeInclusionForestProof: Option<SpTrieStorageProofCompactProof>;
     } & Struct;
@@ -3907,13 +3907,13 @@ declare module "@polkadot/types/lookup" {
     readonly asCreateDynamicRatePaymentStream: {
       readonly providerId: H256;
       readonly userAccount: AccountId32;
-      readonly amountProvided: u32;
+      readonly amountProvided: u64;
     } & Struct;
     readonly isUpdateDynamicRatePaymentStream: boolean;
     readonly asUpdateDynamicRatePaymentStream: {
       readonly providerId: H256;
       readonly userAccount: AccountId32;
-      readonly newAmountProvided: u32;
+      readonly newAmountProvided: u64;
     } & Struct;
     readonly isDeleteDynamicRatePaymentStream: boolean;
     readonly asDeleteDynamicRatePaymentStream: {
@@ -4588,8 +4588,8 @@ declare module "@polkadot/types/lookup" {
   }
   /** @name PalletStorageProvidersBackupStorageProvider (392) */
   interface PalletStorageProvidersBackupStorageProvider extends Struct {
-    readonly capacity: u32;
-    readonly capacityUsed: u32;
+    readonly capacity: u64;
+    readonly capacityUsed: u64;
     readonly multiaddresses: Vec<Bytes>;
     readonly root: H256;
     readonly lastCapacityChange: u32;
@@ -4600,8 +4600,8 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletStorageProvidersMainStorageProvider (393) */
   interface PalletStorageProvidersMainStorageProvider extends Struct {
     readonly buckets: Vec<PalletStorageProvidersBucket>;
-    readonly capacity: u32;
-    readonly capacityUsed: u32;
+    readonly capacity: u64;
+    readonly capacityUsed: u64;
     readonly multiaddresses: Vec<Bytes>;
     readonly valueProp: PalletStorageProvidersValueProposition;
     readonly lastCapacityChange: u32;
@@ -4615,7 +4615,7 @@ declare module "@polkadot/types/lookup" {
     readonly mspId: H256;
     readonly private: bool;
     readonly readAccessGroupId: Option<u32>;
-    readonly size_: u32;
+    readonly size_: u64;
   }
   /** @name PalletStorageProvidersError (398) */
   interface PalletStorageProvidersError extends Enum {
@@ -4643,6 +4643,9 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketAlreadyExists: boolean;
     readonly isAppendBucketToMspFailed: boolean;
     readonly isProviderNotSlashable: boolean;
+    readonly isInvalidEncodedFileMetadata: boolean;
+    readonly isInvalidEncodedAccountId: boolean;
+    readonly isPaymentStreamNotFound: boolean;
     readonly type:
       | "AlreadyRegistered"
       | "SignUpNotRequested"
@@ -4667,7 +4670,10 @@ declare module "@polkadot/types/lookup" {
       | "BucketNotFound"
       | "BucketAlreadyExists"
       | "AppendBucketToMspFailed"
-      | "ProviderNotSlashable";
+      | "ProviderNotSlashable"
+      | "InvalidEncodedFileMetadata"
+      | "InvalidEncodedAccountId"
+      | "PaymentStreamNotFound";
   }
   /** @name PalletFileSystemStorageRequestMetadata (399) */
   interface PalletFileSystemStorageRequestMetadata extends Struct {
@@ -4676,7 +4682,7 @@ declare module "@polkadot/types/lookup" {
     readonly bucketId: H256;
     readonly location: Bytes;
     readonly fingerprint: H256;
-    readonly size_: u32;
+    readonly size_: u64;
     readonly msp: Option<ITuple<[H256, bool]>>;
     readonly userPeerIds: Vec<Bytes>;
     readonly dataServerSps: Vec<H256>;
@@ -4688,11 +4694,11 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemStorageRequestBspsMetadata extends Struct {
     readonly confirmed: bool;
   }
-  /** @name PalletFileSystemMoveBucketRequestMetadata (412) */
+  /** @name PalletFileSystemMoveBucketRequestMetadata (413) */
   interface PalletFileSystemMoveBucketRequestMetadata extends Struct {
     readonly requester: AccountId32;
   }
-  /** @name PalletFileSystemError (413) */
+  /** @name PalletFileSystemError (414) */
   interface PalletFileSystemError extends Enum {
     readonly isStorageRequestAlreadyRegistered: boolean;
     readonly isStorageRequestNotFound: boolean;
@@ -4832,6 +4838,7 @@ declare module "@polkadot/types/lookup" {
     readonly isKeyProofNotFound: boolean;
     readonly isKeyProofVerificationFailed: boolean;
     readonly isFailedToApplyDelta: boolean;
+    readonly isFailedToUpdateProviderAfterKeyRemoval: boolean;
     readonly isTooManyValidProofSubmitters: boolean;
     readonly type:
       | "NotProvider"
@@ -4854,6 +4861,7 @@ declare module "@polkadot/types/lookup" {
       | "KeyProofNotFound"
       | "KeyProofVerificationFailed"
       | "FailedToApplyDelta"
+      | "FailedToUpdateProviderAfterKeyRemoval"
       | "TooManyValidProofSubmitters";
   }
   /** @name PalletPaymentStreamsFixedRatePaymentStream (423) */
@@ -4865,7 +4873,7 @@ declare module "@polkadot/types/lookup" {
   }
   /** @name PalletPaymentStreamsDynamicRatePaymentStream (424) */
   interface PalletPaymentStreamsDynamicRatePaymentStream extends Struct {
-    readonly amountProvided: u32;
+    readonly amountProvided: u64;
     readonly priceIndexWhenLastCharged: u128;
     readonly userDeposit: u128;
     readonly outOfFundsTick: Option<u32>;
