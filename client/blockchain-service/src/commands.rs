@@ -28,10 +28,8 @@ use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, StopStoringForInsolventUserRequest,
-        RetryStrategy, SubmitProofRequest,
-    , Tip,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RetryStrategy,
+        StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
     },
 };
 

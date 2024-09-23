@@ -332,9 +332,13 @@ where
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(stop_storing_for_insolvent_user_call)
+                .send_extrinsic(stop_storing_for_insolvent_user_call, Tip::from(0))
                 .await?
-                .with_timeout(Duration::from_secs(60))
+                .with_timeout(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .extrinsic_retry_timeout,
+                ))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await?;
 
@@ -368,7 +372,7 @@ where
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call)
+                    .send_extrinsic(call, Tip::from(0))
                     .await;
 
                 match charging_result {
