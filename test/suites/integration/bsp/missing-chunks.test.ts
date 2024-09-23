@@ -1,5 +1,6 @@
-import { describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, registerToxic, type EnrichedBspApi } from "../../../util";
 
+// TODO: Add asserts to this test case when we impl the missing chunks handling
 describeBspNet(
   "BSP: Missing Chunks",
   { initialised: false, networkConfig: "noisy", toxics: [], keepAlive: false },
@@ -15,39 +16,34 @@ describeBspNet(
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      await userApi.file.newStorageRequest(source, destination, bucketName);
 
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
+      //  use toxiproxy to close the connection after 50 KB
+      await registerToxic({
+        type: "limit_data",
+        name: "limit_data",
+        toxicity: 1,
+        stream: "upstream",
+        attributes: {
+          bytes: 51200
+        }
+      });
 
-      const { fingerprint, file_size, location } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
-
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.issueStorageRequest(
-          newBucketEventDataBlob.bucketId,
-          location,
-          (fingerprint as any).toString().slice(0, -1).concat("A"),
-          file_size,
-          userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
-        ),
-        shUser
-      );
-      //  use toxiproxy to drop the chunks
       await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",
         checkTxPool: true
       });
+
+      await userApi.block.seal();
+
+      // Example of how to assert on a log message
+      await userApi.assert.log({
+        searchString: "Received remote upload request for file FileKey(",
+        containerName: "docker-sh-bsp-1"
+      });
+
+      // TODO Add an assert that shows this process timing out or being handled in a specific way
     });
   }
 );
