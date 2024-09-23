@@ -1,18 +1,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, FullCodec, HasCompact};
-use frame_support::dispatch::DispatchResult;
-use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
-use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
-use frame_support::traits::{fungible, Incrementable};
-use frame_support::{BoundedBTreeSet, Parameter};
-use scale_info::prelude::fmt::Debug;
-use scale_info::TypeInfo;
+use frame_support::{
+    dispatch::DispatchResult,
+    pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member},
+    sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps},
+    traits::{fungible, Incrementable},
+    BoundedBTreeSet, Parameter,
+};
+use scale_info::{prelude::fmt::Debug, TypeInfo};
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating};
-use sp_runtime::{BoundedVec, DispatchError};
-use sp_std::collections::btree_set::BTreeSet;
-use sp_std::vec::Vec;
+use sp_runtime::{
+    traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating},
+    BoundedVec, DispatchError,
+};
+use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -74,7 +76,7 @@ pub trait ReadBucketsInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Type of the root of the buckets.
     type MerkleHash: Parameter
@@ -186,7 +188,7 @@ pub trait MutateBucketsInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
@@ -280,7 +282,7 @@ pub trait ReadStorageProvidersInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Type of the counter of the total number of registered Storage Providers.
     type SpCount: Parameter
@@ -386,7 +388,7 @@ pub trait MutateStorageProvidersInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Increase the used capacity of a Storage Provider (MSP or BSP). To be called when confirming
     /// that it's storing a new file.
@@ -504,6 +506,12 @@ pub trait MutateChallengeableProvidersInterface {
 
     /// Update the root for a registered challengeable Provider.
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
+
+    /// Update the information of a registered challengeable Provider after a successful trie element removal.
+    fn update_provider_after_key_removal(
+        who: &Self::ProviderId,
+        removed_trie_value: &Vec<u8>,
+    ) -> DispatchResult;
 }
 
 /// A trait to read information about generic Providers, such as their ID, owner, root, stake, etc.
@@ -624,7 +632,7 @@ pub trait SystemMetricsInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact
-        + Into<u32>;
+        + Into<u64>;
 
     /// Get the total available capacity of units of the network.
     fn get_total_capacity() -> Self::ProvidedUnit;
@@ -937,6 +945,12 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::DynamicRatePaymentStream>;
+
+    /// Get the amount provided of a dynamic-rate payment stream between a User and a Provider
+    fn get_dynamic_rate_payment_stream_amount_provided(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::Units>;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.

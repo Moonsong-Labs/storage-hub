@@ -5332,7 +5332,7 @@ mod delete_file_and_pending_deletions_tests {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = u32::MAX;
+                let size = u64::MAX;
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
@@ -5347,7 +5347,7 @@ mod delete_file_and_pending_deletions_tests {
                         owner_account_id.clone(),
                         bucket_id,
                         location.clone(),
-                        i,
+                        i as u64,
                         fingerprint,
                     );
 
@@ -5356,7 +5356,7 @@ mod delete_file_and_pending_deletions_tests {
                         bucket_id,
                         file_key,
                         location.clone(),
-                        i,
+                        i as u64,
                         fingerprint,
                         None,
                     ));
