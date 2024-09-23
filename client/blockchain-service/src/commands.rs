@@ -4,7 +4,7 @@ use log::warn;
 use serde_json::Number;
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
@@ -14,9 +14,6 @@ use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
     QueryStorageProviderCapacityError,
 };
-use sp_api::ApiError;
-use sp_core::H256;
-
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
     BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId, TickNumber,

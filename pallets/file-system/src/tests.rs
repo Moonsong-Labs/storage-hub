@@ -4328,9 +4328,8 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -6509,6 +6508,8 @@ mod stop_storing_for_insolvent_user {
 
     mod success {
 
+        use shp_traits::PaymentStreamsInterface;
+
         use super::*;
 
         #[test]
@@ -6985,10 +6986,12 @@ mod stop_storing_for_insolvent_user {
                 // its debt but a lagging SP has not updated its storage state yet.
 
                 // Delete the payment stream between the user and the BSP.
-                assert_ok!(PaymentStreams::delete_dynamic_rate_payment_stream(
-                    &bsp_id,
-                    &owner_account_id,
-                ));
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                        &bsp_id,
+                        &owner_account_id,
+                    )
+                );
                 // Try to stop storing the user's file as the BSP.
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     bsp_signed.clone(),
@@ -7304,9 +7307,8 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(

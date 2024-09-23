@@ -101,31 +101,6 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
-// Converter from the Balance type to the BlockNumber type for math.
-// It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct SaturatingBalanceToBlockNumber;
-
-impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
-    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
-        block_number.saturated_into()
-    }
-}
-
-pub struct BlockFullnessHeadroom;
-impl Get<Weight> for BlockFullnessHeadroom {
-    fn get() -> Weight {
-        Weight::from_parts(10_000, 0)
-            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
-    }
-}
-
-pub struct MinNotFullBlocksRatio;
-impl Get<Perbill> for MinNotFullBlocksRatio {
-    fn get() -> Perbill {
-        Perbill::from_percent(50)
-    }
-}
-
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -161,6 +136,21 @@ pub struct SaturatingBalanceToBlockNumber;
 impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
     fn convert(block_number: Balance) -> BlockNumberFor<Test> {
         block_number.saturated_into()
+    }
+}
+
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        Weight::from_parts(10_000, 0)
+            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        Perbill::from_percent(50)
     }
 }
 
