@@ -1377,12 +1377,31 @@ where
 
         // Verify the proof of inclusion.
         // If the Provider is a BSP, the proof is verified against the BSP's forest.
-        let proven_keys = if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+        let new_root = if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
+            let proven_keys =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                    &sp_id,
+                    &[file_key],
+                    &inclusion_forest_proof,
+                )?;
+
+            // Ensure that the file key IS part of the BSP's forest.
+            ensure!(
+                proven_keys.contains(&file_key),
+                Error::<T>::ExpectedInclusionProof
+            );
+
+            // Compute new root after removing file key from forest partial trie.
+            let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
                 &sp_id,
-                &[file_key],
+                &[(file_key, TrieRemoveMutation::default().into())],
                 &inclusion_forest_proof,
-            )?
+            )?;
+
+            // Update root of the BSP.
+            <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
+
+            new_root
         } else {
             // If the Provider is a MSP, the proof is verified against the Bucket's root.
 
@@ -1402,28 +1421,34 @@ where
                 <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
                     .ok_or(Error::<T>::BucketNotFound)?;
 
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
-                &bucket_root,
-                &[file_key],
-                &inclusion_forest_proof,
-            )?
+            let proven_keys =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                    &bucket_root,
+                    &[file_key],
+                    &inclusion_forest_proof,
+                )?;
+
+            // Ensure that the file key IS part of the Bucket's trie.
+            ensure!(
+                proven_keys.contains(&file_key),
+                Error::<T>::ExpectedInclusionProof
+            );
+
+            // Compute new root after removing file key from forest partial trie.
+            let new_root =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
+                    &bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &inclusion_forest_proof,
+                )?;
+
+            // Update root of the Bucket.
+            <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
+                bucket_id, new_root,
+            )?;
+
+            new_root
         };
-
-        // Ensure that the file key IS part of the SP's forest.
-        ensure!(
-            proven_keys.contains(&file_key),
-            Error::<T>::ExpectedInclusionProof
-        );
-
-        // Compute new root after removing file key from forest partial trie.
-        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &sp_id,
-            &[(file_key, TrieRemoveMutation::default().into())],
-            &inclusion_forest_proof,
-        )?;
-
-        // Update root of SP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
 
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
@@ -1637,8 +1662,6 @@ where
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
-        let size: u32 = size.into();
-
         shp_file_metadata::FileMetadata::<
             { shp_constants::H_LENGTH },
             { shp_constants::FILE_CHUNK_SIZE },

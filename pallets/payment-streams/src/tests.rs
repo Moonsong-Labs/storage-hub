@@ -4474,7 +4474,7 @@ fn register_account_as_bsp(account: AccountId, storage_amount: StorageData<Test>
     let deposit_for_storage_amount: BalanceOf<Test> = <SpMinDeposit as Get<u128>>::get()
         .saturating_add(
             <DepositPerData as Get<u128>>::get()
-                .saturating_mul((storage_amount - <SpMinCapacity as Get<u32>>::get()).into()),
+                .saturating_mul((storage_amount - <SpMinCapacity as Get<u64>>::get()).into()),
         );
 
     // Check the balance of the account to make sure it has more than the deposit amount needed
@@ -4521,7 +4521,7 @@ fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>
     let deposit_for_storage_amount: BalanceOf<Test> = <SpMinDeposit as Get<u128>>::get()
         .saturating_add(
             <DepositPerData as Get<u128>>::get()
-                .saturating_mul((storage_amount - <SpMinCapacity as Get<u32>>::get()).into()),
+                .saturating_mul((storage_amount - <SpMinCapacity as Get<u64>>::get()).into()),
         );
 
     // Check the balance of the account to make sure it has more than the deposit amount needed
