@@ -135,10 +135,12 @@ where
             .iter()
             .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
 
+        let encoded_user = user.encode();
+
         while let Some((_, value)) = trie_iter.next().transpose()? {
             let metadata = FileMetadata::decode(&mut &value[..])?;
             let file_key = metadata.file_key::<T::Hash>();
-            if metadata.owner == user.encode() {
+            if metadata.owner == encoded_user {
                 files.push((file_key, metadata));
             }
         }

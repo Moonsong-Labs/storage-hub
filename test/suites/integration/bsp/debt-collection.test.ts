@@ -177,10 +177,8 @@ describeBspNet(
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
     });
 
-    it("BSP correctly deletes all files from an insolvent user", async () => {
-      ///////** INITIAL SETUP **///////
-
-      // Make sure the payment stream between Alice and the DUMMY_BSP_ID actually exists
+    it("Correctly updates payment stream on-chain to make user insolvent", async () => {
+      // Make sure the payment stream between the user and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
           ShConsts.DUMMY_BSP_ID
@@ -222,7 +220,7 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Check if the user owes the provider.
-      let usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
+      const usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
         ShConsts.DUMMY_BSP_ID,
         0
       );
@@ -230,18 +228,13 @@ describeBspNet(
       assert(usersWithDebtResult.asOk.length === 1);
       assert(usersWithDebtResult.asOk[0].toString() === userAddress);
 
-      // Get the last chargeable info of the dummy BSP before proof submission
-      let lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(
-        ShConsts.DUMMY_BSP_ID
-      );
-
       // Seal one more block with the pending extrinsics.
       await userApi.sealBlock();
 
       // Get the current price of storage from the runtime, the new stream deposit and the ED
       const currentPriceOfStorage = await userApi.query.paymentStreams.currentPricePerUnitPerTick();
-      const newStreamDeposit = await userApi.consts.paymentStreams.newStreamDeposit;
-      const existentialDeposit = await userApi.consts.balances.existentialDeposit;
+      const newStreamDeposit = userApi.consts.paymentStreams.newStreamDeposit;
+      const existentialDeposit = userApi.consts.balances.existentialDeposit;
 
       // Get the current free balance of the user
       const freeBalance = (await userApi.query.system.account(userAddress)).data.free;
@@ -267,7 +260,7 @@ describeBspNet(
       const { extSuccess } = updateDynamicRatePaymentStreamResult;
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
-      // Assert that event dynamic-rate payment stream creation was emitted
+      // Assert that event dynamic-rate payment stream update was emitted
       userApi.assertEvent(
         "paymentStreams",
         "DynamicRatePaymentStreamUpdated",
@@ -282,29 +275,33 @@ describeBspNet(
       strictEqual(userAccount.toString(), userAddress);
       strictEqual(providerId.toString(), ShConsts.DUMMY_BSP_ID.toString());
       strictEqual(newAmountProvided.toNumber(), newAmountProvidedForInsolvency.toNumber());
+    });
 
-      ///////** INITIAL PROOF SUBMISSION **///////
-
+    it("Correctly flags update payment stream as without funds after charging", async () => {
+      // Get the last chargeable info of the dummy BSP before proof submission
+      const lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(
+        ShConsts.DUMMY_BSP_ID
+      );
       // Calculate the next challenge tick for the DUMMY_BSP_ID.
       // We first get the last tick for which the BSP submitted a proof.
-      let lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
         ShConsts.DUMMY_BSP_ID
       );
       assert(lastTickResult.isOk);
-      let lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      let challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
         ShConsts.DUMMY_BSP_ID
       );
       assert(challengePeriodResult.isOk);
-      let challengePeriod = challengePeriodResult.asOk.toNumber();
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      let nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
       // Calculate how many blocks to advance until next challenge tick.
       let currentBlock = await userApi.rpc.chain.getBlock();
       let currentBlockNumber = currentBlock.block.header.number.toNumber();
-      let blocksToAdvance = nextChallengeTick - currentBlockNumber;
+      const blocksToAdvance = nextChallengeTick - currentBlockNumber;
 
       // Advance blocksToAdvance blocks.
       for (let i = 0; i < blocksToAdvance; i++) {
@@ -329,7 +326,7 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Assert for the the event of the proof successfully submitted and verified.
-      let proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
+      const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
       strictEqual(proofAcceptedEvents.length, 3, "There should be three proofs accepted events");
 
       // Check that the Providers were added to the list of Providers that have submitted proofs
@@ -347,7 +344,7 @@ describeBspNet(
       );
 
       // Check that the last chargeable info of the dummy BSP has not been updated yet
-      let lastChargeableInfoAfterProofSubmission =
+      const lastChargeableInfoAfterProofSubmission =
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
@@ -358,7 +355,7 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Assert for the the event of the last chargeable info of the Providers being updated
-      let lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
+      const lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
         "paymentStreams",
         "LastChargeableInfoUpdated"
       );
@@ -368,8 +365,8 @@ describeBspNet(
         "There should be three last chargeable info updated events"
       );
 
-      // Check the last chargeable info of the dummy BSP
-      lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(
+      // Get the last chargeable info of the dummy BSP after it's updated
+      const lastChargeableInfoAfterUpdate = await userApi.query.paymentStreams.lastChargeableInfo(
         ShConsts.DUMMY_BSP_ID
       );
 
@@ -382,14 +379,17 @@ describeBspNet(
       // Check that the last chargeable price index of the dummy BSP is greater than the last charged price index of the payment stream
       // so that the payment stream can be charged by the BSP
       assert(
-        paymentStreamInfo.unwrap().priceIndexWhenLastCharged.lt(lastChargeableInfo.priceIndex)
+        paymentStreamInfo
+          .unwrap()
+          .priceIndexWhenLastCharged.lt(lastChargeableInfoAfterUpdate.priceIndex)
       );
 
       // Check that the user now owes the provider.
-      usersWithDebtResult = await userApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
-        ShConsts.DUMMY_BSP_ID,
-        1
-      );
+      const usersWithDebtResult =
+        await userApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
+          ShConsts.DUMMY_BSP_ID,
+          1
+        );
       assert(usersWithDebtResult.isOk);
       assert(usersWithDebtResult.asOk.length === 1);
       assert(usersWithDebtResult.asOk[0].toString() === userAddress);
@@ -429,29 +429,33 @@ describeBspNet(
           userAddress
         );
       assert(solventThreePaymentStreamInfoAfterCharging.unwrap().outOfFundsTick.isNone);
+    });
 
-      ///////** SECOND PROOF SUBMISSION, USER MARKED AS WITHOUT FUNDS **///////
-
+    it("Correctly flags user as without funds after grace period, emits event and deletes payment stream", async () => {
+      // Get the last chargeable info of the dummy BSP before proof submission
+      const lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(
+        ShConsts.DUMMY_BSP_ID
+      );
       // Calculate the next challenge tick for the DUMMY_BSP_ID.
       // We first get the last tick for which the BSP submitted a proof.
-      lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
         ShConsts.DUMMY_BSP_ID
       );
       assert(lastTickResult.isOk);
-      lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
         ShConsts.DUMMY_BSP_ID
       );
       assert(challengePeriodResult.isOk);
-      challengePeriod = challengePeriodResult.asOk.toNumber();
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
       // Calculate how many blocks to advance until next challenge tick.
-      currentBlock = await userApi.rpc.chain.getBlock();
-      currentBlockNumber = currentBlock.block.header.number.toNumber();
-      blocksToAdvance = nextChallengeTick - currentBlockNumber;
+      let currentBlock = await userApi.rpc.chain.getBlock();
+      let currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const blocksToAdvance = nextChallengeTick - currentBlockNumber;
 
       // Advance blocksToAdvance blocks
       for (let i = 0; i < blocksToAdvance; i++) {
@@ -468,7 +472,7 @@ describeBspNet(
       // Check that no Providers have submitted a valid proof yet.
       currentBlock = await userApi.rpc.chain.getBlock();
       currentBlockNumber = currentBlock.block.header.number.toNumber();
-      providersWithProofs =
+      let providersWithProofs =
         await userApi.query.proofsDealer.validProofSubmittersLastTicks(currentBlockNumber);
       assert(providersWithProofs.isEmpty, "No Providers should have submitted a valid proof yet");
 
@@ -476,7 +480,7 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Assert for the the event of the proof successfully submitted and verified.
-      proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
+      const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
       strictEqual(proofAcceptedEvents.length, 3, "There should be three proofs accepted events");
 
       // Check that the Providers were added to the list of Providers that have submitted proofs
@@ -494,7 +498,7 @@ describeBspNet(
       );
 
       // Check that the last chargeable info of the dummy BSP has not been updated yet
-      lastChargeableInfoAfterProofSubmission =
+      const lastChargeableInfoAfterProofSubmission =
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
@@ -505,7 +509,7 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Assert for the the event of the last chargeable info of the Providers being updated
-      lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
+      const lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
         "paymentStreams",
         "LastChargeableInfoUpdated"
       );
@@ -535,24 +539,24 @@ describeBspNet(
       if (!blockResult.events?.find((event) => event.event.method === "UserWithoutFunds")) {
         // Calculate the next challenge tick for the DUMMY_BSP_ID.
         // We first get the last tick for which the BSP submitted a proof.
-        lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
           ShConsts.DUMMY_BSP_ID
         );
         assert(lastTickResult.isOk);
-        lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
         // Then we get the challenge period for the BSP.
-        challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
           ShConsts.DUMMY_BSP_ID
         );
         assert(challengePeriodResult.isOk);
-        challengePeriod = challengePeriodResult.asOk.toNumber();
+        const challengePeriod = challengePeriodResult.asOk.toNumber();
         // Then we calculate the next challenge tick.
-        nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+        const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
         // Calculate how many blocks to advance until next challenge tick.
         currentBlock = await userApi.rpc.chain.getBlock();
         currentBlockNumber = currentBlock.block.header.number.toNumber();
-        blocksToAdvance = nextChallengeTick - currentBlockNumber;
+        const blocksToAdvance = nextChallengeTick - currentBlockNumber;
         // Advance blocksToAdvance blocks
         for (let i = 0; i < blocksToAdvance; i++) {
           await userApi.sealBlock();
@@ -593,9 +597,9 @@ describeBspNet(
         userAddress
       );
       assert(deletedPaymentStreamInfo.isNone);
+    });
 
-      ///////** DELETION OF FILES **///////
-
+    it("BSP correctly deletes all files from an insolvent user", async () => {
       // We execute this loop three times since that's the amount of files the user has stored with the BSPs
       for (let i = 0; i < 3; i++) {
         // Check that the three Providers are trying to delete the files of the user

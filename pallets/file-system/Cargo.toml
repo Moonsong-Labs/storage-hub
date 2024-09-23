@@ -33,7 +33,6 @@ sp-trie = { workspace = true }
 
 # Local
 pallet-file-system-runtime-api = { workspace = true }
-pallet-payment-streams = { workspace = true }
 
 shp-constants = { workspace = true }
 shp-file-metadata = { workspace = true }

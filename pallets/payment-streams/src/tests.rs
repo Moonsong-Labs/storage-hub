@@ -374,6 +374,7 @@ mod fixed_rate_streams {
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
+                let deposit = rate * <NewStreamDeposit as Get<u64>>::get() as u128;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_msp_id,
@@ -382,8 +383,15 @@ mod fixed_rate_streams {
                     )
                 );
 
+                // Check that the deposit is correct
+                let payment_stream_info =
+                    PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
+                        .unwrap();
+                assert_eq!(payment_stream_info.user_deposit, deposit);
+
                 // Update the rate of the payment stream from Bob to Alice to 20 units per block
                 let new_rate: BalanceOf<Test> = 20;
+                let new_deposit = new_rate * <NewStreamDeposit as Get<u64>>::get() as u128;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
                         &alice_msp_id,
@@ -397,8 +405,9 @@ mod fixed_rate_streams {
                     PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
                         .unwrap();
 
-                // The payment stream should be updated with the correct rate
+                // The payment stream should be updated with the correct rate and deposit
                 assert_eq!(payment_stream_info.rate, new_rate);
+                assert_eq!(payment_stream_info.user_deposit, new_deposit);
 
                 // The event should be emitted
                 System::assert_last_event(
@@ -2055,7 +2064,7 @@ mod dynamic_rate_streams {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
-                let amount_provided = 100;
+                let amount_provided: u64 = 100;
                 let current_price = 10;
                 let current_price_index = 10000;
 
@@ -2069,6 +2078,9 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 100 units provided
+                let deposit = current_price
+                    * amount_provided as u128
+                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
@@ -2077,8 +2089,17 @@ mod dynamic_rate_streams {
                     )
                 );
 
+                // Check that the deposit was correct
+                let payment_stream_info =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&alice_bsp_id, &bob)
+                        .unwrap();
+                assert_eq!(payment_stream_info.user_deposit, deposit);
+
                 // Update the amount provided of the payment stream from Bob to Alice to 200 units
-                let new_amount_provided = 200;
+                let new_amount_provided: u64 = 200;
+                let new_deposit = current_price
+                    * new_amount_provided as u128
+                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
                         &alice_bsp_id,
@@ -2092,8 +2113,9 @@ mod dynamic_rate_streams {
                     PaymentStreams::get_dynamic_rate_payment_stream_info(&alice_bsp_id, &bob)
                         .unwrap();
 
-                // The payment stream should be updated with the correct amount_provided
+                // The payment stream should be updated with the correct amount_provided and deposit
                 assert_eq!(payment_stream_info.amount_provided, new_amount_provided);
+                assert_eq!(payment_stream_info.user_deposit, new_deposit);
 
                 // The event should be emitted
                 System::assert_last_event(
@@ -4453,6 +4475,172 @@ mod user_without_funds {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
             });
         }
+    }
+}
+
+mod users_with_debt_over_threshold {
+
+    use super::*;
+
+    #[test]
+    fn get_users_with_debt_over_threshold_correctly_returns_list_of_users() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let charlie: AccountId = 2;
+            let dave: AccountId = 3;
+            let amount_provided_bob = 100;
+            let amount_provided_charlie = 1;
+            let current_price = 10;
+            let current_price_index = 10000;
+            let empty_account_id_vector: Vec<AccountId> = Vec::new();
+
+            // Update the current price and current price index
+            CurrentPricePerUnitPerTick::<Test>::put(current_price);
+            AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+
+            // Register Dave as a BSP with 1000 units of data and get his BSP ID
+            register_account_as_bsp(dave, 1000);
+            let dave_bsp_id =
+                <StorageProviders as ReadProvidersInterface>::get_provider_id(dave).unwrap();
+
+            // Create a payment stream from Bob to Alice of 100 units provided
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                    &alice_bsp_id,
+                    &bob,
+                    &amount_provided_bob,
+                )
+            );
+
+            // Create a payment stream from Bob to Dave of 100 units provided
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                    &dave_bsp_id,
+                    &bob,
+                    &amount_provided_bob,
+                )
+            );
+
+            // Create a payment stream from Charlie to Alice of 200 units provided
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                    &alice_bsp_id,
+                    &charlie,
+                    &amount_provided_charlie,
+                )
+            );
+
+            // Check that `get_users_with_debt_over_threshold` for Alice returns Bob and Charlie if threshold is 0
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&alice_bsp_id, 0).unwrap(),
+                vec![bob, charlie]
+            );
+
+            // And it returns an empty vector if threshold is > 0
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&alice_bsp_id, 1).unwrap(),
+                empty_account_id_vector
+            );
+
+            // Check that `get_users_with_debt_over_threshold` for Dave returns Bob if threshold is 0
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&dave_bsp_id, 0).unwrap(),
+                vec![bob]
+            );
+
+            // And it returns an empty vector if threshold is > 0
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&dave_bsp_id, 1).unwrap(),
+                empty_account_id_vector
+            );
+
+            // Set the last chargeable price index of Alice to the equivalent of one block ahead
+            LastChargeableInfo::<Test>::insert(
+                &alice_bsp_id,
+                ProviderLastChargeableInfo {
+                    last_chargeable_tick: System::block_number(),
+                    price_index: DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob)
+                        .unwrap()
+                        .price_index_when_last_charged
+                        + current_price,
+                },
+            );
+
+            // Same with Dave
+            LastChargeableInfo::<Test>::insert(
+                &dave_bsp_id,
+                ProviderLastChargeableInfo {
+                    last_chargeable_tick: System::block_number(),
+                    price_index: DynamicRatePaymentStreams::<Test>::get(&dave_bsp_id, &bob)
+                        .unwrap()
+                        .price_index_when_last_charged
+                        + current_price,
+                },
+            );
+
+            // Check that now `get_users_with_debt_over_threshold` for Alice returns Bob and Charlie with a threshold of 1
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&alice_bsp_id, 1).unwrap(),
+                vec![bob, charlie]
+            );
+
+            // And for Dave returns Bob with a threshold of 1
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&dave_bsp_id, 1).unwrap(),
+                vec![bob]
+            );
+
+            // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+            run_to_block(System::block_number() + 10);
+            let bob_new_balance = NativeBalance::free_balance(&bob);
+            let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                + bob_new_balance / (amount_provided_bob as u128)
+                + 1;
+            LastChargeableInfo::<Test>::insert(
+                &alice_bsp_id,
+                ProviderLastChargeableInfo {
+                    last_chargeable_tick: System::block_number(),
+                    price_index: current_price_index,
+                },
+            );
+
+            // Charge the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::charge_payment_streams(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Advance enough blocks for Bob to be flagged as a user without funds
+            run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+            assert_ok!(PaymentStreams::charge_payment_streams(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that the UserWithoutFunds event was emitted for Bob
+            System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+            // Check that Bob is flagged as a user without funds
+            assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+            // Check that now `get_users_with_debt_over_threshold` for Alice returns only Charlie with a threshold of 1
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&alice_bsp_id, 1).unwrap(),
+                vec![charlie]
+            );
+
+            // And returns an empty vector for Dave, since Bob has been flagged as without funds
+            assert_eq!(
+                PaymentStreams::get_users_with_debt_over_threshold(&dave_bsp_id, 1).unwrap(),
+                empty_account_id_vector
+            );
+        });
     }
 }
 

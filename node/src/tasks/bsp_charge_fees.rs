@@ -73,80 +73,6 @@ where
     }
 }
 
-impl<FL, FSH> BspChargeFeesTask<FL, FSH>
-where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
-{
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
-        Self {
-            storage_hub_handler,
-        }
-    }
-
-    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
-        // Remove the file key from the Forest.
-        // Check that the new Forest root matches the one on-chain.
-        {
-            let fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&NoKey)
-                .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-            fs.write().await.delete_file_key(file_key).map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to remove file key from Forest storage: {:?}",
-                    e
-                )
-            })?;
-        };
-
-        Ok(())
-    }
-
-    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
-        // Get root for this provider according to the runtime.
-        let onchain_root = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_forest_root(provider_id)
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query provider root from runtime after successfully submitting proof. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to query provider root from runtime after successfully submitting proof: {:?}",
-                    e
-                )
-            })?;
-
-        trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
-
-        // Check that the new Forest root matches the one on-chain.
-        let fs = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get(&NoKey)
-            .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-        let root = { fs.read().await.root() };
-
-        trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
-
-        if root != onchain_root {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Applying mutations yielded different root than the one on-chain. This means that there is a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "Applying mutations yielded different root than the one on-chain."
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 impl<FL, FSH> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -214,14 +140,31 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.who;
 
-        // Queue a request to confirm the storing of the file.
-        self.storage_hub_handler
-            .blockchain
-            .queue_stop_storing_for_insolvent_user_request(StopStoringForInsolventUserRequest::new(
-                insolvent_user,
-            ))
-            .await?;
+        // Check if we are storing any file for this user.
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
+        let user_files = fs
+            .read()
+            .await
+            .get_files_by_user(&insolvent_user)
+            .map_err(|e| anyhow!("Failed to get metadata from Forest: {:?}", e))?;
+
+        // If we are, queue up a file deletion request for that user.
+        if !user_files.is_empty() {
+            info!(target: LOG_TARGET, "Files found for user {:?}, queueing up file deletion", insolvent_user);
+            // Queue a request to stop storing a file from the insolvent user.
+            self.storage_hub_handler
+                .blockchain
+                .queue_stop_storing_for_insolvent_user_request(
+                    StopStoringForInsolventUserRequest::new(insolvent_user),
+                )
+                .await?;
+        }
         Ok(())
     }
 }
@@ -241,14 +184,31 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.owner;
 
-        // Queue a request to confirm the storing of the file.
-        self.storage_hub_handler
-            .blockchain
-            .queue_stop_storing_for_insolvent_user_request(StopStoringForInsolventUserRequest::new(
-                insolvent_user,
-            ))
-            .await?;
+        // Check if we are storing any file for this user.
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
+        let user_files = fs
+            .read()
+            .await
+            .get_files_by_user(&insolvent_user)
+            .map_err(|e| anyhow!("Failed to get metadata from Forest: {:?}", e))?;
+
+        // If we are, queue up a file deletion request for that user.
+        if !user_files.is_empty() {
+            info!(target: LOG_TARGET, "Files found for user {:?}, queueing up file deletion", insolvent_user);
+            // Queue a request to stop storing a file from the insolvent user.
+            self.storage_hub_handler
+                .blockchain
+                .queue_stop_storing_for_insolvent_user_request(
+                    StopStoringForInsolventUserRequest::new(insolvent_user),
+                )
+                .await?;
+        }
         Ok(())
     }
 }
@@ -387,7 +347,87 @@ where
         }
 
         // Release the forest root write "lock".
-        let _ = forest_root_write_tx.send(());
+        let forest_root_write_result = forest_root_write_tx.send(());
+        if forest_root_write_result.is_err() {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
+            return Err(anyhow!(
+                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+impl<FL, FSH> BspChargeFeesTask<FL, FSH>
+where
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+        Self {
+            storage_hub_handler,
+        }
+    }
+
+    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
+        // Remove the file key from the Forest.
+        // Check that the new Forest root matches the one on-chain.
+        {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&NoKey)
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+            fs.write().await.delete_file_key(file_key).map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                anyhow!(
+                    "Failed to remove file key from Forest storage: {:?}",
+                    e
+                )
+            })?;
+        };
+
+        Ok(())
+    }
+
+    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
+        // Get root for this provider according to the runtime.
+        let onchain_root = self
+            .storage_hub_handler
+            .blockchain
+            .query_provider_forest_root(provider_id)
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query provider root from runtime after successfully submitting proof. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                anyhow!(
+                    "Failed to query provider root from runtime after successfully submitting proof: {:?}",
+                    e
+                )
+            })?;
+
+        trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
+
+        // Check that the new Forest root matches the one on-chain.
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+        let root = { fs.read().await.root() };
+
+        trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
+
+        if root != onchain_root {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Applying mutations yielded different root than the one on-chain. This means that there is a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team.");
+            return Err(anyhow!(
+                "Applying mutations yielded different root than the one on-chain."
+            ));
+        }
 
         Ok(())
     }

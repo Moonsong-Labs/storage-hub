@@ -1376,7 +1376,9 @@ where
                 .ok_or(Error::<T>::NotASp)?;
 
         // Check that the owner of the file has been flagged as insolvent OR that the Provider does not
-        // have any active payment streams with the user.
+        // have any active payment streams with the user. The rationale here is that if there is a
+        // user who cannot pay, or is just not paying anymore, the SP has the right to stop storing files for them
+        // without having to pay any penalty.
         ensure!(
             <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner)
                 || !<T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(
