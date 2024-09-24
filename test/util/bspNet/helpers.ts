@@ -254,6 +254,11 @@ export const closeSimpleBspNet = async () => {
   });
 
   const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
+
+  if (docker.getContainer("toxiproxy")) {
+    promises.push(docker.getContainer("toxiproxy").stop());
+  }
+
   await Promise.all(promises);
 
   await docker.pruneContainers();
