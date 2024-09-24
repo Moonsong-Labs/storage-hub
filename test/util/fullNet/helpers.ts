@@ -186,6 +186,9 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(bspKey.address, amount))
     );
     await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(mspKey.address, amount))
+    );
+    await userApi.sealBlock(
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 

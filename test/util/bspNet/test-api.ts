@@ -251,8 +251,9 @@ export class BspNetTestApi implements AsyncDisposable {
         source: string,
         location: string,
         bucketName: string,
+        msp_id?: HexString,
         owner?: KeyringPair
-      ) => Files.sendNewStorageRequest(this._api, source, location, bucketName, undefined, owner)
+      ) => Files.sendNewStorageRequest(this._api, source, location, bucketName, msp_id, owner)
     };
 
     /**
