@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import inquirer from "inquirer";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,17 +94,23 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
 
   // Build Docker image
   const dockerfilePath = path.join(__dirname, "crossbuild-mac-libpq.dockerfile");
-  execSync(`docker build -f ${dockerfilePath} -t crossbuild-libpq ${path.join(__dirname, "..", "..")}`, { stdio: "inherit" });
+  execSync(
+    `docker build -f ${dockerfilePath} -t crossbuild-libpq ${path.join(__dirname, "..", "..")}`,
+    { stdio: "inherit" }
+  );
 
   // Create container and copy libpq.so
   execSync("docker create --name linux-libpq-container crossbuild-libpq", { stdio: "inherit" });
-  
+
   const destPath = path.join(__dirname, "..", "..", "target", target, "release", "deps");
-  
+
   // Ensure the destination directory exists
   fs.mkdirSync(destPath, { recursive: true });
 
-  execSync(`docker cp linux-libpq-container:/artifacts/libpq.so ${path.join(destPath, "libpq.so")}`, { stdio: "inherit" });
+  execSync(
+    `docker cp linux-libpq-container:/artifacts/libpq.so ${path.join(destPath, "libpq.so")}`,
+    { stdio: "inherit" }
+  );
 
   // Remove container
   execSync("docker rm linux-libpq-container", { stdio: "inherit" });
