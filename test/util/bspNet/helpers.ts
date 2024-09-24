@@ -263,7 +263,7 @@ export const closeSimpleBspNet = async () => {
     console.log("No proxy found, skipping");
   }
 
-  await Promise.all(promises);
+  await Promise.allSettled(promises);
 
   await docker.pruneContainers();
   await docker.pruneVolumes();
