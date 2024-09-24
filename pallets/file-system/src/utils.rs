@@ -1778,9 +1778,9 @@ where
         let threshold_slope = base_slope.saturating_add(
             base_slope
                 .checked_mul(&bsp_weight)
-                .unwrap_or(T::ThresholdType::zero())
+                .unwrap_or(maximum_threshold)
                 .checked_div(&global_weight)
-                .unwrap_or(T::ThresholdType::zero()),
+                .unwrap_or(T::ThresholdType::one()),
         );
 
         // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
