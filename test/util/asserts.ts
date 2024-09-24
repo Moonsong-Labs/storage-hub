@@ -3,6 +3,7 @@ import invariant from "tiny-invariant";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
 import { sleep } from "./timer";
+import { waitForLog } from "./bspNet";
 
 export type AssertExtrinsicOptions = {
   /** The block height to check. If not provided, the latest block will be used. */
@@ -209,3 +210,20 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
 
   invariant(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
 }
+
+export const assertDockerLog = async (
+  containerName: string,
+  searchString: string,
+  timeoutMs?: number
+) => {
+  const timeout = timeoutMs ?? 10_000;
+  try {
+    return await waitForLog({
+      containerName,
+      searchString,
+      timeout
+    });
+  } catch {
+    throw `No matches for ${searchString} in container ${containerName} after ${timeout / 1000} seconds.`;
+  }
+};

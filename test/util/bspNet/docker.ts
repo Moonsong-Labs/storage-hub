@@ -6,6 +6,7 @@ import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
 import invariant from "tiny-invariant";
+import { PassThrough, type Readable } from "node:stream";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -218,4 +219,67 @@ export const dropTransactionGlobally = async (options: { module: string; method:
     await using api = await BspNetTestApi.connect(endpoint);
     await NodeBspNet.dropTransaction(api, { module: options.module, method: options.method });
   }
+};
+
+export const waitForLog = async (options: {
+  searchString: string;
+  containerName: string;
+  timeout?: number;
+}): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const docker = new Docker();
+    const container = docker.getContainer(options.containerName);
+
+    container.logs(
+      { follow: true, stdout: true, stderr: true, tail: 0, timestamps: false },
+      (err, stream) => {
+        if (err) {
+          return reject(err);
+        }
+
+        if (stream === undefined) {
+          return reject(new Error("No stream returned."));
+        }
+
+        const stdout = new PassThrough();
+        const stderr = new PassThrough();
+
+        docker.modem.demuxStream(stream, stdout, stderr);
+
+        let timeoutHandle: NodeJS.Timeout | undefined;
+
+        const cleanup = () => {
+          (stream as Readable).destroy();
+          stdout.destroy();
+          stderr.destroy();
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        };
+
+        const onData = (chunk: Buffer) => {
+          const log = chunk.toString("utf8");
+          if (log.includes(options.searchString)) {
+            cleanup();
+            resolve(log);
+          }
+        };
+
+        stdout.on("data", onData);
+        stderr.on("data", onData);
+
+        stream.on("error", (err) => {
+          cleanup();
+          reject(err);
+        });
+
+        if (options.timeout) {
+          timeoutHandle = setTimeout(() => {
+            cleanup();
+            reject(new Error(`Timeout of ${options.timeout}ms exceeded while waiting for log.`));
+          }, options.timeout);
+        }
+      }
+    );
+  });
 };
