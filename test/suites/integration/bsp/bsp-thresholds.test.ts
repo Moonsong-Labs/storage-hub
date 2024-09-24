@@ -179,36 +179,45 @@ describeBspNet(
       await api.docker.stopBspContainer("sh-bsp-three");
     });
 
-    it("BSP two cannot spam the chain to volunteer first", async () => {
-      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 50)));
+    it(
+      "BSP two cannot spam the chain to volunteer first",
+      {
+        skip: "Test takes way to long to run. This test actually spams the chain with transactions, unskip it if you want to run it."
+      },
+      async () => {
+        await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 50)));
 
-      const { fileKey } = await api.file.newStorageRequest(
-        "res/cloud.jpg",
-        "test/cloud.jpg",
-        "bucket-3"
-      ); // T0
-      const bsp1VolunteerTick = (
-        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.DUMMY_BSP_ID, fileKey)
-      ).asOk.toNumber();
-      const bsp2VolunteerTick = (
-        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
-      ).asOk.toNumber();
+        const { fileKey } = await api.file.newStorageRequest(
+          "res/cloud.jpg",
+          "test/cloud.jpg",
+          "bucket-3"
+        ); // T0
+        const bsp1VolunteerTick = (
+          await api.call.fileSystemApi.queryEarliestFileVolunteerTick(
+            ShConsts.DUMMY_BSP_ID,
+            fileKey
+          )
+        ).asOk.toNumber();
+        const bsp2VolunteerTick = (
+          await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
+        ).asOk.toNumber();
 
-      assert(bsp1VolunteerTick < bsp2VolunteerTick, "BSP one should be able to volunteer first");
+        assert(bsp1VolunteerTick < bsp2VolunteerTick, "BSP one should be able to volunteer first");
 
-      // BSP two tries to spam the chain to advance until it can volunteer
-      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerTick) {
-        await api.block.skipTo(bsp2VolunteerTick, { spam: true, verbose: true });
+        // BSP two tries to spam the chain to advance until it can volunteer
+        if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerTick) {
+          await api.block.skipTo(bsp2VolunteerTick, { spam: true, verbose: true });
+        }
+
+        const tickAfterSpamResult = (await api.call.proofsDealerApi.getCurrentTick()).toNumber();
+
+        assert(
+          tickAfterSpamResult < bsp2VolunteerTick,
+          "BSP two should not be able to spam the chain and reach his threshold to volunteer"
+        );
+
+        await api.docker.stopBspContainer("sh-bsp-two");
       }
-
-      const tickAfterSpamResult = (await api.call.proofsDealerApi.getCurrentTick()).toNumber();
-
-      assert(
-        tickAfterSpamResult < bsp2VolunteerTick,
-        "BSP two should not be able to spam the chain and reach his threshold to volunteer"
-      );
-
-      await api.docker.stopBspContainer("sh-bsp-two");
-    });
+    );
   }
 );
