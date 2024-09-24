@@ -267,6 +267,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InsufficientAvailableCapacity: AugmentedError<ApiType>;
       /**
+       * Bucket id and file key pair is invalid.
+       **/
+      InvalidBucketIdFileKeyPair: AugmentedError<ApiType>;
+      /**
        * Metadata does not correspond to expected file key.
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;

@@ -81,7 +81,7 @@ impl ConfirmStoringRequest {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub enum MspResponse {
+pub enum MspRespondStorageRequest {
     Accept,
     Reject(RejectedStorageRequestReason),
 }
@@ -89,12 +89,12 @@ pub enum MspResponse {
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct RespondStorageRequest {
     pub file_key: H256,
-    pub response: MspResponse,
+    pub response: MspRespondStorageRequest,
     pub try_count: u32,
 }
 
 impl RespondStorageRequest {
-    pub fn new(file_key: H256, response: MspResponse) -> Self {
+    pub fn new(file_key: H256, response: MspRespondStorageRequest) -> Self {
         Self {
             file_key,
             response,

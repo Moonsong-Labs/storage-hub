@@ -14,6 +14,7 @@ use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
@@ -70,6 +71,13 @@ pub enum BlockchainServiceCommand {
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
+        >,
+    },
+    QueryMspConfirmChunksToProveForFile {
+        msp_id: ProviderId,
+        file_key: H256,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
         >,
     },
     QueueSubmitProofRequest {
@@ -193,6 +201,13 @@ pub trait BlockchainServiceInterface {
         bsp_id: ProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
+
+    /// Query the chunks that a MSP needs to confirm for a file.
+    async fn query_msp_confirm_chunks_to_prove_for_file(
+        &self,
+        msp_id: ProviderId,
+        file_key: H256,
+    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
 
     /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
@@ -411,6 +426,22 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
             bsp_id,
+            file_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_msp_confirm_chunks_to_prove_for_file(
+        &self,
+        msp_id: ProviderId,
+        file_key: H256,
+    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryMspConfirmChunksToProveForFile {
+            msp_id,
             file_key,
             callback,
         };

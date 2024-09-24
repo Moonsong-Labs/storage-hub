@@ -22,16 +22,25 @@ pub enum QueryBspConfirmChunksToProveForFileError {
     InternalError,
 }
 
+/// Error type for the `query_msp_confirm_chunks_to_prove_for_file` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryMspConfirmChunksToProveForFileError {
+    StorageRequestNotFound,
+    InternalError,
+}
+
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait FileSystemApi<ProviderId, FileKey, BlockNumber, ChunkId>
+    pub trait FileSystemApi<BackupStorageProviderId, MainStorageProviderId, FileKey, BlockNumber, ChunkId>
     where
-        ProviderId: Codec,
+        BackupStorageProviderId: Codec,
+        MainStorageProviderId: Codec,
         FileKey: Codec,
         BlockNumber: Codec,
         ChunkId: Codec,
     {
-        fn query_earliest_file_volunteer_block(bsp_id: ProviderId, file_key: FileKey) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
-        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: ProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
+        fn query_earliest_file_volunteer_block(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
+        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
+        fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
     }
 }

@@ -28,6 +28,8 @@ use storage_hub_runtime::{Runtime, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
+use crate::events::ProcessMspRespondStoringRequest;
+use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
@@ -462,6 +464,9 @@ impl BlockchainService {
                     state_store_context
                         .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                        .delete();
                     state_store_context.commit();
                 }
                 Err(TryRecvError::Closed) => {
@@ -469,6 +474,9 @@ impl BlockchainService {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
                         .access_value(&OngoingProcessConfirmStoringRequestCf)
+                        .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessMspRespondStorageRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -492,7 +500,7 @@ impl BlockchainService {
                 }
             };
 
-            // Thi is to avoid starting a new task if the proof is not the next one to be submitted.
+            // This is to avoid starting a new task if the proof is not the next one to be submitted.
             if next_challenge_tick == request.tick {
                 // If the proof is still the next one to be submitted, we can process it.
                 next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
@@ -578,6 +586,12 @@ impl BlockchainService {
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 self.emit(ProcessConfirmStoringRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
+                self.emit(ProcessMspRespondStoringRequest {
                     data,
                     forest_root_write_tx,
                 });

@@ -45,6 +45,7 @@ use sp_std::prelude::Vec;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
@@ -53,7 +54,8 @@ use pallet_proofs_dealer_runtime_api::{
     GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
 };
 use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, ProviderId, StorageProviderId,
+    BackupStorageProvider, BackupStorageProviderId, MainStorageProviderId, ProviderId,
+    StorageProviderId,
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
@@ -536,13 +538,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
         fn query_earliest_file_volunteer_block(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
             FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
         }
 
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
             FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
+        }
+
+        fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+            FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
     }
 

@@ -31,6 +31,7 @@ pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
 pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
+pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
 pub type MspStorageRequestResponse = pallet_file_system::types::MspStorageRequestResponse<Runtime>;
 pub type AcceptedStorageRequestParameters =
     pallet_file_system::types::AcceptedStorageRequestParameters<Runtime>;

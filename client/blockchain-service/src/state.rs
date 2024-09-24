@@ -4,6 +4,7 @@ use log::info;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use shc_common::types::BlockNumber;
 
+use crate::events::ProcessMspRespondStoringRequestData;
 use crate::{
     events::ProcessConfirmStoringRequestData,
     typed_store::{
@@ -60,6 +61,14 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestRightIndexCf {
         "pending_confirm_storing_request_right_index";
 }
 
+pub struct OngoingProcessMspRespondStorageRequestCf;
+impl SingleScaleEncodedValueCf for OngoingProcessMspRespondStorageRequestCf {
+    type Value = ProcessMspRespondStoringRequestData;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "ongoing_process_msp_respond_storage_request";
+}
+
 /// Pending respond storage requests.
 #[derive(Default)]
 pub struct PendingMspRespondStorageRequestCf;
@@ -90,12 +99,13 @@ impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
         "pending_msp_respond_storage_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 8] = [
+const ALL_COLUMN_FAMILIES: [&str; 9] = [
     LastProcessedBlockNumberCf::NAME,
     OngoingProcessConfirmStoringRequestCf::NAME,
     PendingConfirmStoringRequestLeftIndexCf::NAME,
     PendingConfirmStoringRequestRightIndexCf::NAME,
     PendingConfirmStoringRequestCf::NAME,
+    OngoingProcessMspRespondStorageRequestCf::NAME,
     PendingMspRespondStorageRequestLeftIndexCf::NAME,
     PendingMspRespondStorageRequestRightIndexCf::NAME,
     PendingMspRespondStorageRequestCf::NAME,

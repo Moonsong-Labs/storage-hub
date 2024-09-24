@@ -953,12 +953,13 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_respond_storage_requests(
             origin: OriginFor<T>,
-            file_key_responses: FileKeyResponsesInput<T>,
+            file_key_responses_input: FileKeyResponsesInput<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            let results = Self::do_msp_respond_storage_request(who.clone(), file_key_responses)?;
+            let results =
+                Self::do_msp_respond_storage_request(who.clone(), file_key_responses_input)?;
 
             Self::deposit_event(Event::MspRespondedToStorageRequests { results });
 

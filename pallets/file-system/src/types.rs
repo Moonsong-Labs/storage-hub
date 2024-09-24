@@ -102,28 +102,33 @@ impl<T: Config> StorageRequestMetadata<T> {
 /// Possible MSP responses to a storage request.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub enum MspStorageRequestResponse<T: Config> {
-    Accept(AcceptedStorageRequestParameters<T>),
-    Reject(RejectedStorageRequestReason),
+pub struct MspStorageRequestResponse<T: Config> {
+    pub accept: Option<AcceptedStorageRequestParameters<T>>,
+    /// Reject the storage request. (file_key, reason)
+    pub reject: Option<
+        BoundedVec<
+            (MerkleHash<T>, RejectedStorageRequestReason),
+            MaxBatchMspRespondStorageRequests<T>,
+        >,
+    >,
 }
 
 impl<T: Config> Debug for MspStorageRequestResponse<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            MspStorageRequestResponse::Accept(params) => {
-                write!(f, "Accepted: {:?}", params.encode())
-            }
-            MspStorageRequestResponse::Reject(reason) => {
-                write!(f, "Rejected: {:?}", reason)
-            }
-        }
+        write!(
+            f,
+            "MspStorageRequestResponse(accept: {:?}, reject: {:?})",
+            self.accept.encode(),
+            self.reject.encode()
+        )
     }
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct AcceptedStorageRequestParameters<T: Config> {
-    pub file_proof: KeyProof<T>,
+    pub file_keys_and_proofs:
+        BoundedVec<(MerkleHash<T>, KeyProof<T>), MaxBatchMspRespondStorageRequests<T>>,
     pub non_inclusion_forest_proof: ForestProof<T>,
 }
 
@@ -138,13 +143,7 @@ pub enum RejectedStorageRequestReason {
 ///
 /// The input must be a list of (file_key, response) grouped by bucket id.
 pub type FileKeyResponsesInput<T> = BoundedVec<
-    (
-        BucketIdFor<T>,
-        BoundedVec<
-            (MerkleHash<T>, MspStorageRequestResponse<T>),
-            <T as crate::Config>::MaxBatchConfirmStorageRequests,
-        >,
-    ),
+    (BucketIdFor<T>, MspStorageRequestResponse<T>),
     MaxBatchMspRespondStorageRequests<T>,
 >;
 

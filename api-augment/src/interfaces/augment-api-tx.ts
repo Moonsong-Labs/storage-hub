@@ -557,26 +557,19 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       mspRespondStorageRequests: AugmentedSubmittable<
         (
-          fileKeyResponses:
-            | Vec<ITuple<[H256, Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]>>
+          fileKeyResponsesInput:
+            | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
             | [
                 H256 | string | Uint8Array,
                 (
-                  | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
-                  | [
-                      H256 | string | Uint8Array,
-                      (
-                        | PalletFileSystemMspStorageRequestResponse
-                        | { Accept: any }
-                        | { Reject: any }
-                        | string
-                        | Uint8Array
-                      )
-                    ][]
+                  | PalletFileSystemMspStorageRequestResponse
+                  | { accept?: any; reject?: any }
+                  | string
+                  | Uint8Array
                 )
               ][]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<ITuple<[H256, Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]>>]
+        [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
