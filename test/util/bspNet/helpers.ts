@@ -255,8 +255,12 @@ export const closeSimpleBspNet = async () => {
 
   const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
 
-  if (docker.getContainer("toxiproxy")) {
-    promises.push(docker.getContainer("toxiproxy").stop());
+  try {
+    if (docker.getContainer("toxiproxy")) {
+      promises.push(docker.getContainer("toxiproxy").stop());
+    }
+  } catch {
+    console.log("No proxy found, skipping");
   }
 
   await Promise.all(promises);
