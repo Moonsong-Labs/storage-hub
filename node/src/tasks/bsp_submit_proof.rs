@@ -1,17 +1,18 @@
-use std::time::Duration;
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
 
-use shc_actors_framework::event_bus::EventHandler;
+use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
-    types::SubmitProofRequest,
+    types::{RetryStrategy, SubmitProofRequest},
+    BlockchainService,
 };
 use shc_common::types::{
     BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
@@ -141,7 +142,7 @@ where
         // Check if this proof is the next one to be submitted.
         // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
         // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
-        self.check_if_proof_is_outdated(&event).await?;
+        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
@@ -218,42 +219,43 @@ where
             },
         );
 
-        // Attempt three times to submit extrinsic if it fails.
-        let mut extrinsic_submitted = false;
-        for attempt in 0..MAX_PROOF_SUBMISSION_ATTEMPTS {
-            // First check if this proof is still the next one to be submitted.
-            self.check_if_proof_is_outdated(&event).await?;
+        let max_tip = <storage_hub_runtime::Runtime as pallet_storage_providers::Config>::SlashAmountPerMaxFileSize::get()
+            .saturating_mul(event.data.forest_challenges.len() as u128)
+            .saturating_mul(2u32.into());
 
-            // Send the extrinsic and wait for it to be included in the block.
-            let mut transaction = self
-                .storage_hub_handler
-                .blockchain
-                .send_extrinsic(call.clone())
-                .await?
-                .with_timeout(Duration::from_secs(60));
+        let cloned_blockchain = Arc::new(self.storage_hub_handler.blockchain.clone());
+        let cloned_event = Arc::new(event.clone());
 
-            // Check if the extrinsic was successful.
-            if transaction
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await
-                .is_ok()
-            {
-                // If the extrinsic was successful, break out of the loop.
-                extrinsic_submitted = true;
-                break;
-            }
+        let should_retry = move || {
+            let cloned_blockchain = Arc::clone(&cloned_blockchain);
+            let cloned_event = Arc::clone(&cloned_event);
 
-            warn!(target: LOG_TARGET, "Failed to submit proof, attempt #{}", attempt + 1);
-        }
+            Box::pin(async move {
+                Self::check_if_proof_is_outdated(&cloned_blockchain, &cloned_event)
+                    .await
+                    .is_ok()
+            }) as Pin<Box<dyn Future<Output = bool> + Send>>
+        };
 
-        // Exit with error if extrinsic was not submitted.
-        if !extrinsic_submitted {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to submit proof after {} attempts", MAX_PROOF_SUBMISSION_ATTEMPTS);
-            return Err(anyhow!(
-                "Failed to submit proof after {} attempts",
-                MAX_PROOF_SUBMISSION_ATTEMPTS
-            ));
-        }
+        // Attempt to submit the extrinsic with retries and tip increase.
+        self.storage_hub_handler
+            .blockchain
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
+                    .with_max_tip(max_tip as f64)
+                    .with_timeout(Duration::from_secs(self.storage_hub_handler.provider_config.extrinsic_retry_timeout))
+                    .with_should_retry(Some(Box::new(should_retry))),
+            )
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to submit proof after {} attempts: {}", MAX_PROOF_SUBMISSION_ATTEMPTS, e);
+                anyhow!(
+                    "Failed to submit proof after {} attempts",
+                    MAX_PROOF_SUBMISSION_ATTEMPTS
+                )
+            })?;
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
@@ -288,7 +290,13 @@ where
         }
 
         // Release the forest root write "lock".
-        let _ = forest_root_write_tx.send(());
+        let forest_root_write_result = forest_root_write_tx.send(());
+        if forest_root_write_result.is_err() {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
+            return Err(anyhow!(
+                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
+            ));
+        }
 
         Ok(())
     }
@@ -445,13 +453,11 @@ where
     }
 
     async fn check_if_proof_is_outdated(
-        &self,
+        blockchain: &ActorHandle<BlockchainService>,
         event: &ProcessSubmitProofRequest,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
-        let next_challenge_tick = self
-            .storage_hub_handler
-            .blockchain
+        let next_challenge_tick = blockchain
             .get_next_challenge_tick_for_provider(event.data.provider_id)
             .await?;
 

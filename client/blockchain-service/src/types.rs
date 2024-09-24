@@ -1,13 +1,19 @@
-use std::cmp::Ordering;
+use std::{
+    cmp::{min, Ordering},
+    future::Future,
+    pin::Pin,
+    time::Duration,
+};
 
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
 use frame_system::EventRecord;
+use sp_core::H256;
+use sp_runtime::{AccountId32, DispatchError};
+
 use shc_common::types::{
     BlockNumber, ProviderId, RandomnessOutput, RejectedStorageRequestReason, TrieRemoveMutation,
 };
-use sp_core::H256;
-use sp_runtime::DispatchError;
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -107,6 +113,21 @@ impl RespondStorageRequest {
     }
 }
 
+/// A struct that holds the information to stop storing all files from an insolvent user.
+/// (Which is only the user's account ID).
+///
+/// This struct is used as an item in the `pending_stop_storing_for_insolvent_user_requests` queue.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct StopStoringForInsolventUserRequest {
+    pub user: AccountId32,
+}
+
+impl StopStoringForInsolventUserRequest {
+    pub fn new(user: AccountId32) -> Self {
+        Self { user }
+    }
+}
+
 /// Type alias for the events vector.
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events that have occurred
@@ -157,3 +178,108 @@ pub enum ExtrinsicResult {
 
 /// Type alias for the extrinsic hash.
 pub type ExtrinsicHash = H256;
+
+/// Type alias for the tip.
+pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<storage_hub_runtime::Runtime>;
+
+/// A struct which defines a submit extrinsic retry strategy. This defines a simple strategy when
+/// sending and extrinsic. It will retry a maximum number of times ([Self::max_retries]).
+/// If the extrinsic is not included in a block within a certain time frame [`Self::timeout`] it is
+/// considered a failure.
+/// The tip will increase with each retry, up to a maximum tip of [`Self::max_tip`].
+/// The tip series (with the exception of the first try which is 0) is a geometric progression with
+/// a multiplier of [`Self::base_multiplier`].
+/// The final tip for each retry is calculated as:
+/// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
+/// ([`Self::base_multiplier`] - 1)).
+/// An optional check function can be provided to determine if the extrinsic should be retried,
+/// aborting early if the function returns false.
+pub struct RetryStrategy {
+    /// Maximum number of retries after which the extrinsic submission will be considered failed.
+    pub max_retries: u32,
+    /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
+    pub timeout: Duration,
+    /// Maximum tip to be paid for the extrinsic submission. The progression follows an exponential
+    /// backoff strategy.
+    pub max_tip: f64,
+    /// Base multiplier for the tip calculation. This is the base of the geometric progression.
+    /// A higher value will make tips grow faster.
+    pub base_multiplier: f64,
+    /// An optional check function to determine if the extrinsic should be retried.
+    /// If this is provided, the function will be called before each retry to determine if the
+    /// extrinsic should be retried or the submission should be considered failed. If this is not
+    /// provided, the extrinsic will be retried until [`Self::max_retries`] is reached.
+    pub should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
+}
+
+impl RetryStrategy {
+    /// Creates a new `RetryStrategy` instance.
+    pub fn new(max_retries: u32, timeout: Duration, max_tip: f64, base_multiplier: f64) -> Self {
+        Self {
+            max_retries,
+            timeout,
+            max_tip,
+            base_multiplier,
+            should_retry: None,
+        }
+    }
+
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn with_max_tip(mut self, max_tip: f64) -> Self {
+        self.max_tip = max_tip;
+        self
+    }
+
+    pub fn with_base_multiplier(mut self, base_multiplier: f64) -> Self {
+        self.base_multiplier = base_multiplier;
+        self
+    }
+
+    pub fn with_should_retry(
+        mut self,
+        should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
+    ) -> Self {
+        self.should_retry = should_retry;
+        self
+    }
+
+    /// Computes the tip for the given retry count.
+    /// The formula for the tip is:
+    /// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
+    /// ([`Self::base_multiplier`] - 1)).
+    pub fn compute_tip(&self, retry_count: u32) -> f64 {
+        // Ensure the retry_count is within the bounds of max_retries
+        let retry_count = min(retry_count, self.max_retries);
+
+        // Calculate the geometric progression factor for this retry_count
+        let factor = (self
+            .base_multiplier
+            .powf(retry_count as f64 / self.max_retries as f64)
+            - 1.0)
+            / (self.base_multiplier - 1.0);
+
+        // Final tip formula for each retry, scaled to max_tip
+        self.max_tip * factor
+    }
+}
+
+impl Default for RetryStrategy {
+    fn default() -> Self {
+        Self {
+            max_retries: 5,
+            timeout: Duration::from_secs(30),
+            max_tip: 0.0,
+            base_multiplier: 2.0,
+            should_retry: None,
+        }
+    }
+}

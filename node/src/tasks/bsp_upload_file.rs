@@ -11,17 +11,17 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::ConfirmStoringRequest,
+    types::{ConfirmStoringRequest, RetryStrategy, Tip},
 };
 use shc_common::types::{
-    FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+    Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::StorageDataUnit;
+use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
@@ -29,6 +29,7 @@ use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
 const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
+const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -381,10 +382,17 @@ where
         // continue only if it is successful.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
-            .await?
-            .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(MAX_CONFIRM_STORING_REQUEST_TRY_COUNT)
+                    .with_max_tip(MAX_CONFIRM_STORING_REQUEST_TIP as f64)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+            )
             .await?;
 
         // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
@@ -395,7 +403,13 @@ where
         }
 
         // Release the forest root write "lock".
-        let _ = forest_root_write_tx.send(());
+        let forest_root_write_result = forest_root_write_tx.send(());
+        if forest_root_write_result.is_err() {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
+            return Err(anyhow!(
+                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
+            ));
+        }
 
         Ok(())
     }
@@ -456,7 +470,104 @@ where
             })?;
 
         // Increase storage capacity if the available capacity is less than the file size.
-        if available_capacity < event.size {}
+        if available_capacity < event.size {
+            warn!(
+                target: LOG_TARGET,
+                "Insufficient storage capacity to volunteer for file key: {:?}",
+                event.file_key
+            );
+
+            let current_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .max_storage_capacity;
+
+            if max_storage_capacity == current_capacity {
+                let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
+            let new_capacity = self.calculate_capacity(&event, current_capacity)?;
+
+            let call = storage_hub_runtime::RuntimeCall::Providers(
+                pallet_storage_providers::Call::change_capacity { new_capacity },
+            );
+
+            let earliest_change_capacity_block = self
+                .storage_hub_handler
+                .blockchain
+                .query_earliest_change_capacity_block(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
+            // Wait for the earliest block where the capacity can be changed.
+            self.storage_hub_handler
+                .blockchain
+                .wait_for_block(earliest_change_capacity_block)
+                .await?;
+
+            self.storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, Tip::from(0))
+                .await?
+                .with_timeout(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .extrinsic_retry_timeout,
+                ))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await?;
+
+            info!(
+                target: LOG_TARGET,
+                "Increased storage capacity to {:?} bytes",
+                new_capacity
+            );
+
+            let available_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_available_storage_capacity(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query available storage capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                })?;
+
+            // Skip volunteering if the new available capacity is still less than the file size.
+            if available_capacity < event.size {
+                let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Skipping volunteering.";
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        }
 
         // Get the file key.
         let file_key: FileKey = metadata
@@ -526,9 +637,13 @@ where
         // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
+            .send_extrinsic(call, Tip::from(0))
             .await?
-            .with_timeout(Duration::from_secs(60))
+            .with_timeout(Duration::from_secs(
+                self.storage_hub_handler
+                    .provider_config
+                    .extrinsic_retry_timeout,
+            ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 

@@ -33,12 +33,16 @@ use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::OngoingProcessConfirmStoringRequestCf,
+    state::{
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+    },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{EventsVec, Extrinsic},
+    types::{EventsVec, Extrinsic, Tip},
     BlockchainService,
 };
 
@@ -128,6 +132,7 @@ impl BlockchainService {
     pub(crate) async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
+        tip: Tip,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
@@ -136,7 +141,7 @@ impl BlockchainService {
         let nonce = self.nonce_counter;
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce);
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, tip);
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -186,6 +191,7 @@ impl BlockchainService {
         client: Arc<ParachainClient>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
         nonce: u32,
+        tip: Tip,
     ) -> UncheckedExtrinsic {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
@@ -198,26 +204,22 @@ impl BlockchainService {
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
-        // TODO: Consider tipping the transaction.
-        let tip = 0;
         let extra: SignedExtra = (
-        frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-        frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
-            period,
-            current_block,
-        )),
-        frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<storage_hub_runtime::Runtime>::from(
+            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
+                period,
+                current_block,
+            )),
+            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
+            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
             tip,
-        ),
-        cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-            storage_hub_runtime::Runtime,
-        >::new(),
-    );
+            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
+                storage_hub_runtime::Runtime,
+            >::new(),
+        );
 
         let raw_payload = SignedPayload::from_raw(
             function.clone(),
@@ -445,7 +447,7 @@ impl BlockchainService {
     }
 
     /// Check if there are any pending requests to update the forest root on the runtime, and process them.
-    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest`.
+    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest` over `StopStoringForInsolventUserRequest`.
     /// This function is called every time a new block is imported and after each request is queued.
     pub(crate) fn check_pending_forest_root_writes(&mut self) {
         if let Some(mut rx) = self.forest_root_write_lock.take() {
@@ -467,6 +469,9 @@ impl BlockchainService {
                     state_store_context
                         .access_value(&OngoingProcessMspRespondStorageRequestCf)
                         .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                        .delete();
                     state_store_context.commit();
                 }
                 Err(TryRecvError::Closed) => {
@@ -477,6 +482,9 @@ impl BlockchainService {
                         .delete();
                     state_store_context
                         .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                        .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -550,6 +558,18 @@ impl BlockchainService {
                 );
             }
         }
+
+        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending stop storing for insolvent user requests.
+        if next_event_data.is_none() {
+            if let Some(request) = state_store_context
+                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pop_front()
+            {
+                next_event_data = Some(
+                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
+                );
+            }
+        }
         state_store_context.commit();
 
         if let Some(event_data) = next_event_data {
@@ -563,13 +583,23 @@ impl BlockchainService {
 
         let data = data.into();
 
-        // If this is a confirm storing request, we need to store it in the state store.
-        if let ForestWriteLockTaskData::ConfirmStoringRequest(data) = &data {
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            state_store_context
-                .access_value(&OngoingProcessConfirmStoringRequestCf)
-                .write(data);
-            state_store_context.commit();
+        // If this is a confirm storing request or a stop storing for insolvent user request, we need to store it in the state store.
+        match &data {
+            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            _ => {}
         }
 
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
@@ -592,6 +622,12 @@ impl BlockchainService {
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 self.emit(ProcessMspRespondStoringRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
                     forest_root_write_tx,
                 });

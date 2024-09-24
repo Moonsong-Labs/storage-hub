@@ -4,7 +4,7 @@ use std::{cmp::max, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
+use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
 use sp_core::{bounded_vec, H256};
 use sp_runtime::AccountId32;
 
@@ -181,7 +181,7 @@ where
                 // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call)
+                    .send_extrinsic(call, Tip::from(0))
                     .await?
                     .with_timeout(Duration::from_secs(60))
                     .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -235,7 +235,7 @@ where
                     // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call)
+                        .send_extrinsic(call, Tip::from(0))
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -275,7 +275,7 @@ where
                     // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call)
+                        .send_extrinsic(call, Tip::from(0))
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -310,7 +310,7 @@ where
                     // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call)
+                        .send_extrinsic(call, Tip::from(0))
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -345,7 +345,7 @@ where
                     // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call)
+                        .send_extrinsic(call, Tip::from(0))
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -545,7 +545,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
+            .send_extrinsic(call, Tip::from(0))
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -673,7 +673,7 @@ where
 
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(call)
+                .send_extrinsic(call, Tip::from(0))
                 .await?
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -732,7 +732,7 @@ where
                 // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call)
+                    .send_extrinsic(call, Tip::from(0))
                     .await?
                     .with_timeout(Duration::from_secs(60))
                     .watch_for_success(&self.storage_hub_handler.blockchain)

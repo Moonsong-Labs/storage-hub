@@ -35,6 +35,9 @@ serde = { workspace = true }
 
 # Local
 pallet-storage-providers = { workspace = true }
+pallet-payment-streams = { workspace = true }
+shp-constants = { workspace = true }
+shp-file-metadata = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
@@ -59,6 +62,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-balances/std",
+	"pallet-payment-streams/std",
 	"pallet-proofs-dealer-runtime-api/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",

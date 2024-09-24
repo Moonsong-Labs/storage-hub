@@ -85,6 +85,7 @@ pub enum ForestWriteLockTaskData {
     SubmitProofRequest(ProcessSubmitProofRequestData),
     ConfirmStoringRequest(ProcessConfirmStoringRequestData),
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData),
+    StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData),
 }
 
 impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
@@ -102,6 +103,12 @@ impl From<ProcessConfirmStoringRequestData> for ForestWriteLockTaskData {
 impl From<ProcessMspRespondStoringRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessMspRespondStoringRequestData) -> Self {
         Self::MspRespondStorageRequest(data)
+    }
+}
+
+impl From<ProcessStopStoringForInsolventUserRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessStopStoringForInsolventUserRequestData) -> Self {
+        Self::StopStoringForInsolventUserRequest(data)
     }
 }
 
@@ -148,6 +155,19 @@ pub struct ProcessMspRespondStoringRequest {
 
 impl EventBusMessage for ProcessMspRespondStoringRequest {}
 
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessStopStoringForInsolventUserRequestData {
+    pub who: AccountId32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessStopStoringForInsolventUserRequest {
+    pub data: ProcessStopStoringForInsolventUserRequestData,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+impl EventBusMessage for ProcessStopStoringForInsolventUserRequest {}
+
 /// Slashable Provider event.
 ///
 /// This event is emitted when a provider is marked as slashable by the runtime.
@@ -189,6 +209,29 @@ pub struct LastChargeableInfoUpdated {
 
 impl EventBusMessage for LastChargeableInfoUpdated {}
 
+/// User without funds event.
+///
+/// This event is emitted when a User has been determined as insolvent by the Payment Streams pallet for
+/// being unable to pay for their payment streams for a prolonged period of time.
+#[derive(Debug, Clone)]
+pub struct UserWithoutFunds {
+    pub who: AccountId32,
+}
+impl EventBusMessage for UserWithoutFunds {}
+
+/// Provider stopped storing for insolvent user event.
+///
+/// This event is emitted when a provider has stopped storing a file for an insolvent user.
+#[derive(Debug, Clone)]
+pub struct SpStopStoringInsolventUser {
+    pub sp_id: ProviderId,
+    pub file_key: FileKey,
+    pub owner: AccountId32,
+    pub location: FileLocation,
+    pub new_root: H256,
+}
+impl EventBusMessage for SpStopStoringInsolventUser {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -202,10 +245,14 @@ pub struct BlockchainServiceEventBusProvider {
     process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
     process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
     process_msp_respond_storing_request_event_bus: EventBus<ProcessMspRespondStoringRequest>,
+    process_stop_storing_for_insolvent_user_request_event_bus:
+        EventBus<ProcessStopStoringForInsolventUserRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
     finalised_mutations_applied_event_bus: EventBus<FinalisedTrieRemoveMutationsApplied>,
     proof_accepted_event_bus: EventBus<ProofAccepted>,
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
+    user_without_funds_event_bus: EventBus<UserWithoutFunds>,
+    sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -218,10 +265,13 @@ impl BlockchainServiceEventBusProvider {
             process_submit_proof_request_event_bus: EventBus::new(),
             process_confirm_storage_request_event_bus: EventBus::new(),
             process_msp_respond_storing_request_event_bus: EventBus::new(),
+            process_stop_storing_for_insolvent_user_request_event_bus: EventBus::new(),
             slashable_provider_event_bus: EventBus::new(),
             finalised_mutations_applied_event_bus: EventBus::new(),
             proof_accepted_event_bus: EventBus::new(),
             last_chargeable_info_updated_event_bus: EventBus::new(),
+            user_without_funds_event_bus: EventBus::new(),
+            sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
         }
     }
 }
@@ -268,6 +318,14 @@ impl ProvidesEventBus<ProcessMspRespondStoringRequest> for BlockchainServiceEven
     }
 }
 
+impl ProvidesEventBus<ProcessStopStoringForInsolventUserRequest>
+    for BlockchainServiceEventBusProvider
+{
+    fn event_bus(&self) -> &EventBus<ProcessStopStoringForInsolventUserRequest> {
+        &self.process_stop_storing_for_insolvent_user_request_event_bus
+    }
+}
+
 impl ProvidesEventBus<SlashableProvider> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<SlashableProvider> {
         &self.slashable_provider_event_bus
@@ -289,5 +347,17 @@ impl ProvidesEventBus<ProofAccepted> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<LastChargeableInfoUpdated> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<LastChargeableInfoUpdated> {
         &self.last_chargeable_info_updated_event_bus
+    }
+}
+
+impl ProvidesEventBus<UserWithoutFunds> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<UserWithoutFunds> {
+        &self.user_without_funds_event_bus
+    }
+}
+
+impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<SpStopStoringInsolventUser> {
+        &self.sp_stop_storing_insolvent_user_event_bus
     }
 }
