@@ -21,6 +21,7 @@
     "docker:stop": "docker compose -f ../docker/local-node-compose.yml  -p sh_dev_node down",
     "docker:stop:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node down",
     "docker:start:bspnet": "NOISY=0 ROCKSDB=0 pnpm tsx scripts/bspNetBootstrap.ts",
+    "docker:start:fullNet": "NOISY=0 ROCKSDB=0 pnpm tsx scripts/fullNetBootstrap.ts",
     "docker:stop:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml down --remove-orphans && docker volume prune -f",
     "docker:start:bspnet:rocksdb": "NOISY=0 ROCKSDB=1 pnpm tsx scripts/bspNetBootstrap.ts",
     "docker:stop:bspnet:rocksdb": "docker compose -f ../docker/local-dev-bsp-rocksdb-compose.yml down --remove-orphans && docker volume prune -f",

@@ -13,6 +13,13 @@ export const NODE_INFOS = {
     AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
     expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
   },
+  msp: {
+    containerName: "docker-sh-msp-1",
+    port: 9988,
+    p2pPort: 30555,
+    AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
+    expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
+  },
   collator: {
     containerName: "docker-sh-collator-1",
     port: 9955,

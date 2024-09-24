@@ -2766,7 +2766,7 @@ mod msp_respond_storage_request {
             owner_account_id: AccountId32,
             bucket_name: Vec<u8>,
             location: Vec<u8>,
-            size: u32,
+            size: u64,
             fingerprint: H256,
             peer_ids: PeerIds<Test>,
         }
@@ -2925,7 +2925,7 @@ mod msp_respond_storage_request {
                     StorageRequestParams {
                         owner_account_id: Keyring::Alice.to_account_id(),
                         bucket_name: b"first bucket".to_vec(),
-                        location: b"test".to_vec(),
+                        location: b"location".to_vec(),
                         size: 4,
                         fingerprint: H256::zero(),
                         peer_ids: BoundedVec::try_from(
@@ -2936,7 +2936,7 @@ mod msp_respond_storage_request {
                     StorageRequestParams {
                         owner_account_id: Keyring::Bob.to_account_id(),
                         bucket_name: b"second bucket".to_vec(),
-                        location: b"never/go/to/a/second/location".to_vec(),
+                        location: b"location2".to_vec(),
                         size: 8,
                         fingerprint: H256::random(),
                         peer_ids: BoundedVec::try_from(
@@ -2947,7 +2947,7 @@ mod msp_respond_storage_request {
                     StorageRequestParams {
                         owner_account_id: Keyring::Bob.to_account_id(),
                         bucket_name: b"second bucket".to_vec(),
-                        location: b"never/go/to/a/second/location2".to_vec(),
+                        location: b"location3".to_vec(),
                         size: 8,
                         fingerprint: H256::random(),
                         peer_ids: BoundedVec::try_from(
@@ -7052,15 +7052,25 @@ mod stop_storing_for_insolvent_user {
                 ));
 
                 // Dispatch MSP confirm storing.
-                assert_ok!(FileSystem::msp_accept_storage_request(
+                assert_ok!(FileSystem::msp_respond_storage_requests(
                     RuntimeOrigin::signed(msp.clone()),
-                    file_key,
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },
+                    bounded_vec![(
+                        bucket_id,
+                        MspStorageRequestResponse {
+                            accept: Some(AcceptedStorageRequestParameters {
+                                file_keys_and_proofs: bounded_vec![(
+                                    file_key,
+                                    CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                )],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: None
+                        }
+                    )]
                 ));
 
                 // Assert that the storage was updated
