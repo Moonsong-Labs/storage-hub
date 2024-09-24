@@ -249,18 +249,21 @@ export const forceSignupBsp = async (options: {
 export const closeSimpleBspNet = async () => {
   const docker = new Docker();
 
-  const existingNodes = await docker.listContainers({
-    filters: { ancestor: [DOCKER_IMAGE] }
-  });
+  const allContainers = await docker.listContainers({ all: true });
+
+  const existingNodes = allContainers.filter((container) => container.Image === DOCKER_IMAGE);
+
+  const toxiproxyContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes("toxiproxy"))
+  );
 
   const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
 
-  try {
-    if (docker.getContainer("toxiproxy")) {
-      promises.push(docker.getContainer("toxiproxy").stop());
-    }
-  } catch {
-    console.log("No proxy found, skipping");
+  if (toxiproxyContainer && toxiproxyContainer.State === "running") {
+    console.log("Stopping toxiproxy container");
+    promises.push(docker.getContainer(toxiproxyContainer.Id).stop());
+  } else {
+    console.log("No running toxiproxy container found, skipping");
   }
 
   await Promise.allSettled(promises);
