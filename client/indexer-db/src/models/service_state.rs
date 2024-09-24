@@ -6,7 +6,7 @@ use crate::{schema::service_state, DbConnection};
 
 /// A single record table that holds the state/metadata of the indexer service.
 #[derive(Debug, Queryable, Insertable)]
-#[table_name = "service_state"]
+#[diesel(table_name = service_state)]
 pub struct ServiceState {
     pub id: i32,
     pub last_processed_block: i64,
