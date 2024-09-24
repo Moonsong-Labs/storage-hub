@@ -12,7 +12,7 @@ let api: EnrichedBspApi | undefined;
 const bspNetConfig: BspNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
-}; 
+};
 
 const CONFIG = {
   bucketName: "nothingmuch-0",

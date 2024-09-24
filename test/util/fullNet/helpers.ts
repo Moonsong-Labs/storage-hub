@@ -4,11 +4,7 @@ import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import * as util from "node:util";
-import {
-  alice,
-  bspKey,
-  shUser
-} from "../pjsKeyring";
+import { bspKey, mspKey, shUser } from "../pjsKeyring";
 import { showContainers } from "../bspNet/docker";
 import type { BspNetConfig } from "../bspNet/types";
 import * as ShConsts from "../bspNet/consts.ts";
@@ -148,15 +144,20 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
       log: true,
       env: {
         ...process.env,
+        NODE_KEY: ShConsts.NODE_INFOS.msp.nodeKey,
         BSP_IP: bspIp,
         BSP_PEER_ID: bspPeerId
       }
     });
 
-    const peerIDMsp = await getContainerPeerId(
-      `http://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`
+    const mspId = await getContainerIp(
+      bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.msp.containerName
     );
-    console.log(`sh-msp Peer ID: ${peerIDMsp}`);
+
+    const mspPeerId = await getContainerPeerId(`http://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`);
+    console.log(`sh-msp Peer ID: ${mspPeerId}`);
+
+    const multiAddressMsp = `/ip4/${mspId}/tcp/30350/p2p/${mspPeerId}`;
 
     await compose.upOne("sh-user", {
       cwd: cwd,
@@ -200,20 +201,20 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
       weight: bspNetConfig.bspStartingWeight
     });
 
-    // Make MSP
+    // Sign up MSP
     await userApi.sealBlock(
       userApi.tx.sudo.sudo(
         userApi.tx.providers.forceMspSignUp(
-          alice.address,
+          mspKey.address,
           ShConsts.DUMMY_MSP_ID,
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
-          [multiAddressBsp],
+          [multiAddressMsp],
           {
             identifier: ShConsts.VALUE_PROP,
             dataLimit: 500,
             protocols: ["https", "ssh", "telnet"]
           },
-          alice.address
+          mspKey.address
         )
       )
     );
@@ -270,4 +271,3 @@ export const runInitialisedFullNet = async (bspNetConfig: BspNetConfig) => {
     userApi?.disconnect();
   }
 };
-

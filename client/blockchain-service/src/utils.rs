@@ -115,8 +115,9 @@ impl BlockchainService {
                             StorageProviderId::BackupStorageProvider(bsp_id) => {
                                 self.provider_ids.insert(bsp_id);
                             }
-                            // TODO: For now, we only care about BSPs.
-                            StorageProviderId::MainStorageProvider(_msp_id) => {}
+                            StorageProviderId::MainStorageProvider(msp_id) => {
+                                self.provider_ids.insert(msp_id);
+                            }
                         }
                     } else {
                         warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", key);

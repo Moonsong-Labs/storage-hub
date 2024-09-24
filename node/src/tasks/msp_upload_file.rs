@@ -90,7 +90,7 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer for file_key {:?}, location {:?}, fingerprint {:?}",
+            "Registering user peer for file_key {:?}, location {:?}, fingerprint {:?}",
             event.file_key,
             event.location,
             event.fingerprint
