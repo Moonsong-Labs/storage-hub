@@ -13,15 +13,15 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
 };
 use sp_api::ApiError;
 use sp_core::H256;
 
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId,
-    TrieRemoveMutation,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProviderId,
+    RandomnessOutput, StorageProviderId, TrieRemoveMutation,
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
@@ -165,6 +165,11 @@ pub enum BlockchainServiceCommand {
     QueryWorstCaseScenarioSlashableAmount {
         provider_id: ProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Option<Balance>>>,
+    },
+    QueryMspIdOfBucketId {
+        bucket_id: BucketId,
+        callback:
+            tokio::sync::oneshot::Sender<Result<MainStorageProviderId, QueryMspIdOfBucketIdError>>,
     },
 }
 
@@ -327,6 +332,12 @@ pub trait BlockchainServiceInterface {
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
         retry_strategy: RetryStrategy,
     ) -> Result<()>;
+
+    /// Helper function to get the MSP ID of a bucket ID.
+    async fn query_msp_id_of_bucket_id(
+        &self,
+        bucket_id: BucketId,
+    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -716,5 +727,18 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         }
 
         Ok(())
+    }
+
+    async fn query_msp_id_of_bucket_id(
+        &self,
+        bucket_id: BucketId,
+    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryMspIdOfBucketId {
+            bucket_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 }

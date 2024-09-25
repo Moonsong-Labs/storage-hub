@@ -107,9 +107,14 @@ where
     pub fn start_user_tasks(&self) {
         log::info!("Starting User tasks.");
 
-        UserSendsFileTask::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.blockchain)
-            .start();
+        let msp_upload_file_task = UserSendsFileTask::new(self.clone());
+
+        // Subscribing to NewStorageRequest event from the BlockchainService.
+        let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
+            msp_upload_file_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        new_storage_request_event_bus_listener.start();
     }
 }
 

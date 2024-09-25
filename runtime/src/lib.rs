@@ -54,12 +54,12 @@ use pallet_proofs_dealer_runtime_api::{
     GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
 };
 use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, MainStorageProviderId, ProviderId,
+    BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId, ProviderId,
     StorageProviderId,
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
 };
 use shp_traits::TrieRemoveMutation;
 
@@ -605,13 +605,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit, Balance> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit, Balance, BucketId<Runtime>> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
 
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
             Providers::get_storage_provider_id(who)
+        }
+
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderId<Runtime>, QueryMspIdOfBucketIdError> {
+            Providers::query_msp_id_of_bucket_id(bucket_id)
         }
 
         fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit, QueryStorageProviderCapacityError> {

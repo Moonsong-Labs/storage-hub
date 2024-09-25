@@ -10,7 +10,7 @@ use futures::prelude::*;
 use log::{debug, trace, warn};
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError, StorageProvidersApi,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -759,6 +759,28 @@ impl Actor for BlockchainService {
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send back slashable amount: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryMspIdOfBucketId {
+                    bucket_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let msp_id = self
+                        .client
+                        .runtime_api()
+                        .query_msp_id_of_bucket_id(current_block_hash, &bucket_id)
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(QueryMspIdOfBucketIdError::BucketNotFound)
+                        });
+
+                    match callback.send(msp_id) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back MSP ID: {:?}", e);
                         }
                     }
                 }
