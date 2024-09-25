@@ -255,12 +255,6 @@ fn challenge_submit_in_two_rounds_succeed() {
             <Test as crate::Config>::NativeBalance::usable_balance(&1),
             user_balance - challenge_fee * 2
         );
-
-        // TODO: Uncomment when `on_initialize` trigger is added.
-        // // Check that the challenge is in the queue.
-        // let challenges_queue = crate::ChallengesQueue::<Test>::get();
-        // assert_eq!(challenges_queue.len(), 1);
-        // assert_eq!(challenges_queue[0], file_key);
     });
 }
 
@@ -392,22 +386,6 @@ fn challenge_overflow_challenges_queue_fail() {
             ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
-    });
-}
-
-#[test]
-fn proofs_dealer_trait_verify_proof_succeed() {
-    new_test_ext().execute_with(|| {
-        // TODO
-        assert!(true)
-    });
-}
-
-#[test]
-fn proofs_dealer_trait_verify_proof_fail() {
-    new_test_ext().execute_with(|| {
-        // TODO
-        assert!(true)
     });
 }
 
