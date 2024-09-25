@@ -1768,13 +1768,20 @@ where
         let threshold_weighted_starting_point =
             bsp_weight.saturating_mul(threshold_global_starting_point);
 
-        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a block range.
-        let threshold_slope = maximum_threshold
-            .saturating_sub(threshold_weighted_starting_point)
+        let base_slope = maximum_threshold
+            .saturating_sub(threshold_global_starting_point)
             .checked_div(&T::ThresholdTypeToBlockNumber::convert_back(
                 BlockRangeToMaximumThreshold::<T>::get(),
             ))
             .unwrap_or(T::ThresholdType::one());
+
+        let threshold_slope = base_slope.saturating_add(
+            base_slope
+                .checked_mul(&bsp_weight)
+                .unwrap_or(maximum_threshold)
+                .checked_div(&global_weight)
+                .unwrap_or(T::ThresholdType::one()),
+        );
 
         // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
         let threshold_slope = if threshold_slope.is_zero() {
