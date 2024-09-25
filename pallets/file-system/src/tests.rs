@@ -6382,13 +6382,24 @@ mod compute_threshold {
 
                 // Set BlockRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
+                
+                // Set max reputation weight
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
+                    match bsp {
+                        Some(bsp) => {
+                            bsp.reputation_weight = u32::MAX;
+                        }
+                        None => {
+                            panic!("BSP should exist");
+                        }
+                    }
+                });
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
                 let (_threshold_to_succeed, slope) =
                     FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at).unwrap();
 
-                // Since base_slope is zero, threshold_slope should be set maximum threshold
                 assert_eq!(slope, ThresholdType::<Test>::max_value());
             });
         }
