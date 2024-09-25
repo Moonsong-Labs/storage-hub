@@ -6382,7 +6382,7 @@ mod compute_threshold {
 
                 // Set BlockRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
-                
+
                 // Set max reputation weight
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
                     match bsp {
