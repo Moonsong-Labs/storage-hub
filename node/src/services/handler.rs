@@ -8,8 +8,8 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
-        ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
+        AcceptedBspVolunteer, LastChargeableInfoUpdated, MultipleNewChallengeSeeds,
+        NewStorageRequest, ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
         ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -115,6 +115,12 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_storage_request_event_bus_listener.start();
+
+        let accepted_bsp_volunteer_event_bus_listener: EventBusListener<AcceptedBspVolunteer, _> =
+            msp_upload_file_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        accepted_bsp_volunteer_event_bus_listener.start();
     }
 }
 
