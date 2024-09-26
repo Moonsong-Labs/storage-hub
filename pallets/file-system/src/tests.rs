@@ -26,7 +26,7 @@ use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     bounded_vec,
-    traits::{BlakeTwo256, Get},
+    traits::{BlakeTwo256, Get, Zero},
     BoundedVec, DispatchError,
 };
 use sp_std::collections::btree_map::BTreeMap;
