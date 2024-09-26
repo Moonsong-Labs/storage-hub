@@ -284,6 +284,7 @@ construct_runtime!(
 
         // Miscellaneous
         Nfts: pallet_nfts = 50,
+        Parameters: pallet_parameters = 51,
     }
 );
 
@@ -299,6 +300,8 @@ mod benches {
         [pallet_collator_selection, CollatorSelection]
         [cumulus_pallet_parachain_system, ParachainSystem]
         [cumulus_pallet_xcmp_queue, XcmpQueue]
+        [nfts, Nfts]
+        [pallet_parameters, Parameters]
     );
 }
 
@@ -622,6 +625,10 @@ impl_runtime_apis! {
 
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
             Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
+        }
+
+        fn get_slash_amount_per_max_file_size() -> Balance {
+            Providers::get_slash_amount_per_max_file_size()
         }
     }
 }

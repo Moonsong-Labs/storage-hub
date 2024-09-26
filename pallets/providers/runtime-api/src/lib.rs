@@ -23,6 +23,7 @@ sp_api::decl_runtime_apis! {
         fn query_available_storage_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
         fn query_earliest_change_capacity_block(who: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
+        fn get_slash_amount_per_max_file_size() -> Balance;
     }
 }
 
