@@ -14,7 +14,7 @@ use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
 };
-use shc_indexer_db::{models::ServiceState, DbConnection, DbPool};
+use shc_indexer_db::{models::*, DbConnection, DbPool};
 use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -73,7 +73,7 @@ impl IndexerService {
 
         let mut db_conn = self.db_pool.get().await?;
 
-        let service_state = shc_indexer_db::models::ServiceState::get(&mut db_conn).await?;
+        let service_state = ServiceState::get(&mut db_conn).await?;
 
         for block_number in
             (service_state.last_processed_block as BlockNumber + 1)..=finalized_block_number
@@ -242,18 +242,37 @@ impl IndexerService {
 
     async fn index_providers_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {}
+            pallet_storage_providers::Event::BspSignUpSuccess {
+                who,
+                multiaddresses,
+                capacity,
+            } => {
+                let mut sql_multiaddresses = Vec::new();
+                for multiaddress in multiaddresses {
+                    let multiaddress_str =
+                        String::from_utf8(multiaddress.to_vec()).expect("Invalid multiaddress");
+                    sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
+                }
+
+                Bsp::create(conn, who.to_string(), capacity.into(), sql_multiaddresses).await?;
+            }
+            pallet_storage_providers::Event::BspSignOffSuccess { who } => {
+                Bsp::delete(conn, who.to_string()).await?;
+            }
+            pallet_storage_providers::Event::CapacityChanged {
+                who, new_capacity, ..
+            } => {
+                Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+            }
+            pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
             pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {}
             pallet_storage_providers::Event::MspSignUpSuccess { .. } => {}
-            pallet_storage_providers::Event::BspSignUpSuccess { .. } => {}
-            pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
             pallet_storage_providers::Event::MspSignOffSuccess { .. } => {}
-            pallet_storage_providers::Event::BspSignOffSuccess { .. } => {}
-            pallet_storage_providers::Event::CapacityChanged { .. } => {}
             pallet_storage_providers::Event::Slashed { .. } => {}
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }

@@ -949,6 +949,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bigdecimal"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51d712318a27c7150326677b321a5fa91b55f6d9034ffd67f20319e147d40cee"
+dependencies = [
+ "autocfg",
+ "libm",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
 name = "binary-merkle-tree"
 version = "13.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0#3c3d6fceb82372a3019b37117aa453d564b212de"
@@ -2759,11 +2773,15 @@ version = "2.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "158fe8e2e68695bd615d7e4f3227c0727b151330d3e253b525086c348d055d5e"
 dependencies = [
+ "bigdecimal",
  "bitflags 2.6.0",
  "byteorder",
  "chrono",
  "diesel_derives",
  "itoa",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
  "pq-sys",
 ]
 
@@ -13004,6 +13022,7 @@ dependencies = [
 name = "shc-indexer-db"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "chrono",
  "diesel",
  "diesel-async",
