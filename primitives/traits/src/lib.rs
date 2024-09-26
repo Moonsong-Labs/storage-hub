@@ -990,3 +990,31 @@ pub trait ProofSubmittersInterface {
 
     fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId);
 }
+
+/// A trait to encode, decode and read information from file metadata.
+pub trait FileMetadataInterface {
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a file's metadata
+    type Metadata: Parameter + Member + MaybeSerializeDeserialize + Debug + Encode + Decode;
+
+    /// The type which represents the unit that we use to measure file size (e.g. bytes)
+    type StorageDataUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u64>;
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error>;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8>;
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit;
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error>;
+}

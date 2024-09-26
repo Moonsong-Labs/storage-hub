@@ -5,9 +5,9 @@ use core::fmt::Debug;
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
-use shp_traits::AsCompact;
+use shp_traits::{AsCompact, FileMetadataInterface};
 use sp_arithmetic::traits::SaturatedConversion;
-use sp_core::H256;
+use sp_core::{crypto::AccountId32, H256};
 use sp_std::vec::Vec;
 
 /// A struct containing all the information about a file in StorageHub.
@@ -68,6 +68,31 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 
     pub fn last_chunk_id(&self) -> ChunkId {
         ChunkId::new(self.chunks_count() - 1)
+    }
+}
+
+/// Interface for encoding and decoding FileMetadata, used by the runtime.
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+    FileMetadataInterface for FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    type AccountId = AccountId32;
+    type Metadata = Self;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES> as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
     }
 }
 

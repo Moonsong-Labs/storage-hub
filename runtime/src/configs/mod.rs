@@ -53,7 +53,7 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use shp_file_key_verifier::FileKeyVerifier;
-use shp_file_metadata::ChunkId;
+use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -467,6 +467,11 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
