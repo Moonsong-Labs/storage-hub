@@ -2447,8 +2447,9 @@ mod msp_respond_storage_request {
 					Some((msp_id, true))
 				);
 
-				// Get the new root of the bucket.
-				let new_bucket_root =
+                let first_bucket_root = <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
+                    .unwrap();
+				let second_bucket_root =
 					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
 					.unwrap();
 
@@ -2461,14 +2462,14 @@ mod msp_respond_storage_request {
                                 MspAcceptedBatchStorageRequests::<Test> {
                                     file_keys: bounded_vec![first_file_key],
                                     bucket_id: first_bucket_id,
-                                    new_bucket_root,
+                                    new_bucket_root: first_bucket_root,
                                     owner: owner_account_id.clone()
                                 }
                             ), BatchResponses::<Test>::Accepted(
                                 MspAcceptedBatchStorageRequests::<Test> {
                                     file_keys: bounded_vec![second_file_key],
                                     bucket_id: second_bucket_id,
-                                    new_bucket_root,
+                                    new_bucket_root: second_bucket_root,
                                     owner: owner_account_id
                                 }
                             )],
