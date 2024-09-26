@@ -7312,18 +7312,6 @@ mod stop_storing_for_insolvent_user {
 				)
 					.unwrap();
 
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MspAcceptedStoring {
-                        file_key,
-                        msp_id,
-                        bucket_id,
-                        owner: owner_account_id.clone(),
-                        new_bucket_root,
-                    }
-                    .into(),
-                );
-
                 // Assert that the capacity used by the MSP was updated
                 assert_eq!(
                     pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id)

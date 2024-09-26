@@ -512,22 +512,6 @@ pub mod pallet {
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
         },
-        /// Notifies that a MSP has accepted to store a file.
-        MspAcceptedStoring {
-            file_key: MerkleHash<T>,
-            msp_id: ProviderIdFor<T>,
-            bucket_id: BucketIdFor<T>,
-            owner: T::AccountId,
-            new_bucket_root: MerkleHash<T>,
-        },
-        /// Notifies that a MSP has rejected to store a file.
-        MspRejectedStoring {
-            file_key: MerkleHash<T>,
-            msp_id: ProviderIdFor<T>,
-            bucket_id: BucketIdFor<T>,
-            owner: T::AccountId,
-            reason: RejectedStorageRequestReason,
-        },
         /// Notifies that a MSP has responded to storage request(s).
         MspRespondedToStorageRequests {
             results: MspRespondStorageRequestsResult<T>,
