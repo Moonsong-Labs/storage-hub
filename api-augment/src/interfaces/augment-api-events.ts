@@ -39,6 +39,8 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   XcmV3TraitsError,
   XcmVersionedAssets,
   XcmVersionedLocation
@@ -1079,6 +1081,30 @@ declare module "@polkadot/api-base/types/events" {
        * The validation function has been scheduled to apply.
        **/
       ValidationFunctionStored: AugmentedEvent<ApiType, []>;
+      /**
+       * Generic event
+       **/
+      [key: string]: AugmentedEvent<ApiType>;
+    };
+    parameters: {
+      /**
+       * A Parameter was set.
+       *
+       * Is also emitted when the value was not changed.
+       **/
+      Updated: AugmentedEvent<
+        ApiType,
+        [
+          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>,
+          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>
+        ],
+        {
+          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+        }
+      >;
       /**
        * Generic event
        **/

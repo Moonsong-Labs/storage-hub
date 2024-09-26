@@ -158,6 +158,11 @@ const STORAGE_PROVIDERS_V1 = {
     ],
     type: "Option<Balance>"
   },
+  get_slash_amount_per_max_file_size: {
+    description: "Get the slashable amount corresponding to the configured max file size.",
+    params: [],
+    type: "Balance"
+  },
   query_storage_provider_capacity: {
     description: "Query the storage provider capacity.",
     params: [

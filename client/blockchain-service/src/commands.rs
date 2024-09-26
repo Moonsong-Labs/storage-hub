@@ -154,6 +154,9 @@ pub enum BlockchainServiceCommand {
         provider_id: ProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Option<Balance>>>,
     },
+    QuerySlashAmountPerMaxFileSize {
+        callback: tokio::sync::oneshot::Sender<Result<Balance>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -293,6 +296,8 @@ pub trait BlockchainServiceInterface {
         &self,
         provider_id: ProviderId,
     ) -> Result<Option<Balance>>;
+
+    async fn query_slash_amount_per_max_file_size(&self) -> Result<Balance>;
 
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
@@ -607,6 +612,13 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
             provider_id,
             callback,
         };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_slash_amount_per_max_file_size(&self) -> Result<Balance> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QuerySlashAmountPerMaxFileSize { callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

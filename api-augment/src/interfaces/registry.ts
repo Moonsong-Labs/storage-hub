@@ -109,6 +109,8 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceDirection,
   PalletNftsPriceWithDirection,
+  PalletParametersCall,
+  PalletParametersEvent,
   PalletPaymentStreamsCall,
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsError,
@@ -200,6 +202,13 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntime,
   StorageHubRuntimeRuntimeHoldReason,
   StorageHubRuntimeSessionKeys,
@@ -357,6 +366,8 @@ declare module "@polkadot/types/types/registry" {
     PalletNftsPreSignedMint: PalletNftsPreSignedMint;
     PalletNftsPriceDirection: PalletNftsPriceDirection;
     PalletNftsPriceWithDirection: PalletNftsPriceWithDirection;
+    PalletParametersCall: PalletParametersCall;
+    PalletParametersEvent: PalletParametersEvent;
     PalletPaymentStreamsCall: PalletPaymentStreamsCall;
     PalletPaymentStreamsDynamicRatePaymentStream: PalletPaymentStreamsDynamicRatePaymentStream;
     PalletPaymentStreamsError: PalletPaymentStreamsError;
@@ -448,6 +459,13 @@ declare module "@polkadot/types/types/registry" {
     StagingXcmV4Response: StagingXcmV4Response;
     StagingXcmV4TraitsOutcome: StagingXcmV4TraitsOutcome;
     StagingXcmV4Xcm: StagingXcmV4Xcm;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters: StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue;
     StorageHubRuntimeRuntime: StorageHubRuntimeRuntime;
     StorageHubRuntimeRuntimeHoldReason: StorageHubRuntimeRuntimeHoldReason;
     StorageHubRuntimeSessionKeys: StorageHubRuntimeSessionKeys;
