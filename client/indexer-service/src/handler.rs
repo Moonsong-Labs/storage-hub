@@ -9,8 +9,13 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{BlockNumber, ParachainClient};
+use shc_common::blockchain_utils::EventsRetrievalError;
+use shc_common::{
+    blockchain_utils::get_events_at_block,
+    types::{BlockNumber, ParachainClient},
+};
 use shc_indexer_db::{models::ServiceState, DbConnection, DbPool};
+use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
 
@@ -84,27 +89,186 @@ impl IndexerService {
         Ok(())
     }
 
-    async fn index_block<'a>(
-        &self,
+    async fn index_block<'a, 'b: 'a>(
+        &'b self,
         conn: &mut DbConnection<'a>,
         block_number: BlockNumber,
         block_hash: H256,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
-        // TODO: Process relevant block events
+        let block_events = get_events_at_block(&self.client, &block_hash)?;
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
                 ServiceState::update(conn, block_number as i64).await?;
 
-                // TODO: Add here everything else that we want to update for this block
+                for ev in block_events {
+                    self.index_event(conn, &ev.event).await?;
+                }
 
                 Ok(())
             })
         })
         .await?;
 
+        Ok(())
+    }
+
+    async fn index_event<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            RuntimeEvent::BucketNfts(event) => self.index_bucket_nfts_event(conn, event).await?,
+            RuntimeEvent::FileSystem(event) => self.index_file_system_event(conn, event).await?,
+            RuntimeEvent::PaymentStreams(event) => {
+                self.index_payment_streams_event(conn, event).await?
+            }
+            RuntimeEvent::ProofsDealer(event) => {
+                self.index_proofs_dealer_event(conn, event).await?
+            }
+            RuntimeEvent::Providers(event) => self.index_providers_event(conn, event).await?,
+            RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
+            // Runtime events that we're not interested in.
+            // We add them here instead of directly matching (_ => {})
+            // to ensure the compiler will let us know to treat future events when added.
+            RuntimeEvent::System(_) => {}
+            RuntimeEvent::ParachainSystem(_) => {}
+            RuntimeEvent::Balances(_) => {}
+            RuntimeEvent::TransactionPayment(_) => {}
+            RuntimeEvent::Sudo(_) => {}
+            RuntimeEvent::CollatorSelection(_) => {}
+            RuntimeEvent::Session(_) => {}
+            RuntimeEvent::XcmpQueue(_) => {}
+            RuntimeEvent::PolkadotXcm(_) => {}
+            RuntimeEvent::CumulusXcm(_) => {}
+            RuntimeEvent::MessageQueue(_) => {}
+            RuntimeEvent::Nfts(_) => {}
+        }
+
+        Ok(())
+    }
+
+    async fn index_bucket_nfts_event<'a, 'b: 'a>(
+        &'b self,
+        _conn: &mut DbConnection<'a>,
+        event: &pallet_bucket_nfts::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            pallet_bucket_nfts::Event::AccessShared { .. } => {}
+            pallet_bucket_nfts::Event::ItemReadAccessUpdated { .. } => {}
+            pallet_bucket_nfts::Event::ItemBurned { .. } => {}
+            pallet_bucket_nfts::Event::__Ignore(_, _) => {}
+        }
+        Ok(())
+    }
+
+    async fn index_file_system_event<'a, 'b: 'a>(
+        &'b self,
+        _conn: &mut DbConnection<'a>,
+        event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            pallet_file_system::Event::NewStorageRequest { .. } => {}
+            pallet_file_system::Event::NewBucket { .. } => {}
+            pallet_file_system::Event::MoveBucketRequested { .. } => {}
+            pallet_file_system::Event::BucketPrivacyUpdated { .. } => {}
+            pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
+            pallet_file_system::Event::MspAcceptedStoring { .. } => {}
+            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
+            pallet_file_system::Event::BspConfirmedStoring { .. } => {}
+            pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
+            pallet_file_system::Event::StorageRequestExpired { .. } => {}
+            pallet_file_system::Event::StorageRequestRevoked { .. } => {}
+            pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
+            pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
+            pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
+            pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
+            pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
+            pallet_file_system::Event::FileDeletionRequest { .. } => {}
+            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}
+            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
+            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
+            pallet_file_system::Event::MoveBucketAccepted { .. } => {}
+            pallet_file_system::Event::MoveBucketRejected { .. } => {}
+            pallet_file_system::Event::DataServerRegisteredForMoveBucket { .. } => {}
+            pallet_file_system::Event::__Ignore(_, _) => {}
+        }
+        Ok(())
+    }
+
+    async fn index_payment_streams_event<'a, 'b: 'a>(
+        &'b self,
+        _conn: &mut DbConnection<'a>,
+        event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated { .. } => {}
+            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {}
+            pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
+            pallet_payment_streams::Event::FixedRatePaymentStreamCreated { .. } => {}
+            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {}
+            pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
+            pallet_payment_streams::Event::PaymentStreamCharged { .. } => {}
+            pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
+            pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
+            pallet_payment_streams::Event::UserPaidDebts { .. } => {}
+            pallet_payment_streams::Event::UserSolvent { .. } => {}
+            pallet_payment_streams::Event::__Ignore(_, _) => {}
+        }
+        Ok(())
+    }
+
+    async fn index_proofs_dealer_event<'a, 'b: 'a>(
+        &'b self,
+        _conn: &mut DbConnection<'a>,
+        event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
+            pallet_proofs_dealer::Event::NewChallenge { .. } => {}
+            pallet_proofs_dealer::Event::ProofAccepted { .. } => {}
+            pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
+            pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
+            pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
+            pallet_proofs_dealer::Event::NoRecordOfLastSubmittedProof { .. } => {}
+            pallet_proofs_dealer::Event::NewChallengeCycleInitialised { .. } => {}
+            pallet_proofs_dealer::Event::__Ignore(_, _) => {}
+        }
+        Ok(())
+    }
+
+    async fn index_providers_event<'a, 'b: 'a>(
+        &'b self,
+        _conn: &mut DbConnection<'a>,
+        event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {}
+            pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {}
+            pallet_storage_providers::Event::MspSignUpSuccess { .. } => {}
+            pallet_storage_providers::Event::BspSignUpSuccess { .. } => {}
+            pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
+            pallet_storage_providers::Event::MspSignOffSuccess { .. } => {}
+            pallet_storage_providers::Event::BspSignOffSuccess { .. } => {}
+            pallet_storage_providers::Event::CapacityChanged { .. } => {}
+            pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::__Ignore(_, _) => {}
+        }
+        Ok(())
+    }
+
+    async fn index_randomness_event<'a, 'b: 'a>(
+        &'b self,
+        _conn: &mut DbConnection<'a>,
+        event: &pallet_randomness::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. } => {}
+            pallet_randomness::Event::__Ignore(_, _) => {}
+        }
         Ok(())
     }
 }
@@ -166,6 +330,8 @@ impl ActorEventLoop<IndexerService> for IndexerServiceEventLoop {
 pub enum IndexBlockError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] diesel::result::Error),
+    #[error("Failed to retrieve or decode events: {0}")]
+    EventsRetrievalError(#[from] EventsRetrievalError),
 }
 
 #[derive(Error, Debug)]

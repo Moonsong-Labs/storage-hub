@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
+use frame_system::EventRecord;
 use sc_executor::WasmExecutor;
 use sc_network::NetworkService;
 use sc_service::TFullClient;
@@ -139,3 +140,16 @@ impl DownloadRequestId {
         DownloadRequestId(next)
     }
 }
+
+/// Type alias for the events vector.
+///
+/// The events vector is a storage element in the FRAME system pallet, which stores all the events
+/// that have occurred in a block. This is syntactic sugar to make the code more readable.
+pub type StorageHubEventsVec = Vec<
+    Box<
+        EventRecord<
+            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
+            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        >,
+    >,
+>;
