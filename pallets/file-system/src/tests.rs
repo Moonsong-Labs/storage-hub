@@ -7306,12 +7306,6 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_bucket_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(
-					&bucket_id,
-				)
-					.unwrap();
-
                 // Assert that the capacity used by the MSP was updated
                 assert_eq!(
                     pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id)
