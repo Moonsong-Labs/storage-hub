@@ -2987,12 +2987,7 @@ mod msp_respond_storage_request {
                                         .expect("Root bucket should exist");
                                     BatchResponses::Accepted(accepted)
                                 }
-                                BatchResponses::Rejected(rejected) => {
-                                    BatchResponses::Rejected(rejected)
-                                }
-                                BatchResponses::Failed(_) => {
-                                    panic!("Unexpected failed batch response")
-                                }
+                                br => br,
                             })
                             .collect();
 

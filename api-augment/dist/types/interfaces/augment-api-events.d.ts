@@ -22,7 +22,6 @@ import type {
   FrameSupportTokensMiscBalanceStatus,
   PalletFileSystemEitherAccountIdOrProviderId,
   PalletFileSystemMspRespondStorageRequestsResult,
-  PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
@@ -638,40 +637,6 @@ declare module "@polkadot/api-base/types/events" {
         {
           mspId: H256;
           bucketId: H256;
-        }
-      >;
-      /**
-       * Notifies that a MSP has accepted to store a file.
-       **/
-      MspAcceptedStoring: AugmentedEvent<
-        ApiType,
-        [fileKey: H256, mspId: H256, bucketId: H256, owner: AccountId32, newBucketRoot: H256],
-        {
-          fileKey: H256;
-          mspId: H256;
-          bucketId: H256;
-          owner: AccountId32;
-          newBucketRoot: H256;
-        }
-      >;
-      /**
-       * Notifies that a MSP has rejected to store a file.
-       **/
-      MspRejectedStoring: AugmentedEvent<
-        ApiType,
-        [
-          fileKey: H256,
-          mspId: H256,
-          bucketId: H256,
-          owner: AccountId32,
-          reason: PalletFileSystemRejectedStorageRequestReason
-        ],
-        {
-          fileKey: H256;
-          mspId: H256;
-          bucketId: H256;
-          owner: AccountId32;
-          reason: PalletFileSystemRejectedStorageRequestReason;
         }
       >;
       /**

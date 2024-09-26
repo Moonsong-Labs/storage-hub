@@ -1814,22 +1814,6 @@ declare module "@polkadot/types/lookup" {
       readonly size_: u64;
       readonly peerIds: Vec<Bytes>;
     } & Struct;
-    readonly isMspAcceptedStoring: boolean;
-    readonly asMspAcceptedStoring: {
-      readonly fileKey: H256;
-      readonly mspId: H256;
-      readonly bucketId: H256;
-      readonly owner: AccountId32;
-      readonly newBucketRoot: H256;
-    } & Struct;
-    readonly isMspRejectedStoring: boolean;
-    readonly asMspRejectedStoring: {
-      readonly fileKey: H256;
-      readonly mspId: H256;
-      readonly bucketId: H256;
-      readonly owner: AccountId32;
-      readonly reason: PalletFileSystemRejectedStorageRequestReason;
-    } & Struct;
     readonly isMspRespondedToStorageRequests: boolean;
     readonly asMspRespondedToStorageRequests: {
       readonly results: PalletFileSystemMspRespondStorageRequestsResult;
@@ -1941,8 +1925,6 @@ declare module "@polkadot/types/lookup" {
       | "BucketPrivacyUpdated"
       | "NewCollectionAndAssociation"
       | "NewStorageRequest"
-      | "MspAcceptedStoring"
-      | "MspRejectedStoring"
       | "MspRespondedToStorageRequests"
       | "AcceptedBspVolunteer"
       | "BspConfirmedStoring"
@@ -1962,19 +1944,12 @@ declare module "@polkadot/types/lookup" {
       | "MoveBucketRejected"
       | "DataServerRegisteredForMoveBucket";
   }
-  /** @name PalletFileSystemRejectedStorageRequestReason (133) */
-  interface PalletFileSystemRejectedStorageRequestReason extends Enum {
-    readonly isReachedMaximumCapacity: boolean;
-    readonly isReceivedInvalidProof: boolean;
-    readonly isInternalError: boolean;
-    readonly type: "ReachedMaximumCapacity" | "ReceivedInvalidProof" | "InternalError";
-  }
-  /** @name PalletFileSystemMspRespondStorageRequestsResult (134) */
+  /** @name PalletFileSystemMspRespondStorageRequestsResult (133) */
   interface PalletFileSystemMspRespondStorageRequestsResult extends Struct {
     readonly mspId: H256;
     readonly responses: Vec<PalletFileSystemBatchResponses>;
   }
-  /** @name PalletFileSystemBatchResponses (136) */
+  /** @name PalletFileSystemBatchResponses (135) */
   interface PalletFileSystemBatchResponses extends Enum {
     readonly isAccepted: boolean;
     readonly asAccepted: PalletFileSystemMspAcceptedBatchStorageRequests;
@@ -1984,18 +1959,25 @@ declare module "@polkadot/types/lookup" {
     readonly asFailed: PalletFileSystemMspFailedBatchStorageRequests;
     readonly type: "Accepted" | "Rejected" | "Failed";
   }
-  /** @name PalletFileSystemMspAcceptedBatchStorageRequests (137) */
+  /** @name PalletFileSystemMspAcceptedBatchStorageRequests (136) */
   interface PalletFileSystemMspAcceptedBatchStorageRequests extends Struct {
     readonly fileKeys: Vec<H256>;
     readonly bucketId: H256;
     readonly newBucketRoot: H256;
     readonly owner: AccountId32;
   }
-  /** @name PalletFileSystemMspRejectedBatchStorageRequests (140) */
+  /** @name PalletFileSystemMspRejectedBatchStorageRequests (139) */
   interface PalletFileSystemMspRejectedBatchStorageRequests extends Struct {
     readonly fileKeys: Vec<ITuple<[H256, PalletFileSystemRejectedStorageRequestReason]>>;
     readonly bucketId: H256;
     readonly owner: AccountId32;
+  }
+  /** @name PalletFileSystemRejectedStorageRequestReason (142) */
+  interface PalletFileSystemRejectedStorageRequestReason extends Enum {
+    readonly isReachedMaximumCapacity: boolean;
+    readonly isReceivedInvalidProof: boolean;
+    readonly isInternalError: boolean;
+    readonly type: "ReachedMaximumCapacity" | "ReceivedInvalidProof" | "InternalError";
   }
   /** @name PalletFileSystemMspFailedBatchStorageRequests (144) */
   interface PalletFileSystemMspFailedBatchStorageRequests extends Struct {

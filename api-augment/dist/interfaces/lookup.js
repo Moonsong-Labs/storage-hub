@@ -1430,20 +1430,6 @@ export default {
         size_: "u64",
         peerIds: "Vec<Bytes>"
       },
-      MspAcceptedStoring: {
-        fileKey: "H256",
-        mspId: "H256",
-        bucketId: "H256",
-        owner: "AccountId32",
-        newBucketRoot: "H256"
-      },
-      MspRejectedStoring: {
-        fileKey: "H256",
-        mspId: "H256",
-        bucketId: "H256",
-        owner: "AccountId32",
-        reason: "PalletFileSystemRejectedStorageRequestReason"
-      },
       MspRespondedToStorageRequests: {
         results: "PalletFileSystemMspRespondStorageRequestsResult"
       },
@@ -1537,20 +1523,14 @@ export default {
     }
   },
   /**
-   * Lookup133: pallet_file_system::types::RejectedStorageRequestReason
-   **/
-  PalletFileSystemRejectedStorageRequestReason: {
-    _enum: ["ReachedMaximumCapacity", "ReceivedInvalidProof", "InternalError"]
-  },
-  /**
-   * Lookup134: pallet_file_system::types::MspRespondStorageRequestsResult<T>
+   * Lookup133: pallet_file_system::types::MspRespondStorageRequestsResult<T>
    **/
   PalletFileSystemMspRespondStorageRequestsResult: {
     mspId: "H256",
     responses: "Vec<PalletFileSystemBatchResponses>"
   },
   /**
-   * Lookup136: pallet_file_system::types::BatchResponses<T>
+   * Lookup135: pallet_file_system::types::BatchResponses<T>
    **/
   PalletFileSystemBatchResponses: {
     _enum: {
@@ -1560,7 +1540,7 @@ export default {
     }
   },
   /**
-   * Lookup137: pallet_file_system::types::MspAcceptedBatchStorageRequests<T>
+   * Lookup136: pallet_file_system::types::MspAcceptedBatchStorageRequests<T>
    **/
   PalletFileSystemMspAcceptedBatchStorageRequests: {
     fileKeys: "Vec<H256>",
@@ -1569,12 +1549,18 @@ export default {
     owner: "AccountId32"
   },
   /**
-   * Lookup140: pallet_file_system::types::MspRejectedBatchStorageRequests<T>
+   * Lookup139: pallet_file_system::types::MspRejectedBatchStorageRequests<T>
    **/
   PalletFileSystemMspRejectedBatchStorageRequests: {
     fileKeys: "Vec<(H256,PalletFileSystemRejectedStorageRequestReason)>",
     bucketId: "H256",
     owner: "AccountId32"
+  },
+  /**
+   * Lookup142: pallet_file_system::types::RejectedStorageRequestReason
+   **/
+  PalletFileSystemRejectedStorageRequestReason: {
+    _enum: ["ReachedMaximumCapacity", "ReceivedInvalidProof", "InternalError"]
   },
   /**
    * Lookup144: pallet_file_system::types::MspFailedBatchStorageRequests<T>

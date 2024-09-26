@@ -1416,20 +1416,6 @@ declare const _default: {
         size_: string;
         peerIds: string;
       };
-      MspAcceptedStoring: {
-        fileKey: string;
-        mspId: string;
-        bucketId: string;
-        owner: string;
-        newBucketRoot: string;
-      };
-      MspRejectedStoring: {
-        fileKey: string;
-        mspId: string;
-        bucketId: string;
-        owner: string;
-        reason: string;
-      };
       MspRespondedToStorageRequests: {
         results: string;
       };
@@ -1523,20 +1509,14 @@ declare const _default: {
     };
   };
   /**
-   * Lookup133: pallet_file_system::types::RejectedStorageRequestReason
-   **/
-  PalletFileSystemRejectedStorageRequestReason: {
-    _enum: string[];
-  };
-  /**
-   * Lookup134: pallet_file_system::types::MspRespondStorageRequestsResult<T>
+   * Lookup133: pallet_file_system::types::MspRespondStorageRequestsResult<T>
    **/
   PalletFileSystemMspRespondStorageRequestsResult: {
     mspId: string;
     responses: string;
   };
   /**
-   * Lookup136: pallet_file_system::types::BatchResponses<T>
+   * Lookup135: pallet_file_system::types::BatchResponses<T>
    **/
   PalletFileSystemBatchResponses: {
     _enum: {
@@ -1546,7 +1526,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup137: pallet_file_system::types::MspAcceptedBatchStorageRequests<T>
+   * Lookup136: pallet_file_system::types::MspAcceptedBatchStorageRequests<T>
    **/
   PalletFileSystemMspAcceptedBatchStorageRequests: {
     fileKeys: string;
@@ -1555,12 +1535,18 @@ declare const _default: {
     owner: string;
   };
   /**
-   * Lookup140: pallet_file_system::types::MspRejectedBatchStorageRequests<T>
+   * Lookup139: pallet_file_system::types::MspRejectedBatchStorageRequests<T>
    **/
   PalletFileSystemMspRejectedBatchStorageRequests: {
     fileKeys: string;
     bucketId: string;
     owner: string;
+  };
+  /**
+   * Lookup142: pallet_file_system::types::RejectedStorageRequestReason
+   **/
+  PalletFileSystemRejectedStorageRequestReason: {
+    _enum: string[];
   };
   /**
    * Lookup144: pallet_file_system::types::MspFailedBatchStorageRequests<T>
