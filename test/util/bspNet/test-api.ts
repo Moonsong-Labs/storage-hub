@@ -202,7 +202,23 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A boolean indicating whether the provider was slashed.
        */
       providerSlashed: (providerId: string) =>
-        Assertions.checkProviderWasSlashed(this._api, providerId)
+        Assertions.checkProviderWasSlashed(this._api, providerId),
+
+      /**
+       * Asserts that a specific log message appears in a Docker container's output.
+       * @param options - The options for the log assertion.
+       * @param options.searchString - The string to search for in the container's logs.
+       * @param options.containerName - The name of the Docker container to search logs in.
+       * @param options.timeout - Optional. The maximum time (in milliseconds) to wait for the log message to appear. Default 10s.
+       * @returns A promise that resolves to the matching log message if found, or rejects if the timeout is reached.
+       */
+      log: async (options: { searchString: string; containerName: string; timeout?: number }) => {
+        return Assertions.assertDockerLog(
+          options.containerName,
+          options.searchString,
+          options.timeout
+        );
+      }
     };
 
     /**

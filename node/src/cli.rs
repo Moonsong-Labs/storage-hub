@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use clap::{Parser, ValueEnum};
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::command::ProviderOptions;
+use crate::command::{IndexerOptions, ProviderOptions};
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -137,6 +137,35 @@ impl ProviderConfigurations {
     }
 }
 
+#[derive(Debug, Parser, Clone)]
+pub struct IndexerConfigurations {
+    /// Whether to enable the indexer.
+    ///
+    /// By default, the indexer is disabled.
+    /// If enabled, a Postgres database must be set up (see the indexer README for details).
+    #[arg(long, default_value = "false")]
+    pub indexer: bool,
+
+    /// Postgres database URL.
+    ///
+    /// If not provided, the indexer will use the `DATABASE_URL` environment variable. If the
+    /// environment variable is not set, the node will abort.
+    #[arg(long)]
+    pub database_url: Option<String>,
+}
+
+impl IndexerConfigurations {
+    pub fn indexer_options(&self) -> Option<IndexerOptions> {
+        if self.indexer {
+            Some(IndexerOptions {
+                database_url: self.database_url.clone(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
 /// Block authoring scheme to be used by the dev service.
 #[derive(Debug, Copy, Clone)]
 pub enum Sealing {
@@ -204,8 +233,13 @@ pub struct Cli {
     #[arg(raw = true)]
     pub relay_chain_args: Vec<String>,
 
+    /// Provider configurations
     #[command(flatten)]
     pub provider_config: ProviderConfigurations,
+
+    /// Indexer configurations
+    #[command(flatten)]
+    pub indexer_config: IndexerConfigurations,
 }
 
 #[derive(Debug, Parser)]

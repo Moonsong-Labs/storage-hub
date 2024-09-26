@@ -77,7 +77,11 @@ jobs:
           cache: false
       - uses: rui314/setup-mold@v1
       - uses: ./.github/workflow-templates/setup-pnpm
-      - uses: arduino/setup-protoc@v3
+      # Install libpq-dev
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - name: Build All
         # TODO: Make this only build the parachain node project
         run: cargo build --release
