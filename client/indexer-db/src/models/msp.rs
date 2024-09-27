@@ -80,4 +80,15 @@ impl Msp {
             .await?;
         Ok(())
     }
+
+    pub async fn get_by_blockchain_id<'a>(
+        conn: &mut DbConnection<'a>,
+        blockchain_id: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let msp = msp::table
+            .filter(msp::blockchain_id.eq(blockchain_id))
+            .first(conn)
+            .await?;
+        Ok(msp)
+    }
 }

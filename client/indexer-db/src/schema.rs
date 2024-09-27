@@ -19,6 +19,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    bucket (id) {
+        id -> Int4,
+        msp_id -> Int4,
+        account -> Varchar,
+        blockchain_id -> Varchar,
+        name -> Bytea,
+        collection_id -> Nullable<Varchar>,
+        private -> Bool,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     msp (id) {
         id -> Int4,
         account -> Varchar,
@@ -57,12 +71,14 @@ diesel::table! {
 
 diesel::joinable!(bsp_multiaddress -> bsp (bsp_id));
 diesel::joinable!(bsp_multiaddress -> multiaddress (multiaddress_id));
+diesel::joinable!(bucket -> msp (msp_id));
 diesel::joinable!(msp_multiaddress -> msp (msp_id));
 diesel::joinable!(msp_multiaddress -> multiaddress (multiaddress_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     bsp,
     bsp_multiaddress,
+    bucket,
     msp,
     msp_multiaddress,
     multiaddress,

@@ -168,14 +168,51 @@ impl IndexerService {
 
     async fn index_file_system_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
+            pallet_file_system::Event::NewBucket {
+                who,
+                msp_id,
+                bucket_id,
+                name,
+                collection_id,
+                private,
+            } => {
+                let msp = Msp::get_by_blockchain_id(conn, msp_id.to_string()).await?;
+                Bucket::create(
+                    conn,
+                    msp.id,
+                    who.to_string(),
+                    bucket_id.to_string(),
+                    name.to_vec(),
+                    collection_id.map(|id| id.to_string()),
+                    *private,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::MoveBucketAccepted { msp_id, bucket_id } => {
+                let msp = Msp::get_by_blockchain_id(conn, msp_id.to_string()).await?;
+                Bucket::update_msp(conn, bucket_id.to_string(), msp.id).await?;
+            }
+            pallet_file_system::Event::BucketPrivacyUpdated {
+                who,
+                bucket_id,
+                collection_id,
+                private,
+            } => {
+                Bucket::update_privacy(
+                    conn,
+                    who.to_string(),
+                    bucket_id.to_string(),
+                    collection_id.map(|id| id.to_string()),
+                    *private,
+                )
+                .await?;
+            }
             pallet_file_system::Event::NewStorageRequest { .. } => {}
-            pallet_file_system::Event::NewBucket { .. } => {}
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
-            pallet_file_system::Event::BucketPrivacyUpdated { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::MspAcceptedStoring { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
@@ -192,7 +229,6 @@ impl IndexerService {
             pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
-            pallet_file_system::Event::MoveBucketAccepted { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::DataServerRegisteredForMoveBucket { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
