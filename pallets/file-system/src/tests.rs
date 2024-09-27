@@ -2219,10 +2219,8 @@ mod msp_respond_storage_request {
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
 				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
-                let first_size = 4;
-				let second_size = 8;
-                let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let size = 4;
+                let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
@@ -2238,8 +2236,8 @@ mod msp_respond_storage_request {
                     owner_account_id.clone(),
                     bucket_id,
                     first_location.clone(),
-                    first_size,
-                    first_fingerprint,
+                    size,
+                    fingerprint,
                 );
 
 				// Compute the file key for the second file.
@@ -2247,8 +2245,8 @@ mod msp_respond_storage_request {
 					owner_account_id.clone(),
 					bucket_id,
 					second_location.clone(),
-					second_size,
-					second_fingerprint,
+					size,
+					fingerprint,
 				);
 
                 // Dispatch a storage request for the first file.
@@ -2256,8 +2254,8 @@ mod msp_respond_storage_request {
 					owner_signed.clone(),
 					bucket_id,
 					first_location.clone(),
-					first_fingerprint,
-					first_size,
+					fingerprint,
+					size,
 					msp_id,
 					peer_ids.clone(),
 				));
@@ -2267,8 +2265,8 @@ mod msp_respond_storage_request {
 					owner_signed.clone(),
 					bucket_id,
 					second_location.clone(),
-					second_fingerprint,
-					second_size,
+					fingerprint,
+					size,
 					msp_id,
 					peer_ids.clone(),
 				));
@@ -2330,7 +2328,7 @@ mod msp_respond_storage_request {
                 // Assert that the MSP used capacity has been updated.
                 assert_eq!(
                     <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-                    first_size + second_size
+                    size * 2
                 );
             });
         }
@@ -2921,14 +2919,19 @@ mod msp_respond_storage_request {
                 // Register the MSP.
                 let msp_id = add_msp_to_provider_storage(&msp_account_id);
 
+                let first_bucket = b"first bucket".to_vec();
+                let second_bucket = b"second bucket".to_vec();
+                let size = 4;
+                let fingerprint = H256::zero();
+
                 // Define storage request parameters
                 let storage_request_params = vec![
                     StorageRequestParams {
                         owner_account_id: Keyring::Alice.to_account_id(),
-                        bucket_name: b"first bucket".to_vec(),
+                        bucket_name: first_bucket,
                         location: b"location".to_vec(),
-                        size: 4,
-                        fingerprint: H256::zero(),
+                        size,
+                        fingerprint,
                         peer_ids: BoundedVec::try_from(
                             vec![BoundedVec::try_from(vec![1]).unwrap()],
                         )
@@ -2936,10 +2939,10 @@ mod msp_respond_storage_request {
                     },
                     StorageRequestParams {
                         owner_account_id: Keyring::Bob.to_account_id(),
-                        bucket_name: b"second bucket".to_vec(),
+                        bucket_name: second_bucket.clone(),
                         location: b"location2".to_vec(),
-                        size: 8,
-                        fingerprint: H256::random(),
+                        size,
+                        fingerprint,
                         peer_ids: BoundedVec::try_from(
                             vec![BoundedVec::try_from(vec![2]).unwrap()],
                         )
@@ -2947,10 +2950,10 @@ mod msp_respond_storage_request {
                     },
                     StorageRequestParams {
                         owner_account_id: Keyring::Bob.to_account_id(),
-                        bucket_name: b"second bucket".to_vec(),
+                        bucket_name: second_bucket,
                         location: b"location3".to_vec(),
-                        size: 8,
-                        fingerprint: H256::random(),
+                        size,
+                        fingerprint,
                         peer_ids: BoundedVec::try_from(
                             vec![BoundedVec::try_from(vec![2]).unwrap()],
                         )
