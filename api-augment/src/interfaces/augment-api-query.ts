@@ -1230,7 +1230,7 @@ declare module "@polkadot/api-base/types/storage" {
        * - No new checkpoint challenges would be emitted and added to [`TickToCheckpointChallenges`].
        * - Deadlines for proof submissions are indefinitely postponed.
        **/
-      challengesTickerPaused: AugmentedQuery<ApiType, () => Observable<bool>, []> &
+      challengesTickerPaused: AugmentedQuery<ApiType, () => Observable<Option<Null>>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The challenge tick of the last checkpoint challenge round.
