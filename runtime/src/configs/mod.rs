@@ -52,9 +52,8 @@ use crate::{
     PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
     RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
     WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MILLIUNIT, MINUTES,
-    NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
-    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
 use runtime_params::RuntimeParameters;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -435,9 +434,8 @@ impl pallet_randomness::Config for Runtime {
 }
 
 parameter_types! {
-    pub const SpMinDeposit: Balance = 20 * UNIT;
-    pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashAmountPerMaxFileSize: Balance = 20 * MILLIUNIT; // TODO: Change this to a more realistic slashing amount.
+    pub const SpMinDeposit: Balance = 100 * UNIT;
+    pub const BucketDeposit: Balance = 100 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -520,7 +518,6 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 200 * UNIT; // TODO: Change this value into something much higher like 1_000_000 * UNIT
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
@@ -551,7 +548,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
-    type StakeToChallengePeriod = StakeToChallengePeriod;
+    type StakeToChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
     type MinChallengePeriod = MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
 }

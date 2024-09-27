@@ -7,7 +7,7 @@ import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import * as util from "node:util";
-import { DOCKER_IMAGE } from "../constants.ts";
+import { DOCKER_IMAGE, MILLIUNIT, UNIT } from "../constants.ts";
 import {
   alice,
   bspDownKey,
@@ -186,7 +186,39 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
+    // Setting:
+    // replication_target = 1 -> One BSP is enough to fulfil a storage request.
+    // block_range_to_maximum_threshold = 1 -> The threshold goes from the minimum to the maximum in 1 tick.
     await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1)));
+
+    // Adjusting runtime parameters...
+    // The `set_parameter` extrinsic receives an object like this:
+    // {
+    //   RuntimeConfig: Enum {
+    //     SlashAmountPerMaxFileSize: [null, {VALUE_YOU_WANT}],
+    //     StakeToChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //   }
+    // }
+    const slashAmountPerMaxFileSizeRuntimeParameter = {
+      RuntimeConfig: {
+        SlashAmountPerMaxFileSize: [null, 20n * MILLIUNIT]
+      }
+    };
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(
+        userApi.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter)
+      )
+    );
+    const stakeToChallengePeriodRuntimeParameter = {
+      RuntimeConfig: {
+        StakeToChallengePeriod: [null, 1000n * UNIT]
+      }
+    };
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(
+        userApi.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter)
+      )
+    );
 
     // Make BSP
     await forceSignupBsp({

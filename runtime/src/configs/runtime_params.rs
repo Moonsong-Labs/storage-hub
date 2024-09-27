@@ -1,4 +1,4 @@
-use crate::{Balance, Runtime, MILLIUNIT, UNIT};
+use crate::{Balance, Runtime, UNIT};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
@@ -9,10 +9,13 @@ pub mod dynamic_params {
     pub mod runtime_config {
         use super::*;
 
-        // for fees, 80% are burned, 20% to the treasury
         #[codec(index = 0)]
         #[allow(non_upper_case_globals)]
-        pub static SlashAmountPerMaxFileSize: Balance = 20 * MILLIUNIT;
+        pub static SlashAmountPerMaxFileSize: Balance = 20 * UNIT;
+
+        #[codec(index = 1)]
+        #[allow(non_upper_case_globals)]
+        pub static StakeToChallengePeriod: Balance = 1_000_000_000 * UNIT;
     }
 }
 
@@ -23,6 +26,10 @@ impl Default for RuntimeParameters {
             dynamic_params::runtime_config::Parameters::SlashAmountPerMaxFileSize(
                 dynamic_params::runtime_config::SlashAmountPerMaxFileSize,
                 Some(20 * UNIT),
+            ),
+            dynamic_params::runtime_config::Parameters::StakeToChallengePeriod(
+                dynamic_params::runtime_config::StakeToChallengePeriod,
+                Some(1000 * UNIT),
             ),
         )
     }
