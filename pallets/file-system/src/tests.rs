@@ -6607,34 +6607,34 @@ mod stop_storing_for_insolvent_user {
                     .unwrap(),
                 ));
 
-            // Assert that the storage was updated
-            assert_eq!(
-                file_system::StorageRequests::<Test>::get(file_key),
-                Some(StorageRequestMetadata {
-                    requested_at: 1,
-                    owner: owner_account_id.clone(),
-                    bucket_id,
-                    location: location.clone(),
-                    fingerprint,
-                    size,
-                    msp: Some((msp_id, false)),
-                    user_peer_ids: peer_ids.clone(),
-                    data_server_sps: BoundedVec::default(),
-                    bsps_required: ReplicationTarget::<Test>::get(),
-                    bsps_confirmed: 1,
-                    bsps_volunteered: 1,
-                })
-            );
+                // Assert that the storage was updated
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                    })
+                );
 
-            // Assert that the RequestStorageBsps was updated
-            assert_eq!(
-                file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                    .expect("BSP should exist in storage"),
-                StorageRequestBspsMetadata::<Test> {
-                    confirmed: true,
-                    _phantom: Default::default()
-                }
-            );
+                // Assert that the RequestStorageBsps was updated
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: true,
+                        _phantom: Default::default()
+                    }
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -7186,34 +7186,34 @@ mod stop_storing_for_insolvent_user {
                     .unwrap(),
                 ));
 
-            // Assert that the storage was updated
-            assert_eq!(
-                file_system::StorageRequests::<Test>::get(file_key),
-                Some(StorageRequestMetadata {
-                    requested_at: 1,
-                    owner: owner_account_id.clone(),
-                    bucket_id,
-                    location: location.clone(),
-                    fingerprint,
-                    size,
-                    msp: Some((msp_id, false)),
-                    user_peer_ids: peer_ids.clone(),
-                    data_server_sps: BoundedVec::default(),
-                    bsps_required: ReplicationTarget::<Test>::get(),
-                    bsps_confirmed: 1,
-                    bsps_volunteered: 1,
-                })
-            );
+                // Assert that the storage was updated
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                    })
+                );
 
-            // Assert that the RequestStorageBsps was updated
-            assert_eq!(
-                file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                    .expect("BSP should exist in storage"),
-                StorageRequestBspsMetadata::<Test> {
-                    confirmed: true,
-                    _phantom: Default::default()
-                }
-            );
+                // Assert that the RequestStorageBsps was updated
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: true,
+                        _phantom: Default::default()
+                    }
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -7387,34 +7387,34 @@ mod stop_storing_for_insolvent_user {
                     .unwrap(),
                 ));
 
-            // Assert that the storage was updated
-            assert_eq!(
-                file_system::StorageRequests::<Test>::get(file_key),
-                Some(StorageRequestMetadata {
-                    requested_at: 1,
-                    owner: owner_account_id.clone(),
-                    bucket_id,
-                    location: location.clone(),
-                    fingerprint,
-                    size,
-                    msp: Some((msp_id, false)),
-                    user_peer_ids: peer_ids.clone(),
-                    data_server_sps: BoundedVec::default(),
-                    bsps_required: ReplicationTarget::<Test>::get(),
-                    bsps_confirmed: 1,
-                    bsps_volunteered: 1,
-                })
-            );
+                // Assert that the storage was updated
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                    })
+                );
 
-            // Assert that the RequestStorageBsps was updated
-            assert_eq!(
-                file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
-                    .expect("BSP should exist in storage"),
-                StorageRequestBspsMetadata::<Test> {
-                    confirmed: true,
-                    _phantom: Default::default()
-                }
-            );
+                // Assert that the RequestStorageBsps was updated
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: true,
+                        _phantom: Default::default()
+                    }
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
