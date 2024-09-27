@@ -4,7 +4,7 @@ services:
     container_name: docker-sh-bsp-1
     platform: linux/amd64
     ports:
-      - "9966:9944"
+      - "9666:9944"
       - "30350:30350"
     volumes:
       - ./dev-keystores/bsp:/keystore:rw
@@ -33,7 +33,7 @@ services:
     container_name: docker-sh-msp-1
     platform: linux/amd64
     ports:
-      - "9988:9944"
+      - "9777:9944"
       - "30555:30350"
     volumes:
       - ./dev-keystores/msp:/keystore:rw
@@ -63,7 +63,7 @@ services:
     platform: linux/amd64
     container_name: docker-sh-user-1
     ports:
-      - "9977:9944"
+      - "9888:9944"
       - "30444:30444"
     volumes:
       - ./dev-keystores/user:/keystore:rw
