@@ -6361,7 +6361,7 @@ mod compute_threshold {
                 let block_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
-                // BSP should be able to volunteer immediately for the storage request since the BlockRangeToMaximumThreshold is 1
+                // BSP should be able to volunteer immediately for the storage request since the TickRangeToMaximumThreshold is 1
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
 
                 let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<
@@ -6538,10 +6538,10 @@ mod compute_threshold {
                     )
                         .unwrap();
 
-                // Set BlockRangeToMaximumThreshold to one
+                // Set TickRangeToMaximumThreshold to one
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
@@ -6576,7 +6576,7 @@ mod compute_threshold {
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 // Set max reputation weight
@@ -6601,7 +6601,7 @@ mod compute_threshold {
         }
 
         #[test]
-        fn bsp_with_heigher_weight_should_have_higher_slope() {
+        fn bsp_with_higher_weight_should_have_higher_slope() {
             new_test_ext().execute_with(|| {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
@@ -6631,7 +6631,7 @@ mod compute_threshold {
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
@@ -6690,7 +6690,7 @@ mod compute_threshold {
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
