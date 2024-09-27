@@ -892,10 +892,7 @@ where
             let encoded_trie_value = file_metadata.encode();
 
             // Skip any duplicates.
-            if accepted_file_keys_and_metadata
-                .insert(file_key, encoded_trie_value)
-                .is_some()
-            {
+            if accepted_file_keys_and_metadata.contains_key(&file_key) {
                 continue;
             }
 
@@ -971,6 +968,15 @@ where
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
             }
+
+            expect_or_err!(
+                accepted_file_keys_and_metadata
+                    .insert(file_key, encoded_trie_value)
+                    .is_none(),
+                "Failed to insert file key and metadata into accepted_file_keys_and_metadata",
+                Error::<T>::InconsistentState,
+                bool
+            );
         }
 
         // Get the current root of the bucket where the file will be stored.

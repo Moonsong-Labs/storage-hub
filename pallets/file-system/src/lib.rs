@@ -740,6 +740,8 @@ pub mod pallet {
         TooManyStorageRequestResponses,
         /// Bucket id and file key pair is invalid.
         InvalidBucketIdFileKeyPair,
+        /// Updated state does is not what is expected.
+        InconsistentState,
     }
 
     #[pallet::call]

@@ -2307,7 +2307,7 @@ mod msp_respond_storage_request {
 
 				// Get the new root of the bucket.
                 let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
+                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
                     .unwrap();
 
                 // Assert that the correct event was deposited
