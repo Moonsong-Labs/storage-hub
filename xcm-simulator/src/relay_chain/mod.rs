@@ -164,6 +164,7 @@ impl pallet_message_queue::Config for Runtime {
     type QueueChangeHandler = ();
     type QueuePausedQuery = ();
     type WeightInfo = ();
+    type IdleMaxServiceWeight = ();
 }
 
 construct_runtime!(

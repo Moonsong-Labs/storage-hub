@@ -1,4 +1,5 @@
 use crate::{
+    self as file_system,
     mock::*,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileLocation,
@@ -1403,7 +1404,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1476,7 +1477,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1514,7 +1515,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1620,7 +1621,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1650,17 +1651,17 @@ mod request_storage {
                 let expiration_block = System::block_number() + storage_request_ttl;
 
                 // Assert that the next starting block to clean up is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
 
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
-                    FileSystem::next_available_storage_request_expiration_block(),
+                    file_system::NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     expiration_block
                 );
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
                     vec![file_key]
                 );
 
@@ -1668,7 +1669,7 @@ mod request_storage {
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
                     vec![]
                 );
             });
@@ -1726,7 +1727,10 @@ mod request_storage {
 
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    )
+                    .len(),
                     max_expired_items_in_block as usize
                 );
 
@@ -1735,7 +1739,9 @@ mod request_storage {
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    ),
                     vec![]
                 );
             });
@@ -1797,11 +1803,14 @@ mod request_storage {
                     expected_expiration_block_number.into();
 
                 // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
 
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    )
+                    .len(),
                     max_storage_request_expiry as usize
                 );
 
@@ -1813,25 +1822,30 @@ mod request_storage {
                 // Assert that the storage request expirations storage is at max capacity
                 // TODO: Fix this test...
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    )
+                    .len(),
                     max_storage_request_expiry as usize
                 );
 
                 // Assert that the `NextExpirationInsertionBlockNumber` storage did not update
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
 
                 // Go to block number after which the storage request expirations should be removed
                 roll_to(expected_expiration_block_number + 1);
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    ),
                     vec![]
                 );
 
                 // Assert that the `NextExpirationInsertionBlockNumber` storage is set to the next block number
                 assert_eq!(
-                    FileSystem::next_starting_block_to_clean_up(),
+                    file_system::NextStartingBlockToCleanUp::<Test>::get(),
                     System::block_number() + 1
                 );
             });
@@ -1942,11 +1956,11 @@ mod revoke_storage_request {
                 let expiration_block = System::block_number() + storage_request_ttl;
 
                 // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
                     vec![file_key]
                 );
 
@@ -2008,7 +2022,7 @@ mod revoke_storage_request {
 
                 // Check StorageRequestBsps storage for confirmed BSPs
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: false,
@@ -2159,7 +2173,7 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(file_key).unwrap().msp,
                     Some((msp_id, true))
                 );
 
@@ -2258,7 +2272,7 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key).unwrap().msp,
                     Some((msp_id, true))
                 );
 
@@ -2299,7 +2313,7 @@ mod msp_accept_storage_request {
 
 				// Assert that the storage was updated
 				assert_eq!(
-					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
 					Some((msp_id, true))
 				);
 
@@ -2408,7 +2422,7 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key).unwrap().msp,
                     Some((msp_id, true))
                 );
 
@@ -2449,7 +2463,7 @@ mod msp_accept_storage_request {
 
 				// Assert that the storage was updated
 				assert_eq!(
-					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
 					Some((msp_id, true))
 				);
 
@@ -2562,7 +2576,7 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key).unwrap().msp,
                     Some((msp_id, true))
                 );
 
@@ -2603,7 +2617,7 @@ mod msp_accept_storage_request {
 
 				// Assert that the storage was updated
 				assert_eq!(
-					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
 					Some((msp_id, true))
 				);
 
@@ -2712,8 +2726,11 @@ mod msp_accept_storage_request {
                 ));
 
                 // Storage request should be removed
-                assert!(FileSystem::storage_requests(file_key).is_none());
-                assert!(FileSystem::storage_request_buckets(bucket_id, file_key).is_none());
+                assert!(file_system::StorageRequests::<Test>::get(file_key).is_none());
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(bucket_id, file_key)
+                        .is_none()
+                );
             });
         }
     }
@@ -3535,7 +3552,7 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: false,
@@ -4008,7 +4025,7 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4027,7 +4044,7 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4206,7 +4223,7 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4216,7 +4233,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4325,7 +4342,7 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4335,7 +4352,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4462,7 +4479,7 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4472,7 +4489,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4513,11 +4530,11 @@ mod bsp_stop_storing {
 				));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4632,7 +4649,7 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4642,7 +4659,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4683,11 +4700,11 @@ mod bsp_stop_storing {
 				));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4786,7 +4803,7 @@ mod bsp_stop_storing {
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4796,7 +4813,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4837,11 +4854,11 @@ mod bsp_stop_storing {
 				));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4990,11 +5007,11 @@ mod bsp_stop_storing {
 				));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5095,7 +5112,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage request bsps_required was incremented
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5182,7 +5199,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage request was created with one bsps_required
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 5,
                         owner: owner_account_id.clone(),
@@ -5422,7 +5439,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -5450,7 +5467,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was not removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -5615,7 +5632,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -5630,7 +5647,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::file_deletion_request_expirations(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
                     vec![(
                         owner_account_id.clone(),
                         file_key
@@ -5642,13 +5659,13 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Item expiration should be removed
                 assert_eq!(
-                    FileSystem::file_deletion_request_expirations(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
                     vec![]
                 );
 
                 // Asser that the pending file deletion request was removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
                 );
 
@@ -5696,7 +5713,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -5736,7 +5753,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
                 );
             });
@@ -5779,7 +5796,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -5821,7 +5838,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
                 );
             });
@@ -5939,7 +5956,7 @@ mod compute_threshold {
                     )
                         .unwrap();
 
-                let storage_request = FileSystem::storage_requests(file_key).unwrap();
+                let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
@@ -6154,7 +6171,7 @@ mod stop_storing_for_insolvent_user {
 
             // Assert that the storage was updated
             assert_eq!(
-                FileSystem::storage_requests(file_key),
+                file_system::StorageRequests::<Test>::get(file_key),
                 Some(StorageRequestMetadata {
                     requested_at: 1,
                     owner: owner_account_id.clone(),
@@ -6173,7 +6190,7 @@ mod stop_storing_for_insolvent_user {
 
             // Assert that the RequestStorageBsps was updated
             assert_eq!(
-                FileSystem::storage_request_bsps(file_key, bsp_id)
+                file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                     .expect("BSP should exist in storage"),
                 StorageRequestBspsMetadata::<Test> {
                     confirmed: true,
@@ -6377,7 +6394,7 @@ mod stop_storing_for_insolvent_user {
 
             // Assert that the storage was updated
             assert_eq!(
-                FileSystem::storage_requests(file_key),
+                file_system::StorageRequests::<Test>::get(file_key),
                 Some(StorageRequestMetadata {
                     requested_at: 1,
                     owner: owner_account_id.clone(),
@@ -6396,7 +6413,7 @@ mod stop_storing_for_insolvent_user {
 
             // Assert that the RequestStorageBsps was updated
             assert_eq!(
-                FileSystem::storage_request_bsps(file_key, bsp_id)
+                file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                     .expect("BSP should exist in storage"),
                 StorageRequestBspsMetadata::<Test> {
                     confirmed: true,
@@ -6578,7 +6595,7 @@ mod stop_storing_for_insolvent_user {
 
             // Assert that the storage was updated
             assert_eq!(
-                FileSystem::storage_requests(file_key),
+                file_system::StorageRequests::<Test>::get(file_key),
                 Some(StorageRequestMetadata {
                     requested_at: 1,
                     owner: owner_account_id.clone(),
@@ -6597,7 +6614,7 @@ mod stop_storing_for_insolvent_user {
 
             // Assert that the RequestStorageBsps was updated
             assert_eq!(
-                FileSystem::storage_request_bsps(file_key, bsp_id)
+                file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                     .expect("BSP should exist in storage"),
                 StorageRequestBspsMetadata::<Test> {
                     confirmed: true,

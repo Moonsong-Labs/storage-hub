@@ -58,6 +58,7 @@ use polkadot_runtime_common::{
 };
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
+use sp_api::StorageProof;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{Get, Hasher, H256};
 use sp_runtime::{
@@ -260,6 +261,7 @@ impl pallet_message_queue::Config for Runtime {
     type HeapSize = sp_core::ConstU32<{ 64 * 1024 }>;
     type MaxStale = sp_core::ConstU32<8>;
     type ServiceWeight = MessageQueueServiceWeight;
+    type IdleMaxServiceWeight = ();
 }
 
 impl cumulus_pallet_aura_ext::Config for Runtime {}
@@ -301,7 +303,6 @@ impl pallet_aura::Config for Runtime {
     type DisabledValidators = ();
     type MaxAuthorities = ConstU32<100_000>;
     type AllowMultipleBlocksPerSlot = ConstBool<true>;
-    #[cfg(feature = "experimental")]
     type SlotDuration = ConstU64<SLOT_DURATION>;
 }
 
@@ -378,11 +379,15 @@ impl pallet_nfts::Config for Runtime {
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
 fn relay_chain_state_proof() -> RelayChainStateProof {
-    let relay_storage_root = ParachainSystem::validation_data()
-        .expect("set in `set_validation_data`")
-        .relay_parent_storage_root;
-    let relay_chain_state =
-        ParachainSystem::relay_state_proof().expect("set in `set_validation_data`");
+    // CRITICAL TODO: Change this to the actual relay storage root after upgrading to polkadot-sdk v1.13.0
+    let relay_storage_root = H256::zero();
+    /* let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
+    .expect("set in `set_validation_data`")
+    .relay_parent_storage_root; */
+    let root_vec: Vec<Vec<u8>> = vec![relay_storage_root.as_bytes().to_vec()];
+    let relay_chain_state = StorageProof::new(root_vec);
+    /* let relay_chain_state = cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get()
+    .expect("set in `set_validation_data`"); */
     RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
         .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
 }
@@ -393,8 +398,11 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     fn get_epoch_index() -> u64 {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            let _relay_storage_root = ParachainSystem::validation_data();
-            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+            /* let _relay_storage_root =
+                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
+            let _relay_chain_state =
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
             const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
             return BENCHMARKING_NEW_EPOCH;
         }
@@ -407,8 +415,11 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     fn get_epoch_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            let _relay_storage_root = ParachainSystem::validation_data();
-            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+            /* let _relay_storage_root =
+                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
+            let _relay_chain_state =
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }
@@ -421,8 +432,11 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     fn get_parent_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            let _relay_storage_root = ParachainSystem::validation_data();
-            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+            /* let _relay_storage_root =
+                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
+            let _relay_chain_state =
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }

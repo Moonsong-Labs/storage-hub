@@ -182,6 +182,10 @@ impl xcm_executor::Config for XcmConfig {
     type SafeCallFilter = Everything;
     type Aliasers = Nothing;
     type TransactionalProcessor = FrameTransactionalProcessor;
+    // TODO: Implement these handlers if needed
+    type HrmpNewChannelOpenRequestHandler = ();
+    type HrmpChannelAcceptedHandler = ();
+    type HrmpChannelClosingHandler = ();
 }
 
 /// Converts a local signed origin into an XCM location.

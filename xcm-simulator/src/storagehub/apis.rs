@@ -1,4 +1,4 @@
-use crate::*;
+use crate::storagehub::*;
 use frame_support::{
     genesis_builder_helper::{build_config, create_default_config},
     weights::Weight,

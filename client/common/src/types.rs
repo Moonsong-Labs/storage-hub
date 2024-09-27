@@ -11,7 +11,7 @@ use sp_core::Hasher;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
-use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
+use storage_hub_runtime::{apis::RuntimeApi, opaque::Block, Runtime};
 use trie_db::TrieLayout;
 
 /// The hash type of trie node keys
@@ -48,7 +48,7 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
-type HostFunctions = (cumulus_client_service::ParachainHostFunctions);
+type HostFunctions = cumulus_client_service::ParachainHostFunctions;
 
 #[cfg(feature = "runtime-benchmarks")]
 type HostFunctions = (
