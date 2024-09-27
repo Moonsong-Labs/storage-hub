@@ -6507,11 +6507,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
@@ -6532,11 +6528,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set TickRangeToMaximumThreshold to one
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
@@ -6564,11 +6556,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
@@ -6608,25 +6596,17 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set global_weight to 1
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
+                // Set global_weight to the sum of the two BSPs reputation weights
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
 
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
@@ -6639,21 +6619,22 @@ mod compute_threshold {
                 let (_threshold_to_succeed, slope_bsp_1) =
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
 
-
-                // Set BSP's reputation weight to max
-                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_charlie_id, |bsp| {
-                    match bsp {
+                // Set BSP's reputation weight to 10 (10 times higher than the other BSP)
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+                    &bsp_charlie_id,
+                    |bsp| match bsp {
                         Some(bsp) => {
-                            bsp.reputation_weight = u32::MAX;
+                            bsp.reputation_weight = 10;
                         }
                         None => {
                             panic!("BSP should exist");
                         }
-                    }
-                });
+                    },
+                );
 
                 let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at).unwrap();
+                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
+                        .unwrap();
 
                 // BSP with higher weight should have higher slope
                 assert!(slope_bsp_2 > slope_bsp_1);
@@ -6668,24 +6649,16 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set global_weight to 1
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
+                // Set global_weight to the sum of the weights of the BSPs
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
 
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
@@ -6699,9 +6672,10 @@ mod compute_threshold {
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
 
                 let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at).unwrap();
+                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
+                        .unwrap();
 
-                // BSP with higher weight should have higher slope
+                // BSPs with equal weight should have equal slope
                 assert_eq!(slope_bsp_2, slope_bsp_1);
             });
         }
