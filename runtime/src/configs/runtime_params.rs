@@ -27,10 +27,6 @@ impl Default for RuntimeParameters {
                 dynamic_params::runtime_config::SlashAmountPerMaxFileSize,
                 Some(20 * UNIT),
             ),
-            dynamic_params::runtime_config::Parameters::StakeToChallengePeriod(
-                dynamic_params::runtime_config::StakeToChallengePeriod,
-                Some(1000 * UNIT),
-            ),
         )
     }
 }
