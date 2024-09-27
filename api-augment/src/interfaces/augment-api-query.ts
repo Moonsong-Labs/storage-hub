@@ -67,10 +67,10 @@ import type {
   PalletXcmRemoteLockedFungibleRecord,
   PalletXcmVersionMigrationStage,
   PolkadotCorePrimitivesOutboundHrmpMessage,
-  PolkadotPrimitivesV6AbridgedHostConfiguration,
-  PolkadotPrimitivesV6PersistedValidationData,
-  PolkadotPrimitivesV6UpgradeGoAhead,
-  PolkadotPrimitivesV6UpgradeRestriction,
+  PolkadotPrimitivesV7AbridgedHostConfiguration,
+  PolkadotPrimitivesV7PersistedValidationData,
+  PolkadotPrimitivesV7UpgradeGoAhead,
+  PolkadotPrimitivesV7UpgradeRestriction,
   ShpTraitsTrieRemoveMutation,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
@@ -214,6 +214,8 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Any liquidity locks on some account balances.
        * NOTE: Should only be accessed when setting, changing and freeing a lock.
+       *
+       * Use of locks is deprecated in favour of freezes. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       locks: AugmentedQuery<
         ApiType,
@@ -223,6 +225,8 @@ declare module "@polkadot/api-base/types/storage" {
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
        * Named reserves on some account balances.
+       *
+       * Use of reserves is deprecated in favour of holds. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       reserves: AugmentedQuery<
         ApiType,
@@ -754,7 +758,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       hostConfiguration: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6AbridgedHostConfiguration>>,
+        () => Observable<Option<PolkadotPrimitivesV7AbridgedHostConfiguration>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -900,7 +904,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeGoAhead: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6UpgradeGoAhead>>,
+        () => Observable<Option<PolkadotPrimitivesV7UpgradeGoAhead>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -915,7 +919,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeRestrictionSignal: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6UpgradeRestriction>>,
+        () => Observable<Option<PolkadotPrimitivesV7UpgradeRestriction>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -938,7 +942,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       validationData: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6PersistedValidationData>>,
+        () => Observable<Option<PolkadotPrimitivesV7PersistedValidationData>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
