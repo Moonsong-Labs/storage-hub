@@ -357,7 +357,6 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {

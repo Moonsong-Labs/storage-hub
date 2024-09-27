@@ -486,7 +486,6 @@ where
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
-        // TODO: Return error if the file is already stored and overwrite is false.
 
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
@@ -529,8 +528,8 @@ where
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
-            return Err(Error::<T>::BspsRequiredExceedsMax)?;
+        if bsps_required > ReplicationTarget::<T>::get().into() {
+            return Err(Error::<T>::BspsRequiredExceedsTarget)?;
         }
 
         let storage_request_metadata = StorageRequestMetadata::<T> {

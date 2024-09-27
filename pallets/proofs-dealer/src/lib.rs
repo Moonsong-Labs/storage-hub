@@ -474,10 +474,8 @@ pub mod pallet {
         ///
         /// This function allows anyone to add a new challenge to the `ChallengesQueue`.
         /// The challenge will be dispatched in the coming blocks.
-        /// Regular users are charged a small fee for submitting a challenge, which
-        /// goes to the Treasury. Unless the one calling is a registered Provider.
-        ///
-        /// TODO: Consider checking also if there was a request to change MSP.
+        /// Users are charged a small fee for submitting a challenge, which
+        /// goes to the Treasury.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {

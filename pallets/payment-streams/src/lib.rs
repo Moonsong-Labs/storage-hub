@@ -326,7 +326,7 @@ pub mod pallet {
         InvalidLastChargeableBlockNumber,
         /// Error thrown when the new last chargeable price index that is trying to be set is greater than the current price index or smaller than the previous last chargeable price index
         InvalidLastChargeablePriceIndex,
-        /// Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
+        /// Error thrown when charging a payment stream would result in an overflow of the balance type
         ChargeOverflow,
         /// Error thrown when trying to operate when the User has been flagged for not having enough funds.
         UserWithoutFunds,

@@ -3964,7 +3964,7 @@ export default {
       "StorageRequestNotRevoked",
       "StorageRequestExists",
       "ReplicationTargetCannotBeZero",
-      "BspsRequiredExceedsMax",
+      "BspsRequiredExceedsTarget",
       "NotABsp",
       "NotAMsp",
       "NotASp",

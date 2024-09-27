@@ -4920,7 +4920,7 @@ declare module "@polkadot/types/lookup" {
     readonly isStorageRequestNotRevoked: boolean;
     readonly isStorageRequestExists: boolean;
     readonly isReplicationTargetCannotBeZero: boolean;
-    readonly isBspsRequiredExceedsMax: boolean;
+    readonly isBspsRequiredExceedsTarget: boolean;
     readonly isNotABsp: boolean;
     readonly isNotAMsp: boolean;
     readonly isNotASp: boolean;
@@ -4979,7 +4979,7 @@ declare module "@polkadot/types/lookup" {
       | "StorageRequestNotRevoked"
       | "StorageRequestExists"
       | "ReplicationTargetCannotBeZero"
-      | "BspsRequiredExceedsMax"
+      | "BspsRequiredExceedsTarget"
       | "NotABsp"
       | "NotAMsp"
       | "NotASp"

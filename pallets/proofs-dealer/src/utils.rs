@@ -93,7 +93,7 @@ where
 {
     /// Add custom challenge to ChallengesQueue.
     ///
-    /// Check if sender is a registered Provider. If it is not, charge a fee for the challenge.
+    /// Charges a fee for the challenge.
     /// This is to prevent spamming the network with challenges. If the challenge is already queued,
     /// just return. Otherwise, add the challenge to the queue.
     ///
@@ -101,17 +101,14 @@ where
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
     pub fn do_challenge(who: &AccountIdFor<T>, key: &KeyFor<T>) -> DispatchResult {
-        // Check if sender is a registered Provider.
-        if ProvidersPalletFor::<T>::get_provider_id(who.clone()).is_none() {
-            // Charge a fee for the challenge if it is not.
-            BalancePalletFor::<T>::transfer(
-                &who,
-                &TreasuryAccountFor::<T>::get(),
-                ChallengesFeeFor::<T>::get(),
-                Preservation::Expendable,
-            )
-            .map_err(|_| Error::<T>::FeeChargeFailed)?;
-        }
+        // Charge a fee for the challenge.
+        BalancePalletFor::<T>::transfer(
+            &who,
+            &TreasuryAccountFor::<T>::get(),
+            ChallengesFeeFor::<T>::get(),
+            Preservation::Expendable,
+        )
+        .map_err(|_| Error::<T>::FeeChargeFailed)?;
 
         // Enqueue challenge.
         Self::enqueue_challenge(key)
