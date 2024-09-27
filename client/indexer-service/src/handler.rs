@@ -211,17 +211,17 @@ impl IndexerService {
                 )
                 .await?;
             }
+            pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
+            pallet_file_system::Event::BspConfirmedStoring { .. } => {}
             pallet_file_system::Event::NewStorageRequest { .. } => {}
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::MspAcceptedStoring { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
-            pallet_file_system::Event::BspConfirmedStoring { .. } => {}
             pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
             pallet_file_system::Event::StorageRequestExpired { .. } => {}
             pallet_file_system::Event::StorageRequestRevoked { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
-            pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
