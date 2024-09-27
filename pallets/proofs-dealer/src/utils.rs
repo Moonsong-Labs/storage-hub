@@ -576,7 +576,7 @@ where
 
         // Get the number of blocks that have been considered _not_ full in the past `BlockFullnessPeriod`.
         let not_full_blocks_count = NotFullBlocksCount::<T>::get();
-        let new_not_full_blocks_count = not_full_blocks_count.clone();
+        let mut new_not_full_blocks_count = not_full_blocks_count.clone();
         weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         // This would only be `None` if the block number is 0, so this should be safe.
@@ -597,7 +597,8 @@ where
                         >= T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Increment the counter of blocks that are not full.
-                    new_not_full_blocks_count.saturating_add(1u32.into());
+                    new_not_full_blocks_count =
+                        new_not_full_blocks_count.saturating_add(1u32.into());
                 }
             }
         }
@@ -625,7 +626,8 @@ where
                         >= T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Decrement the counter of blocks that are not full.
-                    new_not_full_blocks_count.saturating_sub(1u32.into());
+                    new_not_full_blocks_count =
+                        new_not_full_blocks_count.saturating_sub(1u32.into());
                 }
             }
         }
@@ -646,7 +648,7 @@ where
                 min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
 
             // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
-            if not_full_blocks_count > min_non_full_blocks {
+            if new_not_full_blocks_count > min_non_full_blocks {
                 // The network is NOT considered to be under a spam attack, so we resume the `ChallengesTicker`.
                 ChallengesTickerPaused::<T>::set(None);
             } else {
