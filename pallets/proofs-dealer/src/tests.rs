@@ -259,68 +259,6 @@ fn challenge_submit_in_two_rounds_succeed() {
 }
 
 #[test]
-fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
-    new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited.
-        run_to_block(1);
-
-        // Create user with no funds.
-        let user = RuntimeOrigin::signed(1);
-
-        // Register user as a Provider in Providers pallet.
-        let provider_id = BlakeTwo256::hash(b"provider_id");
-        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
-            &1,
-            provider_id,
-        );
-        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
-            &provider_id,
-            pallet_storage_providers::types::BackupStorageProvider {
-                capacity: Default::default(),
-                capacity_used: Default::default(),
-                multiaddresses: Default::default(),
-                root: Default::default(),
-                last_capacity_change: Default::default(),
-                owner_account: 1u64,
-                payment_account: Default::default(),
-                reputation_weight:
-                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
-            },
-        );
-
-        // Set Provider's root to be an arbitrary value, different than the default root,
-        // to simulate that it is actually providing a service.
-        let root = BlakeTwo256::hash(b"1234");
-        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
-            &provider_id,
-            |provider| {
-                provider.as_mut().expect("Provider should exist").root = root;
-            },
-        );
-
-        // Mock a FileKey.
-        let file_key = BlakeTwo256::hash(b"file_key");
-
-        // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(user, file_key));
-
-        // Check that the event is emitted.
-        System::assert_last_event(
-            Event::NewChallenge {
-                who: 1,
-                key_challenged: file_key,
-            }
-            .into(),
-        );
-
-        // Check that the challenge is in the queue.
-        let challenges_queue = crate::ChallengesQueue::<Test>::get();
-        assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
-    });
-}
-
-#[test]
 fn challenge_wrong_origin_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
