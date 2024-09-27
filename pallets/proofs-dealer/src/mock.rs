@@ -124,7 +124,6 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {

@@ -632,7 +632,7 @@ pub mod pallet {
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
-        BspsRequiredExceedsMax,
+        BspsRequiredExceedsTarget,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.

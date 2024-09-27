@@ -233,7 +233,6 @@ where
             Error::<T>::PaymentStreamNotFound
         );
 
-        // TODO: What do we do when a user is flagged as without funds? Does the provider assume the loss and we remove the payment stream?
         // Check that the user is not flagged as without funds
         ensure!(
             !UsersWithoutFunds::<T>::contains_key(user_account),
@@ -470,7 +469,6 @@ where
             Error::<T>::PaymentStreamNotFound
         );
 
-        // TODO: What do we do when a user is flagged as without funds? Does the provider assume the loss and we remove the payment stream?
         // Check that the user is not flagged as without funds
         ensure!(
             !UsersWithoutFunds::<T>::contains_key(user_account),
@@ -518,7 +516,7 @@ where
     /// the last charged tick of this payment stream.  As such, the last charged tick can't ever be greater than the last chargeable tick, and if they are equal then no charge is made.
     /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_tick)`. In this case,
     /// the price index at the last charged tick can't ever be greater than the price index at the last chargeable tick, and if they are equal then no charge is made.
-    /// TODO: Maybe add a way to pass an array of users to charge them all at once?
+    /// TODO: Add a way to pass an array of users to charge them all at once?
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
@@ -1002,7 +1000,8 @@ where
             }
 
             // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
-            // needed weight in the block for this, such as what `on_initialize` does.
+            // TODO: needed weight in the block for this, such as what `on_initialize` does.
+            // TODO: Solve when benchmarking.
         }
     }
 

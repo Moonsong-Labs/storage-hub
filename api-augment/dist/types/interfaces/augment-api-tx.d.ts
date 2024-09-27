@@ -3079,10 +3079,8 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This function allows anyone to add a new challenge to the `ChallengesQueue`.
        * The challenge will be dispatched in the coming blocks.
-       * Regular users are charged a small fee for submitting a challenge, which
-       * goes to the Treasury. Unless the one calling is a registered Provider.
-       *
-       * TODO: Consider checking also if there was a request to change MSP.
+       * Users are charged a small fee for submitting a challenge, which
+       * goes to the Treasury.
        **/
       challenge: AugmentedSubmittable<
         (key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,

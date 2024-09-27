@@ -297,7 +297,6 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
@@ -448,8 +447,7 @@ impl crate::Config for Test {
     type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
-// TODO: To write tests we probably should use the actual implementation instead of this mock.
-// (Or at least a better mock)
+// If we ever require a better mock that doesn't just return true if it is Eve, change this.
 pub struct MockUserSolvency;
 impl ReadUserSolvencyInterface for MockUserSolvency {
     type AccountId = AccountId;

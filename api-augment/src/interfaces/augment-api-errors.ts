@@ -193,7 +193,7 @@ declare module "@polkadot/api-base/types/errors" {
       /**
        * BSPs required for storage request cannot exceed the maximum allowed.
        **/
-      BspsRequiredExceedsMax: AugmentedError<ApiType>;
+      BspsRequiredExceedsTarget: AugmentedError<ApiType>;
       /**
        * Action not allowed while the bucket is being moved.
        **/
@@ -679,7 +679,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
-       * Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
+       * Error thrown when charging a payment stream would result in an overflow of the balance type
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
