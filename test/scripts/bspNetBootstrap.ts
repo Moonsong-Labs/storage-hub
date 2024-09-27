@@ -1,9 +1,4 @@
-import {
-  BspNetTestApi,
-  registerToxics,
-  type BspNetConfig,
-  type ToxicInfo
-} from "../util";
+import { BspNetTestApi, registerToxics, type BspNetConfig, type ToxicInfo } from "../util";
 import * as ShConsts from "../util/bspNet/consts";
 import { NetworkLauncher } from "../util/netLaunch";
 
@@ -19,8 +14,7 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-
-  await NetworkLauncher.create("bspnet", bspNetConfig)
+  await NetworkLauncher.create("bspnet", bspNetConfig);
 
   if (bspNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
@@ -69,13 +63,12 @@ async function bootStrapNetwork() {
   }
 }
 
-bootStrapNetwork()
-  .catch((e) => {
-    console.error("Error running bootstrap script:", e);
-    if (bspNetConfig.noisy) {
-      console.log("❌ NoisyNet Bootstrap failure");
-    } else {
-      console.log("❌ BSPNet Bootstrap failure");
-    }
-    process.exitCode = 1;
-  })
+bootStrapNetwork().catch((e) => {
+  console.error("Error running bootstrap script:", e);
+  if (bspNetConfig.noisy) {
+    console.log("❌ NoisyNet Bootstrap failure");
+  } else {
+    console.log("❌ BSPNet Bootstrap failure");
+  }
+  process.exitCode = 1;
+});
