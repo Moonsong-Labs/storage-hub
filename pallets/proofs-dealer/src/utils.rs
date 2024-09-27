@@ -642,10 +642,10 @@ where
             // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
             if not_full_blocks_count > min_non_full_blocks {
                 // The network is NOT considered to be under a spam attack, so we resume the `ChallengesTicker`.
-                ChallengesTickerPaused::<T>::set(false);
+                ChallengesTickerPaused::<T>::set(None);
             } else {
                 // At this point, the network is presumably under a spam attack, so we pause the `ChallengesTicker`.
-                ChallengesTickerPaused::<T>::set(true);
+                ChallengesTickerPaused::<T>::set(Some(()));
             }
             weight.consume(T::DbWeight::get().reads_writes(1, 1));
         }

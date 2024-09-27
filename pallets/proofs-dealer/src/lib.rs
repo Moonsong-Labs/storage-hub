@@ -362,7 +362,7 @@ pub mod pallet {
     /// - Deadlines for proof submissions are indefinitely postponed.
     #[pallet::storage]
     #[pallet::getter(fn challenges_ticker_paused)]
-    pub type ChallengesTickerPaused<T: Config> = StorageValue<_, bool, ValueQuery>;
+    pub type ChallengesTickerPaused<T: Config> = StorageValue<_, ()>;
 
     /// A mapping from block number to the weight used in that block.
     ///
@@ -646,7 +646,11 @@ pub mod pallet {
             // Check that the extrinsic was executed by the root origin.
             ensure_root(origin)?;
 
-            ChallengesTickerPaused::<T>::set(paused);
+            if paused {
+                ChallengesTickerPaused::<T>::set(Some(()));
+            } else {
+                ChallengesTickerPaused::<T>::set(None);
+            }
 
             // Emit the corresponding event.
             Self::deposit_event(Event::<T>::ChallengesTickerSet { paused });
@@ -668,7 +672,7 @@ pub mod pallet {
             // TODO: Benchmark computational weight cost of this hook.
 
             // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.
-            if !ChallengesTickerPaused::<T>::get() {
+            if ChallengesTickerPaused::<T>::get().is_none() {
                 Self::do_new_challenges_round(weight);
             }
 

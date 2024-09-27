@@ -3733,7 +3733,7 @@ fn challenges_ticker_paused_only_after_tolerance_blocks() {
         run_to_block_spammed(block_fullness_period);
 
         // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriodFor`.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period);
 
         // Go one more block beyond `BlockFullnessPeriodFor`.
@@ -3741,12 +3741,12 @@ fn challenges_ticker_paused_only_after_tolerance_blocks() {
         run_to_block_spammed(block_fullness_period + 1);
 
         // Assert that now the challenges ticker is paused, and the tick counter stopped at `BlockFullnessPeriodFor` + 1.
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
         // Going one block beyond, shouldn't increment the ticker.
         run_to_block(block_fullness_period + 2);
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
     });
 }
@@ -3774,7 +3774,7 @@ fn challenges_ticker_paused_when_less_than_min_not_full_blocks_ratio_are_not_ful
         run_to_block_spammed(block_fullness_period);
 
         // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriod`.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period);
 
         // Go one more block beyond `BlockFullnessPeriod`.
@@ -3782,12 +3782,12 @@ fn challenges_ticker_paused_when_less_than_min_not_full_blocks_ratio_are_not_ful
         run_to_block(block_fullness_period + 1);
 
         // Assert that now the challenges ticker is paused, and the tick counter stopped at `BlockFullnessPeriod` + 1.
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
         // Going one block beyond, shouldn't increment the ticker.
         run_to_block(block_fullness_period + 2);
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
     });
 }
@@ -3815,7 +3815,7 @@ fn challenges_ticker_not_paused_when_more_than_min_not_full_blocks_ratio_are_not
         run_to_block_spammed(block_fullness_period);
 
         // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriod`.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period);
 
         // Go one more block beyond `BlockFullnessPeriod`.
@@ -3823,12 +3823,12 @@ fn challenges_ticker_not_paused_when_more_than_min_not_full_blocks_ratio_are_not
         run_to_block(block_fullness_period + 1);
 
         // Assert that the challenges ticker is still NOT paused, and the tick counter continues.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
         // Going one block beyond, should increment the ticker.
         run_to_block(block_fullness_period + 2);
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 2);
     });
 }
@@ -3892,7 +3892,7 @@ fn challenges_ticker_unpaused_after_spam_finishes() {
 
         // Going one block beyond, shouldn't increment the ticker.
         run_to_block(block_fullness_period + 2);
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
@@ -3909,12 +3909,12 @@ fn challenges_ticker_unpaused_after_spam_finishes() {
         run_to_block(current_block + empty_blocks_to_advance);
 
         // Assert that the challenges ticker is NOT paused, but that the `ChallengesTicker` is still the same.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
 
         // Advance one more block and assert that the challenges ticker increments.
         run_to_block(current_block + empty_blocks_to_advance + 1);
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
     });
 }
@@ -3938,7 +3938,7 @@ fn challenges_ticker_paused_twice() {
 
         // Going one block beyond, shouldn't increment the ticker.
         run_to_block(block_fullness_period + 2);
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
@@ -3955,12 +3955,12 @@ fn challenges_ticker_paused_twice() {
         run_to_block(current_block + empty_blocks_to_advance);
 
         // Assert that the challenges ticker is NOT paused, but that the `ChallengesTicker` is still the same.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
 
         // Advance one more block and assert that the challenges ticker increments.
         run_to_block(current_block + empty_blocks_to_advance + 1);
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
@@ -3984,7 +3984,7 @@ fn challenges_ticker_paused_twice() {
         }
 
         // Assert that the challenges ticker IS paused, but that the `ChallengesTicker` has advanced `not_empty_blocks_to_advance`.
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(
             ChallengesTicker::<Test>::get(),
             current_ticker + blocks_advanced
@@ -3993,7 +3993,7 @@ fn challenges_ticker_paused_twice() {
         // Advance one more block and assert that the challenges ticker doesn't increment.
         let current_block = System::block_number();
         run_to_block(current_block + 1);
-        assert!(ChallengesTickerPaused::<Test>::get() == true);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
         assert_eq!(
             ChallengesTicker::<Test>::get(),
             current_ticker + blocks_advanced
@@ -4109,13 +4109,13 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
         }
 
         // Now the `ChallengesTicker` shouldn't be paused. But current ticker should be the same.
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
 
         // Advancing one more block should increase the `ChallengesTicker` by one.
         let current_block = System::block_number();
         run_to_block(current_block + 1);
-        assert!(ChallengesTickerPaused::<Test>::get() == false);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
         assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
 
         // Get how many blocks until the deadline tick.
