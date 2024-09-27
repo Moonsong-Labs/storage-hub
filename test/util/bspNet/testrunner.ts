@@ -4,11 +4,11 @@ import {
   cleardownTest,
   runInitialisedBspsNet,
   runMultipleInitialisedBspsNet,
-  runSimpleBspNet
 } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
 import * as ShConsts from "./consts";
+import { NetworkLauncher } from "../netLaunch";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -118,7 +118,7 @@ export const launchNetwork = async (
     ? await runMultipleInitialisedBspsNet(config)
     : initialised === true
       ? await runInitialisedBspsNet(config)
-      : await runSimpleBspNet(config);
+      : await NetworkLauncher.create("bspnet", config);
 };
 
 const pickConfig = (options: TestOptions) => {

@@ -1,14 +1,12 @@
 import {
   BspNetTestApi,
   registerToxics,
-  runSimpleBspNet,
   type BspNetConfig,
-  type EnrichedBspApi,
   type ToxicInfo
 } from "../util";
 import * as ShConsts from "../util/bspNet/consts";
+import { NetworkLauncher } from "../util/netLaunch";
 
-let api: EnrichedBspApi | undefined;
 const bspNetConfig: BspNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
@@ -21,7 +19,8 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runSimpleBspNet(bspNetConfig);
+
+  await NetworkLauncher.create("bspnet", bspNetConfig)
 
   if (bspNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
@@ -56,7 +55,7 @@ async function bootStrapNetwork() {
     await registerToxics(reqToxics);
   }
 
-  api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+  await using api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
   await api.file.newStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
 
@@ -80,4 +79,3 @@ bootStrapNetwork()
     }
     process.exitCode = 1;
   })
-  .finally(async () => await api?.disconnect());

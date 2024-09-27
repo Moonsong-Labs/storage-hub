@@ -51,6 +51,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 };
 
 export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
+
 export const getContainerPeerId = async (url: string, verbose = false) => {
   const maxRetries = 60;
   const sleepTime = 500;
@@ -99,6 +100,7 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
     const composeYaml = parse(composeFile);
+
     if (bspNetConfig.extrinsicRetryTimeout) {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${bspNetConfig.extrinsicRetryTimeout}`
