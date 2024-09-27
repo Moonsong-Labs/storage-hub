@@ -347,5 +347,9 @@ impl_runtime_apis! {
         fn query_earliest_change_capacity_block(provider_id: &BackupStorageProviderId<Runtime>) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError> {
             Providers::query_earliest_change_capacity_block(provider_id)
         }
+
+		fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
+            Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
+        }
     }
 }
