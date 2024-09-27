@@ -48,17 +48,11 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-);
+type HostFunctions = (cumulus_client_service::ParachainHostFunctions);
 
 #[cfg(feature = "runtime-benchmarks")]
 type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
+    cumulus_client_service::ParachainHostFunctions,
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
