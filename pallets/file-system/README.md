@@ -52,19 +52,29 @@ $$T_{wsp} = w \cdot T_{gsp}$$
 
 $w$: _BSP weight_ (current weight of the BSP)
 
-#### Threshold Slope
+#### Global Threshold Slope
 
-The rate of increase of the threshold from the weighted starting point to the maximum threshold over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
+The rate of increase of the threshold from the global starting point to the maximum threshold over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
+This global threshold slope is calculated taking into account the global starting point, so that it is the same for all BSPs.
 
-$$T_{s} = \frac{M - T_{wsp}}{B_{t}}$$
+$$S_{g} = \frac{M - T_{gsp}}{B_{t}}$$
 
 $B_{t}$: _Block time_ (number of blocks to pass to reach $M$)
+
+#### Weighted Threshold Slope
+
+The actual rate of increase of the threshold from the weighted starting point to the maximum threshold.
+This weighted threshold slope is calculated taking into account the BSP's weight, so that it is different for each BSP, and BSPs with higher weights will have a higher threshold slope.
+
+$$S_{w} = w \cdot S_{g}$$
+
+$w$: _BSP weight_ (current weight of the BSP)
 
 #### Threshold
 
 The threshold to succeed will be different for each BSP. By calculating their own starting point $T_{wsp}$ and increasing at a rate based on the global weight of all BSPs over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
 
-$$T = T_{wsp} + T_{s} \cdot b$$
+$$T = T_{wsp} + S_{w} \cdot b$$
 
 $T_{wsp}$: _Threshold weighted starting point_ (taking into account the BSP's weight)
 $T_{s}$: _Threshold slope_ (rate of increase reaching constant within target block time)
