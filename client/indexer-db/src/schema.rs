@@ -7,6 +7,7 @@ diesel::table! {
         capacity -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        blockchain_id -> Varchar,
     }
 }
 
@@ -25,6 +26,7 @@ diesel::table! {
         value_prop -> Varchar,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        blockchain_id -> Varchar,
     }
 }
 

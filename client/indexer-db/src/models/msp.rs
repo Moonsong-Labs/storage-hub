@@ -19,6 +19,7 @@ pub struct Msp {
     pub value_prop: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub blockchain_id: String,
 }
 
 /// Association table between MSP and MultiAddress
@@ -38,12 +39,14 @@ impl Msp {
         capacity: BigDecimal,
         value_prop: String,
         multiaddresses: Vec<MultiAddress>,
+        blockchain_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let msp = diesel::insert_into(msp::table)
             .values((
                 msp::account.eq(account),
                 msp::capacity.eq(capacity),
                 msp::value_prop.eq(value_prop),
+                msp::blockchain_id.eq(blockchain_id),
             ))
             .returning(Msp::as_select())
             .get_result(conn)

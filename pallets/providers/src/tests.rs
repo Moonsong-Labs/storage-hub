@@ -238,6 +238,7 @@ mod sign_up {
                             multiaddresses,
                             capacity: storage_amount,
                             value_prop,
+                            msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -333,6 +334,7 @@ mod sign_up {
                             multiaddresses,
                             capacity: storage_amount,
                             value_prop,
+                            msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -731,6 +733,7 @@ mod sign_up {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
+                            bsp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -834,6 +837,7 @@ mod sign_up {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
+                            bsp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -1226,6 +1230,7 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
                             value_prop: value_prop.clone(),
+                            msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -1317,6 +1322,7 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
                             value_prop: value_prop.clone(),
+                            msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -1338,6 +1344,7 @@ mod sign_up {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
+                            bsp_id: bob_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -1425,6 +1432,7 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
                             value_prop: value_prop.clone(),
+                            msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -1506,6 +1514,7 @@ mod sign_up {
                             multiaddresses,
                             capacity: storage_amount,
                             value_prop,
+                            msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
                     );
@@ -2448,6 +2457,9 @@ mod sign_off {
                     // Check the counter of registered MSPs
                     assert_eq!(StorageProviders::get_msp_count(), 1);
 
+                    // Get the MSP ID of Alice
+                    let alice_msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Sign off Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::msp_sign_off(RuntimeOrigin::signed(alice)));
 
@@ -2467,7 +2479,11 @@ mod sign_off {
 
                     // Check the MSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspSignOffSuccess { who: alice }.into(),
+                        Event::<Test>::MspSignOffSuccess {
+                            who: alice,
+                            msp_id: alice_msp_id,
+                        }
+                        .into(),
                     );
                 });
             }
@@ -2502,6 +2518,9 @@ mod sign_off {
                     // Check the counter of registered BSPs
                     assert_eq!(StorageProviders::get_bsp_count(), 1);
 
+                    // Get the BSP ID of Alice
+                    let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Sign off Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)));
 
@@ -2524,7 +2543,11 @@ mod sign_off {
 
                     // Check the BSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspSignOffSuccess { who: alice }.into(),
+                        Event::<Test>::BspSignOffSuccess {
+                            who: alice,
+                            bsp_id: alice_bsp_id,
+                        }
+                        .into(),
                     );
                 });
             }
@@ -2700,6 +2723,8 @@ mod change_capacity {
 
         /// This module holds the success cases for changing the capacity of Main Storage Providers
         mod msp {
+            use crate::types::StorageProviderId;
+
             use super::*;
 
             #[test]
@@ -2753,10 +2778,13 @@ mod change_capacity {
                         deposit_for_increased_storage
                     );
 
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
                         Event::<Test>::CapacityChanged {
                             who: alice,
+                            provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
                             new_capacity: increased_storage_amount,
                             next_block_when_change_allowed:
@@ -2821,10 +2849,13 @@ mod change_capacity {
                         deposit_for_decreased_storage
                     );
 
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
                         Event::<Test>::CapacityChanged {
                             who: alice,
+                            provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
                             new_capacity: decreased_storage_amount,
                             next_block_when_change_allowed:
@@ -2885,10 +2916,13 @@ mod change_capacity {
                         deposit_for_minimum_storage
                     );
 
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
                         Event::<Test>::CapacityChanged {
                             who: alice,
+                            provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
                             new_capacity: minimum_storage_amount,
                             next_block_when_change_allowed:
@@ -2904,6 +2938,8 @@ mod change_capacity {
         }
         /// This module holds the success cases for changing the capacity of Backup Storage Providers
         mod bsp {
+            use crate::types::StorageProviderId;
+
             use super::*;
 
             #[test]
@@ -2969,10 +3005,13 @@ mod change_capacity {
                         increased_storage_amount
                     );
 
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
                         Event::<Test>::CapacityChanged {
                             who: alice,
+                            provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
                             new_capacity: increased_storage_amount,
                             next_block_when_change_allowed:
@@ -3049,10 +3088,13 @@ mod change_capacity {
                         decreased_storage_amount
                     );
 
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
                         Event::<Test>::CapacityChanged {
                             who: alice,
+                            provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
                             new_capacity: decreased_storage_amount,
                             next_block_when_change_allowed:
@@ -3125,10 +3167,13 @@ mod change_capacity {
                         minimum_storage_amount
                     );
 
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
+
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
                         Event::<Test>::CapacityChanged {
                             who: alice,
+                            provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
                             new_capacity: minimum_storage_amount,
                             next_block_when_change_allowed:
@@ -4322,10 +4367,13 @@ fn register_account_as_msp(
         Some(account)
     ));
 
+    let msp_id = StorageProviders::get_provider_id(account).unwrap();
+
     // Check that the confirm MSP sign up event was emitted
     System::assert_last_event(
         Event::<Test>::MspSignUpSuccess {
             who: account,
+            msp_id,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
             value_prop: value_prop.clone(),
@@ -4405,10 +4453,13 @@ fn register_account_as_bsp(
         Some(account)
     ));
 
+    let bsp_id = StorageProviders::get_provider_id(account).unwrap();
+
     // Check that the confirm BSP sign up event was emitted
     System::assert_last_event(
         Event::<Test>::BspSignUpSuccess {
             who: account,
+            bsp_id,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
         }

@@ -249,6 +249,7 @@ impl IndexerService {
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {}
             pallet_storage_providers::Event::BspSignUpSuccess {
                 who,
+                bsp_id,
                 multiaddresses,
                 capacity,
             } => {
@@ -259,9 +260,19 @@ impl IndexerService {
                     sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
                 }
 
-                Bsp::create(conn, who.to_string(), capacity.into(), sql_multiaddresses).await?;
+                Bsp::create(
+                    conn,
+                    who.to_string(),
+                    capacity.into(),
+                    sql_multiaddresses,
+                    bsp_id.to_string(),
+                )
+                .await?;
             }
-            pallet_storage_providers::Event::BspSignOffSuccess { who } => {
+            pallet_storage_providers::Event::BspSignOffSuccess {
+                who,
+                bsp_id: _bsp_id,
+            } => {
                 Bsp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::CapacityChanged {
@@ -273,6 +284,7 @@ impl IndexerService {
             pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {}
             pallet_storage_providers::Event::MspSignUpSuccess {
                 who,
+                msp_id,
                 multiaddresses,
                 capacity,
                 value_prop,
@@ -293,10 +305,11 @@ impl IndexerService {
                     capacity.into(),
                     value_prop,
                     sql_multiaddresses,
+                    msp_id.to_string(),
                 )
                 .await?;
             }
-            pallet_storage_providers::Event::MspSignOffSuccess { who } => {
+            pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::Slashed { .. } => {}

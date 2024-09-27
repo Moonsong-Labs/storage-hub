@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// Table that holds the BSPs.
+/// The account is guaranteed to be unique across both MSPs and BSPs.
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = bsp)]
 pub struct Bsp {
@@ -16,6 +17,7 @@ pub struct Bsp {
     pub capacity: BigDecimal,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub blockchain_id: String,
 }
 
 /// Association table between BSP and MultiAddress
@@ -34,9 +36,14 @@ impl Bsp {
         account: String,
         capacity: BigDecimal,
         multiaddresses: Vec<MultiAddress>,
+        blockchain_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let bsp = diesel::insert_into(bsp::table)
-            .values((bsp::account.eq(account), bsp::capacity.eq(capacity)))
+            .values((
+                bsp::account.eq(account),
+                bsp::capacity.eq(capacity),
+                bsp::blockchain_id.eq(blockchain_id),
+            ))
             .returning(Bsp::as_select())
             .get_result(conn)
             .await?;
