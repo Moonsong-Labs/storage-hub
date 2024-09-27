@@ -4082,7 +4082,8 @@ export default {
       "FileMetadataProcessingQueueFull",
       "TooManyBatchResponses",
       "TooManyStorageRequestResponses",
-      "InvalidBucketIdFileKeyPair"
+      "InvalidBucketIdFileKeyPair",
+      "InconsistentState"
     ]
   },
   /**

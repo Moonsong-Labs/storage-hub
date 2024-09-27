@@ -255,6 +255,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * Updated state does is not what is expected.
+       **/
+      InconsistentState: AugmentedError<ApiType>;
+      /**
        * SP does not have enough storage capacity to store the file.
        **/
       InsufficientAvailableCapacity: AugmentedError<ApiType>;

@@ -4807,6 +4807,7 @@ declare module "@polkadot/types/lookup" {
     readonly isTooManyBatchResponses: boolean;
     readonly isTooManyStorageRequestResponses: boolean;
     readonly isInvalidBucketIdFileKeyPair: boolean;
+    readonly isInconsistentState: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4868,7 +4869,8 @@ declare module "@polkadot/types/lookup" {
       | "FileMetadataProcessingQueueFull"
       | "TooManyBatchResponses"
       | "TooManyStorageRequestResponses"
-      | "InvalidBucketIdFileKeyPair";
+      | "InvalidBucketIdFileKeyPair"
+      | "InconsistentState";
   }
   /** @name PalletProofsDealerError (442) */
   interface PalletProofsDealerError extends Enum {
