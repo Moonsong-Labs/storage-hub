@@ -574,6 +574,11 @@ where
 
         let current_block = frame_system::Pallet::<T>::block_number();
 
+        // Get the number of blocks that have been considered _not_ full in the past `BlockFullnessPeriod`.
+        let not_full_blocks_count = NotFullBlocksCount::<T>::get();
+        let new_not_full_blocks_count = not_full_blocks_count.clone();
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
         // This would only be `None` if the block number is 0, so this should be safe.
         if let Some(prev_block) = current_block.checked_sub(&1u32.into()) {
             // Get the weight usage in the previous block.
@@ -592,8 +597,7 @@ where
                         >= T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Increment the counter of blocks that are not full.
-                    NotFullBlocksCount::<T>::mutate(|n| *n = n.saturating_add(1u32.into()));
-                    weight.consume(T::DbWeight::get().reads_writes(1, 1));
+                    new_not_full_blocks_count.saturating_add(1u32.into());
                 }
             }
         }
@@ -621,19 +625,21 @@ where
                         >= T::BlockFullnessHeadroom::get().proof_size()
                 {
                     // Decrement the counter of blocks that are not full.
-                    NotFullBlocksCount::<T>::mutate(|n| *n = n.saturating_sub(1u32.into()));
-                    weight.consume(T::DbWeight::get().reads_writes(1, 1));
+                    new_not_full_blocks_count.saturating_sub(1u32.into());
                 }
             }
+        }
+
+        // If there was a change in the number of blocks that were not full, we need to update the storage.
+        if new_not_full_blocks_count != not_full_blocks_count {
+            NotFullBlocksCount::<T>::set(new_not_full_blocks_count);
+            weight.consume(T::DbWeight::get().reads_writes(0, 1));
         }
 
         // At this point, we have an updated count of blocks that were not full in the past `BlockFullnessPeriod`.
         weight.consume(T::DbWeight::get().reads_writes(1, 0));
         if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get() {
             // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
-            let not_full_blocks_count = NotFullBlocksCount::<T>::get();
-            weight.consume(T::DbWeight::get().reads_writes(1, 0));
-
             // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
             let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
             let min_non_full_blocks =

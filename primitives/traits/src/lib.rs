@@ -677,6 +677,8 @@ pub trait ProofsDealerInterface {
     /// The type that represents the randomness output.
     type RandomnessOutput: Parameter + Member + Debug;
     /// The numerical type used to represent ticks.
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time
     type TickNumber: Parameter
         + Member
         + AtLeast32BitUnsigned

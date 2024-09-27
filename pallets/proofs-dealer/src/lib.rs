@@ -68,7 +68,7 @@ pub mod pallet {
         /// verifies specifically a proof for that key. For example, if the keys in the forest
         /// represent files, this would verify the proof for a specific file, and [`Config::ForestVerifier`]
         /// would verify that the file is in the forest.
-        /// The type of the challenge is a `[u8; 8]`` that actually represents a u64 number, which is
+        /// The type of the challenge is a `[u8; 8]` that actually represents a u64 number, which is
         /// the index of the chunk being challenged.
         type KeyVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
 
