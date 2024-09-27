@@ -1,14 +1,10 @@
 import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
-import {
-  cleardownTest,
-  runInitialisedBspsNet,
-  runMultipleInitialisedBspsNet,
-  runSimpleBspNet
-} from "./helpers";
+import { cleardownTest } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
 import * as ShConsts from "./consts";
+import { NetworkLauncher } from "../netLaunch";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -65,10 +61,11 @@ export async function describeBspNet<
           launchEventEmitter.once("networkLaunched", resolve);
         });
         // Launch the network
-        const launchResponse = await launchNetwork(
-          { ...bspNetConfig, toxics: options?.toxics },
-          options?.initialised
-        );
+        const launchResponse = await NetworkLauncher.create("bspnet", {
+          ...bspNetConfig,
+          toxics: options?.toxics,
+          initialised: options?.initialised
+        });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
@@ -115,10 +112,10 @@ export const launchNetwork = async (
   initialised: boolean | "multi" = false
 ) => {
   return initialised === "multi"
-    ? await runMultipleInitialisedBspsNet(config)
+    ? await NetworkLauncher.create("bspnet", { ...config, initialised: "multi" })
     : initialised === true
-      ? await runInitialisedBspsNet(config)
-      : await runSimpleBspNet(config);
+      ? await NetworkLauncher.create("bspnet", { ...config, initialised: true })
+      : await NetworkLauncher.create("bspnet", config);
 };
 
 const pickConfig = (options: TestOptions) => {

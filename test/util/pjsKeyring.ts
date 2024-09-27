@@ -30,6 +30,13 @@ export const bspTwoKey = keyring.addFromUri(bspTwoSeed, { name: "Sh-BSP-Two" });
 export const bspThreeSeed = "//Sh-BSP-Three";
 export const bspThreeKey = keyring.addFromUri(bspThreeSeed, { name: "Sh-BSP-Three" });
 
+export const mspSeed = "//Sh-MSP";
+export const mspKey = keyring.addFromUri(mspSeed, { name: "Sh-MSP" });
+export const mspDownSeed = "//Sh-MSP-Down";
+export const mspDownKey = keyring.addFromUri(mspDownSeed, { name: "Sh-MSP-Down" });
+export const mspTwoSeed = "//Sh-MSP-Two";
+export const mspTwoKey = keyring.addFromUri(mspTwoSeed, { name: "Sh-MSP-Two" });
+
 export const collator = keyring.addFromUri("//Sh-collator", {
   name: "Sh-collator"
 });

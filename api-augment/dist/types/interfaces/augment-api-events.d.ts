@@ -20,6 +20,8 @@ import type {
   FrameSupportDispatchDispatchInfo,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemMspRespondStorageRequestsResult,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
@@ -638,17 +640,13 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a MSP has accepted to store a file.
+       * Notifies that a MSP has responded to storage request(s).
        **/
-      MspAcceptedStoring: AugmentedEvent<
+      MspRespondedToStorageRequests: AugmentedEvent<
         ApiType,
-        [fileKey: H256, mspId: H256, bucketId: H256, owner: AccountId32, newBucketRoot: H256],
+        [results: PalletFileSystemMspRespondStorageRequestsResult],
         {
-          fileKey: H256;
-          mspId: H256;
-          bucketId: H256;
-          owner: AccountId32;
-          newBucketRoot: H256;
+          results: PalletFileSystemMspRespondStorageRequestsResult;
         }
       >;
       /**
@@ -714,9 +712,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       PriorityChallengeForFileDeletionQueued: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256],
+        [issuer: PalletFileSystemEitherAccountIdOrProviderId, fileKey: H256],
         {
-          user: AccountId32;
+          issuer: PalletFileSystemEitherAccountIdOrProviderId;
           fileKey: H256;
         }
       >;

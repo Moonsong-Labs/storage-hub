@@ -10,7 +10,7 @@ use futures::prelude::*;
 use log::{debug, trace, warn};
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError, StorageProvidersApi,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -32,6 +32,7 @@ use storage_hub_runtime::RuntimeEvent;
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
@@ -40,6 +41,7 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 
+use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
@@ -388,6 +390,34 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryMspConfirmChunksToProveForFile {
+                    msp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let chunks_to_prove = self
+                        .client
+                        .runtime_api()
+                        .query_msp_confirm_chunks_to_prove_for_file(
+                            current_block_hash,
+                            msp_id.into(),
+                            file_key,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(QueryMspConfirmChunksToProveForFileError::InternalError)
+                        });
+
+                    match callback.send(chunks_to_prove) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Chunks to prove file sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send chunks to prove file: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryChallengesFromSeed {
                     seed,
                     provider_id,
@@ -612,6 +642,21 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_msp_respond_storage_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
                     // The strategy used here is to replace the request in the set with the new request.
                     // This is because new insertions are presumed to be done with more information of the current state of the chain,
@@ -717,6 +762,28 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryMspIdOfBucketId {
+                    bucket_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let msp_id = self
+                        .client
+                        .runtime_api()
+                        .query_msp_id_of_bucket_id(current_block_hash, &bucket_id)
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(QueryMspIdOfBucketIdError::BucketNotFound)
+                        });
+
+                    match callback.send(msp_id) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back MSP ID: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -804,6 +871,22 @@ impl BlockchainService {
             for request in process_confirm_storing_request.confirm_storing_requests {
                 state_store_context
                     .pending_confirm_storing_request_deque()
+                    .push_back(request);
+            }
+        }
+
+        // Check if there was an ongoing process msp respond storage request task.
+        let maybe_ongoing_process_msp_respond_storage_request = state_store_context
+            .access_value(&OngoingProcessMspRespondStorageRequestCf)
+            .read();
+
+        // If there was an ongoing process msp respond storage request task, we need to re-queue the requests.
+        if let Some(process_msp_respond_storage_request) =
+            maybe_ongoing_process_msp_respond_storage_request
+        {
+            for request in process_msp_respond_storage_request.respond_storing_requests {
+                state_store_context
+                    .pending_msp_respond_storage_request_deque()
                     .push_back(request);
             }
         }

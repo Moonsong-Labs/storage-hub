@@ -18,7 +18,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
 };
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
@@ -903,6 +903,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
     }
 
+    fn get_bucket_owner(bucket_id: &Self::BucketId) -> Result<Self::AccountId, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.user_id)
+    }
+
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(bucket.size)
@@ -1515,5 +1520,13 @@ where
         provider_id: &ProviderId<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         Self::compute_worst_case_scenario_slashable_amount(provider_id)
+    }
+
+    pub fn query_msp_id_of_bucket_id(
+        bucket_id: &BucketId<T>,
+    ) -> Result<MainStorageProviderId<T>, QueryMspIdOfBucketIdError> {
+        let bucket =
+            Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
+        Ok(bucket.msp_id)
     }
 }

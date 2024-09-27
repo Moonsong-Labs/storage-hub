@@ -259,6 +259,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InsufficientAvailableCapacity: AugmentedError<ApiType>;
       /**
+       * Bucket id and file key pair is invalid.
+       **/
+      InvalidBucketIdFileKeyPair: AugmentedError<ApiType>;
+      /**
        * Metadata does not correspond to expected file key.
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
@@ -379,6 +383,14 @@ declare module "@polkadot/api-base/types/errors" {
        * BSPs assignment threshold cannot be below asymptote.
        **/
       ThresholdBelowAsymptote: AugmentedError<ApiType>;
+      /**
+       * Too many batch responses to process.
+       **/
+      TooManyBatchResponses: AugmentedError<ApiType>;
+      /**
+       * Too many storage request responses.
+       **/
+      TooManyStorageRequestResponses: AugmentedError<ApiType>;
       /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/

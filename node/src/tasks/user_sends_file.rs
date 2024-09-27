@@ -2,7 +2,10 @@ use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info};
 use sc_network::PeerId;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::AcceptedBspVolunteer;
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface,
+    events::{AcceptedBspVolunteer, NewStorageRequest},
+};
 use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -44,6 +47,52 @@ where
         Self {
             storage_hub_handler,
         }
+    }
+}
+
+impl<FL, FSH> EventHandler<NewStorageRequest> for UserSendsFileTask<FL, FSH>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
+    /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
+    /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
+    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Handling new storage request from user [{:?}], with location [{:?}]",
+            event.who,
+            event.location,
+        );
+
+        let file_metadata = FileMetadata {
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            bucket_id: event.bucket_id.as_ref().to_vec(),
+            file_size: event.size.into(),
+            fingerprint: event.fingerprint,
+            location: event.location.into_inner(),
+        };
+
+        let msp_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_msp_id_of_bucket_id(event.bucket_id)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to query MSP ID of bucket ID {:?}\n Error: {:?}",
+                    event.bucket_id,
+                    e
+                )
+            })?;
+
+        info!(
+            target: LOG_TARGET,
+            "Successfully sent file metadata to MSP ({}) to store the file [{:?}]",
+            msp_id, file_metadata.fingerprint,
+        );
+
+        Ok(())
     }
 }
 
