@@ -1,6 +1,7 @@
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
+use shc_common::types::StorageProviderId;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -276,10 +277,19 @@ impl IndexerService {
                 Bsp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::CapacityChanged {
-                who, new_capacity, ..
-            } => {
-                Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
-            }
+                who,
+                new_capacity,
+                provider_id,
+                old_capacity: _old_capacity,
+                next_block_when_change_allowed: _next_block_when_change_allowed,
+            } => match provider_id {
+                StorageProviderId::BackupStorageProvider(_) => {
+                    Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+                }
+                StorageProviderId::MainStorageProvider(_) => {
+                    Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+                }
+            },
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
             pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {}
             pallet_storage_providers::Event::MspSignUpSuccess {
@@ -309,7 +319,10 @@ impl IndexerService {
                 )
                 .await?;
             }
-            pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id } => {
+            pallet_storage_providers::Event::MspSignOffSuccess {
+                who,
+                msp_id: _msp_id,
+            } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::Slashed { .. } => {}
