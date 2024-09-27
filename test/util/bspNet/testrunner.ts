@@ -65,7 +65,10 @@ export async function describeBspNet<
           launchEventEmitter.once("networkLaunched", resolve);
         });
         // Launch the network
-        const launchResponse = await launchNetwork(bspNetConfig, options?.initialised);
+        const launchResponse = await launchNetwork(
+          { ...bspNetConfig, toxics: options?.toxics },
+          options?.initialised
+        );
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);

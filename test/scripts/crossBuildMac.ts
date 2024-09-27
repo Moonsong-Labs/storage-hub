@@ -1,5 +1,11 @@
 import { execSync } from "node:child_process";
 import inquirer from "inquirer";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function main() {
   const { confirm } = await inquirer.prompt({
@@ -42,6 +48,9 @@ async function main() {
   const target = "x86_64-unknown-linux-gnu";
   addRustupTarget(target);
 
+  // Build and copy libpq.so before cargo zigbuild
+  await buildAndCopyLibpq(target);
+
   execSync(`cargo zigbuild --target ${target} --release`, { stdio: "inherit" });
 }
 
@@ -74,4 +83,37 @@ const addRustupTarget = (target: string): void => {
   if (!execCommand("rustup target list --installed").includes(target)) {
     execSync(`rustup target add ${target}`, { stdio: "inherit" });
   }
+};
+
+// Updated function to build and copy libpq.so
+const buildAndCopyLibpq = async (target: string): Promise<void> => {
+  console.log("Building and copying libpq.so...");
+
+  // Set Docker platform
+  process.env.DOCKER_DEFAULT_PLATFORM = "linux/amd64";
+
+  // Build Docker image
+  const dockerfilePath = path.join(__dirname, "crossbuild-mac-libpq.dockerfile");
+  execSync(
+    `docker build -f ${dockerfilePath} -t crossbuild-libpq ${path.join(__dirname, "..", "..")}`,
+    { stdio: "inherit" }
+  );
+
+  // Create container and copy libpq.so
+  execSync("docker create --name linux-libpq-container crossbuild-libpq", { stdio: "inherit" });
+
+  const destPath = path.join(__dirname, "..", "..", "target", target, "release", "deps");
+
+  // Ensure the destination directory exists
+  fs.mkdirSync(destPath, { recursive: true });
+
+  execSync(
+    `docker cp linux-libpq-container:/artifacts/libpq.so ${path.join(destPath, "libpq.so")}`,
+    { stdio: "inherit" }
+  );
+
+  // Remove container
+  execSync("docker rm linux-libpq-container", { stdio: "inherit" });
+
+  console.log(`libpq.so has been copied to ${destPath}`);
 };

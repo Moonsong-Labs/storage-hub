@@ -26,30 +26,32 @@ async function bootStrapNetwork() {
   if (bspNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
     // see: https://github.com/Shopify/toxiproxy?tab=readme-ov-file#toxics
-    const reqToxics = [
-      {
-        type: "latency",
-        name: "lag-down",
-        stream: "upstream",
-        toxicity: 0.8,
-        attributes: {
-          latency: 25,
-          jitter: 7
+    const reqToxics =
+      bspNetConfig.toxics ??
+      ([
+        {
+          type: "latency",
+          name: "lag-down",
+          stream: "upstream",
+          toxicity: 0.8,
+          attributes: {
+            latency: 25,
+            jitter: 7
+          }
+        },
+        {
+          type: "bandwidth",
+          name: "low-band",
+          // Setting as upstream simulates slow user connection
+          stream: "upstream",
+          // 50% of the time, the toxic will be applied
+          toxicity: 0.5,
+          attributes: {
+            // 10kbps
+            rate: 10
+          }
         }
-      },
-      {
-        type: "bandwidth",
-        name: "low-band",
-        // Setting as upstream simulates slow user connection
-        stream: "upstream",
-        // 50% of the time, the toxic will be applied
-        toxicity: 0.5,
-        attributes: {
-          // 10kbps
-          rate: 10
-        }
-      }
-    ] satisfies ToxicInfo[];
+      ] satisfies ToxicInfo[]);
 
     await registerToxics(reqToxics);
   }
