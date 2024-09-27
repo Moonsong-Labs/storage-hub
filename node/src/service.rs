@@ -1,16 +1,16 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 // std
-use std::{cell::RefCell, path::PathBuf, sync::Arc, time::Duration};
+use futures::{Stream, StreamExt};
+use log::info;
+use shc_indexer_service::spawn_indexer_service;
+use std::{cell::RefCell, env, path::PathBuf, sync::Arc, time::Duration};
 
 use async_channel::Receiver;
 use chrono::Utc;
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
-
-use futures::{Stream, StreamExt};
-use log::info;
 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
@@ -55,6 +55,7 @@ use substrate_prometheus_endpoint::Registry;
 
 use crate::{
     cli::StorageLayer,
+    command::IndexerOptions,
     services::builder::{
         BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
         RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable,
@@ -211,6 +212,7 @@ where
             storage_path,
             max_storage_capacity,
             jump_capacity,
+            extrinsic_retry_timeout,
             ..
         }) => {
             info!(
@@ -235,7 +237,12 @@ where
                 )
                 .await;
 
-            storage_hub_builder.setup(storage_path.clone(), *max_storage_capacity, *jump_capacity);
+            storage_hub_builder.setup(
+                storage_path.clone(),
+                *max_storage_capacity,
+                *jump_capacity,
+                *extrinsic_retry_timeout,
+            );
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 
@@ -281,6 +288,7 @@ where
 async fn start_dev_impl<R, S>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -307,6 +315,26 @@ where
         transaction_pool,
         other: (_, mut telemetry, _),
     } = new_partial(&config, true)?;
+
+    let maybe_db_pool = if let Some(ref indexer_options) = indexer_options {
+        let database_url = indexer_options
+            .database_url
+            .clone()
+            .unwrap_or_else(|| env::var("DATABASE_URL").expect("DATABASE_URL is not set"));
+
+        Some(
+            shc_indexer_db::setup_db_pool(database_url)
+                .await
+                .map_err(|e| sc_service::Error::Application(Box::new(e)))?,
+        )
+    } else {
+        None
+    };
+
+    if indexer_options.is_some() {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
+        spawn_indexer_service(&task_spawner, client.clone(), maybe_db_pool.unwrap()).await;
+    }
 
     let signing_dev_key = config
         .dev_key_seed
@@ -642,6 +670,7 @@ async fn start_node_impl<R, S>(
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
@@ -666,6 +695,26 @@ where
     let mut task_manager = params.task_manager;
     let keystore = params.keystore_container.keystore();
 
+    let maybe_db_pool = if let Some(ref indexer_options) = indexer_options {
+        let database_url = indexer_options
+            .database_url
+            .clone()
+            .unwrap_or_else(|| env::var("DATABASE_URL").expect("DATABASE_URL is not set"));
+
+        Some(
+            shc_indexer_db::setup_db_pool(database_url)
+                .await
+                .map_err(|e| sc_service::Error::Application(Box::new(e)))?,
+        )
+    } else {
+        None
+    };
+
+    if indexer_options.is_some() {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
+        spawn_indexer_service(&task_spawner, client.clone(), maybe_db_pool.unwrap()).await;
+    }
+
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
@@ -685,7 +734,7 @@ where
         hwbench.clone(),
     )
     .await
-    .map_err(|e| sc_service::Error::Application(Box::new(e) as Box<_>))?;
+    .map_err(|e| sc_service::Error::Application(Box::new(e)))?;
 
     let validator = parachain_config.role.is_authority();
     let prometheus_registry = parachain_config.prometheus_registry().cloned();
@@ -982,6 +1031,7 @@ fn start_consensus(
 pub async fn start_dev_node(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -995,6 +1045,7 @@ pub async fn start_dev_node(
                 start_dev_impl::<BspProvider, InMemoryStorageLayer>(
                     config,
                     Some(provider_options),
+                    indexer_options,
                     hwbench,
                     para_id,
                     sealing,
@@ -1005,6 +1056,7 @@ pub async fn start_dev_node(
                 start_dev_impl::<BspProvider, RocksDbStorageLayer>(
                     config,
                     Some(provider_options),
+                    indexer_options,
                     hwbench,
                     para_id,
                     sealing,
@@ -1015,6 +1067,7 @@ pub async fn start_dev_node(
                 start_dev_impl::<MspProvider, InMemoryStorageLayer>(
                     config,
                     Some(provider_options),
+                    indexer_options,
                     hwbench,
                     para_id,
                     sealing,
@@ -1025,6 +1078,7 @@ pub async fn start_dev_node(
                 start_dev_impl::<MspProvider, RocksDbStorageLayer>(
                     config,
                     Some(provider_options),
+                    indexer_options,
                     hwbench,
                     para_id,
                     sealing,
@@ -1035,6 +1089,7 @@ pub async fn start_dev_node(
                 start_dev_impl::<UserRole, NoStorageLayer>(
                     config,
                     Some(provider_options),
+                    indexer_options,
                     hwbench,
                     para_id,
                     sealing,
@@ -1044,7 +1099,15 @@ pub async fn start_dev_node(
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_dev_impl::<UserRole, NoStorageLayer>(config, None, hwbench, para_id, sealing).await
+        start_dev_impl::<UserRole, NoStorageLayer>(
+            config,
+            None,
+            indexer_options,
+            hwbench,
+            para_id,
+            sealing,
+        )
+        .await
     }
 }
 
@@ -1053,6 +1116,7 @@ pub async fn start_parachain_node(
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -1067,6 +1131,7 @@ pub async fn start_parachain_node(
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
+                    indexer_options,
                     para_id,
                     hwbench,
                 )
@@ -1078,6 +1143,7 @@ pub async fn start_parachain_node(
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
+                    indexer_options,
                     para_id,
                     hwbench,
                 )
@@ -1089,6 +1155,7 @@ pub async fn start_parachain_node(
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
+                    indexer_options,
                     para_id,
                     hwbench,
                 )
@@ -1100,6 +1167,7 @@ pub async fn start_parachain_node(
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
+                    indexer_options,
                     para_id,
                     hwbench,
                 )
@@ -1111,6 +1179,7 @@ pub async fn start_parachain_node(
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
+                    indexer_options,
                     para_id,
                     hwbench,
                 )
@@ -1124,6 +1193,7 @@ pub async fn start_parachain_node(
             polkadot_config,
             collator_options,
             None,
+            indexer_options,
             para_id,
             hwbench,
         )

@@ -1,32 +1,34 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
-use codec::Encode;
-use frame_support::dispatch::{DispatchResultWithPostInfo, Pays};
-use frame_support::ensure;
-use frame_support::pallet_prelude::DispatchResult;
-use frame_support::sp_runtime::{
-    traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
-    ArithmeticError, BoundedVec, DispatchError,
-};
-use frame_support::traits::tokens::Restriction;
-use frame_support::traits::{
-    fungible::{Inspect, InspectHold, MutateHold},
-    tokens::{Fortitude, Precision, Preservation},
-    Get, Randomness,
+use crate::*;
+use codec::{Decode, Encode};
+use frame_support::{
+    dispatch::{DispatchResultWithPostInfo, Pays},
+    ensure,
+    pallet_prelude::DispatchResult,
+    sp_runtime::{
+        traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
+        ArithmeticError, BoundedVec, DispatchError,
+    },
+    traits::{
+        fungible::{Inspect, InspectHold, MutateHold},
+        tokens::{Fortitude, Precision, Preservation, Restriction},
+        Get, Randomness,
+    },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
     QueryStorageProviderCapacityError,
 };
+use shp_file_metadata::FileMetadata;
 use shp_traits::{
     MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, ProofSubmittersInterface, ReadBucketsInterface,
-    ReadChallengeableProvidersInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    SystemMetricsInterface,
+    MutateStorageProvidersInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    ReadBucketsInterface, ReadChallengeableProvidersInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface, SystemMetricsInterface,
 };
+use sp_std::vec::Vec;
 use types::{ProviderId, StorageProviderId};
-
-use crate::*;
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -1396,6 +1398,43 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
         }
         Ok(())
     }
+
+    fn update_provider_after_key_removal(
+        who: &Self::ProviderId,
+        removed_trie_value: &Vec<u8>,
+    ) -> DispatchResult {
+        // Get the removed file's metadata
+        let file_metadata: FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > = FileMetadata::decode(&mut removed_trie_value.as_slice())
+            .map_err(|_| Error::<T>::InvalidEncodedFileMetadata)?;
+
+        // Get the file size as a StorageDataUnit type and the owner as an AccountId type
+        let file_size = StorageDataUnit::<T>::from(file_metadata.file_size);
+        let owner = T::AccountId::decode(&mut file_metadata.owner.as_slice())
+            .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
+
+        // Decrease the used capacity of the provider
+        Self::decrease_capacity_used(who, file_size)?;
+
+        // Update the provider's payment stream with the user
+        let previous_amount_provided =
+            <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+                who,
+                &owner,
+            )
+            .ok_or(Error::<T>::PaymentStreamNotFound)?;
+        let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
+        <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+            who,
+            &owner,
+            &new_amount_provided,
+        )?;
+
+        Ok(())
+    }
 }
 
 /// Implement the SystemMetricsInterface for the Storage Providers pallet.
@@ -1470,5 +1509,11 @@ where
         let bsp = BackupStorageProviders::<T>::get(provider_id)
             .ok_or(QueryEarliestChangeCapacityBlockError::ProviderNotRegistered)?;
         Ok(bsp.last_capacity_change + T::MinBlocksBetweenCapacityChanges::get())
+    }
+
+    pub fn get_worst_case_scenario_slashable_amount(
+        provider_id: &ProviderId<T>,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        Self::compute_worst_case_scenario_slashable_amount(provider_id)
     }
 }

@@ -124,6 +124,29 @@ where
 
         Ok(())
     }
+
+    fn get_files_by_user(
+        &self,
+        user: &sp_runtime::AccountId32,
+    ) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>> {
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+        let mut files = Vec::new();
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        let encoded_user = user.encode();
+
+        while let Some((_, value)) = trie_iter.next().transpose()? {
+            let metadata = FileMetadata::decode(&mut &value[..])?;
+            let file_key = metadata.file_key::<T::Hash>();
+            if metadata.owner == encoded_user {
+                files.push((file_key, metadata));
+            }
+        }
+
+        Ok(files)
+    }
 }
 
 #[cfg(test)]

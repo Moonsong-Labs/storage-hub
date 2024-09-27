@@ -476,7 +476,7 @@ parameter_types! {
     pub const MaxBuckets: u32 = 10000;
     pub const BucketNameLimit: u32 = 100;
     pub const SpMinDeposit: Balance = 20 * UNIT;
-    pub const SpMinCapacity: u32 = 2;
+    pub const SpMinCapacity: u64 = 2;
     pub const DepositPerData: Balance = 2;
     pub const MinBlocksBetweenCapacityChanges: u32 = 10;
     pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
@@ -492,9 +492,10 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
+    type PaymentStreams = PaymentStreams;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
@@ -505,7 +506,7 @@ impl pallet_storage_providers::Config for Runtime {
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = SpMinCapacity;
     type DepositPerData = DepositPerData;
-    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxFileSize = ConstU64<{ u64::MAX }>;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
@@ -540,7 +541,7 @@ impl pallet_payment_streams::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type UserWithoutFundsCooldown = UserWithoutFundsCooldown; // Amount of blocks that a user will have to wait before being able to clear the out of funds flag
     type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
-    type Units = u32; // Storage unit
+    type Units = u64; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
 }
@@ -660,6 +661,7 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type PaymentStreams = PaymentStreams;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
     type ReplicationTargetType = u32;

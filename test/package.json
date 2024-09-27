@@ -14,7 +14,7 @@
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
-    "crossbuild:mac": "pnpm tsx scripts/crossBuildMac.ts",
+    "crossbuild:mac": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/crossBuildMac.ts",
     "docker:build": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildLocalDocker.ts",
     "docker:start": "docker compose -f ../docker/local-node-compose.yml  -p sh_dev_node up -d",
     "docker:start:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node up -d",
@@ -67,7 +67,8 @@
     "json-bigint": "^1.0.0",
     "testcontainers": "10.13.0",
     "tiny-invariant": "^1.3.3",
-    "tsx": "4.19.0"
+    "tsx": "4.19.0",
+    "yaml": "^2.5.1"
   },
   "devDependencies": {
     "@biomejs/biome": "1.8.3",

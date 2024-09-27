@@ -11,17 +11,17 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::ConfirmStoringRequest,
+    types::{ConfirmStoringRequest, RetryStrategy, Tip},
 };
 use shc_common::types::{
-    FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+    Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::StorageDataUnit;
+use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
@@ -29,6 +29,7 @@ use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
 const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
+const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -383,10 +384,17 @@ where
         // continue only if it is successful.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
-            .await?
-            .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(MAX_CONFIRM_STORING_REQUEST_TRY_COUNT)
+                    .with_max_tip(MAX_CONFIRM_STORING_REQUEST_TIP as f64)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+            )
             .await?;
 
         // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
@@ -397,7 +405,13 @@ where
         }
 
         // Release the forest root write "lock".
-        let _ = forest_root_write_tx.send(());
+        let forest_root_write_result = forest_root_write_tx.send(());
+        if forest_root_write_result.is_err() {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
+            return Err(anyhow!(
+                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
+            ));
+        }
 
         Ok(())
     }
@@ -517,9 +531,13 @@ where
 
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(call)
+                .send_extrinsic(call, Tip::from(0))
                 .await?
-                .with_timeout(Duration::from_secs(60))
+                .with_timeout(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .extrinsic_retry_timeout,
+                ))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await?;
 
@@ -623,9 +641,13 @@ where
         // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
+            .send_extrinsic(call, Tip::from(0))
             .await?
-            .with_timeout(Duration::from_secs(60))
+            .with_timeout(Duration::from_secs(
+                self.storage_hub_handler
+                    .provider_config
+                    .extrinsic_retry_timeout,
+            ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 

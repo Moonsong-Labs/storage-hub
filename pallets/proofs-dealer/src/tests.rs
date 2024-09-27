@@ -1378,8 +1378,8 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
-                capacity: Default::default(),
-                capacity_used: Default::default(),
+                capacity: 1000,
+                capacity_used: 100,
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
@@ -1389,6 +1389,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
+
+		// Increment the used capacity of BSPs in the Providers pallet.
+		pallet_storage_providers::UsedBspsCapacity::<Test>::set(100);
 
         // Hold some of the Provider's balance so it simulates it having a stake.
         assert_ok!(<Test as crate::Config>::NativeBalance::hold(
@@ -1404,6 +1407,18 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             &provider_id,
             |provider| {
                 provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+		// Create a dynamic-rate payment stream between the user and the Provider.
+		pallet_payment_streams::DynamicRatePaymentStreams::<Test>::insert(
+            &provider_id,
+			&1,
+            pallet_payment_streams::types::DynamicRatePaymentStream {
+                amount_provided: 10,
+				price_index_when_last_charged: pallet_payment_streams::AccumulatedPriceIndex::<Test>::get(),
+				user_deposit: 10 * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get() as u128 * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+				out_of_funds_tick: None,
             },
         );
 
@@ -1508,6 +1523,163 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             <<Test as crate::Config>::ProvidersPallet as ReadChallengeableProvidersInterface>::get_root(provider_id)
                 .unwrap();
         assert_eq!(root.as_ref(), challenges.last().unwrap().as_ref());
+    });
+}
+
+#[test]
+fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_is_invalid() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Create user and add funds to the account.
+        let user = RuntimeOrigin::signed(1);
+        let user_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            user_balance
+        ));
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: 1000,
+                capacity_used: 100,
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+            },
+        );
+
+        // Increment the used capacity of BSPs in the Providers pallet.
+        pallet_storage_providers::UsedBspsCapacity::<Test>::set(100);
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Create a dynamic-rate payment stream between the user and the Provider.
+        pallet_payment_streams::DynamicRatePaymentStreams::<Test>::insert(
+            &provider_id,
+            &1,
+            pallet_payment_streams::types::DynamicRatePaymentStream {
+                amount_provided: 10,
+                price_index_when_last_charged:
+                    pallet_payment_streams::AccumulatedPriceIndex::<Test>::get(),
+                user_deposit: 10
+                    * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get(
+                    ) as u128
+                    * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Set Provider's last submitted proof tick.
+        let last_tick_provider_submitted_proof = System::block_number();
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let mut challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Set last checkpoint challenge block to be equal to the last tick this provider has submitted
+        // a proof for, so that custom challenges will be taken into account in proof verification.
+        let checkpoint_challenge_block = last_tick_provider_submitted_proof;
+        LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
+
+        // Make up custom challenges.
+        let custom_challenges = BoundedVec::try_from(vec![
+            (
+                [0; BlakeTwo256::LENGTH].into(), // Challenge that will return invalid metadata
+                Some(TrieRemoveMutation::default()),
+            ),
+            (
+                BlakeTwo256::hash(b"custom_challenge_2"),
+                Some(TrieRemoveMutation::default()),
+            ),
+        ])
+        .unwrap();
+
+        // Set custom challenges in checkpoint block.
+        TickToCheckpointChallenges::<Test>::insert(
+            checkpoint_challenge_block,
+            custom_challenges.clone(),
+        );
+
+        // Add custom challenges to the challenges vector.
+        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in &challenges {
+            key_proofs.insert(
+                *challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic and it fails because of the invalid metadata.
+        assert_noop!(
+            ProofsDealer::submit_proof(user, proof, None),
+            crate::Error::<Test>::FailedToApplyDelta
+        );
     });
 }
 
@@ -2021,7 +2193,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
-                capacity: (2 * 100) as u32,
+                capacity: (2 * 100) as u64,
                 capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),

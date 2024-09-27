@@ -103,6 +103,13 @@ pub mod pallet {
             MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
         >;
 
+        /// The trait to create, update, delete and inspect payment streams.
+        type PaymentStreams: shp_traits::PaymentStreamsInterface<
+            AccountId = Self::AccountId,
+            ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+        >;
+
         /// The trait for checking user solvency in the system
         type UserSolvency: shp_traits::ReadUserSolvencyInterface<AccountId = Self::AccountId>;
 

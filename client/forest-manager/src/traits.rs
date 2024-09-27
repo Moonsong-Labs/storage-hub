@@ -2,6 +2,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
 use shc_common::types::{FileMetadata, ForestProof, HasherOutT, StorageProofsMerkleTrieLayout};
+use sp_runtime::AccountId32;
 use tokio::sync::RwLock;
 use trie_db::TrieLayout;
 
@@ -30,6 +31,11 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>>;
     /// Delete a file key.
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>>;
+    /// Get all the files that belong to a particular user.
+    fn get_files_by_user(
+        &self,
+        user: &AccountId32,
+    ) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>>;
 }
 
 /// Handler to manage file storage instances.

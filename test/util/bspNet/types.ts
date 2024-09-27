@@ -156,10 +156,21 @@ export type BspNetConfig = {
   capacity?: bigint;
 
   /**
+   * Optional parameter to set the timeout interval for submit extrinsic retries.
+   */
+  extrinsicRetryTimeout?: number;
+
+  /**
    * Optional parameter to set the weight of the BSP.
    * Measured in bytes.
    */
   bspStartingWeight?: bigint;
+
+  /**
+   * Optional parameter to define what toxics to apply to the network.
+   * Only applies when `noisy` is set to true.
+   */
+  toxics?: ToxicInfo[];
 };
 
 /**
@@ -257,6 +268,10 @@ export type TestOptions = {
   capacity?: bigint;
   /** Set a custom BSP weight */
   bspStartingWeight?: bigint;
+  /** Custom toxics to apply to the network */
+  toxics?: ToxicInfo[];
+  /** Set a custom timeout interval for submit extrinsic retries */
+  extrinsicRetryTimeout?: number;
 };
 
 /**

@@ -889,6 +889,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToApplyDelta: AugmentedError<ApiType>;
       /**
+       * Failed to update the provider after a key removal mutation.
+       **/
+      FailedToUpdateProviderAfterKeyRemoval: AugmentedError<ApiType>;
+      /**
        * The fee for submitting a challenge could not be charged.
        **/
       FeeChargeFailed: AugmentedError<ApiType>;
@@ -987,6 +991,14 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Error thrown when failing to decode the owner Account ID from the received metadata.
+       **/
+      InvalidEncodedAccountId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when failing to decode the metadata from a received trie value that was removed.
+       **/
+      InvalidEncodedFileMetadata: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid.
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
@@ -1030,6 +1042,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when trying to update a payment stream that does not exist.
+       **/
+      PaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Error thrown when an attempt was made to slash an unslashable Storage Provider.
        **/

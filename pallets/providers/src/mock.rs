@@ -31,35 +31,6 @@ const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
 
-pub struct MockRandomness;
-impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
-    fn random(subject: &[u8]) -> (H256, BlockNumberFor<Test>) {
-        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
-
-        // Concatenate the subject with the block number to get a unique hash for each block
-        let subject_concat_block = [
-            subject,
-            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
-        ]
-        .concat();
-
-        let hashed_subject = blake2_256(&subject_concat_block);
-
-        (
-            H256::from_slice(&hashed_subject),
-            frame_system::Pallet::<Test>::block_number()
-                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
-        )
-    }
-}
-
-/// This function is used to test the randomness of the providers pallet.
-pub fn test_randomness_output(
-    who: &<Test as frame_system::Config>::AccountId,
-) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
-    <Test as pallet_storage_providers::Config>::ProvidersRandomness::random(who.encode().as_ref())
-}
-
 // Configure a mock runtime to test the pallet.
 construct_runtime!(
     pub enum Test
@@ -68,6 +39,7 @@ construct_runtime!(
         Balances: pallet_balances,
         StorageProviders: pallet_storage_providers,
         ProofsDealer: pallet_proofs_dealer,
+        PaymentStreams: pallet_payment_streams,
     }
 );
 
@@ -129,16 +101,7 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
-// Converter from the Balance type to the BlockNumber type for math.
-// It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct SaturatingBalanceToBlockNumber;
-
-impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
-    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
-        block_number.saturated_into()
-    }
-}
-
+// Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = StorageProviders;
@@ -161,6 +124,16 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
     type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ConstU64<20>;
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -220,31 +193,45 @@ where
     }
 }
 
-pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
-pub struct DefaultMerkleRoot<T>(PhantomData<T>);
-impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
-    fn get() -> HasherOutT<T> {
-        sp_trie::empty_trie_root::<T>()
+// Payment streams pallet:
+impl pallet_payment_streams::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type ProvidersPallet = StorageProviders;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type Units = u64;
+    type NewStreamDeposit = ConstU64<10>;
+    type UserWithoutFundsCooldown = ConstU64<100>;
+    type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
+}
+// Converter from the BlockNumber type to the Balance type for math
+pub struct BlockNumberToBalance;
+impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
+    fn convert(block_number: BlockNumberFor<Test>) -> Balance {
+        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
     }
 }
 
+// Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
+    type PaymentStreams = PaymentStreams;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<2>;
+    type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
-    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxFileSize = ConstU64<{ u64::MAX }>;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -256,6 +243,43 @@ impl crate::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
+}
+
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
+
+pub struct MockRandomness;
+impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
+    fn random(subject: &[u8]) -> (H256, BlockNumberFor<Test>) {
+        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
+
+        // Concatenate the subject with the block number to get a unique hash for each block
+        let subject_concat_block = [
+            subject,
+            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
+        ]
+        .concat();
+
+        let hashed_subject = blake2_256(&subject_concat_block);
+
+        (
+            H256::from_slice(&hashed_subject),
+            frame_system::Pallet::<Test>::block_number()
+                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
+        )
+    }
+}
+
+/// This function is used to test the randomness of the providers pallet.
+pub fn test_randomness_output(
+    who: &<Test as frame_system::Config>::AccountId,
+) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
+    <Test as pallet_storage_providers::Config>::ProvidersRandomness::random(who.encode().as_ref())
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
