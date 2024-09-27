@@ -18,6 +18,24 @@ diesel::table! {
 }
 
 diesel::table! {
+    msp (id) {
+        id -> Int4,
+        account -> Varchar,
+        capacity -> Numeric,
+        value_prop -> Varchar,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    msp_multiaddress (msp_id, multiaddress_id) {
+        msp_id -> Int4,
+        multiaddress_id -> Int4,
+    }
+}
+
+diesel::table! {
     multiaddress (id) {
         id -> Int4,
         address -> Varchar,
@@ -37,10 +55,14 @@ diesel::table! {
 
 diesel::joinable!(bsp_multiaddress -> bsp (bsp_id));
 diesel::joinable!(bsp_multiaddress -> multiaddress (multiaddress_id));
+diesel::joinable!(msp_multiaddress -> msp (msp_id));
+diesel::joinable!(msp_multiaddress -> multiaddress (multiaddress_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     bsp,
     bsp_multiaddress,
+    msp,
+    msp_multiaddress,
     multiaddress,
     service_state,
 );

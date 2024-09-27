@@ -1,0 +1,80 @@
+use bigdecimal::BigDecimal;
+use chrono::NaiveDateTime;
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
+
+use crate::{
+    models::multiaddress::MultiAddress,
+    schema::{msp, msp_multiaddress},
+    DbConnection,
+};
+
+/// Table that holds the MSPs.
+#[derive(Debug, Queryable, Insertable, Selectable)]
+#[diesel(table_name = msp)]
+pub struct Msp {
+    pub id: i32,
+    pub account: String,
+    pub capacity: BigDecimal,
+    pub value_prop: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+/// Association table between MSP and MultiAddress
+#[derive(Debug, Queryable, Insertable, Associations)]
+#[diesel(table_name = msp_multiaddress)]
+#[diesel(belongs_to(Msp, foreign_key = msp_id))]
+#[diesel(belongs_to(MultiAddress, foreign_key = multiaddress_id))]
+pub struct MspMultiAddress {
+    pub msp_id: i32,
+    pub multiaddress_id: i32,
+}
+
+impl Msp {
+    pub async fn create<'a>(
+        conn: &mut DbConnection<'a>,
+        account: String,
+        capacity: BigDecimal,
+        value_prop: String,
+        multiaddresses: Vec<MultiAddress>,
+    ) -> Result<Self, diesel::result::Error> {
+        let msp = diesel::insert_into(msp::table)
+            .values((
+                msp::account.eq(account),
+                msp::capacity.eq(capacity),
+                msp::value_prop.eq(value_prop),
+            ))
+            .returning(Msp::as_select())
+            .get_result(conn)
+            .await?;
+
+        diesel::insert_into(msp_multiaddress::table)
+            .values(
+                multiaddresses
+                    .into_iter()
+                    .map(|ma| {
+                        (
+                            msp_multiaddress::msp_id.eq(msp.id),
+                            msp_multiaddress::multiaddress_id.eq(ma.id),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .execute(conn)
+            .await?;
+
+        Ok(msp)
+    }
+
+    pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        account: String,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::delete(msp::table)
+            .filter(msp::account.eq(account))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+}

@@ -271,8 +271,34 @@ impl IndexerService {
             }
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
             pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {}
-            pallet_storage_providers::Event::MspSignUpSuccess { .. } => {}
-            pallet_storage_providers::Event::MspSignOffSuccess { .. } => {}
+            pallet_storage_providers::Event::MspSignUpSuccess {
+                who,
+                multiaddresses,
+                capacity,
+                value_prop,
+            } => {
+                let mut sql_multiaddresses = Vec::new();
+                for multiaddress in multiaddresses {
+                    let multiaddress_str =
+                        String::from_utf8(multiaddress.to_vec()).expect("Invalid multiaddress");
+                    sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
+                }
+
+                // TODO: update value prop after properly defined in runtime
+                let value_prop = format!("{value_prop:?}");
+
+                Msp::create(
+                    conn,
+                    who.to_string(),
+                    capacity.into(),
+                    value_prop,
+                    sql_multiaddresses,
+                )
+                .await?;
+            }
+            pallet_storage_providers::Event::MspSignOffSuccess { who } => {
+                Msp::delete(conn, who.to_string()).await?;
+            }
             pallet_storage_providers::Event::Slashed { .. } => {}
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
