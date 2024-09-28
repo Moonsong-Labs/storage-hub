@@ -60,7 +60,7 @@ use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_api::StorageProof;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{Get, Hasher, H256};
+use sp_core::{Get, Hasher, H256, blake2_256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -380,11 +380,11 @@ impl pallet_nfts::Config for Runtime {
 /// Only callable after `set_validation_data` is called which forms this proof the same way
 fn relay_chain_state_proof() -> RelayChainStateProof {
     // CRITICAL TODO: Change this to the actual relay storage root after upgrading to polkadot-sdk v1.13.0
-    let relay_storage_root = H256::zero();
+    let relay_storage_root = DefaultMerkleRoot::<LayoutV1<BlakeTwo256>>::get();
     /* let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
     .expect("set in `set_validation_data`")
     .relay_parent_storage_root; */
-    let root_vec: Vec<Vec<u8>> = vec![relay_storage_root.as_bytes().to_vec()];
+    let root_vec: vec::Vec<vec::Vec<u8>> = vec![relay_storage_root.as_bytes().to_vec()];
     let relay_chain_state = StorageProof::new(root_vec);
     /* let relay_chain_state = cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get()
     .expect("set in `set_validation_data`"); */
@@ -406,11 +406,13 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
             const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
             return BENCHMARKING_NEW_EPOCH;
         }
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::EPOCH_INDEX)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read epoch index from relay chain state proof")
+        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove frame_system::Pallet::<Runtime>::block_number()
+        /* relay_chain_state_proof()
+        .read_optional_entry(well_known_keys::EPOCH_INDEX)
+        .ok()
+        .flatten()
+        .expect("expected to be able to read epoch index from relay chain state proof") */
+        frame_system::Pallet::<Runtime>::block_number().into()
     }
     fn get_epoch_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
@@ -423,11 +425,13 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read epoch randomness from relay chain state proof")
+        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
+        /* relay_chain_state_proof()
+        .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
+        .ok()
+        .flatten()
+        .expect("expected to be able to read epoch randomness from relay chain state proof") */
+        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
     }
     fn get_parent_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
@@ -442,11 +446,15 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
         }
         // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
         // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read parent randomness from relay chain state proof")
+        /* relay_chain_state_proof()
+        .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
+        .ok()
+        .flatten()
+        .expect("expected to be able to read parent randomness from relay chain state proof") */
+        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove H256::from_slice(&blake2_256(&Self::get_epoch_index().saturating_sub(1).to_le_bytes()))
+        H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
+        ))
     }
 }
 
