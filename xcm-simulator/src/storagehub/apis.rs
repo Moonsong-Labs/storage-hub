@@ -1,4 +1,5 @@
 use crate::storagehub::*;
+use crate::*;
 use frame_support::{
     genesis_builder_helper::{build_config, create_default_config},
     weights::Weight,
@@ -38,13 +39,13 @@ impl_runtime_apis! {
             included_hash: <Block as BlockT>::Hash,
             slot: cumulus_primitives_aura::Slot,
         ) -> bool {
-            configs::ConsensusHook::can_build_upon(included_hash, slot)
+            storagehub::configs::ConsensusHook::can_build_upon(included_hash, slot)
         }
     }
 
     impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
         fn slot_duration() -> sp_consensus_aura::SlotDuration {
-            sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
+            sp_consensus_aura::SlotDuration::from_millis(storagehub::SLOT_DURATION)
         }
 
         fn authorities() -> Vec<AuraId> {

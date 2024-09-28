@@ -249,7 +249,7 @@ impl BlockchainService {
             storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
                 storage_hub_runtime::AccountId,
             >>::into(caller_pub_key)),
-            polkadot_primitives::Signature::Sr25519(signature.clone()),
+            polkadot_primitives::Signature::Sr25519(signature),
             extra.clone(),
         )
     }

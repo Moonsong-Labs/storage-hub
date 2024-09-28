@@ -598,10 +598,9 @@ where
         // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
         let (request_msp_id, confirm_status) = storage_request_metadata
             .msp
-            .clone()
             .ok_or(Error::<T>::RequestWithoutMsp)?;
         ensure!(request_msp_id == sp_id, Error::<T>::NotSelectedMsp);
-        ensure!(confirm_status == false, Error::<T>::MspAlreadyConfirmed);
+        ensure!(!confirm_status, Error::<T>::MspAlreadyConfirmed);
 
         // Get the bucket ID from the storage request metadata
         let bucket_id = storage_request_metadata.bucket_id;
