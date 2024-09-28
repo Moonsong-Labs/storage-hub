@@ -1820,7 +1820,6 @@ mod request_storage {
                 assert_eq!(used_weight, Weight::zero());
 
                 // Assert that the storage request expirations storage is at max capacity
-                // TODO: Fix this test...
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
                         expected_expiration_block_number
@@ -3508,7 +3507,6 @@ mod bsp_volunteer {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = StorageData::<Test>::try_from(4).unwrap();
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -4395,7 +4393,6 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -4514,7 +4511,6 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -4651,7 +4647,6 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -4821,7 +4816,6 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -4975,7 +4969,6 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
