@@ -40,7 +40,7 @@ The goal here is to have half of the replication target $R_{t}$ be probabilistic
 $$T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
 
 $T_{gsp}$: _Threshold global starting point_
-$R_{t}$: _Replication target_ (number of BSPs required to fulfill a storage request, otherwise known as `ReplicationTarget`)
+$R_{t}$: _Replication target_ (number of BSPs required to fulfill a storage request, otherwise known as `MaxBspsPerStorageRequest`)
 $W_{g}$: _Global weight_ (cumulative weight of all BSPs)
 $M$: _Maximum threshold_ (all BSPs would be eligible to volunteer, for example `u32::MAX`)
 
@@ -52,20 +52,36 @@ $$T_{wsp} = w \cdot T_{gsp}$$
 
 $w$: _BSP weight_ (current weight of the BSP)
 
-#### Threshold Slope
+#### Global Threshold Slope
 
-The rate of increase of the threshold from the weighted starting point to the maximum threshold over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
+The rate of increase of the threshold from the global starting point to the maximum threshold over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
+This global threshold slope is calculated taking into account the global starting point, so that it is the same for all BSPs.
 
-$$T_{s} = \frac{M - T_{wsp}}{B_{t}}$$
+$$S_{g} = \frac{M - T_{gsp}}{B_{t}}$$
 
 $B_{t}$: _Block time_ (number of blocks to pass to reach $M$)
+
+#### Weighted Threshold Slope
+
+The actual rate of increase of the threshold from the weighted starting point to the maximum threshold.
+This weighted threshold slope is calculated taking into account the BSP's weight, so that it is different for each BSP, and BSPs with higher weights will have a higher threshold slope.
+
+$$S_{w} = w \cdot S_{g}$$
+
+$w$: _BSP weight_ (current weight of the BSP)
 
 #### Threshold
 
 The threshold to succeed will be different for each BSP. By calculating their own starting point $T_{wsp}$ and increasing at a rate based on the global weight of all BSPs over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
 
-$$T = T_{wsp} + T_{s} \cdot b$$
+$$T = T_{wsp} + S_{w} \cdot b$$
 
 $T_{wsp}$: _Threshold weighted starting point_ (taking into account the BSP's weight)
 $T_{s}$: _Threshold slope_ (rate of increase reaching constant within target block time)
 $b$: _Blocks passed_ (number of blocks passed since initiated storage request)
+
+> Note ℹ️
+>
+> Actually, the threshold calculation is not done using _**blocks**_, but _**ticks**_. The reason for this is to prevent a potential spamming attack, where a malicious BSP would spam the network with tipped transactions, preventing honest BSPs from volunteering first, and thus letting blocks pass until they themselves can volunteer first.
+>
+> For mor information on ticks, check out the [Proofs Dealer Pallet](./../proofs-dealer/README.md).

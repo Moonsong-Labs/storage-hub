@@ -7,7 +7,7 @@ use frame_support::{
     pallet_prelude::Get,
     parameter_types,
     traits::{Everything, Randomness},
-    weights::constants::RocksDbWeight,
+    weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
 use frame_system as system;
@@ -18,7 +18,7 @@ use shp_traits::{
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, SaturatedConversion,
+    BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -202,6 +202,21 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        Weight::from_parts(10_000, 0)
+            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        Perbill::from_percent(50)
+    }
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -224,6 +239,9 @@ impl crate::Config for Test {
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
     type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
