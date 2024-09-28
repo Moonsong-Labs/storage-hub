@@ -145,3 +145,12 @@ pub type RandomnessProviderFor<T> = <T as crate::Config>::RandomnessProvider;
 
 /// Syntactic sugar for the Randomness Output type used in the proofs pallet.
 pub type RandomnessOutputFor<T> = <T as frame_system::Config>::Hash;
+
+/// Syntactic sugar for BlockFullnessPeriod type used in the ProofsDealer pallet.
+pub type BlockFullnessPeriodFor<T> = <T as crate::Config>::BlockFullnessPeriod;
+
+/// Syntactic sugar for BlockFullnessHeadroom type used in the ProofsDealer pallet.
+pub type BlockFullnessHeadroomFor<T> = <T as crate::Config>::BlockFullnessHeadroom;
+
+/// Syntactic sugar for MinNotFullBlocksRatio type used in the ProofsDealer pallet.
+pub type MinNotFullBlocksRatioFor<T> = <T as crate::Config>::MinNotFullBlocksRatio;

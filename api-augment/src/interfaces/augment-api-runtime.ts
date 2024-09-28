@@ -226,9 +226,9 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>>
       >;
       /**
-       * Query the earliest block number that a BSP can volunteer for a file.
+       * Query the earliest tick number that a BSP can volunteer for a file.
        **/
-      queryEarliestFileVolunteerBlock: AugmentedCall<
+      queryEarliestFileVolunteerTick: AugmentedCall<
         ApiType,
         (
           bspId: BackupStorageProviderId | string | Uint8Array,

@@ -1551,6 +1551,9 @@ declare const _default: {
         mutations: string;
         newRoot: string;
       };
+      ChallengesTickerSet: {
+        paused: string;
+      };
     };
   };
   /**
@@ -3193,7 +3196,7 @@ declare const _default: {
       };
       set_global_parameters: {
         replicationTarget: string;
-        blockRangeToMaximumThreshold: string;
+        tickRangeToMaximumThreshold: string;
       };
     };
   };
@@ -3217,6 +3220,9 @@ declare const _default: {
       };
       force_initialise_challenge_cycle: {
         provider: string;
+      };
+      set_paused: {
+        paused: string;
       };
     };
   };

@@ -4443,7 +4443,7 @@ fn run_to_block(n: u64) {
     }
 }
 
-/// This module is just a test to make sure the MockRandomness trait works. TODO: remove it alongside the test_randomness_output function
+/// This module is just a test to make sure the MockRandomness trait works.
 mod randomness {
     use super::*;
 

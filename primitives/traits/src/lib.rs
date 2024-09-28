@@ -11,7 +11,10 @@ use frame_support::{
 use scale_info::{prelude::fmt::Debug, TypeInfo};
 use sp_core::Get;
 use sp_runtime::{
-    traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating},
+    traits::{
+        AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One,
+        Saturating, Zero,
+    },
     BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
@@ -673,6 +676,25 @@ pub trait ProofsDealerInterface {
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
     /// The type that represents the randomness output.
     type RandomnessOutput: Parameter + Member + Debug;
+    /// The numerical type used to represent ticks.
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time
+    type TickNumber: Parameter
+        + Member
+        + AtLeast32BitUnsigned
+        + Debug
+        + Default
+        + Copy
+        + MaxEncodedLen
+        + FullCodec
+        + MaybeSerializeDeserialize
+        + Zero
+        + One
+        + CheckedAdd
+        + CheckedSub
+        + CheckedDiv
+        + CheckedMul
+        + Saturating;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -752,6 +774,12 @@ pub trait ProofsDealerInterface {
     /// deadline for submitting a proof to the current tick + the Provider's period (based on its
     /// stake) + the challenges tick tolerance.
     fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
+
+    /// Get the current tick.
+    ///
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time.
+    fn get_current_tick() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -968,6 +996,8 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
+/// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof
+/// submitters in the last ticks.
 pub trait ProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter

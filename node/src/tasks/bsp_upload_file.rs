@@ -579,25 +579,25 @@ where
         self.file_key_cleanup = Some(file_key.into());
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
-        let earliest_volunteer_block = self
+        let earliest_volunteer_tick = self
             .storage_hub_handler
             .blockchain
-            .query_file_earliest_volunteer_block(own_bsp_id, file_key.into())
+            .query_file_earliest_volunteer_tick(own_bsp_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,
-            "Waiting for block {:?} to volunteer for file {:?}",
-            earliest_volunteer_block,
+            "Waiting for tick {:?} to volunteer for file {:?}",
+            earliest_volunteer_tick,
             file_key
         );
 
-        // TODO: if the earliest block is too far away, we should drop the task.
+        // TODO: if the earliest tick is too far away, we should drop the task.
         // TODO: based on the limit above, also add a timeout for the task.
         self.storage_hub_handler
             .blockchain
-            .wait_for_block(earliest_volunteer_block)
+            .wait_for_tick(earliest_volunteer_tick)
             .await?;
 
         // Optimistically register the file for upload in the file transfer service.

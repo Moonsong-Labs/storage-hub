@@ -55,6 +55,8 @@ where
 
         // Check if the iterator has at least one leaf.
         if trie_de_iter.next().is_none() {
+            // If there are no leaves, and still we reached this point, it is because this is a proof of an empty forest.
+            // In this case, we return an empty set of proven keys, meaning that this is a valid proof of having an empty forest.
             return Ok(BTreeSet::new());
         }
 

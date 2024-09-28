@@ -2078,6 +2078,10 @@ declare module "@polkadot/types/lookup" {
       readonly mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
       readonly newRoot: H256;
     } & Struct;
+    readonly isChallengesTickerSet: boolean;
+    readonly asChallengesTickerSet: {
+      readonly paused: bool;
+    } & Struct;
     readonly type:
       | "NewChallenge"
       | "ProofAccepted"
@@ -2086,7 +2090,8 @@ declare module "@polkadot/types/lookup" {
       | "SlashableProvider"
       | "NoRecordOfLastSubmittedProof"
       | "NewChallengeCycleInitialised"
-      | "MutationsApplied";
+      | "MutationsApplied"
+      | "ChallengesTickerSet";
   }
 
   /** @name PalletProofsDealerProof (136) */
@@ -4050,7 +4055,7 @@ declare module "@polkadot/types/lookup" {
     readonly isSetGlobalParameters: boolean;
     readonly asSetGlobalParameters: {
       readonly replicationTarget: Option<u32>;
-      readonly blockRangeToMaximumThreshold: Option<u32>;
+      readonly tickRangeToMaximumThreshold: Option<u32>;
     } & Struct;
     readonly type:
       | "CreateBucket"
@@ -4094,7 +4099,11 @@ declare module "@polkadot/types/lookup" {
     readonly asForceInitialiseChallengeCycle: {
       readonly provider: H256;
     } & Struct;
-    readonly type: "Challenge" | "SubmitProof" | "ForceInitialiseChallengeCycle";
+    readonly isSetPaused: boolean;
+    readonly asSetPaused: {
+      readonly paused: bool;
+    } & Struct;
+    readonly type: "Challenge" | "SubmitProof" | "ForceInitialiseChallengeCycle" | "SetPaused";
   }
 
   /** @name PalletRandomnessCall (315) */
@@ -5005,7 +5014,7 @@ declare module "@polkadot/types/lookup" {
     readonly isStorageRequestNotRevoked: boolean;
     readonly isStorageRequestExists: boolean;
     readonly isReplicationTargetCannotBeZero: boolean;
-    readonly isBspsRequiredExceedsMax: boolean;
+    readonly isBspsRequiredExceedsTarget: boolean;
     readonly isNotABsp: boolean;
     readonly isNotAMsp: boolean;
     readonly isNotASp: boolean;
@@ -5023,7 +5032,6 @@ declare module "@polkadot/types/lookup" {
     readonly isFailedToEncodeFingerprint: boolean;
     readonly isFailedToDecodeThreshold: boolean;
     readonly isAboveThreshold: boolean;
-    readonly isFailedToConvertBlockNumber: boolean;
     readonly isThresholdArithmeticError: boolean;
     readonly isFailedTypeConversion: boolean;
     readonly isDividedByZero: boolean;
@@ -5044,7 +5052,7 @@ declare module "@polkadot/types/lookup" {
     readonly isFileSizeCannotBeZero: boolean;
     readonly isNoGlobalReputationWeightSet: boolean;
     readonly isMaximumThresholdCannotBeZero: boolean;
-    readonly isBlockRangeToMaximumThresholdCannotBeZero: boolean;
+    readonly isTickRangeToMaximumThresholdCannotBeZero: boolean;
     readonly isPendingStopStoringRequestNotFound: boolean;
     readonly isMinWaitForStopStoringNotReached: boolean;
     readonly isPendingStopStoringRequestAlreadyExists: boolean;
@@ -5064,7 +5072,7 @@ declare module "@polkadot/types/lookup" {
       | "StorageRequestNotRevoked"
       | "StorageRequestExists"
       | "ReplicationTargetCannotBeZero"
-      | "BspsRequiredExceedsMax"
+      | "BspsRequiredExceedsTarget"
       | "NotABsp"
       | "NotAMsp"
       | "NotASp"
@@ -5082,7 +5090,6 @@ declare module "@polkadot/types/lookup" {
       | "FailedToEncodeFingerprint"
       | "FailedToDecodeThreshold"
       | "AboveThreshold"
-      | "FailedToConvertBlockNumber"
       | "ThresholdArithmeticError"
       | "FailedTypeConversion"
       | "DividedByZero"
@@ -5103,7 +5110,7 @@ declare module "@polkadot/types/lookup" {
       | "FileSizeCannotBeZero"
       | "NoGlobalReputationWeightSet"
       | "MaximumThresholdCannotBeZero"
-      | "BlockRangeToMaximumThresholdCannotBeZero"
+      | "TickRangeToMaximumThresholdCannotBeZero"
       | "PendingStopStoringRequestNotFound"
       | "MinWaitForStopStoringNotReached"
       | "PendingStopStoringRequestAlreadyExists"

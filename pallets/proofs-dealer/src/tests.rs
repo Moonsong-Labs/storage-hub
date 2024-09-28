@@ -1,42 +1,85 @@
-use std::collections::BTreeMap;
-use std::vec;
+use std::{collections::BTreeMap, vec};
 
-use crate::pallet::Event;
-use crate::types::{
-    ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
-    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
-    MaxSubmittersPerTickFor, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-    TargetTicksStorageOfSubmittersFor,
-};
-use crate::{mock::*, types::Proof};
-use crate::{
-    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
-    LastTickProviderSubmittedAProofFor, SlashableProviders, TickToChallengesSeed,
-    TickToCheckpointChallenges, ValidProofSubmittersLastTicks,
-};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
+    dispatch::DispatchClass,
     pallet_prelude::Weight,
     traits::{
         fungible::{Mutate, MutateHold},
-        OnIdle, OnPoll,
+        OnFinalize, OnIdle, OnPoll,
     },
     weights::WeightMeter,
     BoundedBTreeSet,
 };
+use frame_system::{limits::BlockWeights, BlockWeight, ConsumedWeight};
 use pallet_storage_providers::HoldReason;
 use shp_traits::{ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
-use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
+use sp_runtime::{
+    traits::{BlakeTwo256, Zero},
+    BoundedVec, DispatchError,
+};
 use sp_trie::CompactProof;
+
+use crate::{
+    mock::*,
+    pallet::Event,
+    types::{
+        BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
+        ChallengeTicksToleranceFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor,
+        KeyProof, MaxCustomChallengesPerBlockFor, MaxSubmittersPerTickFor,
+        MinNotFullBlocksRatioFor, Proof, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, TargetTicksStorageOfSubmittersFor,
+    },
+    ChallengesTicker, ChallengesTickerPaused, LastCheckpointTick, LastDeletedTick,
+    LastTickProviderSubmittedAProofFor, NotFullBlocksCount, SlashableProviders,
+    TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
+    ValidProofSubmittersLastTicks,
+};
 
 fn run_to_block(n: u64) {
     while System::block_number() < n {
         System::set_block_number(System::block_number() + 1);
 
-        // Trigger any on_poll hook execution.
+        // Trigger on_poll hook execution.
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to be zero.
+        let zero_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => Zero::zero(),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(zero_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+    }
+}
+
+fn run_to_block_spammed(n: u64) {
+    while System::block_number() < n {
+        System::set_block_number(System::block_number() + 1);
+
+        // Trigger on_poll hook execution.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Fill up block.
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal,
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
     }
 }
 
@@ -255,74 +298,6 @@ fn challenge_submit_in_two_rounds_succeed() {
             <Test as crate::Config>::NativeBalance::usable_balance(&1),
             user_balance - challenge_fee * 2
         );
-
-        // TODO: Uncomment when `on_initialize` trigger is added.
-        // // Check that the challenge is in the queue.
-        // let challenges_queue = crate::ChallengesQueue::<Test>::get();
-        // assert_eq!(challenges_queue.len(), 1);
-        // assert_eq!(challenges_queue[0], file_key);
-    });
-}
-
-#[test]
-fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
-    new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited.
-        run_to_block(1);
-
-        // Create user with no funds.
-        let user = RuntimeOrigin::signed(1);
-
-        // Register user as a Provider in Providers pallet.
-        let provider_id = BlakeTwo256::hash(b"provider_id");
-        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
-            &1,
-            provider_id,
-        );
-        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
-            &provider_id,
-            pallet_storage_providers::types::BackupStorageProvider {
-                capacity: Default::default(),
-                capacity_used: Default::default(),
-                multiaddresses: Default::default(),
-                root: Default::default(),
-                last_capacity_change: Default::default(),
-                owner_account: 1u64,
-                payment_account: Default::default(),
-                reputation_weight:
-                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
-            },
-        );
-
-        // Set Provider's root to be an arbitrary value, different than the default root,
-        // to simulate that it is actually providing a service.
-        let root = BlakeTwo256::hash(b"1234");
-        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
-            &provider_id,
-            |provider| {
-                provider.as_mut().expect("Provider should exist").root = root;
-            },
-        );
-
-        // Mock a FileKey.
-        let file_key = BlakeTwo256::hash(b"file_key");
-
-        // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(user, file_key));
-
-        // Check that the event is emitted.
-        System::assert_last_event(
-            Event::NewChallenge {
-                who: 1,
-                key_challenged: file_key,
-            }
-            .into(),
-        );
-
-        // Check that the challenge is in the queue.
-        let challenges_queue = crate::ChallengesQueue::<Test>::get();
-        assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
     });
 }
 
@@ -392,22 +367,6 @@ fn challenge_overflow_challenges_queue_fail() {
             ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
-    });
-}
-
-#[test]
-fn proofs_dealer_trait_verify_proof_succeed() {
-    new_test_ext().execute_with(|| {
-        // TODO
-        assert!(true)
-    });
-}
-
-#[test]
-fn proofs_dealer_trait_verify_proof_fail() {
-    new_test_ext().execute_with(|| {
-        // TODO
-        assert!(true)
     });
 }
 
@@ -557,8 +516,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Check that the last event emitted is the correct one.
@@ -636,7 +594,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline = ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
@@ -666,12 +624,11 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Check that the Provider no longer has the previous deadline.
-        let deadline = ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
         assert_eq!(deadline, None);
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
@@ -772,8 +729,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id_1);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
         assert_eq!(deadline, Some(()));
 
         // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
@@ -800,13 +756,11 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id_1);
+        let deadline = TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id_1);
         assert_eq!(deadline, Some(()));
 
         // Check that the Provider no longer has the previous deadline.
-        let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id_1);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
         assert_eq!(deadline, None);
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
@@ -903,7 +857,7 @@ fn submit_proof_success() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the next challenge the Provider should listen to.
         let providers_stake =
@@ -972,12 +926,12 @@ fn submit_proof_success() {
 
         // Check that the Provider's deadline was pushed forward.
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
             None
         );
         let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
     });
@@ -1054,7 +1008,7 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the next challenge the Provider should listen to.
         let current_block = System::block_number();
@@ -3077,7 +3031,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Check that Provider is not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
@@ -3113,13 +3067,13 @@ fn new_challenges_round_provider_marked_as_slashable() {
 
         // Check that the Provider's deadline was pushed forward.
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
             None
         );
         let new_deadline =
             new_last_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
     });
@@ -3193,7 +3147,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
 
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Check that Provider is not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
@@ -3244,7 +3198,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         // New challenges round
         let current_tick = ChallengesTicker::<Test>::get();
         let prev_deadline = current_tick + challenge_period;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the deadline block for this Provider.
         run_to_block(next_challenge_deadline);
@@ -3372,8 +3326,8 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, alice_provider_id, ());
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, bob_provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, alice_provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, bob_provider_id, ());
 
         // Check that Alice and Bob are not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(
@@ -3468,22 +3422,659 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         assert_eq!(expected_new_tick, new_last_interval_tick_bob);
 
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, alice_provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, alice_provider_id),
             None
         );
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, bob_provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, bob_provider_id),
             None
         );
 
         // Check that the both Alice and Bob's deadlines were pushed forward.
         let new_deadline = expected_new_tick + challenge_period_plus_tolerance;
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, alice_provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, alice_provider_id),
             Some(()),
         );
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, bob_provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, bob_provider_id),
+            Some(()),
+        );
+    });
+}
+
+#[test]
+fn challenges_ticker_paused_works() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Get the current tick.
+        let current_tick = ChallengesTicker::<Test>::get();
+
+        // Set the challenges ticker to paused.
+        assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), true));
+
+        // Assert event emitted.
+        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: true }.into());
+
+        // Advance a number of blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + 10);
+
+        // Check that the challenges ticker is still the same.
+        assert_eq!(ChallengesTicker::<Test>::get(), current_tick);
+
+        // Unpause the challenges ticker.
+        assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), false));
+
+        // Assert event emitted.
+        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: false }.into());
+
+        // Advance a number of blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + 10);
+
+        // Check that the challenges ticker is now incremented.
+        assert_eq!(ChallengesTicker::<Test>::get(), current_tick + 10);
+    });
+}
+
+#[test]
+fn challenges_ticker_block_considered_full_with_max_normal_weight() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate a full block.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set normal weight used to be the maximum.
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal,
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should NOT be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full);
+    });
+}
+
+#[test]
+fn challenges_ticker_block_considered_full_with_weight_left_smaller_than_headroom() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate an almost full block.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to NOT leave headroom.
+        let headroom_weight = BlockFullnessHeadroomFor::<Test>::get();
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal - headroom_weight + Weight::from_parts(1, 0),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should NOT be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full);
+    });
+}
+
+#[test]
+fn challenges_ticker_block_considered_not_full_with_weight_left_equal_to_headroom() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate a block with exactly headroom weight left.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to leave headroom.
+        let headroom_weight = BlockFullnessHeadroomFor::<Test>::get();
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal.saturating_sub(headroom_weight),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_block_considered_not_full_with_weight_left_greater_than_headroom() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate a not-full block.
+        System::set_block_number(System::block_number() + 1);
+
+        // Starting with `on_poll` hook.
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+        // Set weight used to leave headroom.
+        let headroom_weight = BlockFullnessHeadroomFor::<Test>::get();
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        let max_weight_normal = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_normal.saturating_sub(headroom_weight.mul(2)),
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<Test>::set(max_block_weight);
+
+        // Trigger on_finalize hook execution.
+        ProofsDealer::on_finalize(System::block_number());
+
+        // Get the current count of non-full blocks.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_paused_only_after_tolerance_blocks() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Tick counter should be 1 while in block 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // Go until `BlockFullnessPeriodFor` blocks, with spammed blocks.
+        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        run_to_block_spammed(block_fullness_period);
+
+        // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriodFor`.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period);
+
+        // Go one more block beyond `BlockFullnessPeriodFor`.
+        // Ticker should stop at this tick.
+        run_to_block_spammed(block_fullness_period + 1);
+
+        // Assert that now the challenges ticker is paused, and the tick counter stopped at `BlockFullnessPeriodFor` + 1.
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+
+        // Going one block beyond, shouldn't increment the ticker.
+        run_to_block(block_fullness_period + 2);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_paused_when_less_than_min_not_full_blocks_ratio_are_not_full() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Tick counter should be 1 while in block 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // Make sure there are `BlockFullnessPeriod * MinNotFullBlocksRatio` (floor)
+        // not-spammed blocks. Consider that the first block was not spammed.
+        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        let min_not_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let blocks_to_spam = min_not_full_blocks_ratio
+            .mul_floor(block_fullness_period)
+            .saturating_sub(1);
+        let current_block = System::block_number();
+        run_to_block(current_block + blocks_to_spam);
+
+        // Go until `BlockFullnessPeriodFor` blocks, with spammed blocks.
+        run_to_block_spammed(block_fullness_period);
+
+        // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriod`.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period);
+
+        // Go one more block beyond `BlockFullnessPeriod`.
+        // Ticker should stop at this tick.
+        run_to_block(block_fullness_period + 1);
+
+        // Assert that now the challenges ticker is paused, and the tick counter stopped at `BlockFullnessPeriod` + 1.
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+
+        // Going one block beyond, shouldn't increment the ticker.
+        run_to_block(block_fullness_period + 2);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_not_paused_when_more_than_min_not_full_blocks_ratio_are_not_full() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Tick counter should be 1 while in block 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // Make sure there are more than `BlockFullnessPeriod * MinNotFullBlocksRatio` (floor)
+        // not-spammed blocks. Consider that the first block was not spammed.
+        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        let min_not_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let blocks_to_spam = min_not_full_blocks_ratio
+            .mul_floor(block_fullness_period)
+            .saturating_sub(1);
+        let current_block = System::block_number();
+        run_to_block(current_block + blocks_to_spam + 1);
+
+        // Go until `BlockFullnessPeriodFor` blocks, with spammed blocks.
+        run_to_block_spammed(block_fullness_period);
+
+        // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriod`.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period);
+
+        // Go one more block beyond `BlockFullnessPeriod`.
+        // Ticker should NOT stop at this tick.
+        run_to_block(block_fullness_period + 1);
+
+        // Assert that the challenges ticker is still NOT paused, and the tick counter continues.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+
+        // Going one block beyond, should increment the ticker.
+        run_to_block(block_fullness_period + 2);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 2);
+    });
+}
+
+#[test]
+fn challenges_ticker_not_paused_when_blocks_dont_run_on_poll() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Simulate multiple non-spammed blocks that don't run on `on_poll`.
+        // Like multi block migrations.
+        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        for _ in 1..block_fullness_period {
+            System::set_block_number(System::block_number() + 1);
+
+            // Set weight used to zero (not-spammed).
+            let max_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+                DispatchClass::Normal => Zero::zero(),
+                DispatchClass::Operational => Zero::zero(),
+                DispatchClass::Mandatory => Zero::zero(),
+            });
+            BlockWeight::<Test>::set(max_block_weight);
+
+            // Trigger on_finalize hook execution.
+            ProofsDealer::on_finalize(System::block_number());
+        }
+
+        // Get the current count of non-full blocks. Should be zero as `on_poll` was only run
+        // once in `run_to_block(1)`, taking into account the genesis block. In other words, not
+        // adding anything.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        assert_eq!(blocks_not_full, 0);
+
+        // Current ticker should be 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
+        System::set_block_number(System::block_number() + 1);
+        ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_unpaused_after_spam_finishes() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Tick counter should be 1 while in block 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // Go until `BlockFullnessPeriod` blocks, with spammed blocks.
+        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        run_to_block_spammed(block_fullness_period);
+
+        // Go one more block beyond `BlockFullnessPeriod`.
+        // Ticker should stop at this tick.
+        run_to_block_spammed(block_fullness_period + 1);
+
+        // Going one block beyond, shouldn't increment the ticker.
+        run_to_block(block_fullness_period + 2);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
+        // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let min_non_full_blocks: u64 =
+            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+        let empty_blocks_to_advance = min_non_full_blocks + 1 - blocks_not_full;
+
+        // Advance `empty_blocks_to_advance` blocks.
+        let current_ticker = ChallengesTicker::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + empty_blocks_to_advance);
+
+        // Assert that the challenges ticker is NOT paused, but that the `ChallengesTicker` is still the same.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
+
+        // Advance one more block and assert that the challenges ticker increments.
+        run_to_block(current_block + empty_blocks_to_advance + 1);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
+    });
+}
+
+#[test]
+fn challenges_ticker_paused_twice() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Tick counter should be 1 while in block 1.
+        assert_eq!(ChallengesTicker::<Test>::get(), 1);
+
+        // Go until `BlockFullnessPeriod` blocks, with spammed blocks.
+        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        run_to_block_spammed(block_fullness_period);
+
+        // Go one more block beyond `BlockFullnessPeriod`.
+        // Ticker should stop at this tick.
+        run_to_block_spammed(block_fullness_period + 1);
+
+        // Going one block beyond, shouldn't increment the ticker.
+        run_to_block(block_fullness_period + 2);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(ChallengesTicker::<Test>::get(), block_fullness_period + 1);
+
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
+        // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
+        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let min_non_full_blocks: u64 =
+            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+        let empty_blocks_to_advance = min_non_full_blocks + 1 - blocks_not_full;
+
+        // Advance `empty_blocks_to_advance` blocks.
+        let current_ticker = ChallengesTicker::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + empty_blocks_to_advance);
+
+        // Assert that the challenges ticker is NOT paused, but that the `ChallengesTicker` is still the same.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
+
+        // Advance one more block and assert that the challenges ticker increments.
+        run_to_block(current_block + empty_blocks_to_advance + 1);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
+
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
+        // We need to decrease that number so that it is smaller or equal to`BlockFullnessPeriod * MinNotFullBlocksRatio`.
+        let mut blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let min_non_full_blocks: u64 =
+            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+
+        // We cannot just spam however many blocks of difference are in `blocks_not_full` - `min_non_full_blocks`
+        // because the oldest blocks being considered were also spammed. We would be adding new spammed blocks
+        // in the newest blocks, and removing them from the oldest ones. So we need to spam blocks until non-spammed
+        // blocks are old enough and start getting discarded.
+        let mut blocks_advanced = 0;
+        let current_ticker = ChallengesTicker::<Test>::get();
+        while blocks_not_full > min_non_full_blocks {
+            let current_block = System::block_number();
+            run_to_block_spammed(current_block + 1);
+            blocks_not_full = NotFullBlocksCount::<Test>::get();
+            blocks_advanced += 1;
+        }
+
+        // Assert that the challenges ticker IS paused, but that the `ChallengesTicker` has advanced `not_empty_blocks_to_advance`.
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(
+            ChallengesTicker::<Test>::get(),
+            current_ticker + blocks_advanced
+        );
+
+        // Advance one more block and assert that the challenges ticker doesn't increment.
+        let current_block = System::block_number();
+        run_to_block(current_block + 1);
+        assert!(ChallengesTickerPaused::<Test>::get().is_some());
+        assert_eq!(
+            ChallengesTicker::<Test>::get(),
+            current_ticker + blocks_advanced
+        );
+    });
+}
+
+#[test]
+fn challenges_ticker_provider_not_slashed_if_network_spammed() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Go beyond `BlockFullnessPeriod` blocks, with not spammed blocks, to simulate
+        // an operational scenario already.
+        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        run_to_block(block_fullness_period + 1);
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+            },
+        );
+
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let prev_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
+            &provider_id,
+            prev_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Check that Provider is not in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+
+        // Up until this point, all blocks have been not-spammed, so the `NotFullBlocksCount`
+        // should be equal to `BlockFullnessPeriod`.
+        let current_not_full_blocks_count = NotFullBlocksCount::<Test>::get();
+        assert_eq!(current_not_full_blocks_count, block_fullness_period);
+
+        // Advance until the next challenge period block without spammed blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_period);
+
+        // Advance to the deadline block for this Provider, but with spammed blocks.
+        run_to_block_spammed(prev_deadline);
+
+        // Check that Provider is NOT in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+
+        // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
+        // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
+        let mut blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
+        let min_non_full_blocks: u64 =
+            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+
+        let current_ticker = ChallengesTicker::<Test>::get();
+        while blocks_not_full <= min_non_full_blocks {
+            let current_block = System::block_number();
+            run_to_block(current_block + 1);
+            blocks_not_full = NotFullBlocksCount::<Test>::get();
+        }
+
+        // Now the `ChallengesTicker` shouldn't be paused. But current ticker should be the same.
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker);
+
+        // Advancing one more block should increase the `ChallengesTicker` by one.
+        let current_block = System::block_number();
+        run_to_block(current_block + 1);
+        assert!(ChallengesTickerPaused::<Test>::get().is_none());
+        assert_eq!(ChallengesTicker::<Test>::get(), current_ticker + 1);
+
+        // Get how many blocks until the deadline tick.
+        let current_ticker = ChallengesTicker::<Test>::get();
+        let blocks_to_advance = prev_deadline - current_ticker;
+        let current_block = System::block_number();
+        run_to_block(current_block + blocks_to_advance);
+
+        // Check event of provider being marked as slashable.
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: provider_id,
+                next_challenge_deadline: prev_deadline + challenge_period,
+            }
+            .into(),
+        );
+
+        // Check that Provider is in the SlashableProviders storage map.
+        assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(
+            SlashableProviders::<Test>::get(&provider_id),
+            Some(<Test as crate::Config>::RandomChallengesPerBlock::get())
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let current_tick_provider_submitted_proof =
+            prev_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(
+            current_tick_provider_submitted_proof,
+            new_last_tick_provider_submitted_proof
+        );
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
+            None
+        );
+        let new_deadline =
+            new_last_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
     });

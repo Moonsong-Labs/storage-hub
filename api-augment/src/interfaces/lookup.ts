@@ -1566,6 +1566,9 @@ export default {
         provider: "H256",
         mutations: "Vec<(H256,ShpTraitsTrieRemoveMutation)>",
         newRoot: "H256"
+      },
+      ChallengesTickerSet: {
+        paused: "bool"
       }
     }
   },
@@ -3243,7 +3246,7 @@ export default {
       },
       set_global_parameters: {
         replicationTarget: "Option<u32>",
-        blockRangeToMaximumThreshold: "Option<u32>"
+        tickRangeToMaximumThreshold: "Option<u32>"
       }
     }
   },
@@ -3267,6 +3270,9 @@ export default {
       },
       force_initialise_challenge_cycle: {
         provider: "H256"
+      },
+      set_paused: {
+        paused: "bool"
       }
     }
   },
@@ -4045,7 +4051,7 @@ export default {
       "StorageRequestNotRevoked",
       "StorageRequestExists",
       "ReplicationTargetCannotBeZero",
-      "BspsRequiredExceedsMax",
+      "BspsRequiredExceedsTarget",
       "NotABsp",
       "NotAMsp",
       "NotASp",
@@ -4063,7 +4069,6 @@ export default {
       "FailedToEncodeFingerprint",
       "FailedToDecodeThreshold",
       "AboveThreshold",
-      "FailedToConvertBlockNumber",
       "ThresholdArithmeticError",
       "FailedTypeConversion",
       "DividedByZero",
@@ -4084,7 +4089,7 @@ export default {
       "FileSizeCannotBeZero",
       "NoGlobalReputationWeightSet",
       "MaximumThresholdCannotBeZero",
-      "BlockRangeToMaximumThresholdCannotBeZero",
+      "TickRangeToMaximumThresholdCannotBeZero",
       "PendingStopStoringRequestNotFound",
       "MinWaitForStopStoringNotReached",
       "PendingStopStoringRequestAlreadyExists",
