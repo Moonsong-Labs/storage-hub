@@ -28,7 +28,7 @@ mod xcm_config;
 // Substrate and Polkadot dependencies
 use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
-use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
+use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
