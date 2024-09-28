@@ -27,7 +27,7 @@ mod xcm_config;
 
 // Substrate and Polkadot dependencies
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
+use cumulus_pallet_parachain_system::{ RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
@@ -65,8 +65,6 @@ use sp_runtime::{
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
 use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
-// CRITICAL TODO: Remove after upgrading to polkadot v1.13.0
-use sp_trie_polkadot_sdk::StorageProof;
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
@@ -74,7 +72,7 @@ use xcm::latest::prelude::BodyId;
 use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
+    MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, PaymentStreams,
     PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
     RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
     WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
@@ -380,7 +378,8 @@ impl pallet_nfts::Config for Runtime {
 }
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
-fn relay_chain_state_proof() -> RelayChainStateProof {
+/// CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+/* fn relay_chain_state_proof() -> RelayChainStateProof {
     // CRITICAL TODO: Change this to the actual relay storage root after upgrading to polkadot-sdk v1.13.0
     let relay_storage_root = DefaultMerkleRoot::<StorageProofsMerkleTrieLayout>::get();
     /* let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
@@ -392,7 +391,7 @@ fn relay_chain_state_proof() -> RelayChainStateProof {
     .expect("set in `set_validation_data`"); */
     RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
         .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
-}
+} */
 
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {

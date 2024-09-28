@@ -70,8 +70,6 @@ sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "po
 sp-std = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.10.0", default-features = false }
 # latest version containing trie-db upgrade (double ended iterator)
 sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", version = "29.0.0", default-features = false }
-# CRITICAL TODO: Remove this after upgrading to polkadot sdk v1.13.0
-sp-trie-polkadot-sdk = { package = "sp-trie", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.10.0", default-features = false }
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.10.0", default-features = false }
 sp-arithmetic = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.10.0", default-features = false }
 sp-blockchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.10.0" }

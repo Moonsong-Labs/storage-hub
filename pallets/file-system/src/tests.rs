@@ -2360,7 +2360,9 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(second_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
@@ -2511,7 +2513,9 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(second_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
@@ -2669,7 +2673,9 @@ mod msp_accept_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(second_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
@@ -3756,7 +3762,7 @@ mod bsp_volunteer {
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: false,
@@ -4369,7 +4375,7 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4388,7 +4394,7 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4472,7 +4478,7 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: current_block,
                         owner: owner_account_id.clone(),
@@ -4491,7 +4497,7 @@ mod bsp_confirm {
 
 				// Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -6960,7 +6966,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -7116,7 +7122,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -7135,7 +7141,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
