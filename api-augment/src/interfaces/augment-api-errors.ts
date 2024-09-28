@@ -167,10 +167,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
-       * Block range to maximum threshold cannot be zero.
-       **/
-      BlockRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
-      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -222,10 +218,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to verify proof: required to provide a proof of non-inclusion.
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
-      /**
-       * Failed to convert block number to threshold.
-       **/
-      FailedToConvertBlockNumber: AugmentedError<ApiType>;
       /**
        * Failed to decode threshold.
        **/
@@ -387,6 +379,10 @@ declare module "@polkadot/api-base/types/errors" {
        * BSPs assignment threshold cannot be below asymptote.
        **/
       ThresholdBelowAsymptote: AugmentedError<ApiType>;
+      /**
+       * Tick range to maximum threshold cannot be zero.
+       **/
+      TickRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
       /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/

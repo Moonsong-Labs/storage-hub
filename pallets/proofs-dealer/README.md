@@ -98,6 +98,28 @@ Proof verification, which happens in the `submit_proof` extrinsic, follows the n
     1. The last tick for which the submitter submitted a proof is updated to the tick for which the proof is being submitted.
     2. The deadline for submitting a proof is updated to the next tick for which the submitter should be submitting a proof.
 
+### Tick-Stopping Anti-Spam Mechanism
+
+This pallet implements a mechanism to prevent a spamming attack that would allow a malicious actor to spam the network with tipped transactions, preventing honest Providers from submitting their proofs in time.
+
+Essentially, the mechanism consists in stopping the tick counter, when the network is presumably under a spam attack. Stopping the tick counter has the following effects:
+
+1. No new random seeds are generated, meaning that no new challenges are generated. This is to prevent accumulation of challenges in the network, while Providers are presumably unable to respond to them.
+2. No new checkpoint challenges are generated. Given that the tick doesn't advance, the checkpoint challenge ticks are not reached.
+3. Deadlines are indefinitely pushed forwards. To be precise, given that ticks don't advance, the tick where Providers would meet their deadlines are never reached. This is the key part to discourage the spamming attack, given that it would have a potentially indefinite cost, but no Provider should be slashed as a result.
+4. Proofs are still accepted, and valid proofs will be registered as processed in the tick number that was stopped.
+
+This pallet evaluates a configurable number of blocks in the past (`BlockFullnessPeriod`), checking whether or not they are considered "full". For a block to be _NOT_ full, its [Normal](https://github.com/paritytech/polkadot-sdk/blob/master/substrate/frame/support/src/dispatch.rs#L172) used weight should be such that the difference between such used weight, and the maximum available weight for the [Normal](https://github.com/paritytech/polkadot-sdk/blob/master/substrate/frame/support/src/dispatch.rs#L172) `DispatchClass`, is greater or equal than `BlockFullnessHeadroom`. Both `ref_time` and `proof_size` components of the weight are considered in this comparison.
+
+The code that checks this condition is implemented in the `do_check_spamming_condition` function, which is called by the `on_poll` hook at the beginning of every block, except during Multi Block Migrations. In this function, the pallet checks how many of the past `BlockFullnessPeriod` blocks are considered _NOT_ full, and if that number is greater than `MinNotFullBlocksRatio * BlockFullnessPeriod`, the tick counter is stopped. The `MinNotFullBlocksRatio` constant is a configurable parameter that, in a way, determines the tolerance for malicious collators in the network. For example, if `MinNotFullBlocksRatio` is set to 0.5, then in order to consider the network spammed, more than half of the past `BlockFullnessPeriod` blocks should be considered _NOT_ full. In those past _non-full_ blocks, there would have been at least one block produced by an honest collator.
+
+The [Normal](https://github.com/paritytech/polkadot-sdk/blob/master/substrate/frame/support/src/dispatch.rs#L172) weight used in every block is registered in the `on_finalize` hook, which is executed even in MBMs. However, the criteria to check whether or not a block is considered _NOT_ full is run in the `on_poll` hook of the next block, so successive MBMs would not be considered as multiple _non-full_ blocks.
+
+> `IMPORTANT ❗️`
+>
+> - The `BlockFullnessPeriod` should be configured to be smaller or equal than the `ChallengeTicksTolerance` constant. Otherwise, if bigger, the attacker could spam the network during the tolerance period of a given Provider, but still not spam enough blocks to trigger the anti-spam mechanism.
+> - The `BlockFullnessHeadroom` should be configured to some weight value that would reflect that "an honest Provider could have submitted a proof in that block, if the block was produced by an honest collator".
+
 ## Interfaces
 
 This pallet implements:

@@ -1,8 +1,8 @@
 import type { DefinitionCall, DefinitionsCall } from "@polkadot/types/types";
 
 const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
-  query_earliest_file_volunteer_block: {
-    description: "Query the earliest block number that a BSP can volunteer for a file.",
+  query_earliest_file_volunteer_tick: {
+    description: "Query the earliest tick number that a BSP can volunteer for a file.",
     params: [
       {
         name: "bspId",

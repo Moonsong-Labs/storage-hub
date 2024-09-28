@@ -690,7 +690,7 @@ declare module "@polkadot/api-base/types/submittable" {
       setGlobalParameters: AugmentedSubmittable<
         (
           replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
-          blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
+          tickRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
         [Option<u32>, Option<u32>]
       >;
@@ -3158,6 +3158,15 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
+       * Set the [`ChallengesTickerPaused`] to `true` or `false`.
+       *
+       * Only callable by sudo.
+       **/
+      setPaused: AugmentedSubmittable<
+        (paused: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [bool]
+      >;
+      /**
        * For a Provider to submit a proof.
        *
        * Checks that `provider` is a registered Provider. If none
@@ -3166,7 +3175,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * Validates that the proof corresponds to a challenge that was made in the past,
        * by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
        * Provider should have submitted a proof is calculated based on the last tick they
-       * submitted a proof for (`LastTickProviderSubmittedProofFor`), and the proving period for
+       * submitted a proof for ([`LastTickProviderSubmittedAProofFor`]), and the proving period for
        * that Provider, which is a function of their stake.
        * This extrinsic also checks that there hasn't been a checkpoint challenge round
        * in between the last time the Provider submitted a proof for and the tick
@@ -3174,7 +3183,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * subject to slashing.
        *
        * If valid:
-       * - Pushes forward the Provider in the `ChallengeTickToChallengedProviders` StorageMap a number
+       * - Pushes forward the Provider in the [`TickToProvidersDeadlines`] StorageMap a number
        * of ticks corresponding to the stake of the Provider.
        * - Registers this tick as the last tick in which the Provider submitted a proof.
        *

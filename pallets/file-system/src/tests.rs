@@ -7,9 +7,9 @@ use crate::{
         StorageData, StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestTtl,
         ThresholdType,
     },
-    BlockRangeToMaximumThreshold, Config, DataServersForMoveBucket, Error, Event,
-    PendingBucketsToMove, PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
-    StorageRequestExpirations, StorageRequests,
+    Config, DataServersForMoveBucket, Error, Event, PendingBucketsToMove,
+    PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
+    StorageRequestExpirations, StorageRequests, TickRangeToMaximumThreshold,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -20,7 +20,10 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
-use shp_traits::{ReadBucketsInterface, ReadStorageProvidersInterface, TrieRemoveMutation};
+use shp_traits::{
+    MutateStorageProvidersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
+    ReadStorageProvidersInterface, TrieRemoveMutation,
+};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -184,9 +187,10 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -221,9 +225,10 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -252,9 +257,10 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_charlie_id),
@@ -342,7 +348,7 @@ mod request_move_bucket {
                     peer_ids.clone(),
                 ));
 
-				// Compute the file key.
+                // Compute the file key.
                 let file_key = FileSystem::compute_file_key(
                     owner.clone(),
                     bucket_id,
@@ -352,9 +358,10 @@ mod request_move_bucket {
                 );
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Manually set enough capacity for Charlie
                 pallet_storage_providers::MainStorageProviders::<Test>::mutate(
@@ -369,18 +376,18 @@ mod request_move_bucket {
                 // Dispatch the MSP accept request.
                 // This opereration increases the bucket size.
                 assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp_charlie),
-					file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                    RuntimeOrigin::signed(msp_charlie),
+                    file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
                 // Check bucket size
-                let bucket_size = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id).unwrap();
+                let bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
                 assert_eq!(bucket_size, size);
 
                 // BSP confirm storage request
@@ -414,7 +421,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -469,9 +481,10 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -482,7 +495,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -513,13 +531,14 @@ mod request_move_bucket {
                 );
 
                 // Check bucket is stored by Dave
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_dave_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(&msp_dave_id, &bucket_id));
 
                 // Check pending bucket storages are cleared
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
+                    &msp_dave_id,
+                    bucket_id
+                ));
             });
         }
 
@@ -538,9 +557,10 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -551,7 +571,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -582,13 +607,17 @@ mod request_move_bucket {
                 );
 
                 // Check bucket is still stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Check pending bucket storages are cleared
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
+                    &msp_dave_id,
+                    bucket_id
+                ));
             });
         }
 
@@ -607,9 +636,10 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -620,7 +650,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -635,7 +670,7 @@ mod request_move_bucket {
                 );
 
                 // Check move bucket request expires after MoveBucketRequestTtl
-                let move_bucket_request_ttl: u32 = <Test as Config>::MoveBucketRequestTtl::get() ;
+                let move_bucket_request_ttl: u32 = <Test as Config>::MoveBucketRequestTtl::get();
                 let move_bucket_request_ttl: BlockNumber = move_bucket_request_ttl.into();
                 let expiration = move_bucket_request_ttl + System::block_number();
 
@@ -643,7 +678,10 @@ mod request_move_bucket {
                 roll_to(expiration);
 
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
+                    &msp_dave_id,
+                    bucket_id
+                ));
             });
         }
     }
@@ -693,7 +731,10 @@ mod bsp_add_data_server_for_move_bucket_request {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
                 let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(RuntimeOrigin::signed(bsp_account_id.clone()), 1000));
+                assert_ok!(bsp_sign_up(
+                    RuntimeOrigin::signed(bsp_account_id.clone()),
+                    1000
+                ));
 
                 let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
                 let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
@@ -702,9 +743,10 @@ mod bsp_add_data_server_for_move_bucket_request {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
@@ -714,7 +756,12 @@ mod bsp_add_data_server_for_move_bucket_request {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -733,16 +780,18 @@ mod bsp_add_data_server_for_move_bucket_request {
                     bucket_id,
                 ));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id.clone(),
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner }));
-                assert_eq!(DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(), Some(bsp_id));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata { requester: owner })
+                );
+                assert_eq!(
+                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
+                    Some(bsp_id)
+                );
 
                 assert_noop!(
                     FileSystem::bsp_add_data_server_for_move_bucket_request(
@@ -768,7 +817,10 @@ mod bsp_add_data_server_for_move_bucket_request {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
                 let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(RuntimeOrigin::signed(bsp_account_id.clone()), 1000));
+                assert_ok!(bsp_sign_up(
+                    RuntimeOrigin::signed(bsp_account_id.clone()),
+                    1000
+                ));
 
                 let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
                 let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
@@ -777,9 +829,10 @@ mod bsp_add_data_server_for_move_bucket_request {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -790,7 +843,12 @@ mod bsp_add_data_server_for_move_bucket_request {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -810,24 +868,22 @@ mod bsp_add_data_server_for_move_bucket_request {
                     bucket_id,
                 ));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner }));
-                assert_eq!(DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(), Some(bsp_id));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata { requester: owner })
+                );
+                assert_eq!(
+                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
+                    Some(bsp_id)
+                );
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
-                    Event::DataServerRegisteredForMoveBucket {
-                        bsp_id,
-                        bucket_id,
-                    }
-                    .into(),
+                    Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id }.into(),
                 );
             });
         }
@@ -1331,9 +1387,10 @@ mod request_storage {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -1344,7 +1401,12 @@ mod request_storage {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert_noop!(
                     FileSystem::issue_storage_request(
@@ -1650,9 +1712,6 @@ mod request_storage {
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
                 let expiration_block = System::block_number() + storage_request_ttl;
 
-                // Assert that the next starting block to clean up is set to 0 initially
-                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
-
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
                     file_system::NextAvailableStorageRequestExpirationBlock::<Test>::get(),
@@ -1802,9 +1861,6 @@ mod request_storage {
                 let expected_expiration_block_number: BlockNumberFor<Test> =
                     expected_expiration_block_number.into();
 
-                // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
-                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
-
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
@@ -1827,9 +1883,6 @@ mod request_storage {
                     .len(),
                     max_storage_request_expiry as usize
                 );
-
-                // Assert that the `NextExpirationInsertionBlockNumber` storage did not update
-                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
 
                 // Go to block number after which the storage request expirations should be removed
                 roll_to(expected_expiration_block_number + 1);
@@ -1954,9 +2007,6 @@ mod revoke_storage_request {
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
                 let expiration_block = System::block_number() + storage_request_ttl;
 
-                // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
-                assert_eq!(file_system::NextStartingBlockToCleanUp::<Test>::get(), 0);
-
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(expiration_block),
@@ -1987,14 +2037,14 @@ mod revoke_storage_request {
                 let bucket_id = create_bucket(&owner_account.clone(), name.clone(), msp_id);
 
                 assert_ok!(FileSystem::issue_storage_request(
-            		owner.clone(),
-            		bucket_id,
-					location.clone(),
-					fingerprint,
-					4,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
@@ -2003,11 +2053,7 @@ mod revoke_storage_request {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2131,25 +2177,25 @@ mod msp_accept_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				// Register the MSP.
+                // Register the MSP.
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold the file.
+                // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				// Compute the file key.
+                // Compute the file key.
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
@@ -2160,36 +2206,36 @@ mod msp_accept_storage_request {
 
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                    RuntimeOrigin::signed(msp.clone()),
+                    file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
-				// Get the new root of the bucket.
-                let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
-                    .unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::MspAcceptedStoring {
-						file_key,
-						msp_id,
-						bucket_id,
-						owner: owner_account_id,
-						new_bucket_root
-					}
+                        file_key,
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id,
+                        new_bucket_root,
+                    }
                     .into(),
                 );
             });
@@ -2202,22 +2248,24 @@ mod msp_accept_storage_request {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let second_location =
+                    FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec())
+                        .unwrap();
                 let first_size = 4;
-				let second_size = 8;
+                let second_size = 8;
                 let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let second_fingerprint = H256::random();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				// Register the MSP.
+                // Register the MSP.
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold both files.
+                // Create the bucket that will hold both files.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				// Compute the file key for the first file.
+                // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
@@ -2226,118 +2274,116 @@ mod msp_accept_storage_request {
                     first_fingerprint,
                 );
 
-				// Compute the file key for the second file.
-				let second_file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					second_location.clone(),
-					second_size,
-					second_fingerprint,
-				);
+                // Compute the file key for the second file.
+                let second_file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    second_location.clone(),
+                    second_size,
+                    second_fingerprint,
+                );
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					first_location.clone(),
-					first_fingerprint,
-					first_size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    bucket_id,
+                    first_location.clone(),
+                    first_fingerprint,
+                    first_size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				// Dispatch a storage request for the second file.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					second_location.clone(),
-					second_fingerprint,
-					second_size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request for the second file.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    second_location.clone(),
+                    second_fingerprint,
+                    second_size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Dispatch the MSP accept request for the first file.
                 assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					first_file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                    RuntimeOrigin::signed(msp.clone()),
+                    first_file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
-				// Get the new root of the bucket.
-                let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
-                    .unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::MspAcceptedStoring {
-						file_key: first_file_key,
-						msp_id,
-						bucket_id,
-						owner: owner_account_id.clone(),
-						new_bucket_root
-					}
+                        file_key: first_file_key,
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                        new_bucket_root,
+                    }
                     .into(),
                 );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size
+                );
 
-				// Dispatch the MSP accept request for the second file.
-				assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					second_file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                // Dispatch the MSP accept request for the second file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+                    RuntimeOrigin::signed(msp.clone()),
+                    second_file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
-				// Assert that the storage was updated
-				assert_eq!(
-					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
-					Some((msp_id, true))
-				);
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    Some((msp_id, true))
+                );
 
-				// Get the new root of the bucket.
-				let new_bucket_root =
-					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
-					.unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&bucket_id).unwrap();
 
-				// Assert that the correct event was deposited
-				System::assert_last_event(
-					Event::MspAcceptedStoring {
-						file_key: second_file_key,
-						msp_id,
-						bucket_id,
-						owner: owner_account_id,
-						new_bucket_root
-					}
-					.into(),
-				);
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspAcceptedStoring {
+                        file_key: second_file_key,
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id,
+                        new_bucket_root,
+                    }
+                    .into(),
+                );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size + second_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size + second_size
+                );
             });
         }
 
@@ -2348,26 +2394,29 @@ mod msp_accept_storage_request {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let second_location =
+                    FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec())
+                        .unwrap();
                 let first_size = 4;
-				let second_size = 8;
+                let second_size = 8;
                 let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let second_fingerprint = H256::random();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				// Register the MSP.
+                // Register the MSP.
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold the first file.
+                // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
                 let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id);
 
-				// Create the bucket that will hold the second file.
-				let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-				let second_bucket_id = create_bucket(&owner_account_id.clone(), second_name, msp_id);
+                // Create the bucket that will hold the second file.
+                let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
+                let second_bucket_id =
+                    create_bucket(&owner_account_id.clone(), second_name, msp_id);
 
-				// Compute the file key for the first file.
+                // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     first_bucket_id,
@@ -2376,118 +2425,116 @@ mod msp_accept_storage_request {
                     first_fingerprint,
                 );
 
-				// Compute the file key for the second file.
-				let second_file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_size,
-					second_fingerprint,
-				);
+                // Compute the file key for the second file.
+                let second_file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_size,
+                    second_fingerprint,
+                );
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					first_bucket_id,
-					first_location.clone(),
-					first_fingerprint,
-					first_size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    first_bucket_id,
+                    first_location.clone(),
+                    first_fingerprint,
+                    first_size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				// Dispatch a storage request for the second file.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_fingerprint,
-					second_size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request for the second file.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_fingerprint,
+                    second_size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Dispatch the MSP accept request for the first file.
                 assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					first_file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                    RuntimeOrigin::signed(msp.clone()),
+                    first_file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
-				// Get the new root of the bucket.
-                let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
-                    .unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&first_bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::MspAcceptedStoring {
-						file_key: first_file_key,
-						msp_id,
-						bucket_id: first_bucket_id,
-						owner: owner_account_id.clone(),
-						new_bucket_root
-					}
+                        file_key: first_file_key,
+                        msp_id,
+                        bucket_id: first_bucket_id,
+                        owner: owner_account_id.clone(),
+                        new_bucket_root,
+                    }
                     .into(),
                 );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size
+                );
 
-				// Dispatch the MSP accept request for the second file.
-				assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					second_file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                // Dispatch the MSP accept request for the second file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+                    RuntimeOrigin::signed(msp.clone()),
+                    second_file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
-				// Assert that the storage was updated
-				assert_eq!(
-					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
-					Some((msp_id, true))
-				);
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    Some((msp_id, true))
+                );
 
-				// Get the new root of the bucket.
-				let new_bucket_root =
-					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
-					.unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&second_bucket_id).unwrap();
 
-				// Assert that the correct event was deposited
-				System::assert_last_event(
-					Event::MspAcceptedStoring {
-						file_key: second_file_key,
-						msp_id,
-						bucket_id: second_bucket_id,
-						owner: owner_account_id,
-						new_bucket_root
-					}
-					.into(),
-				);
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspAcceptedStoring {
+                        file_key: second_file_key,
+                        msp_id,
+                        bucket_id: second_bucket_id,
+                        owner: owner_account_id,
+                        new_bucket_root,
+                    }
+                    .into(),
+                );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size + second_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size + second_size
+                );
             });
         }
 
@@ -2496,32 +2543,38 @@ mod msp_accept_storage_request {
             new_test_ext().execute_with(|| {
                 let first_owner_account_id = Keyring::Alice.to_account_id();
                 let first_owner_signed = RuntimeOrigin::signed(first_owner_account_id.clone());
-				let second_owner_account_id = Keyring::Bob.to_account_id();
-				let second_owner_signed = RuntimeOrigin::signed(second_owner_account_id.clone());
+                let second_owner_account_id = Keyring::Bob.to_account_id();
+                let second_owner_signed = RuntimeOrigin::signed(second_owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let second_location =
+                    FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec())
+                        .unwrap();
                 let first_size = 4;
-				let second_size = 8;
+                let second_size = 8;
                 let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let second_fingerprint = H256::random();
                 let first_peer_id = BoundedVec::try_from(vec![1]).unwrap();
-                let first_peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![first_peer_id]).unwrap();
-				let second_peer_id = BoundedVec::try_from(vec![2]).unwrap();
-				let second_peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![second_peer_id]).unwrap();
+                let first_peer_ids: PeerIds<Test> =
+                    BoundedVec::try_from(vec![first_peer_id]).unwrap();
+                let second_peer_id = BoundedVec::try_from(vec![2]).unwrap();
+                let second_peer_ids: PeerIds<Test> =
+                    BoundedVec::try_from(vec![second_peer_id]).unwrap();
 
-				// Register the MSP.
+                // Register the MSP.
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold the first file.
+                // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id = create_bucket(&first_owner_account_id.clone(), first_name, msp_id);
+                let first_bucket_id =
+                    create_bucket(&first_owner_account_id.clone(), first_name, msp_id);
 
-				// Create the bucket that will hold the second file.
-				let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-				let second_bucket_id = create_bucket(&second_owner_account_id.clone(), second_name, msp_id);
+                // Create the bucket that will hold the second file.
+                let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
+                let second_bucket_id =
+                    create_bucket(&second_owner_account_id.clone(), second_name, msp_id);
 
-				// Compute the file key for the first file.
+                // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
                     first_owner_account_id.clone(),
                     first_bucket_id,
@@ -2530,118 +2583,116 @@ mod msp_accept_storage_request {
                     first_fingerprint,
                 );
 
-				// Compute the file key for the second file.
-				let second_file_key = FileSystem::compute_file_key(
-					second_owner_account_id.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_size,
-					second_fingerprint,
-				);
+                // Compute the file key for the second file.
+                let second_file_key = FileSystem::compute_file_key(
+                    second_owner_account_id.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_size,
+                    second_fingerprint,
+                );
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
-					first_owner_signed.clone(),
-					first_bucket_id,
-					first_location.clone(),
-					first_fingerprint,
-					first_size,
-					msp_id,
-					first_peer_ids.clone(),
-				));
+                    first_owner_signed.clone(),
+                    first_bucket_id,
+                    first_location.clone(),
+                    first_fingerprint,
+                    first_size,
+                    msp_id,
+                    first_peer_ids.clone(),
+                ));
 
-				// Dispatch a storage request for the second file.
-				assert_ok!(FileSystem::issue_storage_request(
-					second_owner_signed.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_fingerprint,
-					second_size,
-					msp_id,
-					second_peer_ids.clone(),
-				));
+                // Dispatch a storage request for the second file.
+                assert_ok!(FileSystem::issue_storage_request(
+                    second_owner_signed.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_fingerprint,
+                    second_size,
+                    msp_id,
+                    second_peer_ids.clone(),
+                ));
 
                 // Dispatch the MSP accept request for the first file.
                 assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					first_file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                    RuntimeOrigin::signed(msp.clone()),
+                    first_file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    file_system::StorageRequests::<Test>::get(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
-				// Get the new root of the bucket.
-                let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
-                    .unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&first_bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::MspAcceptedStoring {
-						file_key: first_file_key,
-						msp_id,
-						bucket_id: first_bucket_id,
-						owner: first_owner_account_id.clone(),
-						new_bucket_root
-					}
+                        file_key: first_file_key,
+                        msp_id,
+                        bucket_id: first_bucket_id,
+                        owner: first_owner_account_id.clone(),
+                        new_bucket_root,
+                    }
                     .into(),
                 );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size
+                );
 
-				// Dispatch the MSP accept request for the second file.
-				assert_ok!(FileSystem::msp_accept_storage_request(
-					RuntimeOrigin::signed(msp.clone()),
-					second_file_key,
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					},
-					CompactProof {
-						encoded_nodes: vec![H256::default().as_ref().to_vec()],
-					}
-				));
+                // Dispatch the MSP accept request for the second file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+                    RuntimeOrigin::signed(msp.clone()),
+                    second_file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                ));
 
-				// Assert that the storage was updated
-				assert_eq!(
-					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
-					Some((msp_id, true))
-				);
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    Some((msp_id, true))
+                );
 
-				// Get the new root of the bucket.
-				let new_bucket_root =
-					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
-					.unwrap();
+                // Get the new root of the bucket.
+                let new_bucket_root = Providers::get_root_bucket(&second_bucket_id).unwrap();
 
-				// Assert that the correct event was deposited
-				System::assert_last_event(
-					Event::MspAcceptedStoring {
-						file_key: second_file_key,
-						msp_id,
-						bucket_id: second_bucket_id,
-						owner: second_owner_account_id,
-						new_bucket_root
-					}
-					.into(),
-				);
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspAcceptedStoring {
+                        file_key: second_file_key,
+                        msp_id,
+                        bucket_id: second_bucket_id,
+                        owner: second_owner_account_id,
+                        new_bucket_root,
+                    }
+                    .into(),
+                );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size + second_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size + second_size
+                );
             });
         }
 
@@ -3429,6 +3480,79 @@ mod bsp_volunteer {
         }
 
         #[test]
+        fn bsp_volunteer_above_threshold_high_fail_even_with_spamming() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                // Get BSP ID.
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Compute the file key to volunteer for.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Set a somewhat high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(40)
+                ));
+
+                // Calculate how many ticks until this BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
+                let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                let current_block = System::block_number();
+
+                // Advance by the number of ticks until this BSP can volunteer for the file.
+                // In the process, this BSP will spam the chain to prevent others from volunteering and confirming.
+                roll_to_spammed(current_block + ticks_to_advance);
+
+                // Dispatch BSP volunteer.
+                assert_noop!(
+                    FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
+                    Error::<Test>::AboveThreshold
+                );
+            });
+        }
+
+        #[test]
         fn bsp_volunteer_with_insufficient_capacity() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
@@ -3449,33 +3573,26 @@ mod bsp_volunteer {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					origin,
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					4,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    origin,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id.clone(),
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
-                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
-                    bsp_id,
-                    |bsp| {
-                        assert!(bsp.is_some());
-                        if let Some(bsp) = bsp {
-                            bsp.capacity = 0;
-                        }
-                    },
-                );
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
+                    assert!(bsp.is_some());
+                    if let Some(bsp) = bsp {
+                        bsp.capacity = 0;
+                    }
+                });
 
                 let file_key = FileSystem::compute_file_key(
                     owner.clone(),
@@ -3519,14 +3636,14 @@ mod bsp_volunteer {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					origin,
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					4,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    origin,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -3539,11 +3656,7 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
@@ -3569,7 +3682,100 @@ mod bsp_volunteer {
                         owner,
                         size,
                     }
-                        .into(),
+                    .into(),
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_volunteer_succeeds_after_waiting_enough_blocks_without_spam() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                // Get BSP ID.
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Compute the file key to volunteer for.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Set a somewhat high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(40)
+                ));
+
+                // Calculate how many ticks until this BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
+                let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                let current_block = System::block_number();
+
+                // Advance by the number of ticks until this BSP can volunteer for the file.
+                roll_to(current_block + ticks_to_advance);
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Assert that the RequestStorageBsps has the correct value
+                assert_eq!(
+                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: false,
+                        _phantom: Default::default()
+                    }
+                );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::AcceptedBspVolunteer {
+                        bsp_id,
+                        bucket_id,
+                        location,
+                        fingerprint,
+                        multiaddresses: create_sp_multiaddresses(),
+                        owner: owner_account_id,
+                        size,
+                    }
+                    .into(),
                 );
             });
         }
@@ -3868,9 +4074,7 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                    bsp_account_id.clone(),
-                ).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Force BSP to pass all threshold checks when volunteering.
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -3883,7 +4087,8 @@ mod bsp_confirm {
 
                 // Issue 5 storage requests and volunteer for each
                 for i in 0..5 {
-                    let location = FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
+                    let location =
+                        FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
                     let fingerprint = H256::repeat_byte(i as u8);
 
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
@@ -3926,12 +4131,18 @@ mod bsp_confirm {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 };
 
-                let file_keys_and_proofs: BoundedVec<_, <Test as crate::Config>::MaxBatchConfirmStorageRequests> = file_keys
+                let file_keys_and_proofs: BoundedVec<
+                    _,
+                    <Test as crate::Config>::MaxBatchConfirmStorageRequests,
+                > = file_keys
                     .into_iter()
                     .map(|file_key| {
-                        (file_key, CompactProof {
-                            encoded_nodes: vec![file_key.as_ref().to_vec()],
-                        })
+                        (
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![file_key.as_ref().to_vec()],
+                            },
+                        )
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -3977,14 +4188,14 @@ mod bsp_confirm {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -3997,18 +4208,13 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id.clone(),
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -4016,11 +4222,13 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the storage was updated
@@ -4060,11 +4268,7 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-                        bsp_id,
-                    )
-                        .unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -4074,7 +4278,7 @@ mod bsp_confirm {
                         file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         new_root,
                     }
-                        .into(),
+                    .into(),
                 );
 
                 // Assert that the proving cycle was initialised for this BSP.
@@ -4088,7 +4292,7 @@ mod bsp_confirm {
                         who: bsp_account_id,
                         bsp_id,
                     }
-                        .into(),
+                    .into(),
                 );
 
 				// Assert that the payment stream between the BSP and the user has been created
@@ -4139,7 +4343,7 @@ mod bsp_confirm {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                    Providers::get_provider_id(
                         bsp_account_id.clone(),
                     )
                         .unwrap();
@@ -4147,9 +4351,8 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -4194,7 +4397,7 @@ mod bsp_confirm {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
+                    Providers::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -4297,7 +4500,7 @@ mod bsp_confirm {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
+                    Providers::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -4405,14 +4608,14 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4425,11 +4628,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -4439,11 +4638,14 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
@@ -4484,20 +4686,22 @@ mod bsp_stop_storing {
                 );
 
                 // Dispatch BSP stop storing.
-                assert_noop!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				), Error::<Test>::InvalidFileKeyMetadata);
-
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::InvalidFileKeyMetadata
+                );
             });
         }
 
@@ -4523,14 +4727,14 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4543,11 +4747,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -4557,11 +4757,14 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
@@ -4603,37 +4806,39 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
-				// Check that the request now exists.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Check that the request now exists.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
-				// Try sending the stop storing request again.
-                assert_noop!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				), Error::<Test>::PendingStopStoringRequestAlreadyExists);
-
+                // Try sending the stop storing request again.
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::PendingStopStoringRequestAlreadyExists
+                );
             });
         }
 
@@ -4659,14 +4864,14 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4679,11 +4884,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -4693,11 +4894,14 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
@@ -4739,18 +4943,18 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
@@ -4774,8 +4978,8 @@ mod bsp_stop_storing {
                     })
                 );
 
-				// Assert that the request was added to the pending stop storing requests.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the request was added to the pending stop storing requests.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -4785,20 +4989,23 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
 
-				// Dispatch BSP confirm stop storing.
-				assert_noop!(FileSystem::bsp_confirm_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				), Error::<Test>::MinWaitForStopStoringNotReached);
+                // Dispatch BSP confirm stop storing.
+                assert_noop!(
+                    FileSystem::bsp_confirm_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::MinWaitForStopStoringNotReached
+                );
 
-				// Assert that the pending stop storing request is still there.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the pending stop storing request is still there.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
             });
         }
     }
@@ -4828,14 +5035,14 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4848,11 +5055,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -4862,11 +5065,14 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
@@ -4908,18 +5114,18 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
@@ -4943,8 +5149,8 @@ mod bsp_stop_storing {
                     })
                 );
 
-				// Assert that the request was added to the pending stop storing requests.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the request was added to the pending stop storing requests.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -4954,7 +5160,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -4981,14 +5187,14 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5001,11 +5207,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5015,11 +5217,14 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
@@ -5061,18 +5266,18 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
@@ -5096,8 +5301,8 @@ mod bsp_stop_storing {
                     })
                 );
 
-				// Assert that the request was added to the pending stop storing requests.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the request was added to the pending stop storing requests.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -5107,39 +5312,37 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
 
-				// Advance enough blocks to allow the BSP to confirm the stop storing request.
-				roll_to(frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get());
+                // Advance enough blocks to allow the BSP to confirm the stop storing request.
+                roll_to(
+                    frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
+                );
 
-				// Dispatch BSP confirm stop storing.
-				assert_ok!(FileSystem::bsp_confirm_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                // Dispatch BSP confirm stop storing.
+                assert_ok!(FileSystem::bsp_confirm_stop_storing(
+                    bsp_signed.clone(),
+                    file_key,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
-				// Assert that the pending stop storing request was removed.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+                // Assert that the pending stop storing request was removed.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
 
-				// Assert that the correct event was deposited.
-				let new_root =
-					<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-						bsp_id,
-					)
-						.unwrap();
+                // Assert that the correct event was deposited.
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
-				System::assert_last_event(
-					Event::BspConfirmStoppedStoring {
-						bsp_id,
-						file_key,
-						new_root,
-					}
-						.into(),
-				);
+                System::assert_last_event(
+                    Event::BspConfirmStoppedStoring {
+                        bsp_id,
+                        file_key,
+                        new_root,
+                    }
+                    .into(),
+                );
             });
         }
 
@@ -5163,14 +5366,14 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-            		owner.clone(),
-            		bucket_id,
-            		location.clone(),
-            		fingerprint,
-            		size,
-            		msp_id,
-            		Default::default(),
-        		));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    Default::default(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5183,11 +5386,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
@@ -5198,10 +5397,13 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(file_key,
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    })]).unwrap()
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap()
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5214,18 +5416,18 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					H256::zero(),
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    H256::zero(),
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
@@ -5257,7 +5459,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5282,23 +5484,19 @@ mod bsp_stop_storing {
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					Default::default(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    Default::default(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5309,24 +5507,22 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
-            		&bsp_id, size,
-        		));
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 let current_bsps_required: <Test as Config>::ReplicationTargetType =
                     ReplicationTarget::<Test>::get();
@@ -5358,7 +5554,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5384,11 +5580,7 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5399,24 +5591,22 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
-            		&bsp_id, size,
-        		));
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the storage request was created with one bsps_required
                 assert_eq!(
@@ -5445,7 +5635,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5481,7 +5671,7 @@ mod set_global_parameters_tests {
 
                 assert_noop!(
                     FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0)),
-                    Error::<Test>::BlockRangeToMaximumThresholdCannotBeZero
+                    Error::<Test>::TickRangeToMaximumThresholdCannotBeZero
                 );
             });
         }
@@ -5504,7 +5694,7 @@ mod set_global_parameters_tests {
 
                 // Assert that the global parameters were set correctly
                 assert_eq!(ReplicationTarget::<Test>::get(), 3);
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
     }
@@ -6072,7 +6262,7 @@ mod compute_threshold {
     mod success {
         use super::*;
         #[test]
-        fn query_earliest_file_volunteer_block() {
+        fn query_earliest_file_volunteer_tick() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
@@ -6115,13 +6305,10 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 assert!(frame_system::Pallet::<Test>::block_number() <= block_number);
             });
@@ -6171,43 +6358,56 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
+                        .unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
+                assert!(
+                    threshold_to_succeed > 0
+                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                );
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
-                // BSP should be able to volunteer immediately for the storage request since the BlockRangeToMaximumThreshold is 1
+                // BSP should be able to volunteer immediately for the storage request since the TickRangeToMaximumThreshold is 1
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
 
-                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<Test> = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
+                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<
+                    Test,
+                > = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
 
                 // Simulate there being many BSPs in the network with high reputation weight
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1000u32.saturating_mul(starting_bsp_weight.into()));
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(
+                    1000u32.saturating_mul(starting_bsp_weight.into()),
+                );
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000)).unwrap();
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000))
+                    .unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1000000000);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1000000000);
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
+                        .unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
+                assert!(
+                    threshold_to_succeed > 0
+                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                );
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP can only volunteer after some number of blocks have passed.
                 assert!(block_number > frame_system::Pallet::<Test>::block_number());
@@ -6224,12 +6424,18 @@ mod compute_threshold {
                     }
                 });
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
+                        .unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
+                assert!(
+                    threshold_to_succeed > 0
+                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                );
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -6280,11 +6486,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -6300,14 +6502,16 @@ mod compute_threshold {
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
 
                 assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -6321,11 +6525,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
@@ -6346,16 +6546,12 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set BlockRangeToMaximumThreshold to one
+                // Set TickRangeToMaximumThreshold to one
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
@@ -6378,11 +6574,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
@@ -6390,7 +6582,7 @@ mod compute_threshold {
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 // Set max reputation weight
@@ -6415,37 +6607,29 @@ mod compute_threshold {
         }
 
         #[test]
-        fn bsp_with_heigher_weight_should_have_higher_slope() {
+        fn bsp_with_higher_weight_should_have_higher_slope() {
             new_test_ext().execute_with(|| {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set global_weight to 1
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
+                // Set global_weight to the sum of the two BSPs reputation weights
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
 
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
@@ -6453,21 +6637,22 @@ mod compute_threshold {
                 let (_threshold_to_succeed, slope_bsp_1) =
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
 
-
-                // Set BSP's reputation weight to max
-                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_charlie_id, |bsp| {
-                    match bsp {
+                // Set BSP's reputation weight to 10 (10 times higher than the other BSP)
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+                    &bsp_charlie_id,
+                    |bsp| match bsp {
                         Some(bsp) => {
-                            bsp.reputation_weight = u32::MAX;
+                            bsp.reputation_weight = 10;
                         }
                         None => {
                             panic!("BSP should exist");
                         }
-                    }
-                });
+                    },
+                );
 
                 let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at).unwrap();
+                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
+                        .unwrap();
 
                 // BSP with higher weight should have higher slope
                 assert!(slope_bsp_2 > slope_bsp_1);
@@ -6482,29 +6667,21 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set global_weight to 1
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
+                // Set global_weight to the sum of the weights of the BSPs
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
 
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
@@ -6513,9 +6690,10 @@ mod compute_threshold {
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
 
                 let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at).unwrap();
+                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
+                        .unwrap();
 
-                // BSP with higher weight should have higher slope
+                // BSPs with equal weight should have equal slope
                 assert_eq!(slope_bsp_2, slope_bsp_1);
             });
         }
@@ -6527,6 +6705,8 @@ mod stop_storing_for_insolvent_user {
     use super::*;
 
     mod success {
+
+        use shp_traits::PaymentStreamsInterface;
 
         use super::*;
 
@@ -6572,18 +6752,13 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -6637,11 +6812,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -6814,11 +6985,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_bucket_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(
-					&bucket_id,
-				)
-					.unwrap();
+                let new_bucket_root = Providers::get_root_bucket(&bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -6858,10 +7025,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Get the new bucket root after deletion
                 let new_bucket_root_after_deletion =
-				<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(
-					&bucket_id,
-				)
-					.unwrap();
+                    Providers::get_root_bucket(&bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -6888,185 +7052,178 @@ mod stop_storing_for_insolvent_user {
         #[test]
         fn stop_storing_for_insolvent_user_works_if_user_does_not_have_payment_stream_with_sp() {
             new_test_ext().execute_with(|| {
-            let owner_account_id = Keyring::Alice.to_account_id();
-            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-            let bsp_account_id = Keyring::Bob.to_account_id();
-            let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-            let msp = Keyring::Charlie.to_account_id();
-            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-            let size = 4;
-            let fingerprint = H256::zero();
-            let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-            let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-            let storage_amount: StorageData<Test> = 100;
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
 
-            let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-            // Dispatch storage request.
-            assert_ok!(FileSystem::issue_storage_request(
-                owner_signed.clone(),
-                bucket_id,
-                location.clone(),
-                fingerprint,
-                size,
-                msp_id,
-                peer_ids.clone(),
-            ));
-
-            // Sign up account as a Backup Storage Provider
-            assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-
-            let file_key = FileSystem::compute_file_key(
-                owner_account_id.clone(),
-                bucket_id,
-                location.clone(),
-                size,
-                fingerprint,
-            );
-
-            let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
-
-            // Dispatch BSP volunteer.
-            assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
-
-            // In this case, the tick number is going to be equal to the current block number
-            // minus one (on_poll hook not executed in first block)
-            let tick_when_confirming = System::block_number() - 1;
-
-            // Dispatch BSP confirm storing.
-            assert_ok!(FileSystem::bsp_confirm_storing(
-                bsp_signed.clone(),
-                CompactProof {
-                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                },
-                BoundedVec::try_from(vec![(
-                    file_key,
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    }
-                )])
-                .unwrap(),
-            ));
-
-            // Assert that the storage was updated
-            assert_eq!(
-                FileSystem::storage_requests(file_key),
-                Some(StorageRequestMetadata {
-                    requested_at: 1,
-                    owner: owner_account_id.clone(),
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
                     bucket_id,
-                    location: location.clone(),
+                    location.clone(),
                     fingerprint,
                     size,
-                    msp: Some((msp_id, false)),
-                    user_peer_ids: peer_ids.clone(),
-                    data_server_sps: BoundedVec::default(),
-                    bsps_required: ReplicationTarget::<Test>::get(),
-                    bsps_confirmed: 1,
-                    bsps_volunteered: 1,
-                })
-            );
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-            // Assert that the RequestStorageBsps was updated
-            assert_eq!(
-                FileSystem::storage_request_bsps(file_key, bsp_id)
-                    .expect("BSP should exist in storage"),
-                StorageRequestBspsMetadata::<Test> {
-                    confirmed: true,
-                    _phantom: Default::default()
-                }
-            );
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-            let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-            // Assert that the correct event was deposited
-            System::assert_last_event(
-                Event::BspConfirmedStoring {
-                    who: bsp_account_id.clone(),
-                    bsp_id,
-                    file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
-                    new_root,
-                }
-                .into(),
-            );
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
-            // Assert that the proving cycle was initialised for this BSP.
-            let last_tick_provider_submitted_proof =
-                LastTickProviderSubmittedAProofFor::<Test>::get(&bsp_id).unwrap();
-            assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-            // Assert that the correct event was deposited.
-            System::assert_has_event(
-                Event::BspChallengeCycleInitialised {
-                    who: bsp_account_id,
-                    bsp_id,
-                }
-                .into(),
-            );
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
-            // Assert that the capacity used by the BSP was updated
-            assert_eq!(
-                pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
-                    .expect("BSP should exist in storage")
-                    .capacity_used,
-                size
-            );
+                // Dispatch BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
+                ));
 
-            // Now that the BSP has confirmed storing, we can simulate the payment stream being deleted
-			// and the BSP stopping storing for the user. Note that we use Alice as a user for this test,
-			// which is NOT an insolvent user. This simulates the case where the user has correctly paid all
-			// its debt but a lagging SP has not updated its storage state yet.
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                    })
+                );
 
-			// Delete the payment stream between the user and the BSP.
-			assert_ok!(<<Test as crate::Config>::PaymentStreams as shp_traits::PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
-				&bsp_id,
-				&owner_account_id,
-			));
-			// Try to stop storing the user's file as the BSP.
-            assert_ok!(FileSystem::stop_storing_for_insolvent_user(
-                bsp_signed.clone(),
-                file_key,
-                bucket_id,
-                location.clone(),
-                owner_account_id.clone(),
-                fingerprint,
-                size,
-                CompactProof {
-                    encoded_nodes: vec![file_key.as_ref().to_vec()],
-                },
-            ));
+                // Assert that the RequestStorageBsps was updated
+                assert_eq!(
+                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: true,
+                        _phantom: Default::default()
+                    }
+                );
 
-            // Assert that the correct event was deposited
-            System::assert_last_event(
-                Event::SpStopStoringInsolventUser {
-                    sp_id: bsp_id,
+                let new_root = Providers::get_root(bsp_id).unwrap();
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::BspConfirmedStoring {
+                        who: bsp_account_id.clone(),
+                        bsp_id,
+                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        new_root,
+                    }
+                    .into(),
+                );
+
+                // Assert that the proving cycle was initialised for this BSP.
+                let last_tick_provider_submitted_proof =
+                    LastTickProviderSubmittedAProofFor::<Test>::get(&bsp_id).unwrap();
+                assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
+
+                // Assert that the correct event was deposited.
+                System::assert_has_event(
+                    Event::BspChallengeCycleInitialised {
+                        who: bsp_account_id,
+                        bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Assert that the capacity used by the BSP was updated
+                assert_eq!(
+                    pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
+                        .expect("BSP should exist in storage")
+                        .capacity_used,
+                    size
+                );
+
+                // Now that the BSP has confirmed storing, we can simulate the payment stream being deleted
+                // and the BSP stopping storing for the user. Note that we use Alice as a user for this test,
+                // which is NOT an insolvent user. This simulates the case where the user has correctly paid all
+                // its debt but a lagging SP has not updated its storage state yet.
+
+                // Delete the payment stream between the user and the BSP.
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                        &bsp_id,
+                        &owner_account_id,
+                    )
+                );
+                // Try to stop storing the user's file as the BSP.
+                assert_ok!(FileSystem::stop_storing_for_insolvent_user(
+                    bsp_signed.clone(),
                     file_key,
-                    owner: owner_account_id,
-                    location,
-                    new_root,
-                }
-                .into(),
-            );
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
-            // Assert that the capacity used by the BSP was updated
-            assert_eq!(
-                pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
-                    .expect("BSP should exist in storage")
-                    .capacity_used,
-                0
-            );
-        });
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::SpStopStoringInsolventUser {
+                        sp_id: bsp_id,
+                        file_key,
+                        owner: owner_account_id,
+                        location,
+                        new_root,
+                    }
+                    .into(),
+                );
+
+                // Assert that the capacity used by the BSP was updated
+                assert_eq!(
+                    pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
+                        .expect("BSP should exist in storage")
+                        .capacity_used,
+                    0
+                );
+            });
         }
     }
 
@@ -7151,18 +7308,13 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7216,11 +7368,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -7352,18 +7500,13 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7417,11 +7560,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
