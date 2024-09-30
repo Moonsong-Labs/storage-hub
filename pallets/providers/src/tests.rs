@@ -3,7 +3,7 @@ use crate::{
     types::{
         BackupStorageProvider, BalanceOf, Bucket, MainStorageProvider, MainStorageProviderId,
         MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageDataUnit, StorageProvider,
-        ValuePropId, ValueProposition,
+        StorageProviderId, ValuePropId, ValueProposition,
     },
     Error, Event,
 };

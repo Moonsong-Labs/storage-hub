@@ -159,10 +159,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
-       * Block range to maximum threshold cannot be zero.
-       **/
-      BlockRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
-      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -189,7 +185,7 @@ declare module "@polkadot/api-base/types/errors" {
       /**
        * BSPs required for storage request cannot exceed the maximum allowed.
        **/
-      BspsRequiredExceedsMax: AugmentedError<ApiType>;
+      BspsRequiredExceedsTarget: AugmentedError<ApiType>;
       /**
        * Action not allowed while the bucket is being moved.
        **/
@@ -214,10 +210,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to verify proof: required to provide a proof of non-inclusion.
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
-      /**
-       * Failed to convert block number to threshold.
-       **/
-      FailedToConvertBlockNumber: AugmentedError<ApiType>;
       /**
        * Failed to decode threshold.
        **/
@@ -379,6 +371,10 @@ declare module "@polkadot/api-base/types/errors" {
        * BSPs assignment threshold cannot be below asymptote.
        **/
       ThresholdBelowAsymptote: AugmentedError<ApiType>;
+      /**
+       * Tick range to maximum threshold cannot be zero.
+       **/
+      TickRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
       /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
@@ -675,7 +671,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
-       * Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
+       * Error thrown when charging a payment stream would result in an overflow of the balance type
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
@@ -881,6 +877,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToApplyDelta: AugmentedError<ApiType>;
       /**
+       * Failed to update the provider after a key removal mutation.
+       **/
+      FailedToUpdateProviderAfterKeyRemoval: AugmentedError<ApiType>;
+      /**
        * The fee for submitting a challenge could not be charged.
        **/
       FeeChargeFailed: AugmentedError<ApiType>;
@@ -979,6 +979,14 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Error thrown when failing to decode the owner Account ID from the received metadata.
+       **/
+      InvalidEncodedAccountId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when failing to decode the metadata from a received trie value that was removed.
+       **/
+      InvalidEncodedFileMetadata: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid.
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
@@ -1022,6 +1030,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when trying to update a payment stream that does not exist.
+       **/
+      PaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Error thrown when an attempt was made to slash an unslashable Storage Provider.
        **/
