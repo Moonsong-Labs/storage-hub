@@ -250,6 +250,7 @@ impl BlockchainService {
             cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
                 storage_hub_runtime::Runtime,
             >::new(),
+            frame_metadata_hash_extension::CheckMetadataHash::new(false),
         );
 
         let raw_payload = SignedPayload::from_raw(
@@ -265,6 +266,7 @@ impl BlockchainService {
                 (),
                 (),
                 (),
+                None,
             ),
         );
 

@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use codec::{Decode, Encode};
 use sc_executor::WasmExecutor;
-use sc_network::NetworkService;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
@@ -47,6 +46,8 @@ pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofF
 pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
 pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
+pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
+pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;
@@ -59,7 +60,6 @@ type HostFunctions = (
 
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
 pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
-pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");

@@ -20,6 +20,8 @@ import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
   CumulusPrimitivesParachainInherentParachainInherentData,
   CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim,
+  FrameMetadataHashExtensionCheckMetadataHash,
+  FrameMetadataHashExtensionMode,
   FrameSupportDispatchDispatchClass,
   FrameSupportDispatchDispatchInfo,
   FrameSupportDispatchPays,
@@ -171,6 +173,7 @@ import type {
   SpWeightsRuntimeDbWeight,
   SpWeightsWeightV2Weight,
   StagingParachainInfoCall,
+  StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV3MultiLocation,
   StagingXcmV4Asset,
   StagingXcmV4AssetAssetFilter,
@@ -263,6 +266,8 @@ declare module "@polkadot/types/types/registry" {
     CumulusPrimitivesCoreAggregateMessageOrigin: CumulusPrimitivesCoreAggregateMessageOrigin;
     CumulusPrimitivesParachainInherentParachainInherentData: CumulusPrimitivesParachainInherentParachainInherentData;
     CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim;
+    FrameMetadataHashExtensionCheckMetadataHash: FrameMetadataHashExtensionCheckMetadataHash;
+    FrameMetadataHashExtensionMode: FrameMetadataHashExtensionMode;
     FrameSupportDispatchDispatchClass: FrameSupportDispatchDispatchClass;
     FrameSupportDispatchDispatchInfo: FrameSupportDispatchDispatchInfo;
     FrameSupportDispatchPays: FrameSupportDispatchPays;
@@ -414,6 +419,7 @@ declare module "@polkadot/types/types/registry" {
     SpWeightsRuntimeDbWeight: SpWeightsRuntimeDbWeight;
     SpWeightsWeightV2Weight: SpWeightsWeightV2Weight;
     StagingParachainInfoCall: StagingParachainInfoCall;
+    StagingXcmExecutorAssetTransferTransferType: StagingXcmExecutorAssetTransferTransferType;
     StagingXcmV3MultiLocation: StagingXcmV3MultiLocation;
     StagingXcmV4Asset: StagingXcmV4Asset;
     StagingXcmV4AssetAssetFilter: StagingXcmV4AssetAssetFilter;

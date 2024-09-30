@@ -30,6 +30,7 @@ rocksdb = { workspace = true }
 # Substrate
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+frame-metadata-hash-extension = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 sc-client-api = { workspace = true }
 sc-service = { workspace = true }
