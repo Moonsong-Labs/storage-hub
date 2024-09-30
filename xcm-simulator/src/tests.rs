@@ -1,23 +1,42 @@
-use frame_support::{assert_ok, traits::fungible::Inspect};
-use xcm::prelude::*;
-use xcm_executor::traits::ConvertLocation;
-use xcm_simulator::TestExt;
-
-use crate::relay_chain::location_converter::LocationConverter;
-use crate::storagehub::configs::MaxBatchConfirmStorageRequests;
-use crate::system_chain;
-use crate::{
-    constants::{ALICE, BOB, CENTS, INITIAL_BALANCE},
-    parachain, relay_chain, sh_sibling_account_id, storagehub, MockNet, MockParachain,
-    MockSystemChain, Relay, StorageHub, NON_SYS_PARA_ID,
-};
 use codec::Encode;
-use frame_support::dispatch::GetDispatchInfo;
-use frame_support::BoundedVec;
+use frame_support::{
+    assert_ok,
+    dispatch::GetDispatchInfo,
+    traits::{fungible::Inspect, OnFinalize, OnPoll},
+    BoundedVec,
+};
 use pallet_balances;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
 use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
 use sp_core::H256;
+use sp_weights::WeightMeter;
+use xcm::prelude::*;
+use xcm_executor::traits::ConvertLocation;
+use xcm_simulator::TestExt;
+
+use crate::{
+    constants::{ALICE, BOB, CENTS, INITIAL_BALANCE},
+    parachain, relay_chain,
+    relay_chain::location_converter::LocationConverter,
+    sh_sibling_account_id, storagehub,
+    storagehub::configs::MaxBatchConfirmStorageRequests,
+    system_chain, MockNet, MockParachain, MockSystemChain, Relay, StorageHub, NON_SYS_PARA_ID,
+};
+
+fn sh_run_to_block(n: u32) {
+    while storagehub::System::block_number() < n {
+        storagehub::System::set_block_number(storagehub::System::block_number() + 1);
+
+        // Trigger on_poll hook execution.
+        storagehub::ProofsDealer::on_poll(
+            storagehub::System::block_number(),
+            &mut WeightMeter::new(),
+        );
+
+        // Trigger on_finalize hook execution.
+        storagehub::ProofsDealer::on_finalize(storagehub::System::block_number());
+    }
+}
 
 mod relay_token {
     use crate::{child_account_id, SH_PARA_ID};
@@ -1085,7 +1104,7 @@ mod providers {
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
 
             // Advance enough blocks to allow the parachain to change its provided capacity
-            storagehub::System::set_block_number(
+            sh_run_to_block(
                 storagehub::System::block_number() + MinBlocksBetweenCapacityChanges::get(),
             );
         });
@@ -1322,7 +1341,8 @@ mod users {
             assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
+            // In the config we set to reach the maximum threshold after 1 block
+            sh_run_to_block(storagehub::System::block_number() + 1);
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1695,7 +1715,8 @@ mod users {
             assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
+            // In the config we set to reach the maximum threshold after 1 block
+            sh_run_to_block(storagehub::System::block_number() + 1);
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(

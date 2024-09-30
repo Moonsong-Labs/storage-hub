@@ -70,6 +70,39 @@ impl BlockchainService {
         }
     }
 
+    /// Notify tasks waiting for a tick number.
+    pub(crate) fn notify_tick_number(&mut self, block_hash: &H256) {
+        // Get the current tick number.
+        let tick_number = match self.client.runtime_api().get_current_tick(*block_hash) {
+            Ok(current_tick) => current_tick,
+            Err(_) => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query current tick from runtime in block hash {:?} and block number {:?}. This should not happen.", block_hash, self.client.info().best_number);
+                return;
+            }
+        };
+
+        let mut keys_to_remove = Vec::new();
+
+        for (tick_number, waiters) in self
+            .wait_for_tick_request_by_number
+            .range_mut(..=tick_number)
+        {
+            keys_to_remove.push(*tick_number);
+            for waiter in waiters.drain(..) {
+                match waiter.send(Ok(())) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        error!(target: LOG_TARGET, "Failed to notify task about tick number.");
+                    }
+                }
+            }
+        }
+
+        for key in keys_to_remove {
+            self.wait_for_tick_request_by_number.remove(&key);
+        }
+    }
+
     /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
     ///
     /// If the nonce is higher, the account nonce is updated in the [`BlockchainService`].

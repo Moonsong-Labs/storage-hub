@@ -289,11 +289,6 @@ declare module "@polkadot/api-base/types/storage" {
     };
     fileSystem: {
       /**
-       * Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-       **/
-      blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
-      /**
        * Bookkeeping of the buckets containing open storage requests.
        **/
       bucketsWithStorageRequests: AugmentedQuery<
@@ -470,6 +465,11 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+       **/
+      tickRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/
@@ -1216,50 +1216,43 @@ declare module "@polkadot/api-base/types/storage" {
        * This counter is not necessarily the same as the block number, as challenges are
        * distributed in the `on_poll` hook, which happens at the beginning of every block,
        * so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
-       * During MBMsm, the block number increases, but `ChallengesTicker` does not.
+       * During MBMsm, the block number increases, but [`ChallengesTicker`] does not.
        **/
       challengesTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A mapping from challenge tick to a vector of challenged Providers for that tick.
+       * A boolean that represents whether the [`ChallengesTicker`] is paused.
        *
-       * This is used to keep track of the Providers that have been challenged, and should
-       * submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
-       * key in the mapping. Providers who do submit a proof are removed from their respective
-       * entry and pushed forward to the next tick in which they should submit a proof.
-       * Those who are still in the entry by the time the tick is reached are considered to
-       * have failed to submit a proof and subject to slashing.
+       * By default, this is `false`, meaning that the [`ChallengesTicker`] is incremented every time `on_poll` is called.
+       * This can be set to `true` which would pause the [`ChallengesTicker`], preventing `do_new_challenges_round` from
+       * being executed. Therefore:
+       * - No new random challenges would be emitted and added to [`TickToChallengesSeed`].
+       * - No new checkpoint challenges would be emitted and added to [`TickToCheckpointChallenges`].
+       * - Deadlines for proof submissions are indefinitely postponed.
        **/
-      challengeTickToChallengedProviders: AugmentedQuery<
-        ApiType,
-        (
-          arg1: u32 | AnyNumber | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<Null>>,
-        [u32, H256]
-      > &
-        QueryableStorageEntry<ApiType, [u32, H256]>;
+      challengesTickerPaused: AugmentedQuery<ApiType, () => Observable<Option<Null>>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * The challenge tick of the last checkpoint challenge round.
        *
-       * This is used to determine when to include the challenges from the `ChallengesQueue` and
-       * `PriorityChallengesQueue` in the `TickToCheckpointChallenges` StorageMap. These checkpoint
+       * This is used to determine when to include the challenges from the [`ChallengesQueue`] and
+       * [`PriorityChallengesQueue`] in the [`TickToCheckpointChallenges`] StorageMap. These checkpoint
        * challenge rounds have to be answered by ALL Providers, and this is enforced by the
        * `submit_proof` extrinsic.
        **/
       lastCheckpointTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A value that represents the last tick that was deleted from the `ValidProofSubmittersLastTicks` StorageMap.
+       * A value that represents the last tick that was deleted from the [`ValidProofSubmittersLastTicks`] StorageMap.
        *
-       * This is used to know which tick to delete from the `ValidProofSubmittersLastTicks` StorageMap when the
+       * This is used to know which tick to delete from the [`ValidProofSubmittersLastTicks`] StorageMap when the
        * `on_idle` hook is called.
        **/
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
-       * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
+       * If for a Provider `p`, `LastTickProviderSubmittedAProofFor[p]` is `n`, then the
        * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
        *
        * This gets updated when a Provider submits a proof successfully and is used to determine the
@@ -1274,6 +1267,25 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+       *
+       * This is used to check if the network is presumably under a spam attack.
+       **/
+      notFullBlocksCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A mapping from block number to the weight used in that block.
+       *
+       * This is used to check if the network is presumably under a spam attack.
+       * It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
+       **/
+      pastBlocksWeight: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<SpWeightsWeightV2Weight>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
       /**
        * A priority queue of keys that have been challenged manually.
        *
@@ -1302,7 +1314,7 @@ declare module "@polkadot/api-base/types/storage" {
        * A mapping from challenges tick to a random seed used for generating the challenges in that tick.
        *
        * This is used to keep track of the challenges' seed in the past.
-       * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+       * This mapping goes back only [`ChallengeHistoryLengthFor`] blocks. Previous challenges are removed.
        **/
       tickToChallengesSeed: AugmentedQuery<
         ApiType,
@@ -1315,8 +1327,8 @@ declare module "@polkadot/api-base/types/storage" {
        *
        * This is used to keep track of the challenges that have been made in the past, specifically
        * in the checkpoint challenge rounds.
-       * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-       * This mapping goes back only `ChallengeHistoryLength` ticks. Previous challenges are removed.
+       * The vector is bounded by [`MaxCustomChallengesPerBlockFor`].
+       * This mapping goes back only [`ChallengeHistoryLengthFor`] ticks. Previous challenges are removed.
        **/
       tickToCheckpointChallenges: AugmentedQuery<
         ApiType,
@@ -1327,11 +1339,30 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * A mapping from challenge tick to a vector of challenged Providers for that tick.
+       *
+       * This is used to keep track of the Providers that have been challenged, and should
+       * submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
+       * key in the mapping. Providers who do submit a proof are removed from their respective
+       * entry and pushed forward to the next tick in which they should submit a proof.
+       * Those who are still in the entry by the time the tick is reached are considered to
+       * have failed to submit a proof and subject to slashing.
+       **/
+      tickToProvidersDeadlines: AugmentedQuery<
+        ApiType,
+        (
+          arg1: u32 | AnyNumber | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [u32, H256]
+      > &
+        QueryableStorageEntry<ApiType, [u32, H256]>;
+      /**
        * A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.
        *
        * This is used to keep track of the Providers that have submitted proofs in the last few
-       * ticks, where availability only up to the last `TargetTicksStorageOfSubmitters` ticks is guaranteed.
-       * This storage is then made available for other pallets to use through the `ReadProofSubmittersInterface`.
+       * ticks, where availability only up to the last [`Config::TargetTicksStorageOfSubmitters`] ticks is guaranteed.
+       * This storage is then made available for other pallets to use through the `ProofSubmittersInterface`.
        **/
       validProofSubmittersLastTicks: AugmentedQuery<
         ApiType,

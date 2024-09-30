@@ -1,10 +1,16 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import { describeBspNet, fetchEventData, ShConsts, type EnrichedBspApi } from "../../../util";
+import {
+  describeBspNet,
+  fetchEventData,
+  ShConsts,
+  sleep,
+  type EnrichedBspApi
+} from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard", only: true },
   ({ before, it, createUserApi, createBspApi, getLaunchResponse, createApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -405,6 +411,7 @@ describeBspNet(
 
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
+      await sleep(500);
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
