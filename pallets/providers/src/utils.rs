@@ -1387,6 +1387,11 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
     fn is_provider(who: Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
     }
+
+    fn get_min_stake(
+    ) -> <Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance {
+        T::SpMinDeposit::get()
+    }
 }
 
 /// Implement the MutateChallengeableProvidersInterface for the Storage Providers pallet.
