@@ -481,7 +481,7 @@ declare module "@polkadot/api-base/types/events" {
           fingerprint: H256,
           multiaddresses: Vec<Bytes>,
           owner: AccountId32,
-          size_: u64
+          size_: u32
         ],
         {
           bspId: H256;
@@ -490,7 +490,7 @@ declare module "@polkadot/api-base/types/events" {
           fingerprint: H256;
           multiaddresses: Vec<Bytes>;
           owner: AccountId32;
-          size_: u64;
+          size_: u32;
         }
       >;
       /**
@@ -696,7 +696,7 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256,
           location: Bytes,
           fingerprint: H256,
-          size_: u64,
+          size_: u32,
           peerIds: Vec<Bytes>
         ],
         {
@@ -705,7 +705,7 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256;
           location: Bytes;
           fingerprint: H256;
-          size_: u64;
+          size_: u32;
           peerIds: Vec<Bytes>;
         }
       >;
@@ -1428,11 +1428,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       DynamicRatePaymentStreamCreated: AugmentedEvent<
         ApiType,
-        [userAccount: AccountId32, providerId: H256, amountProvided: u64],
+        [userAccount: AccountId32, providerId: H256, amountProvided: u32],
         {
           userAccount: AccountId32;
           providerId: H256;
-          amountProvided: u64;
+          amountProvided: u32;
         }
       >;
       /**
@@ -1452,11 +1452,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       DynamicRatePaymentStreamUpdated: AugmentedEvent<
         ApiType,
-        [userAccount: AccountId32, providerId: H256, newAmountProvided: u64],
+        [userAccount: AccountId32, providerId: H256, newAmountProvided: u32],
         {
           userAccount: AccountId32;
           providerId: H256;
-          newAmountProvided: u64;
+          newAmountProvided: u32;
         }
       >;
       /**
@@ -1905,16 +1905,6 @@ declare module "@polkadot/api-base/types/events" {
     };
     proofsDealer: {
       /**
-       * The [`ChallengesTicker`] has been paused or unpaused.
-       **/
-      ChallengesTickerSet: AugmentedEvent<
-        ApiType,
-        [paused: bool],
-        {
-          paused: bool;
-        }
-      >;
-      /**
        * A set of mutations has been applied to the Forest.
        **/
       MutationsApplied: AugmentedEvent<
@@ -2028,11 +2018,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspRequestSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
+        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u32],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
-          capacity: u64;
+          capacity: u32;
         }
       >;
       /**
@@ -2052,11 +2042,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
+        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u32],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
-          capacity: u64;
+          capacity: u32;
         }
       >;
       /**
@@ -2065,11 +2055,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       CapacityChanged: AugmentedEvent<
         ApiType,
-        [who: AccountId32, oldCapacity: u64, newCapacity: u64, nextBlockWhenChangeAllowed: u32],
+        [who: AccountId32, oldCapacity: u32, newCapacity: u32, nextBlockWhenChangeAllowed: u32],
         {
           who: AccountId32;
-          oldCapacity: u64;
-          newCapacity: u64;
+          oldCapacity: u32;
+          newCapacity: u32;
           nextBlockWhenChangeAllowed: u32;
         }
       >;
@@ -2082,13 +2072,13 @@ declare module "@polkadot/api-base/types/events" {
         [
           who: AccountId32,
           multiaddresses: Vec<Bytes>,
-          capacity: u64,
+          capacity: u32,
           valueProp: PalletStorageProvidersValueProposition
         ],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
-          capacity: u64;
+          capacity: u32;
           valueProp: PalletStorageProvidersValueProposition;
         }
       >;
@@ -2112,13 +2102,13 @@ declare module "@polkadot/api-base/types/events" {
         [
           who: AccountId32,
           multiaddresses: Vec<Bytes>,
-          capacity: u64,
+          capacity: u32,
           valueProp: PalletStorageProvidersValueProposition
         ],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
-          capacity: u64;
+          capacity: u32;
           valueProp: PalletStorageProvidersValueProposition;
         }
       >;
