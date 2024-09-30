@@ -364,6 +364,10 @@ where
         ));
     }
 
+    let metrics = Network::register_notification_metrics(
+        config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+    );
+
     let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
@@ -375,6 +379,7 @@ where
             block_announce_validator_builder: None,
             warp_sync_params: None,
             block_relay: None,
+            metrics,
         })?;
 
     if config.offchain_worker.enabled {
@@ -923,34 +928,25 @@ fn build_import_queue(
     config: &Configuration,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
-) -> Result<sc_consensus::DefaultImportQueue<Block>, sc_service::Error> {
-    let slot_duration = cumulus_client_consensus_aura::slot_duration(&*client)?;
+) -> sc_consensus::DefaultImportQueue<Block> {
+    cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
+        sp_consensus_aura::sr25519::AuthorityPair,
+        _,
+        _,
+        _,
+        _,
+    >(
+        client,
+        block_import,
+        move |_, _| async move {
+            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
-    Ok(
-        cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
-            sp_consensus_aura::sr25519::AuthorityPair,
-            _,
-            _,
-            _,
-            _,
-        >(
-            client,
-            block_import,
-            move |_, _| async move {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-
-                let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                    *timestamp,
-                    slot_duration,
-                );
-
-                Ok((slot, timestamp))
-            },
-            slot_duration,
-            &task_manager.spawn_essential_handle(),
-            config.prometheus_registry(),
-            telemetry,
-        ),
+            Ok(timestamp)
+        },
+        slot_duration,
+        &task_manager.spawn_essential_handle(),
+        config.prometheus_registry(),
+        telemetry,
     )
 }
 

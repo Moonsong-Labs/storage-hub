@@ -239,5 +239,3 @@ try-runtime = [
 	"shp-traits/try-runtime",
 	"sp-runtime/try-runtime",
 ]
-
-experimental = ["pallet-aura/experimental"]
