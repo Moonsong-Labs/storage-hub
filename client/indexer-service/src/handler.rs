@@ -180,7 +180,7 @@ impl IndexerService {
                 collection_id,
                 private,
             } => {
-                let msp = Msp::get_by_blockchain_id(conn, msp_id.to_string()).await?;
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
                 Bucket::create(
                     conn,
                     msp.id,
@@ -193,7 +193,7 @@ impl IndexerService {
                 .await?;
             }
             pallet_file_system::Event::MoveBucketAccepted { msp_id, bucket_id } => {
-                let msp = Msp::get_by_blockchain_id(conn, msp_id.to_string()).await?;
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.to_string(), msp.id).await?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {

@@ -7,7 +7,7 @@ diesel::table! {
         capacity -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        blockchain_id -> Varchar,
+        onchain_bsp_id -> Varchar,
     }
 }
 
@@ -23,7 +23,7 @@ diesel::table! {
         id -> Int4,
         msp_id -> Int4,
         account -> Varchar,
-        blockchain_id -> Varchar,
+        onchain_bucket_id -> Varchar,
         name -> Bytea,
         collection_id -> Nullable<Varchar>,
         private -> Bool,
@@ -40,7 +40,7 @@ diesel::table! {
         value_prop -> Varchar,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        blockchain_id -> Varchar,
+        onchain_msp_id -> Varchar,
     }
 }
 

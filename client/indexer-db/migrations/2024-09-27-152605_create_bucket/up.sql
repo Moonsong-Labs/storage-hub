@@ -3,7 +3,7 @@ CREATE TABLE bucket (
     id SERIAL PRIMARY KEY,
     msp_id INTEGER NOT NULL,
     account VARCHAR NOT NULL,
-    blockchain_id VARCHAR NOT NULL,
+    onchain_bucket_id VARCHAR NOT NULL,
     name BYTEA NOT NULL,
     collection_id VARCHAR,
     private BOOLEAN NOT NULL,
@@ -19,4 +19,4 @@ CREATE INDEX idx_bucket_msp_id ON bucket(msp_id);
 CREATE INDEX idx_bucket_account ON bucket(account);
 
 -- Create index on blockchain_id for faster lookups
-CREATE INDEX idx_bucket_blockchain_id ON bucket(blockchain_id);
+CREATE INDEX idx_bucket_blockchain_id ON bucket(onchain_bucket_id);

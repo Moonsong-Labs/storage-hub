@@ -2938,8 +2938,6 @@ mod change_capacity {
         }
         /// This module holds the success cases for changing the capacity of Backup Storage Providers
         mod bsp {
-            use crate::types::StorageProviderId;
-
             use super::*;
 
             #[test]

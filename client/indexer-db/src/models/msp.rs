@@ -13,13 +13,14 @@ use crate::{
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = msp)]
 pub struct Msp {
+    /// The ID of the MSP as stored in the database. For the runtime id, use `onchain_msp_id`.
     pub id: i32,
     pub account: String,
     pub capacity: BigDecimal,
     pub value_prop: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub blockchain_id: String,
+    pub onchain_msp_id: String,
 }
 
 /// Association table between MSP and MultiAddress
@@ -39,14 +40,14 @@ impl Msp {
         capacity: BigDecimal,
         value_prop: String,
         multiaddresses: Vec<MultiAddress>,
-        blockchain_id: String,
+        onchain_msp_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let msp = diesel::insert_into(msp::table)
             .values((
                 msp::account.eq(account),
                 msp::capacity.eq(capacity),
                 msp::value_prop.eq(value_prop),
-                msp::blockchain_id.eq(blockchain_id),
+                msp::onchain_msp_id.eq(onchain_msp_id),
             ))
             .returning(Msp::as_select())
             .get_result(conn)
@@ -81,12 +82,12 @@ impl Msp {
         Ok(())
     }
 
-    pub async fn get_by_blockchain_id<'a>(
+    pub async fn get_by_onchain_msp_id<'a>(
         conn: &mut DbConnection<'a>,
-        blockchain_id: String,
+        onchain_msp_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let msp = msp::table
-            .filter(msp::blockchain_id.eq(blockchain_id))
+            .filter(msp::onchain_msp_id.eq(onchain_msp_id))
             .first(conn)
             .await?;
         Ok(msp)

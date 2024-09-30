@@ -12,12 +12,13 @@ use crate::{
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = bsp)]
 pub struct Bsp {
+    /// The ID of the BSP as stored in the database. For the runtime id, use `onchain_bsp_id`.
     pub id: i32,
     pub account: String,
     pub capacity: BigDecimal,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub blockchain_id: String,
+    pub onchain_bsp_id: String,
 }
 
 /// Association table between BSP and MultiAddress
@@ -36,13 +37,13 @@ impl Bsp {
         account: String,
         capacity: BigDecimal,
         multiaddresses: Vec<MultiAddress>,
-        blockchain_id: String,
+        onchain_bsp_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let bsp = diesel::insert_into(bsp::table)
             .values((
                 bsp::account.eq(account),
                 bsp::capacity.eq(capacity),
-                bsp::blockchain_id.eq(blockchain_id),
+                bsp::onchain_bsp_id.eq(onchain_bsp_id),
             ))
             .returning(Bsp::as_select())
             .get_result(conn)
