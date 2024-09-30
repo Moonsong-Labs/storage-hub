@@ -24,6 +24,7 @@ import type {
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
+  PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
@@ -2041,9 +2042,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspSignOffSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32],
+        [who: AccountId32, bspId: H256],
         {
           who: AccountId32;
+          bspId: H256;
         }
       >;
       /**
@@ -2052,9 +2054,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
+        [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
         {
           who: AccountId32;
+          bspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
         }
@@ -2065,9 +2068,16 @@ declare module "@polkadot/api-base/types/events" {
        **/
       CapacityChanged: AugmentedEvent<
         ApiType,
-        [who: AccountId32, oldCapacity: u64, newCapacity: u64, nextBlockWhenChangeAllowed: u32],
+        [
+          who: AccountId32,
+          providerId: PalletStorageProvidersStorageProviderId,
+          oldCapacity: u64,
+          newCapacity: u64,
+          nextBlockWhenChangeAllowed: u32
+        ],
         {
           who: AccountId32;
+          providerId: PalletStorageProvidersStorageProviderId;
           oldCapacity: u64;
           newCapacity: u64;
           nextBlockWhenChangeAllowed: u32;
@@ -2098,9 +2108,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MspSignOffSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32],
+        [who: AccountId32, mspId: H256],
         {
           who: AccountId32;
+          mspId: H256;
         }
       >;
       /**
@@ -2111,12 +2122,14 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
+          mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
           valueProp: PalletStorageProvidersValueProposition
         ],
         {
           who: AccountId32;
+          mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
           valueProp: PalletStorageProvidersValueProposition;

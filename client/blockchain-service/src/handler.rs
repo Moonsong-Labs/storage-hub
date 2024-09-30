@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use futures::prelude::*;
+use log::{debug, trace, warn};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
@@ -6,21 +8,12 @@ use std::{
     sync::Arc,
 };
 
-use futures::prelude::*;
-use log::{debug, trace, warn};
-use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError, StorageProvidersApi,
-};
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
 use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
-use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{Fingerprint, TickNumber, BCSV_KEY_TYPE};
-use shp_file_metadata::FileKey;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
@@ -28,7 +21,6 @@ use sp_runtime::{
     traits::{Header, Zero},
     AccountId32, SaturatedConversion,
 };
-use storage_hub_runtime::RuntimeEvent;
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
@@ -38,7 +30,18 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
 };
+use pallet_storage_providers_runtime_api::{
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
+    QueryStorageProviderCapacityError, StorageProvidersApi,
+};
+use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
+use shc_common::{
+    blockchain_utils::get_events_at_block,
+    types::{Fingerprint, TickNumber, BCSV_KEY_TYPE},
+};
+use shp_file_metadata::FileKey;
+use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
     commands::BlockchainServiceCommand,
@@ -905,7 +908,7 @@ impl BlockchainService {
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
-        match self.get_events_storage_element(block_hash) {
+        match get_events_at_block(&self.client, block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {
@@ -1103,7 +1106,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
-        match self.get_events_storage_element(&block_hash) {
+        match get_events_at_block(&self.client, &block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {

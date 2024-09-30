@@ -24,3 +24,4 @@ chrono = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 thiserror = { workspace = true }
+bigdecimal = { workspace = true }
