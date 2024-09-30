@@ -949,6 +949,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bigdecimal"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51d712318a27c7150326677b321a5fa91b55f6d9034ffd67f20319e147d40cee"
+dependencies = [
+ "autocfg",
+ "libm",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
 name = "binary-merkle-tree"
 version = "13.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0#3c3d6fceb82372a3019b37117aa453d564b212de"
@@ -2759,11 +2773,15 @@ version = "2.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "158fe8e2e68695bd615d7e4f3227c0727b151330d3e253b525086c348d055d5e"
 dependencies = [
+ "bigdecimal",
  "bitflags 2.6.0",
  "byteorder",
  "chrono",
  "diesel_derives",
  "itoa",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
  "pq-sys",
 ]
 
@@ -12897,12 +12915,15 @@ dependencies = [
  "bincode",
  "cumulus-client-service",
  "frame-benchmarking 28.0.0",
+ "frame-support 28.0.0",
  "frame-system 28.0.0",
+ "lazy_static",
  "pallet-file-system",
  "pallet-proofs-dealer",
  "pallet-storage-providers",
  "parity-scale-codec",
  "polkadot-primitives 7.0.0",
+ "sc-client-api",
  "sc-executor",
  "sc-network",
  "sc-service",
@@ -12912,12 +12933,14 @@ dependencies = [
  "shp-file-metadata",
  "shp-forest-verifier",
  "shp-traits",
+ "sp-blockchain",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-runtime 31.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-runtime",
+ "thiserror",
  "trie-db 0.29.1",
 ]
 
@@ -12999,6 +13022,7 @@ dependencies = [
 name = "shc-indexer-db"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "chrono",
  "diesel",
  "diesel-async",
@@ -13026,12 +13050,14 @@ dependencies = [
  "futures",
  "lazy_static",
  "log",
+ "pallet-bucket-nfts",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-payment-streams",
  "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
+ "pallet-randomness",
  "pallet-storage-providers",
  "pallet-storage-providers-runtime-api",
  "pallet-transaction-payment 28.0.0",

@@ -20,14 +20,19 @@ bincode = { workspace = true }
 codec = { workspace = true }
 serde = { workspace = true, default-features = true }
 trie-db = { workspace = true }
+lazy-static = { workspace = true }
+thiserror = { workspace = true }
 
 # Substrate
 frame-system = { workspace = true }
 frame-benchmarking = { workspace = true }
+frame-support = { workspace = true }
+sc-client-api = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
 sc-service = { workspace = true }
 sp-core = { workspace = true }
+sp-blockchain = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }

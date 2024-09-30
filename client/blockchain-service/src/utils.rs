@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use codec::{Decode, Encode};
+use codec::Encode;
 use cumulus_primitives_core::BlockT;
-use frame_support::{StorageHasher, Twox128};
-use lazy_static::lazy_static;
 use log::{debug, error, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
@@ -13,10 +11,13 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers::types::StorageProviderId;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{BlockBackend, HeaderBackend, StorageKey, StorageProvider};
+use sc_client_api::{BlockBackend, HeaderBackend};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
-use shc_common::types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE};
+use shc_common::{
+    blockchain_utils::get_events_at_block,
+    types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE},
+};
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
@@ -40,24 +41,9 @@ use crate::{
         OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{EventsVec, Extrinsic, Tip},
+    types::{Extrinsic, Tip},
     BlockchainService,
 };
-
-lazy_static! {
-    // Would be cool to be able to do this...
-    // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
-
-    // Static and lazily initialised `events_storage_key`
-    static ref EVENTS_STORAGE_KEY: Vec<u8> = {
-        let key = [
-            Twox128::hash(b"System").to_vec(),
-            Twox128::hash(b"Events").to_vec(),
-        ]
-        .concat();
-        key
-    };
-}
 
 impl BlockchainService {
     /// Notify tasks waiting for a block number.
@@ -325,7 +311,7 @@ impl BlockchainService {
             .expect("Extrinsic not found in block. This shouldn't be possible if we're looking into a block for which we got confirmation that the extrinsic was included; qed");
 
         // Get the events from storage.
-        let events_in_block = self.get_events_storage_element(&block_hash)?;
+        let events_in_block = get_events_at_block(&self.client, &block_hash)?;
 
         // Filter the events for the extrinsic.
         // Each event record is composed of the `phase`, `event` and `topics` fields.
@@ -381,25 +367,6 @@ impl BlockchainService {
         }
 
         Ok(result)
-    }
-
-    /// Get the events storage element in a block.
-    pub(crate) fn get_events_storage_element(&self, block_hash: &H256) -> Result<EventsVec> {
-        // Get the events storage.
-        let raw_storage_opt = self
-            .client
-            .storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))
-            .expect("Failed to get Events storage element");
-
-        // Decode the events storage.
-        if let Some(raw_storage) = raw_storage_opt {
-            let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
-                .expect("Failed to decode Events storage element");
-
-            return Ok(block_events);
-        } else {
-            return Err(anyhow::anyhow!("Failed to get Events storage element"));
-        }
     }
 
     /// Check if the challenges tick is one that this provider has to submit a proof for,
