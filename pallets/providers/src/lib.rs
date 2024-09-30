@@ -195,8 +195,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxFileSize: Get<StorageDataUnit<Self>>;
 
-        // TODO: Change these next constants to a more generic type
-
         /// The maximum size of a multiaddress.
         #[pallet::constant]
         type MaxMultiAddressSize: Get<u32>;
@@ -534,10 +532,6 @@ pub mod pallet {
         #[cfg(test)]
         AnotherUnrelatedHold,
     }
-
-    /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]

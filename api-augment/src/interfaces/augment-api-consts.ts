@@ -8,7 +8,7 @@ import "@polkadot/api-base/types/consts";
 import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
 import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
 import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
+import type { AccountId32, H256, Perbill } from "@polkadot/types/interfaces/runtime";
 import type {
   FrameSystemLimitsBlockLength,
   FrameSystemLimitsBlockWeights,
@@ -234,8 +234,28 @@ declare module "@polkadot/api-base/types/consts" {
     };
     proofsDealer: {
       /**
+       * The minimum unused weight that a block must have to be considered _not_ full.
+       *
+       * This is used as part of the criteria for checking if the network is presumably under a spam attack.
+       * For example, this can be set to the benchmarked weight of a `submit_proof` extrinsic, which would
+       * mean that a block is not considered full if a `submit_proof` extrinsic could have still fit in it.
+       **/
+      blockFullnessHeadroom: SpWeightsWeightV2Weight & AugmentedConst<ApiType>;
+      /**
+       * The period of blocks for which the block fullness is checked.
+       *
+       * This is the amount of blocks from the past, for which the block fullness has been checked
+       * and is stored. Blocks older than `current_block` - [`Config::BlockFullnessPeriod`] are
+       * cleared from storage.
+       *
+       * This constant should be equal or smaller than the [`Config::ChallengeTicksTolerance`] constant,
+       * if the goal is to prevent spamming attacks that would prevent honest Providers from submitting
+       * their proofs in time.
+       **/
+      blockFullnessPeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of ticks that challenges history is kept for.
-       * After this many ticks, challenges are removed from `TickToChallengesSeed` StorageMap.
+       * After this many ticks, challenges are removed from [`TickToChallengesSeed`] StorageMap.
        * A "tick" is usually one block, but some blocks may be skipped due to migrations.
        **/
       challengeHistoryLength: u32 & AugmentedConst<ApiType>;
@@ -288,6 +308,18 @@ declare module "@polkadot/api-base/types/consts" {
        * The minimum period in which a Provider can be challenged, regardless of their stake.
        **/
       minChallengePeriod: u32 & AugmentedConst<ApiType>;
+      /**
+       * The minimum ratio (or percentage if you will) of blocks that must be considered _not_ full,
+       * from the total number of [`Config::BlockFullnessPeriod`] blocks taken into account.
+       *
+       * If less than this percentage of blocks are not full, the networks is considered to be presumably
+       * under a spam attack.
+       * This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
+       * if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+       * blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
+       * that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+       **/
+      minNotFullBlocksRatio: Perbill & AugmentedConst<ApiType>;
       /**
        * The number of random challenges that are generated per block, using the random seed
        * generated for that block.

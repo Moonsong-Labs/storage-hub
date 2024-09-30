@@ -171,8 +171,13 @@ pub mod pallet {
             + One
             + Zero;
 
-        /// The type to convert a threshold to a block number.
-        type ThresholdTypeToBlockNumber: ConvertBack<Self::ThresholdType, BlockNumberFor<Self>>;
+        /// The type to convert a threshold to a tick number.
+        ///
+        /// For more information on what "ticks" are, see the [Proofs Dealer pallet](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/proofs-dealer/README.md).
+        type ThresholdTypeToTickNumber: ConvertBack<
+            Self::ThresholdType,
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber,
+        >;
 
         /// The type to convert a hash to a threshold.
         type HashToThresholdType: Convert<Self::Hash, Self::ThresholdType>;
@@ -432,29 +437,28 @@ pub mod pallet {
     #[pallet::getter(fn replication_target)]
     pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
-    /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+    /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
-    #[pallet::getter(fn block_range_to_maximum_threshold)]
-    pub type BlockRangeToMaximumThreshold<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    #[pallet::getter(fn tick_range_to_maximum_threshold)]
+    pub type TickRangeToMaximumThreshold<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub replication_target: ReplicationTargetType<T>,
-        pub block_range_to_maximum_threshold: BlockNumberFor<T>,
+        pub tick_range_to_maximum_threshold: TickNumber<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let replication_target = 1u32.into();
-            let block_range_to_maximum_threshold = 10u32.into();
+            let tick_range_to_maximum_threshold = 10u32.into();
 
             ReplicationTarget::<T>::put(replication_target);
-            BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+            TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
 
             Self {
                 replication_target,
-                block_range_to_maximum_threshold,
+                tick_range_to_maximum_threshold,
             }
         }
     }
@@ -463,7 +467,7 @@ pub mod pallet {
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             ReplicationTarget::<T>::put(self.replication_target);
-            BlockRangeToMaximumThreshold::<T>::put(self.block_range_to_maximum_threshold);
+            TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
         }
     }
 
@@ -628,7 +632,7 @@ pub mod pallet {
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
-        BspsRequiredExceedsMax,
+        BspsRequiredExceedsTarget,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
@@ -664,8 +668,6 @@ pub mod pallet {
         FailedToDecodeThreshold,
         /// BSP did not succeed threshold check.
         AboveThreshold,
-        /// Failed to convert block number to threshold.
-        FailedToConvertBlockNumber,
         /// Arithmetic error in threshold calculation.
         ThresholdArithmeticError,
         /// Failed to convert to primitive type.
@@ -706,8 +708,8 @@ pub mod pallet {
         NoGlobalReputationWeightSet,
         /// Maximum threshold cannot be zero.
         MaximumThresholdCannotBeZero,
-        /// Block range to maximum threshold cannot be zero.
-        BlockRangeToMaximumThresholdCannotBeZero,
+        /// Tick range to maximum threshold cannot be zero.
+        TickRangeToMaximumThresholdCannotBeZero,
         /// Pending stop storing request not found.
         PendingStopStoringRequestNotFound,
         /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
@@ -1206,7 +1208,7 @@ pub mod pallet {
         pub fn set_global_parameters(
             origin: OriginFor<T>,
             replication_target: Option<T::ReplicationTargetType>,
-            block_range_to_maximum_threshold: Option<BlockNumberFor<T>>,
+            tick_range_to_maximum_threshold: Option<TickNumber<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
@@ -1220,13 +1222,13 @@ pub mod pallet {
                 ReplicationTarget::<T>::put(replication_target);
             }
 
-            if let Some(block_range_to_maximum_threshold) = block_range_to_maximum_threshold {
+            if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {
                 ensure!(
-                    block_range_to_maximum_threshold > BlockNumberFor::<T>::zero(),
-                    Error::<T>::BlockRangeToMaximumThresholdCannotBeZero
+                    tick_range_to_maximum_threshold > TickNumber::<T>::zero(),
+                    Error::<T>::TickRangeToMaximumThresholdCannotBeZero
                 );
 
-                BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+                TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
             }
 
             Ok(().into())

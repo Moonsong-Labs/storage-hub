@@ -16,7 +16,7 @@ use sp_runtime::{
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
@@ -33,11 +33,12 @@ use crate::{
         CollectionIdFor, ExpirationItem, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
         KeyProof, MaxBspsPerStorageRequest, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
         PeerIds, ProviderIdFor, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata,
+        StorageRequestMetadata, TickNumber,
     },
-    BlockRangeToMaximumThreshold, BucketsWithStorageRequests, DataServersForMoveBucket, Error,
-    Event, Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
+    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
+    TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -89,63 +90,65 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// Compute the block number at which the BSP is eligible to volunteer for a storage request.
-    pub fn query_earliest_file_volunteer_block(
+    /// Compute the tick number at which the BSP is eligible to volunteer for a storage request.
+    pub fn query_earliest_file_volunteer_tick(
         bsp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
-    ) -> Result<BlockNumberFor<T>, QueryFileEarliestVolunteerBlockError>
+    ) -> Result<TickNumber<T>, QueryFileEarliestVolunteerTickError>
     where
         T: frame_system::Config,
     {
-        // Get the block number at which the storage request was created.
-        let (storage_request_block, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
+        // Get the tick number at which the storage request was created.
+        let (storage_request_tick, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
             Some(storage_request) => (storage_request.requested_at, storage_request.fingerprint),
             None => {
-                return Err(QueryFileEarliestVolunteerBlockError::StorageRequestNotFound);
+                return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
             }
         };
 
         // Get the threshold needed for the BSP to be able to volunteer for the storage request.
         let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
 
-        // Compute the block number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_block_number(bsp_id, bsp_threshold, storage_request_block)
-            .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)
+        // Compute the tick number at which the BSP should send the volunteer request.
+        Self::compute_volunteer_tick_number(bsp_id, bsp_threshold, storage_request_tick)
+            .map_err(|_| QueryFileEarliestVolunteerTickError::ThresholdArithmeticError)
     }
 
-    fn compute_volunteer_block_number(
+    fn compute_volunteer_tick_number(
         bsp_id: ProviderIdFor<T>,
         bsp_threshold: T::ThresholdType,
-        storage_request_block: BlockNumberFor<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError>
+        storage_request_tick: TickNumber<T>,
+    ) -> Result<TickNumber<T>, DispatchError>
     where
         T: frame_system::Config,
     {
         // Compute the threshold to succeed and the slope of the bsp.
         let (to_succeed, slope) =
-            Self::compute_threshold_to_succeed(&bsp_id, storage_request_block)?;
+            Self::compute_threshold_to_succeed(&bsp_id, storage_request_tick)?;
 
         let threshold_diff = match bsp_threshold.checked_sub(&to_succeed) {
             Some(diff) => diff,
             None => {
                 // The BSP's threshold is less than the current threshold.
-                return Ok(<frame_system::Pallet<T>>::block_number());
+                let current_tick =
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                return Ok(current_tick);
             }
         };
 
-        // Calculate the number of blocks required to be below the threshold.
-        let blocks_to_wait = match threshold_diff.checked_div(&slope) {
-            Some(blocks) => blocks,
+        // Calculate the number of ticks required to be below the threshold.
+        let ticks_to_wait = match threshold_diff.checked_div(&slope) {
+            Some(ticks) => ticks,
             None => {
                 return Err(Error::<T>::ThresholdArithmeticError.into());
             }
         };
 
-        // Compute the block number at which the BSP should send the volunteer request.
-        let volunteer_block_number = storage_request_block
-            .saturating_add(T::ThresholdTypeToBlockNumber::convert(blocks_to_wait));
+        // Compute the tick number at which the BSP should send the volunteer request.
+        let volunteer_tick_number = storage_request_tick
+            .saturating_add(T::ThresholdTypeToTickNumber::convert(ticks_to_wait));
 
-        Ok(volunteer_block_number)
+        Ok(volunteer_tick_number)
     }
 
     pub fn query_bsp_confirm_chunks_to_prove_for_file(
@@ -486,7 +489,6 @@ where
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
-        // TODO: Return error if the file is already stored and overwrite is false.
 
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
@@ -529,12 +531,14 @@ where
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
-            return Err(Error::<T>::BspsRequiredExceedsMax)?;
+        if bsps_required > ReplicationTarget::<T>::get().into() {
+            return Err(Error::<T>::BspsRequiredExceedsTarget)?;
         }
 
+        let current_tick =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
         let storage_request_metadata = StorageRequestMetadata::<T> {
-            requested_at: <frame_system::Pallet<T>>::block_number(),
+            requested_at: current_tick,
             owner: sender.clone(),
             bucket_id,
             location: location.clone(),
@@ -723,8 +727,10 @@ where
     /// less than the [globally computed threshold](BspsAssignmentThreshold). As the number of BSPs signed up increases, the threshold decreases, meaning there is a
     /// lower chance of a BSP being eligible to volunteer for a storage request.
     ///
-    /// Though, as the storage request remains open, the threshold increases over time based on the number of blocks since the storage request was issued. This is to
+    /// Though, as the storage request remains open, the threshold increases over time based on the number of ticks since the storage request was issued. This is to
     /// ensure that the storage request is fulfilled by opening up the opportunity for more BSPs to volunteer.
+    ///
+    /// For more information on what "ticks" are, see the [Proofs Dealer pallet](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/proofs-dealer/README.md).
     pub(crate) fn do_bsp_volunteer(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
@@ -1030,7 +1036,7 @@ where
             }
         }
 
-        // Check if this is the first file added to the BSP's Forest. If so, initialise last block proven by this BSP.
+        // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
         let old_root = expect_or_err!(
             <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
             "Failed to get root for BSP, when it was already checked to be a BSP",
@@ -1725,7 +1731,7 @@ where
     /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
     pub fn compute_threshold_to_succeed(
         bsp_id: &ProviderIdFor<T>,
-        requested_at: BlockNumberFor<T>,
+        requested_at: TickNumber<T>,
     ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
         let maximum_threshold = T::ThresholdType::max_value();
 
@@ -1768,20 +1774,17 @@ where
         let threshold_weighted_starting_point =
             bsp_weight.saturating_mul(threshold_global_starting_point);
 
+        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a tick range.
         let base_slope = maximum_threshold
             .saturating_sub(threshold_global_starting_point)
-            .checked_div(&T::ThresholdTypeToBlockNumber::convert_back(
-                BlockRangeToMaximumThreshold::<T>::get(),
+            .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
+                TickRangeToMaximumThreshold::<T>::get(),
             ))
             .unwrap_or(T::ThresholdType::one());
 
-        let threshold_slope = base_slope.saturating_add(
-            base_slope
-                .checked_mul(&bsp_weight)
-                .unwrap_or(maximum_threshold)
-                .checked_div(&global_weight)
-                .unwrap_or(T::ThresholdType::one()),
-        );
+        let threshold_slope = base_slope
+            .checked_mul(&bsp_weight)
+            .unwrap_or(maximum_threshold);
 
         // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
         let threshold_slope = if threshold_slope.is_zero() {
@@ -1790,15 +1793,16 @@ where
             threshold_slope
         };
 
-        let current_block_number = <frame_system::Pallet<T>>::block_number();
+        let current_tick_number =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-        // Get number of blocks since the storage request was issued.
-        let blocks_since_requested = current_block_number.saturating_sub(requested_at);
-        let blocks_since_requested =
-            T::ThresholdTypeToBlockNumber::convert_back(blocks_since_requested);
+        // Get number of ticks since the storage request was issued.
+        let ticks_since_requested = current_tick_number.saturating_sub(requested_at);
+        let ticks_since_requested =
+            T::ThresholdTypeToTickNumber::convert_back(ticks_since_requested);
 
         let to_succeed = threshold_weighted_starting_point
-            .saturating_add(threshold_slope.saturating_mul(blocks_since_requested));
+            .saturating_add(threshold_slope.saturating_mul(ticks_since_requested));
 
         Ok((to_succeed, threshold_slope))
     }

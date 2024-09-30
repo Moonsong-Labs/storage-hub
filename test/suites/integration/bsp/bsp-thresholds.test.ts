@@ -14,7 +14,7 @@ import {
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
-  { initialised: false, bspStartingWeight: 5n },
+  { initialised: false, bspStartingWeight: 5n, networkConfig: "standard" },
   ({ before, it, createUserApi, beforeEach }) => {
     let api: EnrichedBspApi;
 
@@ -34,7 +34,7 @@ describeBspNet(
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
       strictEqual(
-        (await api.query.fileSystem.blockRangeToMaximumThreshold()).toNumber(),
+        (await api.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
         200,
         "Threshold should have changed"
       );
@@ -54,7 +54,7 @@ describeBspNet(
       strictEqual(error, "BadOrigin", "Extrinsic should fail with BadOrigin");
 
       strictEqual(
-        (await api.query.fileSystem.blockRangeToMaximumThreshold()).toNumber(),
+        (await api.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
         1,
         "Threshold should not have changed"
       );
@@ -130,26 +130,24 @@ describeBspNet(
         "test/cloud.jpg",
         "bucket-2"
       ); // T0
-      const bsp1VolunteerBlock = (
-        await api.call.fileSystemApi.queryEarliestFileVolunteerBlock(ShConsts.DUMMY_BSP_ID, fileKey)
+      const bsp1VolunteerTick = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.DUMMY_BSP_ID, fileKey)
       ).asOk.toNumber();
-      const bsp2VolunteerBlock = (
-        await api.call.fileSystemApi.queryEarliestFileVolunteerBlock(ShConsts.BSP_TWO_ID, fileKey)
+      const bsp2VolunteerTick = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
       ).asOk.toNumber();
 
-      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp1VolunteerBlock) {
-        await api.advanceToBlock(bsp1VolunteerBlock);
+      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp1VolunteerTick) {
+        await api.block.skipTo(bsp1VolunteerTick);
       }
       await api.wait.bspVolunteer();
       await api.wait.bspStored();
 
-      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerBlock) {
-        await api.advanceToBlock(bsp2VolunteerBlock);
+      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerTick) {
+        await api.block.skipTo(bsp2VolunteerTick);
       }
       await api.wait.bspVolunteer();
       await api.wait.bspStored();
-
-      await api.docker.stopBspContainer("sh-bsp-two");
     });
 
     it("BSP with reputation is prioritised", async () => {
@@ -165,7 +163,7 @@ describeBspNet(
       await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 10)));
 
       // Create a new storage request
-      await api.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-3"); // T0
+      await api.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-4"); // T0
 
       await api.wait.bspVolunteer();
       const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
@@ -180,5 +178,46 @@ describeBspNet(
       assert(filtered.length === 1, "BSP with reputation should be prioritised");
       await api.docker.stopBspContainer("sh-bsp-three");
     });
+
+    it(
+      "BSP two cannot spam the chain to volunteer first",
+      {
+        skip: "Test takes way to long to run. This test actually spams the chain with transactions, unskip it if you want to run it."
+      },
+      async () => {
+        await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 50)));
+
+        const { fileKey } = await api.file.newStorageRequest(
+          "res/cloud.jpg",
+          "test/cloud.jpg",
+          "bucket-3"
+        ); // T0
+        const bsp1VolunteerTick = (
+          await api.call.fileSystemApi.queryEarliestFileVolunteerTick(
+            ShConsts.DUMMY_BSP_ID,
+            fileKey
+          )
+        ).asOk.toNumber();
+        const bsp2VolunteerTick = (
+          await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
+        ).asOk.toNumber();
+
+        assert(bsp1VolunteerTick < bsp2VolunteerTick, "BSP one should be able to volunteer first");
+
+        // BSP two tries to spam the chain to advance until it can volunteer
+        if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerTick) {
+          await api.block.skipTo(bsp2VolunteerTick, { spam: true, verbose: true });
+        }
+
+        const tickAfterSpamResult = (await api.call.proofsDealerApi.getCurrentTick()).toNumber();
+
+        assert(
+          tickAfterSpamResult < bsp2VolunteerTick,
+          "BSP two should not be able to spam the chain and reach his threshold to volunteer"
+        );
+
+        await api.docker.stopBspContainer("sh-bsp-two");
+      }
+    );
   }
 );
