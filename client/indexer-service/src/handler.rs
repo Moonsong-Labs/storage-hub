@@ -272,6 +272,7 @@ impl IndexerService {
             pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
             pallet_proofs_dealer::Event::NoRecordOfLastSubmittedProof { .. } => {}
             pallet_proofs_dealer::Event::NewChallengeCycleInitialised { .. } => {}
+            pallet_proofs_dealer::Event::ChallengesTickerSet { .. } => {}
             pallet_proofs_dealer::Event::__Ignore(_, _) => {}
         }
         Ok(())
