@@ -243,13 +243,31 @@ impl IndexerService {
         event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
-            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated { .. } => {}
-            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {}
+            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {provider_id, user_account, amount_provided} => {
+                PaymentStream::create(
+                    conn,
+                    provider_id,
+                    user_account
+                ).await?;
+            },
+            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
+                // Currently we are not treating the info of dynamic rate update
+            }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
-            pallet_payment_streams::Event::FixedRatePaymentStreamCreated { .. } => {}
-            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {}
+            pallet_payment_streams::Event::FixedRatePaymentStreamCreated { provider_id, user_account, rate } => {
+                PaymentStream::create(
+                    conn,
+                    provider_id,
+                    user_account
+                ).await?;
+            }
+            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
+                // Currently we are not treating the info of fixed rate update
+            }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
-            pallet_payment_streams::Event::PaymentStreamCharged { .. } => {}
+            pallet_payment_streams::Event::PaymentStreamCharged { .. } => {
+                // We want to handle this and update the payment stream total amount
+            }
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
             pallet_payment_streams::Event::UserPaidDebts { .. } => {}
