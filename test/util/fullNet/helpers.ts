@@ -93,7 +93,10 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
-    const file = "local-dev-full-rocksdb-compose.yml";
+    let file = "local-dev-full-compose.yml";
+    if (bspNetConfig.rocksdb) {
+      file = "local-dev-full-rocksdb-compose.yml";
+    }
 
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const cwd = path.resolve(process.cwd(), "..", "docker");

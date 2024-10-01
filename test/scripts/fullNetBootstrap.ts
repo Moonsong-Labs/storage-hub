@@ -9,7 +9,7 @@ import * as ShConsts from "../util/bspNet/consts";
 import { runFullNet } from "../util/fullNet/helpers";
 
 let api: EnrichedBspApi | undefined;
-const bspNetConfig: BspNetConfig = {
+const fullNetConfig: BspNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
 };
@@ -21,9 +21,9 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runFullNet(bspNetConfig);
+  await runFullNet(fullNetConfig);
 
-  if (bspNetConfig.noisy) {
+  if (fullNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
     // see: https://github.com/Shopify/toxiproxy?tab=readme-ov-file#toxics
     const reqToxics = [
@@ -66,7 +66,7 @@ async function bootStrapNetwork() {
   await api.wait.bspVolunteer();
   await api.wait.bspStored();
 
-  if (bspNetConfig.noisy) {
+  if (fullNetConfig.noisy) {
     console.log("✅ NoisyNet Bootstrap success");
   } else {
     console.log("✅ BSPNet Bootstrap success");
@@ -76,7 +76,7 @@ async function bootStrapNetwork() {
 bootStrapNetwork()
   .catch((e) => {
     console.error("Error running bootstrap script:", e);
-    if (bspNetConfig.noisy) {
+    if (fullNetConfig.noisy) {
       console.log("❌ NoisyNet Bootstrap failure");
     } else {
       console.log("❌ BSPNet Bootstrap failure");
