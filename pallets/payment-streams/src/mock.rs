@@ -1,4 +1,5 @@
 use crate as pallet_payment_streams;
+use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl,
@@ -121,7 +122,6 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
@@ -129,9 +129,41 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
+pub struct MockFileMetadataManager;
+impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
+    type AccountId = AccountId;
+    type Metadata = shp_file_metadata::FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <shp_file_metadata::FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
+    type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageUnit;

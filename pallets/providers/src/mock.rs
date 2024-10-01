@@ -1,22 +1,23 @@
 use crate as pallet_storage_providers;
-use codec::Encode;
+use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{Everything, Randomness},
-    weights::constants::RocksDbWeight,
+    weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
 use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
+use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
+    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, SaturatedConversion,
+    BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::BTreeSet;
@@ -93,7 +94,6 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
@@ -115,15 +115,18 @@ impl pallet_proofs_dealer::Config for Test {
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
-    type ChallengeHistoryLength = ConstU64<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU64<10>;
+    type ChallengeHistoryLength = ConstU64<30>;
+    type ChallengesQueueLength = ConstU32<25>;
+    type CheckpointChallengePeriod = ConstU64<20>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
     type MinChallengePeriod = ConstU64<4>;
-    type ChallengeTicksTolerance = ConstU64<20>;
+    type ChallengeTicksTolerance = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -133,6 +136,21 @@ pub struct SaturatingBalanceToBlockNumber;
 impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
     fn convert(block_number: Balance) -> BlockNumberFor<Test> {
         block_number.saturated_into()
+    }
+}
+
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        Weight::from_parts(10_000, 0)
+            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        Perbill::from_percent(50)
     }
 }
 
@@ -219,6 +237,7 @@ impl crate::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type FileMetadataManager = MockFileMetadataManager;
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
@@ -250,6 +269,37 @@ pub struct DefaultMerkleRoot<T>(PhantomData<T>);
 impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     fn get() -> HasherOutT<T> {
         sp_trie::empty_trie_root::<T>()
+    }
+}
+
+pub struct MockFileMetadataManager;
+impl FileMetadataInterface for MockFileMetadataManager {
+    type AccountId = AccountId;
+    type Metadata = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
     }
 }
 

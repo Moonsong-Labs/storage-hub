@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
+use frame_system::EventRecord;
 use sc_executor::WasmExecutor;
 use sc_network::NetworkService;
 use sc_service::TFullClient;
@@ -29,6 +30,7 @@ pub type FileMetadata =
     shp_file_metadata::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
 pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
@@ -145,3 +147,16 @@ impl DownloadRequestId {
         DownloadRequestId(next)
     }
 }
+
+/// Type alias for the events vector.
+///
+/// The events vector is a storage element in the FRAME system pallet, which stores all the events
+/// that have occurred in a block. This is syntactic sugar to make the code more readable.
+pub type StorageHubEventsVec = Vec<
+    Box<
+        EventRecord<
+            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
+            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        >,
+    >,
+>;

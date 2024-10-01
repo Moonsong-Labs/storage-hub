@@ -159,10 +159,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
-       * Block range to maximum threshold cannot be zero.
-       **/
-      BlockRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
-      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -189,7 +185,7 @@ declare module "@polkadot/api-base/types/errors" {
       /**
        * BSPs required for storage request cannot exceed the maximum allowed.
        **/
-      BspsRequiredExceedsMax: AugmentedError<ApiType>;
+      BspsRequiredExceedsTarget: AugmentedError<ApiType>;
       /**
        * Action not allowed while the bucket is being moved.
        **/
@@ -214,10 +210,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to verify proof: required to provide a proof of non-inclusion.
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
-      /**
-       * Failed to convert block number to threshold.
-       **/
-      FailedToConvertBlockNumber: AugmentedError<ApiType>;
       /**
        * Failed to decode threshold.
        **/
@@ -387,6 +379,10 @@ declare module "@polkadot/api-base/types/errors" {
        * BSPs assignment threshold cannot be below asymptote.
        **/
       ThresholdBelowAsymptote: AugmentedError<ApiType>;
+      /**
+       * Tick range to maximum threshold cannot be zero.
+       **/
+      TickRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
       /**
        * Too many batch responses to process.
        **/
@@ -691,7 +687,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
-       * Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
+       * Error thrown when charging a payment stream would result in an overflow of the balance type
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**

@@ -53,7 +53,7 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use shp_file_key_verifier::FileKeyVerifier;
-use shp_file_metadata::ChunkId;
+use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -467,6 +467,11 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
@@ -528,6 +533,23 @@ impl Get<AccountId32> for TreasuryAccount {
     }
 }
 
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        // TODO: Change this to the benchmarked weight of a `submit_proof` extrinsic or more.
+        // TODO: Right now, it is set to the weight of a `transfer_keep_alive` extrinsic.
+        Weight::from_parts(297_297_000, 308)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        // This means that we tolerate at most 50% of misbehaving collators.
+        Perbill::from_percent(50)
+    }
+}
+
 parameter_types! {
     pub const RandomChallengesPerBlock: u32 = 10;
     pub const MaxCustomChallengesPerBlock: u32 = 10;
@@ -569,6 +591,9 @@ impl pallet_proofs_dealer::Config for Runtime {
     type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
+    type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -615,7 +640,7 @@ impl pallet_file_system::Config for Runtime {
     type Fingerprint = Hash;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
+    type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;

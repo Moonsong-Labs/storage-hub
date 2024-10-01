@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use futures::prelude::*;
+use log::{debug, trace, warn};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
@@ -6,32 +8,22 @@ use std::{
     sync::Arc,
 };
 
-use futures::prelude::*;
-use log::{debug, trace, warn};
-use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError, StorageProvidersApi,
-};
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
 use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
-use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{Fingerprint, BCSV_KEY_TYPE};
-use shp_file_metadata::FileKey;
-use sp_api::ProvideRuntimeApi;
+use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     traits::{Header, Zero},
     AccountId32, SaturatedConversion,
 };
-use storage_hub_runtime::RuntimeEvent;
 
 use pallet_file_system_runtime_api::{
-    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
     QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
@@ -39,7 +31,18 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
 };
+use pallet_storage_providers_runtime_api::{
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError, StorageProvidersApi,
+};
+use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
+use shc_common::{
+    blockchain_utils::get_events_at_block,
+    types::{Fingerprint, TickNumber, BCSV_KEY_TYPE},
+};
+use shp_file_metadata::FileKey;
+use storage_hub_runtime::RuntimeEvent;
 
 use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
@@ -80,6 +83,9 @@ pub struct BlockchainService {
     /// A registry of waiters for a block number.
     pub(crate) wait_for_block_request_by_number:
         BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
+    /// A registry of waiters for a tick number.
+    pub(crate) wait_for_tick_request_by_number:
+        BTreeMap<TickNumber, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
     /// A list of Provider IDs that this node has to pay attention to submit proofs for.
     /// This could be a BSP or a list of buckets that an MSP has.
     pub(crate) provider_ids: BTreeSet<ProviderId>,
@@ -283,7 +289,7 @@ impl Actor for BlockchainService {
                         match tx.send(()) {
                             Ok(_) => {}
                             Err(_) => {
-                                error!(target: LOG_TARGET, "Failed to notify task about waiting block number.");
+                                error!(target: LOG_TARGET, "Failed to notify task about waiting block number. \nThis should never happen, in this same code we have both the sender and receiver of the oneshot channel, so it should always be possible to send the message.");
                             }
                         }
                     } else {
@@ -295,10 +301,64 @@ impl Actor for BlockchainService {
 
                     match callback.send(rx) {
                         Ok(_) => {
-                            trace!(target: LOG_TARGET, "Receiver sent successfully");
+                            trace!(target: LOG_TARGET, "Block message receiver sent successfully");
                         }
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send block message receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::WaitForTick {
+                    tick_number,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    // Current Tick should always return a value, unless there's an internal API error.
+                    let current_tick_result = self
+                        .client
+                        .runtime_api()
+                        .get_current_tick(current_block_hash);
+
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    match current_tick_result {
+                        Ok(current_tick) => {
+                            // If there is no API error, and the current tick is greater than or equal to the tick number
+                            // we are waiting for, we notify the task that the tick has been reached.
+                            if current_tick >= tick_number {
+                                match tx.send(Ok(())) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to notify task about tick reached: {:?}. \nThis should never happen, in this same code we have both the sender and receiver of the oneshot channel, so it should always be possible to send the message.", e);
+                                    }
+                                }
+                            } else {
+                                // If the current tick is less than the tick number we are waiting for, we insert it in
+                                // the waiting queue.
+                                self.wait_for_tick_request_by_number
+                                    .entry(tick_number)
+                                    .or_insert_with(Vec::new)
+                                    .push(tx);
+                            }
+                        }
+                        Err(e) => {
+                            // If there is an API error, we notify the task about it immediately.
+                            match tx.send(Err(e)) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to notify API error to task querying current tick: {:?}. \nThis should never happen, in this same code we have both the sender and receiver of the oneshot channel, so it should always be possible to send the message.", e);
+                                }
+                            }
+                        }
+                    }
+
+                    match callback.send(rx) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Tick message receiver sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send tick message receiver: {:?}", e);
                         }
                     }
                 }
@@ -323,7 +383,7 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
-                BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+                BlockchainServiceCommand::QueryFileEarliestVolunteerTick {
                     bsp_id,
                     file_key,
                     callback,
@@ -333,13 +393,13 @@ impl Actor for BlockchainService {
                     let earliest_block_to_volunteer = self
                         .client
                         .runtime_api()
-                        .query_earliest_file_volunteer_block(
+                        .query_earliest_file_volunteer_tick(
                             current_block_hash,
                             bsp_id.into(),
                             file_key,
                         )
                         .unwrap_or_else(|_| {
-                            Err(QueryFileEarliestVolunteerBlockError::InternalError)
+                            Err(QueryFileEarliestVolunteerTickError::InternalError)
                         });
 
                     match callback.send(earliest_block_to_volunteer) {
@@ -808,6 +868,7 @@ impl BlockchainService {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
+            wait_for_tick_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             forest_root_write_lock: None,
             last_block_processed: Zero::zero(),
@@ -921,12 +982,16 @@ impl BlockchainService {
         // Notify all tasks waiting for this block number (or lower).
         self.notify_import_block_number(&block_number);
 
+        // Notify all tasks waiting for this tick number (or lower).
+        // It is not guaranteed that the tick number will increase at every block import.
+        self.notify_tick_number(&block_hash);
+
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
-        match self.get_events_storage_element(block_hash) {
+        match get_events_at_block(&self.client, block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {
@@ -1124,7 +1189,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
-        match self.get_events_storage_element(&block_hash) {
+        match get_events_at_block(&self.client, &block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {

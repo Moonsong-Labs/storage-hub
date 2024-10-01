@@ -87,7 +87,6 @@ pub type BalanceOf<T> =
 
 pub type ProviderId<T> = HashId<T>;
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
-/// TODO: We should make these IDs configurable from the runtime...
 pub type BackupStorageProviderId<T> = ProviderId<T>;
 /// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
 pub type MainStorageProviderId<T> = ProviderId<T>;

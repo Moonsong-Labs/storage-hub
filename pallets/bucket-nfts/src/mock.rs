@@ -8,7 +8,7 @@ use frame_support::{
 use frame_system as system;
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
-use shp_file_metadata::ChunkId;
+use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
     ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface, TrieMutation,
     TrieRemoveMutation,
@@ -133,6 +133,7 @@ impl ProofsDealerInterface for MockProofsDealer {
     type MerkleHash = H256;
     type RandomnessOutput = H256;
     type MerkleHashing = BlakeTwo256;
+    type TickNumber = BlockNumber;
 
     fn challenge(_key_challenged: &Self::MerkleHash) -> frame_support::dispatch::DispatchResult {
         Ok(())
@@ -198,6 +199,10 @@ impl ProofsDealerInterface for MockProofsDealer {
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
+
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
 }
 
 impl pallet_file_system::Config for Test {
@@ -209,7 +214,7 @@ impl pallet_file_system::Config for Test {
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
+    type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
@@ -312,6 +317,11 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u64;
@@ -358,7 +368,6 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {

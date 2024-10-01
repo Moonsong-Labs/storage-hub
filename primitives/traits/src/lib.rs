@@ -11,7 +11,10 @@ use frame_support::{
 use scale_info::{prelude::fmt::Debug, TypeInfo};
 use sp_core::Get;
 use sp_runtime::{
-    traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating},
+    traits::{
+        AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One,
+        Saturating, Zero,
+    },
     BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
@@ -679,6 +682,25 @@ pub trait ProofsDealerInterface {
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
     /// The type that represents the randomness output.
     type RandomnessOutput: Parameter + Member + Debug;
+    /// The numerical type used to represent ticks.
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time
+    type TickNumber: Parameter
+        + Member
+        + AtLeast32BitUnsigned
+        + Debug
+        + Default
+        + Copy
+        + MaxEncodedLen
+        + FullCodec
+        + MaybeSerializeDeserialize
+        + Zero
+        + One
+        + CheckedAdd
+        + CheckedSub
+        + CheckedDiv
+        + CheckedMul
+        + Saturating;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -758,6 +780,12 @@ pub trait ProofsDealerInterface {
     /// deadline for submitting a proof to the current tick + the Provider's period (based on its
     /// stake) + the challenges tick tolerance.
     fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
+
+    /// Get the current tick.
+    ///
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time.
+    fn get_current_tick() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -974,6 +1002,8 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
+/// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof
+/// submitters in the last ticks.
 pub trait ProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter
@@ -995,4 +1025,32 @@ pub trait ProofSubmittersInterface {
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32>;
 
     fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId);
+}
+
+/// A trait to encode, decode and read information from file metadata.
+pub trait FileMetadataInterface {
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a file's metadata
+    type Metadata: Parameter + Member + MaybeSerializeDeserialize + Debug + Encode + Decode;
+
+    /// The type which represents the unit that we use to measure file size (e.g. bytes)
+    type StorageDataUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u64>;
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error>;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8>;
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit;
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error>;
 }

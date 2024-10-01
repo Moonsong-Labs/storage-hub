@@ -32,6 +32,7 @@ import type {
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
+  PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
@@ -1451,6 +1452,10 @@ declare module "@polkadot/api-base/types/events" {
     };
     proofsDealer: {
       /**
+       * The [`ChallengesTicker`] has been paused or unpaused.
+       **/
+      ChallengesTickerSet: AugmentedEvent<ApiType, [paused: bool], { paused: bool }>;
+      /**
        * A set of mutations has been applied to the Forest.
        **/
       MutationsApplied: AugmentedEvent<
@@ -1553,15 +1558,19 @@ declare module "@polkadot/api-base/types/events" {
        * Event emitted when a Backup Storage Provider has signed off successfully. Provides information about
        * that BSP's account id.
        **/
-      BspSignOffSuccess: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      BspSignOffSuccess: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bspId: H256],
+        { who: AccountId32; bspId: H256 }
+      >;
       /**
        * Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
        * that BSP's account id, the total data it can store according to its stake, and its multiaddress.
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
-        { who: AccountId32; multiaddresses: Vec<Bytes>; capacity: u64 }
+        [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
+        { who: AccountId32; bspId: H256; multiaddresses: Vec<Bytes>; capacity: u64 }
       >;
       /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about
@@ -1569,8 +1578,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       CapacityChanged: AugmentedEvent<
         ApiType,
-        [who: AccountId32, oldCapacity: u64, newCapacity: u64, nextBlockWhenChangeAllowed: u32],
-        { who: AccountId32; oldCapacity: u64; newCapacity: u64; nextBlockWhenChangeAllowed: u32 }
+        [
+          who: AccountId32,
+          providerId: PalletStorageProvidersStorageProviderId,
+          oldCapacity: u64,
+          newCapacity: u64,
+          nextBlockWhenChangeAllowed: u32
+        ],
+        {
+          who: AccountId32;
+          providerId: PalletStorageProvidersStorageProviderId;
+          oldCapacity: u64;
+          newCapacity: u64;
+          nextBlockWhenChangeAllowed: u32;
+        }
       >;
       /**
        * Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
@@ -1595,7 +1616,11 @@ declare module "@polkadot/api-base/types/events" {
        * Event emitted when a Main Storage Provider has signed off successfully. Provides information about
        * that MSP's account id.
        **/
-      MspSignOffSuccess: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      MspSignOffSuccess: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, mspId: H256],
+        { who: AccountId32; mspId: H256 }
+      >;
       /**
        * Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
        * that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
@@ -1604,12 +1629,14 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
+          mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
           valueProp: PalletStorageProvidersValueProposition
         ],
         {
           who: AccountId32;
+          mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
           valueProp: PalletStorageProvidersValueProposition;
