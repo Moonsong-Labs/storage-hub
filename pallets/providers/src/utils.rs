@@ -1,6 +1,6 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use crate::*;
-use codec::{Decode, Encode};
+use codec::Encode;
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Pays},
     ensure,
@@ -20,12 +20,11 @@ use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
     QueryStorageProviderCapacityError,
 };
-use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, PaymentStreamsInterface, ProofSubmittersInterface,
-    ReadBucketsInterface, ReadChallengeableProvidersInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, SystemMetricsInterface,
+    FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
+    MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
 use sp_std::vec::Vec;
 use types::{ProviderId, StorageProviderId};
@@ -1414,16 +1413,21 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
         removed_trie_value: &Vec<u8>,
     ) -> DispatchResult {
         // Get the removed file's metadata
-        let file_metadata: FileMetadata<
-            { shp_constants::H_LENGTH },
-            { shp_constants::FILE_CHUNK_SIZE },
-            { shp_constants::FILE_SIZE_TO_CHALLENGES },
-        > = FileMetadata::decode(&mut removed_trie_value.as_slice())
+        let file_metadata =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::decode(
+                removed_trie_value,
+            )
             .map_err(|_| Error::<T>::InvalidEncodedFileMetadata)?;
 
         // Get the file size as a StorageDataUnit type and the owner as an AccountId type
-        let file_size = StorageDataUnit::<T>::from(file_metadata.file_size);
-        let owner = T::AccountId::decode(&mut file_metadata.owner.as_slice())
+        let file_size =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_size(
+                &file_metadata,
+            );
+        let owner =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_owner(
+                &file_metadata,
+            )
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider

@@ -22,7 +22,6 @@ scale-info = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 shp-constants = { workspace = true }
 shp-traits = { workspace = true, default-features = false }
-shp-file-metadata = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, optional = true }
@@ -39,6 +38,7 @@ serde = { workspace = true }
 #Local
 pallet-proofs-dealer = { workspace = true }
 pallet-payment-streams = { workspace = true }
+shp-file-metadata = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }

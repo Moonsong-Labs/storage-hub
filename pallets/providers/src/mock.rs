@@ -1,5 +1,5 @@
 use crate as pallet_storage_providers;
-use codec::Encode;
+use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
@@ -9,9 +9,10 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
+use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
+    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
@@ -236,6 +237,7 @@ impl crate::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type FileMetadataManager = MockFileMetadataManager;
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
@@ -267,6 +269,37 @@ pub struct DefaultMerkleRoot<T>(PhantomData<T>);
 impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     fn get() -> HasherOutT<T> {
         sp_trie::empty_trie_root::<T>()
+    }
+}
+
+pub struct MockFileMetadataManager;
+impl FileMetadataInterface for MockFileMetadataManager {
+    type AccountId = AccountId;
+    type Metadata = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
     }
 }
 
