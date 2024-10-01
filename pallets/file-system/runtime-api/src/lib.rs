@@ -19,6 +19,7 @@ pub enum QueryFileEarliestVolunteerTickError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryBspConfirmChunksToProveForFileError {
     StorageRequestNotFound,
+    ConfirmChunks(QueryConfirmChunksToProveForFileError),
     InternalError,
 }
 
@@ -26,7 +27,14 @@ pub enum QueryBspConfirmChunksToProveForFileError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryMspConfirmChunksToProveForFileError {
     StorageRequestNotFound,
+    ConfirmChunks(QueryConfirmChunksToProveForFileError),
     InternalError,
+}
+
+/// Error type for the `query_confirm_chunks_to_prove_for_file`.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryConfirmChunksToProveForFileError {
+    ChallengedChunkToChunkIdError,
 }
 
 sp_api::decl_runtime_apis! {

@@ -20,8 +20,8 @@ use sp_std::{
 };
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
@@ -172,30 +172,8 @@ where
             }
         };
 
-        // Generate the list of chunks to prove.
-        let challenges = Self::generate_chunk_challenges_on_sp_confirm(
-            bsp_id,
-            file_key,
-            &storage_request_metadata,
-        );
-
-        let chunks = storage_request_metadata.to_file_metadata().chunks_count();
-
-        let chunks_to_prove = challenges
-            .iter()
-            .map(|challenge| {
-                let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-                let challenged_chunk: ChunkId = ChunkId::new(
-                    challenged_chunk
-                        .try_into()
-                        .map_err(|_| QueryBspConfirmChunksToProveForFileError::InternalError)?,
-                );
-
-                Ok(challenged_chunk)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(chunks_to_prove)
+        Self::query_confirm_chunks_to_prove_for_file(bsp_id, storage_request_metadata, file_key)
+            .map_err(|e| QueryBspConfirmChunksToProveForFileError::ConfirmChunks(e))
     }
 
     pub fn query_msp_confirm_chunks_to_prove_for_file(
@@ -210,9 +188,18 @@ where
             }
         };
 
+        Self::query_confirm_chunks_to_prove_for_file(msp_id, storage_request_metadata, file_key)
+            .map_err(|e| QueryMspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    fn query_confirm_chunks_to_prove_for_file(
+        provider_id: ProviderIdFor<T>,
+        storage_request_metadata: StorageRequestMetadata<T>,
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ChunkId>, QueryConfirmChunksToProveForFileError> {
         // Generate the list of chunks to prove.
         let challenges = Self::generate_chunk_challenges_on_sp_confirm(
-            msp_id,
+            provider_id,
             file_key,
             &storage_request_metadata,
         );
@@ -223,11 +210,10 @@ where
             .iter()
             .map(|challenge| {
                 let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-                let challenged_chunk: ChunkId = ChunkId::new(
-                    challenged_chunk
-                        .try_into()
-                        .map_err(|_| QueryMspConfirmChunksToProveForFileError::InternalError)?,
-                );
+                let challenged_chunk: ChunkId =
+                    ChunkId::new(challenged_chunk.try_into().map_err(|_| {
+                        QueryConfirmChunksToProveForFileError::ChallengedChunkToChunkIdError
+                    })?);
 
                 Ok(challenged_chunk)
             })
