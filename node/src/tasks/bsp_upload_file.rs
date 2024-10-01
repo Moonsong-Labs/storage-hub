@@ -653,7 +653,7 @@ where
     /// Calculate the new capacity after adding the required capacity for the file.
     ///
     /// The new storage capacity will be increased by the jump capacity until it reaches the
-    /// `max_storage_capacity` or it
+    /// `max_storage_capacity`.
     ///
     /// The `max_storage_capacity` is returned if the new capacity exceeds it.
     fn calculate_capacity(

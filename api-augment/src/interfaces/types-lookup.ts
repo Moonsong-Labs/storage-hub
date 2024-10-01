@@ -1961,7 +1961,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isPriorityChallengeForFileDeletionQueued: boolean;
     readonly asPriorityChallengeForFileDeletionQueued: {
-      readonly issuer: PalletFileSystemEitherAccountIdOrProviderId;
+      readonly issuer: PalletFileSystemEitherAccountIdOrMspId;
       readonly fileKey: H256;
     } & Struct;
     readonly isSpStopStoringInsolventUser: boolean;
@@ -2091,13 +2091,13 @@ declare module "@polkadot/types/lookup" {
     readonly owner: AccountId32;
   }
 
-  /** @name PalletFileSystemEitherAccountIdOrProviderId (150) */
-  interface PalletFileSystemEitherAccountIdOrProviderId extends Enum {
+  /** @name PalletFileSystemEitherAccountIdOrMspId (150) */
+  interface PalletFileSystemEitherAccountIdOrMspId extends Enum {
     readonly isAccountId: boolean;
     readonly asAccountId: AccountId32;
-    readonly isProviderId: boolean;
-    readonly asProviderId: H256;
-    readonly type: "AccountId" | "ProviderId";
+    readonly isMspId: boolean;
+    readonly asMspId: H256;
+    readonly type: "AccountId" | "MspId";
   }
 
   /** @name PalletProofsDealerEvent (151) */
@@ -5062,7 +5062,7 @@ declare module "@polkadot/types/lookup" {
     readonly isTooManyBatchResponses: boolean;
     readonly isTooManyStorageRequestResponses: boolean;
     readonly isInvalidBucketIdFileKeyPair: boolean;
-    readonly isInconsistentState: boolean;
+    readonly isInconsistentStateKeyAlreadyExists: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5124,7 +5124,7 @@ declare module "@polkadot/types/lookup" {
       | "TooManyBatchResponses"
       | "TooManyStorageRequestResponses"
       | "InvalidBucketIdFileKeyPair"
-      | "InconsistentState";
+      | "InconsistentStateKeyAlreadyExists";
   }
 
   /** @name PalletProofsDealerError (444) */

@@ -107,17 +107,17 @@ where
     pub fn start_user_tasks(&self) {
         log::info!("Starting User tasks.");
 
-        let msp_upload_file_task = UserSendsFileTask::new(self.clone());
+        let user_sends_file_task = UserSendsFileTask::new(self.clone());
 
         // Subscribing to NewStorageRequest event from the BlockchainService.
         let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
-            msp_upload_file_task
+            user_sends_file_task
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_storage_request_event_bus_listener.start();
 
         let accepted_bsp_volunteer_event_bus_listener: EventBusListener<AcceptedBspVolunteer, _> =
-            msp_upload_file_task
+            user_sends_file_task
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         accepted_bsp_volunteer_event_bus_listener.start();
@@ -132,7 +132,7 @@ where
     pub fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
 
-        // MspUploadFileTask is triggered by a NewStorageRequest event which registeres the user's peer address for
+        // MspUploadFileTask is triggered by a NewStorageRequest event which registers the user's peer address for
         // an upcoming RemoteUploadRequest events, which happens when the user connects to the MSP and submits chunks of the file,
         // along with a proof of storage, which is then queued to batch accept many storage requests at once.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.

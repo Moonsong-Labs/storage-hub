@@ -33,12 +33,23 @@ const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
 ///
 /// The flow is split into three parts, which are represented here as 3 handlers for 3
 /// different events:
+/// - [`NewStorageRequest`] event: The first part of the flow. It is triggered by a user
+///   submitting a storage request to StorageHub. The MSP will check if it has enough
+///   storage capacity to store the file and increase it if necessary (up to a maximum).
+///   If the MSP does not have enough capacity still, it will reject the storage request.
+///   It will register the user and file key in the registry of the File Transfer Service,
+///   which handles incoming p2p upload requests. Finally, it will create a file in the
+///   file storage so that it can write uploaded chunks as soon as possible.
 /// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the MSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored. Finally the MSP will
-///   construct a forest proof of non-inclusion and a file proof and send a accept transaction
-///   to StorageHub which will automatically apply the delta to update the bucket root.
-///   If successful, the MSP will also update their local forest to include the new file.
+///   queue a response to accept storing the file.
+/// - [`ProcessMspRespondStoringRequest`] event: The third part of the flow. It is triggered
+///   when there are new storage request(s) to respond to. The batch of storage requests
+///   will be responded to in a single call to the FileSystem pallet `msp_respond_storage_requests` extrinsic
+///   which will emit an event that describes the final result of the batch response (i.e. all accepted,
+///   rejected and/or failed file keys). The MSP will then apply the necessary deltas to each one of the bucket's
+///   forest storage to reflect the result.
 pub struct MspUploadFileTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -366,10 +377,14 @@ where
     }
 }
 
-/// Handles the `ProcessConfirmStoringRequest` event.
+/// Handles the `ProcessMspRespondStoringRequest` event.
 ///
-/// This event is triggered by the runtime when it decides it is the right time to submit a confirm
-/// storing extrinsic (and update the local forest root).
+/// Triggered when there are new storage request(s) to respond to. Normally, storage requests are
+/// immidiately rejected if the MSP cannot store the file (e.g. not enough capacity). However, this event
+/// is able to respond to storage requests that are either being accepted or rejected either way.
+///
+/// The MSP will call the `msp_respond_storage_requests` extrinsic on the FileSystem pallet to respond to the
+/// storage requests.
 impl<FL, FSH> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -378,7 +393,7 @@ where
     async fn handle_event(&mut self, event: ProcessMspRespondStoringRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing ConfirmStoringRequest: {:?}",
+            "Processing ProcessMspRespondStoringRequest: {:?}",
             event.data.respond_storing_requests,
         );
 
@@ -530,7 +545,7 @@ where
                 },
             };
 
-            final_responses.insert(bucket_id.clone(), response);
+            final_responses.insert(*bucket_id, response);
         }
 
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
@@ -782,7 +797,7 @@ where
     /// Calculate the new capacity after adding the required capacity for the file.
     ///
     /// The new storage capacity will be increased by the jump capacity until it reaches the
-    /// `max_storage_capacity` or it
+    /// `max_storage_capacity`.
     ///
     /// The `max_storage_capacity` is returned if the new capacity exceeds it.
     fn calculate_capacity(

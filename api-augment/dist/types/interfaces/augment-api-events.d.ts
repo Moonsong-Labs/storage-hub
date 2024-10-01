@@ -20,7 +20,7 @@ import type {
   FrameSupportDispatchDispatchInfo,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
-  PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemMspRespondStorageRequestsResult,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
@@ -713,9 +713,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       PriorityChallengeForFileDeletionQueued: AugmentedEvent<
         ApiType,
-        [issuer: PalletFileSystemEitherAccountIdOrProviderId, fileKey: H256],
+        [issuer: PalletFileSystemEitherAccountIdOrMspId, fileKey: H256],
         {
-          issuer: PalletFileSystemEitherAccountIdOrProviderId;
+          issuer: PalletFileSystemEitherAccountIdOrMspId;
           fileKey: H256;
         }
       >;

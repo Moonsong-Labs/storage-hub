@@ -65,7 +65,7 @@ import type {
   PalletFileSystemBatchResponses,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
-  PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemMoveBucketRequestMetadata,
@@ -322,7 +322,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemBatchResponses: PalletFileSystemBatchResponses;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
-    PalletFileSystemEitherAccountIdOrProviderId: PalletFileSystemEitherAccountIdOrProviderId;
+    PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;

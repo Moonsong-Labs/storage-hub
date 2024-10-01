@@ -320,19 +320,19 @@ pub struct MoveBucketRequestMetadata<T: Config> {
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub enum EitherAccountIdOrProviderId<T: Config> {
+pub enum EitherAccountIdOrMspId<T: Config> {
     AccountId(T::AccountId),
-    ProviderId(ProviderIdFor<T>),
+    MspId(ProviderIdFor<T>),
 }
 
-impl<T: Config> Debug for EitherAccountIdOrProviderId<T> {
+impl<T: Config> Debug for EitherAccountIdOrMspId<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            EitherAccountIdOrProviderId::AccountId(account_id) => {
+            EitherAccountIdOrMspId::AccountId(account_id) => {
                 write!(f, "AccountId({:?})", account_id)
             }
-            EitherAccountIdOrProviderId::ProviderId(provider_id) => {
-                write!(f, "ProviderId({:?})", provider_id)
+            EitherAccountIdOrMspId::MspId(provider_id) => {
+                write!(f, "MspId({:?})", provider_id)
             }
         }
     }

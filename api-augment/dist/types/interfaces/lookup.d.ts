@@ -1571,12 +1571,12 @@ declare const _default: {
     owner: string;
   };
   /**
-   * Lookup150: pallet_file_system::types::EitherAccountIdOrProviderId<T>
+   * Lookup150: pallet_file_system::types::EitherAccountIdOrMspId<T>
    **/
-  PalletFileSystemEitherAccountIdOrProviderId: {
+  PalletFileSystemEitherAccountIdOrMspId: {
     _enum: {
       AccountId: string;
-      ProviderId: string;
+      MspId: string;
     };
   };
   /**

@@ -1486,7 +1486,7 @@ export default {
         newRoot: "H256"
       },
       PriorityChallengeForFileDeletionQueued: {
-        issuer: "PalletFileSystemEitherAccountIdOrProviderId",
+        issuer: "PalletFileSystemEitherAccountIdOrMspId",
         fileKey: "H256"
       },
       SpStopStoringInsolventUser: {
@@ -1585,12 +1585,12 @@ export default {
     owner: "AccountId32"
   },
   /**
-   * Lookup150: pallet_file_system::types::EitherAccountIdOrProviderId<T>
+   * Lookup150: pallet_file_system::types::EitherAccountIdOrMspId<T>
    **/
-  PalletFileSystemEitherAccountIdOrProviderId: {
+  PalletFileSystemEitherAccountIdOrMspId: {
     _enum: {
       AccountId: "AccountId32",
-      ProviderId: "H256"
+      MspId: "H256"
     }
   },
   /**
@@ -4102,7 +4102,7 @@ export default {
       "TooManyBatchResponses",
       "TooManyStorageRequestResponses",
       "InvalidBucketIdFileKeyPair",
-      "InconsistentState"
+      "InconsistentStateKeyAlreadyExists"
     ]
   },
   /**

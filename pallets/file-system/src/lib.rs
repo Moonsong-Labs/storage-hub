@@ -558,7 +558,7 @@ pub mod pallet {
         },
         /// Notifies that a file key has been queued for a priority challenge for file deletion.
         PriorityChallengeForFileDeletionQueued {
-            issuer: EitherAccountIdOrProviderId<T>,
+            issuer: EitherAccountIdOrMspId<T>,
             file_key: MerkleHash<T>,
         },
         /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -742,8 +742,8 @@ pub mod pallet {
         TooManyStorageRequestResponses,
         /// Bucket id and file key pair is invalid.
         InvalidBucketIdFileKeyPair,
-        /// Updated state does is not what is expected.
-        InconsistentState,
+        /// Key already exists in mapping when it should not.
+        InconsistentStateKeyAlreadyExists,
     }
 
     #[pallet::call]
