@@ -938,11 +938,14 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Used by a MSP to confirm storing a file that was assigned to it.
+        /// Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
         ///
-        /// The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-        /// in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-        /// the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
+        /// This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
+        /// accepted, rejected or have failed to be processed in the results of the event emitted.
+        ///
+        /// The MSP has to provide a file proof for all the file keys that are being accepted and a non-inclusion proof for the file keys
+        /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
+        /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
