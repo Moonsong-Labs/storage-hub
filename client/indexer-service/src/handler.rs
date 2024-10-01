@@ -243,23 +243,23 @@ impl IndexerService {
         event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
-            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {provider_id, user_account, amount_provided} => {
-                PaymentStream::create(
-                    conn,
-                    provider_id,
-                    user_account
-                ).await?;
-            },
+            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
+                provider_id,
+                user_account,
+                amount_provided,
+            } => {
+                PaymentStream::create(conn, provider_id, user_account).await?;
+            }
             pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
                 // Currently we are not treating the info of dynamic rate update
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
-            pallet_payment_streams::Event::FixedRatePaymentStreamCreated { provider_id, user_account, rate } => {
-                PaymentStream::create(
-                    conn,
-                    provider_id,
-                    user_account
-                ).await?;
+            pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
+                provider_id,
+                user_account,
+                rate,
+            } => {
+                PaymentStream::create(conn, provider_id, user_account).await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
                 // Currently we are not treating the info of fixed rate update

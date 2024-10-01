@@ -13,7 +13,7 @@ pub struct PaymentStream {
     // ID of the payee (msp or bsp)
     pub provider: String,
     // Total amount already paid to this provider
-    pub total_amount_paid: BigUint
+    pub total_amount_paid: BigUint,
 }
 
 impl PaymentStream {
@@ -23,7 +23,10 @@ impl PaymentStream {
         provider: impl Into<String>,
     ) -> Result<Self, diesel::result::Error> {
         let paymentstream = diesel::insert_into(paymentstream::table)
-            .values((paymentstream::account.eq(account), paymentstream::provider.eq(provider)))
+            .values((
+                paymentstream::account.eq(account),
+                paymentstream::provider.eq(provider),
+            ))
             .get_result(conn)
             .await?;
         Ok(paymentstream)
