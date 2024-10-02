@@ -206,6 +206,7 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters,
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue,
@@ -473,6 +474,7 @@ declare module "@polkadot/types/types/registry" {
     StagingXcmV4Response: StagingXcmV4Response;
     StagingXcmV4TraitsOutcome: StagingXcmV4TraitsOutcome;
     StagingXcmV4Xcm: StagingXcmV4Xcm;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod;
     StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
     StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
     StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
