@@ -771,8 +771,8 @@ where
             None => min_challenge_period,
         };
 
-        // Return the minimum between the calculated challenge period and the minimum challenge period.
-        min_challenge_period.min(challenge_period)
+        // Return the maximum between the calculated challenge period and the minimum challenge period.
+        min_challenge_period.max(challenge_period)
     }
 
     /// Add challenge to ChallengesQueue.
