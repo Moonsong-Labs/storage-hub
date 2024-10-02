@@ -246,7 +246,7 @@ impl IndexerService {
             pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
                 provider_id,
                 user_account,
-                amount_provided,
+                amount_provided: _amount_provided,
             } => {
                 PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
                     .await?;
@@ -258,7 +258,7 @@ impl IndexerService {
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
                 provider_id,
                 user_account,
-                rate,
+                rate: _rate,
             } => {
                 PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
                     .await?;
