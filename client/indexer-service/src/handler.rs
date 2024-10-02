@@ -265,8 +265,17 @@ impl IndexerService {
                 // Currently we are not treating the info of fixed rate update
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
-            pallet_payment_streams::Event::PaymentStreamCharged { .. } => {
+            pallet_payment_streams::Event::PaymentStreamCharged {
+                user_account,
+                provider_id,
+                amount,
+            } => {
                 // We want to handle this and update the payment stream total amount
+                let ps =
+                    PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
+                        .await?;
+                let new_total_amount = ps.total_amount_paid + amount;
+                PaymentStream::update_total_amount(conn, ps.id, new_total_amount).await?;
             }
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
