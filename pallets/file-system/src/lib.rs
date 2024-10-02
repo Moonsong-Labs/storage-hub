@@ -217,7 +217,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
-        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests`.
+        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
         #[pallet::constant]
         type MaxBatchMspRespondStorageRequests: Get<u32>;
 
@@ -949,7 +949,7 @@ pub mod pallet {
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn msp_respond_storage_requests(
+        pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
             file_key_responses_input: FileKeyResponsesInput<T>,
         ) -> DispatchResult {

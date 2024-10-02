@@ -922,6 +922,9 @@ impl BlockchainService {
 
         // Check if there was an ongoing process confirm storing task.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+
+        // Check if there was an ongoing process confirm storing task.
+        // Note: This would only exist if the node was running as a BSP.
         let maybe_ongoing_process_confirm_storing_request = state_store_context
             .access_value(&OngoingProcessConfirmStoringRequestCf)
             .read();
@@ -937,6 +940,7 @@ impl BlockchainService {
         }
 
         // Check if there was an ongoing process msp respond storage request task.
+        // Note: This would only exist if the node was running as an MSP.
         let maybe_ongoing_process_msp_respond_storage_request = state_store_context
             .access_value(&OngoingProcessMspRespondStorageRequestCf)
             .read();

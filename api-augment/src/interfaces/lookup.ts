@@ -3201,7 +3201,7 @@ export default {
       bsp_add_data_server_for_move_bucket_request: {
         bucketId: "H256"
       },
-      msp_respond_storage_requests: {
+      msp_respond_storage_requests_multiple_buckets: {
         fileKeyResponsesInput: "Vec<(H256,PalletFileSystemMspStorageRequestResponse)>"
       },
       bsp_volunteer: {

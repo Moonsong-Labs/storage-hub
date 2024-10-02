@@ -46,7 +46,7 @@ const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
 ///   queue a response to accept storing the file.
 /// - [`ProcessMspRespondStoringRequest`] event: The third part of the flow. It is triggered
 ///   when there are new storage request(s) to respond to. The batch of storage requests
-///   will be responded to in a single call to the FileSystem pallet `msp_respond_storage_requests` extrinsic
+///   will be responded to in a single call to the FileSystem pallet `msp_respond_storage_requests_multiple_buckets` extrinsic
 ///   which will emit an event that describes the final result of the batch response (i.e. all accepted,
 ///   rejected and/or failed file keys). The MSP will then apply the necessary deltas to each one of the bucket's
 ///   forest storage to reflect the result.
@@ -175,7 +175,7 @@ where
                 warn!(target: LOG_TARGET, "{}", e);
 
                 let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                    pallet_file_system::Call::msp_respond_storage_requests {
+                    pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                         file_key_responses_input: bounded_vec![(
                             bucket_id,
                             MspStorageRequestResponse {
@@ -229,7 +229,7 @@ where
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests {
+                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                             file_key_responses_input: bounded_vec![(
                                 bucket_id,
                                 MspStorageRequestResponse {
@@ -269,7 +269,7 @@ where
                 | FileStorageWriteError::FailedToGetStoredChunksCount => {
                     // This internal error should not happen.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests {
+                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                             file_key_responses_input: bounded_vec![(
                                 bucket_id,
                                 MspStorageRequestResponse {
@@ -304,7 +304,7 @@ where
                     // This should never happen, given that the first check in the handler is verifying the proof.
                     // This means that something is seriously wrong, so we error out the whole task.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests {
+                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                             file_key_responses_input: bounded_vec![(
                                 bucket_id,
                                 MspStorageRequestResponse {
@@ -339,7 +339,7 @@ where
                     // This should never happen for a well constructed trie.
                     // This means that something is seriously wrong, so we error out the whole task.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests {
+                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                             file_key_responses_input: bounded_vec![(
                                 bucket_id,
                                 MspStorageRequestResponse {
@@ -383,7 +383,7 @@ where
 /// immidiately rejected if the MSP cannot store the file (e.g. not enough capacity). However, this event
 /// is able to respond to storage requests that are either being accepted or rejected either way.
 ///
-/// The MSP will call the `msp_respond_storage_requests` extrinsic on the FileSystem pallet to respond to the
+/// The MSP will call the `msp_respond_storage_requests_multiple_buckets` extrinsic on the FileSystem pallet to respond to the
 /// storage requests.
 impl<FL, FSH> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<FL, FSH>
 where
@@ -549,7 +549,7 @@ where
         }
 
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_storage_requests {
+            pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                 file_key_responses_input: final_responses
                     .into_iter()
                     .collect::<Vec<_>>()
@@ -722,7 +722,7 @@ where
 
                 // Build extrinsic.
                 let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                    pallet_file_system::Call::msp_respond_storage_requests {
+                    pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                         file_key_responses_input: bounded_vec![(
                             H256(metadata.bucket_id.try_into().map_err(|e| {
                                 let err_msg =

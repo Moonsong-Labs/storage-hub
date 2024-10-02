@@ -3152,7 +3152,7 @@ declare const _default: {
       bsp_add_data_server_for_move_bucket_request: {
         bucketId: string;
       };
-      msp_respond_storage_requests: {
+      msp_respond_storage_requests_multiple_buckets: {
         fileKeyResponsesInput: string;
       };
       bsp_volunteer: {

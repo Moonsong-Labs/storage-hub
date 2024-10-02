@@ -4011,8 +4011,8 @@ declare module "@polkadot/types/lookup" {
     readonly asBspAddDataServerForMoveBucketRequest: {
       readonly bucketId: H256;
     } & Struct;
-    readonly isMspRespondStorageRequests: boolean;
-    readonly asMspRespondStorageRequests: {
+    readonly isMspRespondStorageRequestsMultipleBuckets: boolean;
+    readonly asMspRespondStorageRequestsMultipleBuckets: {
       readonly fileKeyResponsesInput: Vec<
         ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>
       >;
@@ -4082,7 +4082,7 @@ declare module "@polkadot/types/lookup" {
       | "IssueStorageRequest"
       | "RevokeStorageRequest"
       | "BspAddDataServerForMoveBucketRequest"
-      | "MspRespondStorageRequests"
+      | "MspRespondStorageRequestsMultipleBuckets"
       | "BspVolunteer"
       | "BspConfirmStoring"
       | "BspRequestStopStoring"

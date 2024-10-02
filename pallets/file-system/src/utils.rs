@@ -620,7 +620,7 @@ where
     ///
     /// All file keys will be processed (unless there are duplicates, they are simply skipped) and any errors
     /// while processing them will be marked as a failed key and continue processing the rest. It is up to the
-    /// caller verify the final result and apply the only the file keys that have successfully been accepted or rejected.
+    /// caller to verify the final result and apply only the file keys that have been successfully accepted.
     pub(crate) fn do_msp_respond_storage_request(
         sender: T::AccountId,
         file_key_responses_input: FileKeyResponsesInput<T>,
