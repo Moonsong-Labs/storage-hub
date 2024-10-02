@@ -266,7 +266,7 @@ impl pallet_storage_providers::Config for Test {
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;

@@ -247,7 +247,7 @@ impl crate::Config for Test {
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -368,13 +368,15 @@ pub fn _new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub mod accounts {
-    pub const ALICE: (u64, u128) = (0, 5_000_000);
-    pub const BOB: (u64, u128) = (1, 10_000_000);
-    pub const CHARLIE: (u64, u128) = (2, 20_000_000);
-    pub const DAVID: (u64, u128) = (3, 30_000_000);
-    pub const EVE: (u64, u128) = (4, 400_000_000);
-    pub const FERDIE: (u64, u128) = (5, 5_000_000_000);
-    pub const GEORGE: (u64, u128) = (6, 600_000_000_000);
+    use super::UNITS;
+
+    pub const ALICE: (u64, u128) = (0, 5_000_000 * UNITS);
+    pub const BOB: (u64, u128) = (1, 10_000_000 * UNITS);
+    pub const CHARLIE: (u64, u128) = (2, 20_000_000 * UNITS);
+    pub const DAVID: (u64, u128) = (3, 30_000_000 * UNITS);
+    pub const EVE: (u64, u128) = (4, 400_000_000 * UNITS);
+    pub const FERDIE: (u64, u128) = (5, 5_000_000_000 * UNITS);
+    pub const GEORGE: (u64, u128) = (6, 600_000_000_000 * UNITS);
 }
 
 // Externalities builder with predefined balances for accounts and starting at block number 1

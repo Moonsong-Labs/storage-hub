@@ -473,6 +473,9 @@ pub trait ReadChallengeableProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Get the minimum stake for a registered challengeable Provider.
+    fn get_min_stake() -> <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance;
 }
 
 /// A trait to mutate the state of challengeable Providers, such as updating their root.
