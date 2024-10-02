@@ -2,7 +2,7 @@ CREATE TABLE paymentstream (
     id SERIAL PRIMARY KEY,
     account VARCHAR NOT NULL,
     provider VARCHAR NOT NULL,
-    total_amount_paid NUMERIC DEFAULT 0
+    total_amount_paid NUMERIC(38, 0) NOT NULL DEFAULT 0
 );
 
 -- Create an index on the account column for faster lookups

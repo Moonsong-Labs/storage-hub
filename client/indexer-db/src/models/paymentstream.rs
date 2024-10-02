@@ -1,5 +1,6 @@
-use bigdecimal::num_bigint::BigUint;
+use bigdecimal::BigDecimal;
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 
 use crate::{schema::paymentstream, DbConnection};
 
@@ -13,20 +14,21 @@ pub struct PaymentStream {
     // ID of the payee (msp or bsp)
     pub provider: String,
     // Total amount already paid to this provider from this account for this payment stream
-    pub total_amount_paid: BigUint,
+    pub total_amount_paid: BigDecimal,
 }
 
 impl PaymentStream {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        account: impl Into<String>,
-        provider: impl Into<String>,
+        account: String,
+        provider: String,
     ) -> Result<Self, diesel::result::Error> {
         let ps = diesel::insert_into(paymentstream::table)
             .values((
                 paymentstream::account.eq(account),
                 paymentstream::provider.eq(provider),
             ))
+            .returning(PaymentStream::as_select())
             .get_result(conn)
             .await?;
         Ok(ps)
@@ -39,10 +41,11 @@ impl PaymentStream {
     ) -> Result<Self, diesel::result::Error> {
         // Looking by a payment stream by provider and the account associated
         let ps = paymentstream::table
-            .filter((
-                paymentstream::account.eq(account),
-                paymentstream::provider.eq(provider),
-            ))
+            .filter(
+                paymentstream::account
+                    .eq(account)
+                    .and(paymentstream::provider.eq(provider)),
+            )
             .first(conn)
             .await?;
         Ok(ps)
@@ -51,13 +54,13 @@ impl PaymentStream {
     pub async fn update_total_amount<'a>(
         conn: &mut DbConnection<'a>,
         ps_id: i32,
-        new_total_amount: BigUint,
-    ) -> Result<Self, diesel::result::Error> {
-        let ps = diesel::update(paymentstream::table)
+        new_total_amount: BigDecimal,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(paymentstream::table)
             .filter(paymentstream::id.eq(ps_id))
             .set(paymentstream::total_amount_paid.eq(new_total_amount))
             .execute(conn)
             .await?;
-        Ok(ps)
+        Ok(())
     }
 }

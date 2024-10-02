@@ -65,7 +65,7 @@ diesel::table! {
         id -> Int4,
         account -> Varchar,
         provider -> Varchar,
-        total_amount_paid -> Nullable<Numeric>,
+        total_amount_paid -> Numeric,
     }
 }
 
