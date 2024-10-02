@@ -61,6 +61,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    paymentstream (id) {
+        id -> Int4,
+        account -> Varchar,
+        provider -> Varchar,
+        total_amount -> Nullable<Numeric>,
+    }
+}
+
+diesel::table! {
     service_state (id) {
         id -> Int4,
         last_processed_block -> Int8,
@@ -82,5 +91,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     msp,
     msp_multiaddress,
     multiaddress,
+    paymentstream,
     service_state,
 );
