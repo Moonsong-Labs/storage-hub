@@ -1,7 +1,4 @@
-use crate::{
-    configs::{MinChallengePeriod, SpMinDeposit},
-    Balance, BlockNumber, Runtime, UNIT,
-};
+use crate::{configs::SpMinDeposit, Balance, BlockNumber, Runtime, UNIT};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
@@ -32,6 +29,10 @@ pub mod dynamic_params {
         .expect(
             "StakeToChallengePeriod / SpMinDeposit should be a number of ticks that can fit in BlockNumber numerical type",
         );
+
+        #[codec(index = 3)]
+        #[allow(non_upper_case_globals)]
+        pub static MinChallengePeriod: BlockNumber = 30;
     }
 }
 

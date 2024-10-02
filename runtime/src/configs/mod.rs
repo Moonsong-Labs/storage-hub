@@ -539,7 +539,6 @@ parameter_types! {
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
@@ -572,7 +571,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod =
         runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
-    type MinChallengePeriod = MinChallengePeriod;
+    type MinChallengePeriod = runtime_params::dynamic_params::runtime_config::MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
