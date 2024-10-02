@@ -239,7 +239,7 @@ impl IndexerService {
 
     async fn index_payment_streams_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
@@ -248,7 +248,8 @@ impl IndexerService {
                 user_account,
                 amount_provided,
             } => {
-                PaymentStream::create(conn, provider_id, user_account).await?;
+                PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
+                    .await?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
                 // Currently we are not treating the info of dynamic rate update
@@ -259,7 +260,8 @@ impl IndexerService {
                 user_account,
                 rate,
             } => {
-                PaymentStream::create(conn, provider_id, user_account).await?;
+                PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
+                    .await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
                 // Currently we are not treating the info of fixed rate update
