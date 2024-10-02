@@ -147,6 +147,7 @@ impl IndexerService {
             RuntimeEvent::CumulusXcm(_) => {}
             RuntimeEvent::MessageQueue(_) => {}
             RuntimeEvent::Nfts(_) => {}
+            RuntimeEvent::Parameters(_) => {}
         }
 
         Ok(())
