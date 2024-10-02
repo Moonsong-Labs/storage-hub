@@ -193,6 +193,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
     //   RuntimeConfig: Enum {
     //     SlashAmountPerMaxFileSize: [null, {VALUE_YOU_WANT}],
     //     StakeToChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //     CheckpointChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //     MinChallengePeriod: [null, {VALUE_YOU_WANT}],
     //   }
     // }
     const slashAmountPerMaxFileSizeRuntimeParameter = {
@@ -214,6 +216,24 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
       userApi.tx.sudo.sudo(
         userApi.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter)
       )
+    );
+    const checkpointChallengePeriodRuntimeParameter = {
+      RuntimeConfig: {
+        CheckpointChallengePeriod: [null, 10]
+      }
+    };
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(
+        userApi.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter)
+      )
+    );
+    const minChallengePeriodRuntimeParameter = {
+      RuntimeConfig: {
+        MinChallengePeriod: [null, 5]
+      }
+    };
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))
     );
 
     // Make BSP
