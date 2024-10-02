@@ -26,6 +26,34 @@ services:
         "--sealing=manual",
         "--base-path=/data",
       ]
+  sh-msp:
+    image: storage-hub:local
+    container_name: docker-sh-msp-1
+    platform: linux/amd64
+    ports:
+      - "9777:9944"
+      - "30555:30350"
+    volumes:
+      - ./dev-keystores/msp:/keystore:rw
+    command:
+      [
+        "--dev",
+        "--provider",
+        "--provider-type=msp",
+        "--max-storage-capacity=4294967295",
+        "--jump-capacity=1073741824",
+        "--name=sh-msp",
+        "--no-hardware-benchmarks",
+        "--unsafe-rpc-external",
+        "--rpc-methods=unsafe",
+        "--port=30350",
+        "--rpc-cors=all",
+        "--node-key=${NODE_KEY}",
+        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
+        "--keystore-path=/keystore",
+        "--sealing=manual",
+        "--base-path=/data",
+      ]
   sh-user:
     image: storage-hub:local
     platform: linux/amd64

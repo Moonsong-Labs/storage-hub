@@ -26,6 +26,20 @@ const FILE_SYSTEM_V1 = {
       }
     ],
     type: "Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>"
+  },
+  query_msp_confirm_chunks_to_prove_for_file: {
+    description: "Query the chunks that a MSP needs to prove to confirm that it is storing a file.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      },
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>"
   }
 };
 const PROOFS_DEALER_V1 = {
@@ -187,6 +201,16 @@ const STORAGE_PROVIDERS_V1 = {
       }
     ],
     type: "Result<BlockNumber, QueryEarliestChangeCapacityBlockError>"
+  },
+  query_msp_id_of_bucket_id: {
+    description: "Query the MSP ID of a bucket ID.",
+    params: [
+      {
+        name: "bucketId",
+        type: "H256"
+      }
+    ],
+    type: "Result<ProviderId, QueryMspIdOfBucketIdError>"
   }
 };
 const PAYMENT_STREAMS_V1 = {

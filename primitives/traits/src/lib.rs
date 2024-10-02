@@ -136,6 +136,9 @@ pub trait ReadBucketsInterface {
     /// Get the root of a bucket.
     fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash>;
 
+    /// Get the bucket owner.
+    fn get_bucket_owner(bucket_id: &Self::BucketId) -> Result<Self::AccountId, DispatchError>;
+
     /// Get bucket size.
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError>;
 
@@ -671,6 +674,9 @@ pub trait ProofsDealerInterface {
         + AsRef<[u8]>
         + AsMut<[u8]>
         + MaxEncodedLen
+        + PartialEq
+        + Eq
+        + Clone
         + FullCodec;
     /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
     type MerkleHashing: Hash<Output = Self::MerkleHash>;

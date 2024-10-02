@@ -213,10 +213,10 @@ impl IndexerService {
             }
             pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
             pallet_file_system::Event::BspConfirmedStoring { .. } => {}
+            pallet_file_system::Event::MspRespondedToStorageRequests { .. } => {}
             pallet_file_system::Event::NewStorageRequest { .. } => {}
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
-            pallet_file_system::Event::MspAcceptedStoring { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
             pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
             pallet_file_system::Event::StorageRequestExpired { .. } => {}

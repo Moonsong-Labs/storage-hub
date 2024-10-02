@@ -649,6 +649,7 @@ impl pallet_file_system::Config for Runtime {
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;

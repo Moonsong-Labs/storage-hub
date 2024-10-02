@@ -5,6 +5,7 @@ use serde_json::Number;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
@@ -12,12 +13,12 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId, TickNumber,
-    TrieRemoveMutation,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProviderId,
+    RandomnessOutput, StorageProviderId, TickNumber, TrieRemoveMutation,
 };
 use sp_api::ApiError;
 use sp_core::H256;
@@ -27,7 +28,7 @@ use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RetryStrategy,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest, RetryStrategy,
         StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
     },
 };
@@ -81,12 +82,23 @@ pub enum BlockchainServiceCommand {
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
     },
+    QueryMspConfirmChunksToProveForFile {
+        msp_id: ProviderId,
+        file_key: H256,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
+        >,
+    },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    QueueMspRespondStorageRequest {
+        request: RespondStorageRequest,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
     QueueStopStoringForInsolventUserRequest {
@@ -158,6 +170,11 @@ pub enum BlockchainServiceCommand {
         provider_id: ProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Option<Balance>>>,
     },
+    QueryMspIdOfBucketId {
+        bucket_id: BucketId,
+        callback:
+            tokio::sync::oneshot::Sender<Result<MainStorageProviderId, QueryMspIdOfBucketIdError>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -208,10 +225,17 @@ pub trait BlockchainServiceInterface {
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 
-    // Queue a SubmitProofRequest to be processed.
+    /// Query the chunks that a MSP needs to confirm for a file.
+    async fn query_msp_confirm_chunks_to_prove_for_file(
+        &self,
+        msp_id: ProviderId,
+        file_key: H256,
+    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
+
+    /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
 
-    // Queue a ConfirmBspRequest to be processed.
+    /// Queue a ConfirmBspRequest to be processed.
     async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()>;
 
     // Queue a BspStopStoringForInsolventUserRequest to be processed.
@@ -219,6 +243,10 @@ pub trait BlockchainServiceInterface {
         &self,
         request: StopStoringForInsolventUserRequest,
     ) -> Result<()>;
+
+    /// Queue a RespondStoringRequest to be processed.
+    async fn queue_msp_respond_storage_request(&self, request: RespondStorageRequest)
+        -> Result<()>;
 
     /// Query the challenges that a Provider needs to submit for a given seed.
     async fn query_challenges_from_seed(
@@ -311,6 +339,12 @@ pub trait BlockchainServiceInterface {
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
         retry_strategy: RetryStrategy,
     ) -> Result<()>;
+
+    /// Helper function to get the MSP ID of a bucket ID.
+    async fn query_msp_id_of_bucket_id(
+        &self,
+        bucket_id: BucketId,
+    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -436,6 +470,22 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
+    async fn query_msp_confirm_chunks_to_prove_for_file(
+        &self,
+        msp_id: ProviderId,
+        file_key: H256,
+    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryMspConfirmChunksToProveForFile {
+            msp_id,
+            file_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueueSubmitProofRequest { request, callback };
@@ -446,6 +496,16 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueueConfirmBspRequest { request, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn queue_msp_respond_storage_request(
+        &self,
+        request: RespondStorageRequest,
+    ) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
@@ -686,5 +746,18 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         }
 
         Ok(())
+    }
+
+    async fn query_msp_id_of_bucket_id(
+        &self,
+        bucket_id: BucketId,
+    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryMspIdOfBucketId {
+            bucket_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 }
