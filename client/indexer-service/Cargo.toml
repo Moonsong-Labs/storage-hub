@@ -67,3 +67,5 @@ pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
+pallet-bucket-nfts = { workspace = true }
+pallet-randomness = { workspace = true }

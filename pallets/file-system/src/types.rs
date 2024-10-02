@@ -11,6 +11,7 @@ use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
 use shp_traits::ReadProvidersInterface;
 use sp_runtime::{traits::CheckedAdd, DispatchError};
+use sp_std::fmt::Debug;
 
 use crate::{
     Config, Error, FileDeletionRequestExpirations, MoveBucketRequestExpirations,
@@ -96,6 +97,131 @@ impl<T: Config> StorageRequestMetadata<T> {
             fingerprint: self.fingerprint.as_ref().into(),
         }
     }
+}
+
+/// Possible MSP responses to a storage request.  
+///  
+/// Contains two lists: one for accepted storage requests and one for rejected  
+/// storage requests, and either of them can be `None` if there are no accepted/rejected  
+/// storage requests.  
+///  
+/// Accepted storage requests come bundled into a [`AcceptedStorageRequestParameters`].  
+/// Rejected storage requests are represented by a list of tuples, where the first element  
+/// is the rejected file key and the second element is the reason for rejection as a  
+/// [`RejectedStorageRequestReason`].
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MspStorageRequestResponse<T: Config> {
+    pub accept: Option<AcceptedStorageRequestParameters<T>>,
+    /// Reject the storage request. (file_key, reason)
+    pub reject: Option<
+        BoundedVec<
+            (MerkleHash<T>, RejectedStorageRequestReason),
+            MaxBatchMspRespondStorageRequests<T>,
+        >,
+    >,
+}
+
+impl<T: Config> Debug for MspStorageRequestResponse<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "MspStorageRequestResponse(accept: {:?}, reject: {:?})",
+            self.accept.encode(),
+            self.reject.encode()
+        )
+    }
+}
+
+/// A bundle of file keys that have been accepted by an MSP, alongside the proofs required to  
+/// add these file keys into the corresponding bucket.  
+///  
+/// This struct includes a list of file keys and their corresponding key proofs (i.e. the  
+/// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to  
+/// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,  
+/// and add them now. One single non-inclusion forest proof for all the file keys is sufficient.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct AcceptedStorageRequestParameters<T: Config> {
+    pub file_keys_and_proofs:
+        BoundedVec<(MerkleHash<T>, KeyProof<T>), MaxBatchMspRespondStorageRequests<T>>,
+    pub non_inclusion_forest_proof: ForestProof<T>,
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+pub enum RejectedStorageRequestReason {
+    ReachedMaximumCapacity,
+    ReceivedInvalidProof,
+    InternalError,
+}
+
+/// Input for MSPs to respond to storage request(s).
+///
+/// The input is a list of ([BucketIdFor], [MspStorageRequestResponse]) elements,
+/// where the [MspStorageRequestResponse] contains the file keys that are accepted
+/// or rejected by the MSP.
+pub type FileKeyResponsesInput<T> = BoundedVec<
+    (BucketIdFor<T>, MspStorageRequestResponse<T>),
+    MaxBatchMspRespondStorageRequests<T>,
+>;
+
+/// Result from an MSP responding to storage request(s).
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MspRespondStorageRequestsResult<T: Config> {
+    pub msp_id: ProviderIdFor<T>,
+    pub responses: BoundedVec<BatchResponses<T>, MaxBatchMspRespondStorageRequests<T>>,
+}
+
+impl<T: Config> Debug for MspRespondStorageRequestsResult<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "MspRespondStorageRequestsResult(msp_id: {:?}, responses: {:?})",
+            self.msp_id,
+            self.responses.encode()
+        )
+    }
+}
+
+/// Possible response batches for an MSP accepting, rejecting, or failing to respond to storage requests.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum BatchResponses<T: Config> {
+    Accepted(MspAcceptedBatchStorageRequests<T>),
+    Rejected(MspRejectedBatchStorageRequests<T>),
+    Failed(MspFailedBatchStorageRequests<T>),
+}
+
+/// Batch of accepted storage requests (i.e. file keys) all belonging to the same bucket.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MspAcceptedBatchStorageRequests<T: Config> {
+    pub file_keys: BoundedVec<MerkleHash<T>, MaxBatchMspRespondStorageRequests<T>>,
+    pub bucket_id: BucketIdFor<T>,
+    pub new_bucket_root: MerkleHash<T>,
+    pub owner: T::AccountId,
+}
+
+/// Batch of rejected storage requests (i.e. file keys) all belonging to the same bucket.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MspRejectedBatchStorageRequests<T: Config> {
+    pub file_keys: BoundedVec<
+        (MerkleHash<T>, RejectedStorageRequestReason),
+        MaxBatchMspRespondStorageRequests<T>,
+    >,
+    pub bucket_id: BucketIdFor<T>,
+    pub owner: T::AccountId,
+}
+
+/// Batch of failed storage requests (i.e. file keys) all belonging to the same bucket.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MspFailedBatchStorageRequests<T: Config> {
+    pub file_keys: BoundedVec<(MerkleHash<T>, DispatchError), MaxBatchMspRespondStorageRequests<T>>,
+    pub bucket_id: BucketIdFor<T>,
+    pub owner: T::AccountId,
 }
 
 /// Ephemeral BSP storage request tracking metadata.
@@ -210,6 +336,26 @@ pub struct MoveBucketRequestMetadata<T: Config> {
     pub requester: T::AccountId,
 }
 
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum EitherAccountIdOrMspId<T: Config> {
+    AccountId(T::AccountId),
+    MspId(ProviderIdFor<T>),
+}
+
+impl<T: Config> Debug for EitherAccountIdOrMspId<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            EitherAccountIdOrMspId::AccountId(account_id) => {
+                write!(f, "AccountId({:?})", account_id)
+            }
+            EitherAccountIdOrMspId::MspId(provider_id) => {
+                write!(f, "MspId({:?})", provider_id)
+            }
+        }
+    }
+}
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
@@ -228,6 +374,13 @@ pub type FileKeyHasher<T> =
 
 /// Alias for the `MaxBspsPerStorageRequest` type used in the FileSystem pallet.
 pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
+
+/// Alias for the `MaxBatchConfirmStorageRequests` type used in the FileSystem pallet.
+pub type MaxBatchConfirmStorageRequests<T> = <T as crate::Config>::MaxBatchConfirmStorageRequests;
+
+/// Alias for the `MaxBatchMspRespondStorageRequests` type used in the FileSystem pallet.
+pub type MaxBatchMspRespondStorageRequests<T> =
+    <T as crate::Config>::MaxBatchMspRespondStorageRequests;
 
 /// Alias for the `MaxFilePathSize` type used in the FileSystem pallet.
 pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;

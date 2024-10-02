@@ -35,7 +35,7 @@ docker compose -f ../../docker/local-dev-postgres.yml up
 5. Export the database URL to the environment:
 
 ```sh
-export DATABASE_URL="postgresql://superuser:superpassword@localhost:5432/postgres"
+export DATABASE_URL="postgresql://superuser:superpassword@localhost:5432/shc-indexer"
 ```
 
 6. Setup the database:

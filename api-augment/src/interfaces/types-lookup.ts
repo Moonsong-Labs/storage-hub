@@ -1800,6 +1800,7 @@ declare module "@polkadot/types/lookup" {
     readonly isMspSignUpSuccess: boolean;
     readonly asMspSignUpSuccess: {
       readonly who: AccountId32;
+      readonly mspId: H256;
       readonly multiaddresses: Vec<Bytes>;
       readonly capacity: u64;
       readonly valueProp: PalletStorageProvidersValueProposition;
@@ -1813,6 +1814,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspSignUpSuccess: boolean;
     readonly asBspSignUpSuccess: {
       readonly who: AccountId32;
+      readonly bspId: H256;
       readonly multiaddresses: Vec<Bytes>;
       readonly capacity: u64;
     } & Struct;
@@ -1823,14 +1825,17 @@ declare module "@polkadot/types/lookup" {
     readonly isMspSignOffSuccess: boolean;
     readonly asMspSignOffSuccess: {
       readonly who: AccountId32;
+      readonly mspId: H256;
     } & Struct;
     readonly isBspSignOffSuccess: boolean;
     readonly asBspSignOffSuccess: {
       readonly who: AccountId32;
+      readonly bspId: H256;
     } & Struct;
     readonly isCapacityChanged: boolean;
     readonly asCapacityChanged: {
       readonly who: AccountId32;
+      readonly providerId: PalletStorageProvidersStorageProviderId;
       readonly oldCapacity: u64;
       readonly newCapacity: u64;
       readonly nextBlockWhenChangeAllowed: u32;
@@ -1859,7 +1864,16 @@ declare module "@polkadot/types/lookup" {
     readonly protocols: Vec<Bytes>;
   }
 
-  /** @name PalletFileSystemEvent (130) */
+  /** @name PalletStorageProvidersStorageProviderId (130) */
+  interface PalletStorageProvidersStorageProviderId extends Enum {
+    readonly isBackupStorageProvider: boolean;
+    readonly asBackupStorageProvider: H256;
+    readonly isMainStorageProvider: boolean;
+    readonly asMainStorageProvider: H256;
+    readonly type: "BackupStorageProvider" | "MainStorageProvider";
+  }
+
+  /** @name PalletFileSystemEvent (131) */
   interface PalletFileSystemEvent extends Enum {
     readonly isNewBucket: boolean;
     readonly asNewBucket: {
@@ -1899,13 +1913,9 @@ declare module "@polkadot/types/lookup" {
       readonly size_: u64;
       readonly peerIds: Vec<Bytes>;
     } & Struct;
-    readonly isMspAcceptedStoring: boolean;
-    readonly asMspAcceptedStoring: {
-      readonly fileKey: H256;
-      readonly mspId: H256;
-      readonly bucketId: H256;
-      readonly owner: AccountId32;
-      readonly newBucketRoot: H256;
+    readonly isMspRespondedToStorageRequests: boolean;
+    readonly asMspRespondedToStorageRequests: {
+      readonly results: PalletFileSystemMspRespondStorageRequestsResult;
     } & Struct;
     readonly isAcceptedBspVolunteer: boolean;
     readonly asAcceptedBspVolunteer: {
@@ -1951,7 +1961,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isPriorityChallengeForFileDeletionQueued: boolean;
     readonly asPriorityChallengeForFileDeletionQueued: {
-      readonly user: AccountId32;
+      readonly issuer: PalletFileSystemEitherAccountIdOrMspId;
       readonly fileKey: H256;
     } & Struct;
     readonly isSpStopStoringInsolventUser: boolean;
@@ -2014,7 +2024,7 @@ declare module "@polkadot/types/lookup" {
       | "BucketPrivacyUpdated"
       | "NewCollectionAndAssociation"
       | "NewStorageRequest"
-      | "MspAcceptedStoring"
+      | "MspRespondedToStorageRequests"
       | "AcceptedBspVolunteer"
       | "BspConfirmedStoring"
       | "StorageRequestFulfilled"
@@ -2034,7 +2044,63 @@ declare module "@polkadot/types/lookup" {
       | "DataServerRegisteredForMoveBucket";
   }
 
-  /** @name PalletProofsDealerEvent (135) */
+  /** @name PalletFileSystemMspRespondStorageRequestsResult (134) */
+  interface PalletFileSystemMspRespondStorageRequestsResult extends Struct {
+    readonly mspId: H256;
+    readonly responses: Vec<PalletFileSystemBatchResponses>;
+  }
+
+  /** @name PalletFileSystemBatchResponses (136) */
+  interface PalletFileSystemBatchResponses extends Enum {
+    readonly isAccepted: boolean;
+    readonly asAccepted: PalletFileSystemMspAcceptedBatchStorageRequests;
+    readonly isRejected: boolean;
+    readonly asRejected: PalletFileSystemMspRejectedBatchStorageRequests;
+    readonly isFailed: boolean;
+    readonly asFailed: PalletFileSystemMspFailedBatchStorageRequests;
+    readonly type: "Accepted" | "Rejected" | "Failed";
+  }
+
+  /** @name PalletFileSystemMspAcceptedBatchStorageRequests (137) */
+  interface PalletFileSystemMspAcceptedBatchStorageRequests extends Struct {
+    readonly fileKeys: Vec<H256>;
+    readonly bucketId: H256;
+    readonly newBucketRoot: H256;
+    readonly owner: AccountId32;
+  }
+
+  /** @name PalletFileSystemMspRejectedBatchStorageRequests (140) */
+  interface PalletFileSystemMspRejectedBatchStorageRequests extends Struct {
+    readonly fileKeys: Vec<ITuple<[H256, PalletFileSystemRejectedStorageRequestReason]>>;
+    readonly bucketId: H256;
+    readonly owner: AccountId32;
+  }
+
+  /** @name PalletFileSystemRejectedStorageRequestReason (143) */
+  interface PalletFileSystemRejectedStorageRequestReason extends Enum {
+    readonly isReachedMaximumCapacity: boolean;
+    readonly isReceivedInvalidProof: boolean;
+    readonly isInternalError: boolean;
+    readonly type: "ReachedMaximumCapacity" | "ReceivedInvalidProof" | "InternalError";
+  }
+
+  /** @name PalletFileSystemMspFailedBatchStorageRequests (145) */
+  interface PalletFileSystemMspFailedBatchStorageRequests extends Struct {
+    readonly fileKeys: Vec<ITuple<[H256, SpRuntimeDispatchError]>>;
+    readonly bucketId: H256;
+    readonly owner: AccountId32;
+  }
+
+  /** @name PalletFileSystemEitherAccountIdOrMspId (150) */
+  interface PalletFileSystemEitherAccountIdOrMspId extends Enum {
+    readonly isAccountId: boolean;
+    readonly asAccountId: AccountId32;
+    readonly isMspId: boolean;
+    readonly asMspId: H256;
+    readonly type: "AccountId" | "MspId";
+  }
+
+  /** @name PalletProofsDealerEvent (151) */
   interface PalletProofsDealerEvent extends Enum {
     readonly isNewChallenge: boolean;
     readonly asNewChallenge: {
@@ -2094,30 +2160,30 @@ declare module "@polkadot/types/lookup" {
       | "ChallengesTickerSet";
   }
 
-  /** @name PalletProofsDealerProof (136) */
+  /** @name PalletProofsDealerProof (152) */
   interface PalletProofsDealerProof extends Struct {
     readonly forestProof: SpTrieStorageProofCompactProof;
     readonly keyProofs: BTreeMap<H256, PalletProofsDealerKeyProof>;
   }
 
-  /** @name SpTrieStorageProofCompactProof (137) */
+  /** @name SpTrieStorageProofCompactProof (153) */
   interface SpTrieStorageProofCompactProof extends Struct {
     readonly encodedNodes: Vec<Bytes>;
   }
 
-  /** @name PalletProofsDealerKeyProof (140) */
+  /** @name PalletProofsDealerKeyProof (156) */
   interface PalletProofsDealerKeyProof extends Struct {
     readonly proof: ShpFileKeyVerifierFileKeyProof;
     readonly challengeCount: u32;
   }
 
-  /** @name ShpFileKeyVerifierFileKeyProof (141) */
+  /** @name ShpFileKeyVerifierFileKeyProof (157) */
   interface ShpFileKeyVerifierFileKeyProof extends Struct {
     readonly fileMetadata: ShpFileMetadataFileMetadata;
     readonly proof: SpTrieStorageProofCompactProof;
   }
 
-  /** @name ShpFileMetadataFileMetadata (142) */
+  /** @name ShpFileMetadataFileMetadata (158) */
   interface ShpFileMetadataFileMetadata extends Struct {
     readonly owner: Bytes;
     readonly bucketId: Bytes;
@@ -2126,13 +2192,13 @@ declare module "@polkadot/types/lookup" {
     readonly fingerprint: ShpFileMetadataFingerprint;
   }
 
-  /** @name ShpFileMetadataFingerprint (143) */
+  /** @name ShpFileMetadataFingerprint (159) */
   interface ShpFileMetadataFingerprint extends U8aFixed {}
 
-  /** @name ShpTraitsTrieRemoveMutation (149) */
+  /** @name ShpTraitsTrieRemoveMutation (165) */
   type ShpTraitsTrieRemoveMutation = Null;
 
-  /** @name PalletRandomnessEvent (153) */
+  /** @name PalletRandomnessEvent (169) */
   interface PalletRandomnessEvent extends Enum {
     readonly isNewOneEpochAgoRandomnessAvailable: boolean;
     readonly asNewOneEpochAgoRandomnessAvailable: {
@@ -2143,7 +2209,7 @@ declare module "@polkadot/types/lookup" {
     readonly type: "NewOneEpochAgoRandomnessAvailable";
   }
 
-  /** @name PalletPaymentStreamsEvent (154) */
+  /** @name PalletPaymentStreamsEvent (170) */
   interface PalletPaymentStreamsEvent extends Enum {
     readonly isFixedRatePaymentStreamCreated: boolean;
     readonly asFixedRatePaymentStreamCreated: {
@@ -2217,7 +2283,7 @@ declare module "@polkadot/types/lookup" {
       | "UserSolvent";
   }
 
-  /** @name PalletBucketNftsEvent (155) */
+  /** @name PalletBucketNftsEvent (171) */
   interface PalletBucketNftsEvent extends Enum {
     readonly isAccessShared: boolean;
     readonly asAccessShared: {
@@ -2239,7 +2305,7 @@ declare module "@polkadot/types/lookup" {
     readonly type: "AccessShared" | "ItemReadAccessUpdated" | "ItemBurned";
   }
 
-  /** @name PalletNftsEvent (156) */
+  /** @name PalletNftsEvent (172) */
   interface PalletNftsEvent extends Enum {
     readonly isCreated: boolean;
     readonly asCreated: {
@@ -2514,7 +2580,7 @@ declare module "@polkadot/types/lookup" {
       | "PalletAttributeSet";
   }
 
-  /** @name PalletNftsAttributeNamespace (160) */
+  /** @name PalletNftsAttributeNamespace (176) */
   interface PalletNftsAttributeNamespace extends Enum {
     readonly isPallet: boolean;
     readonly isCollectionOwner: boolean;
@@ -2524,20 +2590,20 @@ declare module "@polkadot/types/lookup" {
     readonly type: "Pallet" | "CollectionOwner" | "ItemOwner" | "Account";
   }
 
-  /** @name PalletNftsPriceWithDirection (162) */
+  /** @name PalletNftsPriceWithDirection (178) */
   interface PalletNftsPriceWithDirection extends Struct {
     readonly amount: u128;
     readonly direction: PalletNftsPriceDirection;
   }
 
-  /** @name PalletNftsPriceDirection (163) */
+  /** @name PalletNftsPriceDirection (179) */
   interface PalletNftsPriceDirection extends Enum {
     readonly isSend: boolean;
     readonly isReceive: boolean;
     readonly type: "Send" | "Receive";
   }
 
-  /** @name PalletNftsPalletAttributes (164) */
+  /** @name PalletNftsPalletAttributes (180) */
   interface PalletNftsPalletAttributes extends Enum {
     readonly isUsedToClaim: boolean;
     readonly asUsedToClaim: u32;
@@ -3995,11 +4061,11 @@ declare module "@polkadot/types/lookup" {
     readonly asBspAddDataServerForMoveBucketRequest: {
       readonly bucketId: H256;
     } & Struct;
-    readonly isMspAcceptStorageRequest: boolean;
-    readonly asMspAcceptStorageRequest: {
-      readonly fileKey: H256;
-      readonly fileProof: ShpFileKeyVerifierFileKeyProof;
-      readonly nonInclusionForestProof: SpTrieStorageProofCompactProof;
+    readonly isMspRespondStorageRequestsMultipleBuckets: boolean;
+    readonly asMspRespondStorageRequestsMultipleBuckets: {
+      readonly fileKeyResponsesInput: Vec<
+        ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>
+      >;
     } & Struct;
     readonly isBspVolunteer: boolean;
     readonly asBspVolunteer: {
@@ -4066,7 +4132,7 @@ declare module "@polkadot/types/lookup" {
       | "IssueStorageRequest"
       | "RevokeStorageRequest"
       | "BspAddDataServerForMoveBucketRequest"
-      | "MspAcceptStorageRequest"
+      | "MspRespondStorageRequestsMultipleBuckets"
       | "BspVolunteer"
       | "BspConfirmStoring"
       | "BspRequestStopStoring"
@@ -5066,6 +5132,10 @@ declare module "@polkadot/types/lookup" {
     readonly isBspAlreadyDataServer: boolean;
     readonly isBspDataServersExceeded: boolean;
     readonly isFileMetadataProcessingQueueFull: boolean;
+    readonly isTooManyBatchResponses: boolean;
+    readonly isTooManyStorageRequestResponses: boolean;
+    readonly isInvalidBucketIdFileKeyPair: boolean;
+    readonly isInconsistentStateKeyAlreadyExists: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5123,7 +5193,11 @@ declare module "@polkadot/types/lookup" {
       | "BucketIsBeingMoved"
       | "BspAlreadyDataServer"
       | "BspDataServersExceeded"
-      | "FileMetadataProcessingQueueFull";
+      | "FileMetadataProcessingQueueFull"
+      | "TooManyBatchResponses"
+      | "TooManyStorageRequestResponses"
+      | "InvalidBucketIdFileKeyPair"
+      | "InconsistentStateKeyAlreadyExists";
   }
 
   /** @name PalletProofsDealerError (432) */

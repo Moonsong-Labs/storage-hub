@@ -45,7 +45,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{PaymentStreamsInterface, ProofSubmittersInterface};
+    use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
     use sp_runtime::traits::{Bounded, CheckedDiv};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -63,6 +63,12 @@ pub mod pallet {
             AccountId = Self::AccountId,
             ProviderId = HashId<Self>,
             Units = Self::StorageDataUnit,
+        >;
+
+        /// Trait that allows the pallet to manage generic file metadatas
+        type FileMetadataManager: FileMetadataInterface<
+            AccountId = Self::AccountId,
+            StorageDataUnit = Self::StorageDataUnit,
         >;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
@@ -92,11 +98,7 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact
             + Into<BalanceOf<Self>>
-            + Into<u64>
-            // Note: this is the same as just making it a u64, but since we need to interact with the FileMetadata type which is a u64,
-            // we kinda have no clean way to achieve this (at least, not one that comes to mind).
-            // TODO: Remove this and create a FileMetadata trait that implements `decode`, `encode`, `file_key` and `get_size`.
-            + From<u64>;
+            + Into<u64>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -395,6 +397,7 @@ pub mod pallet {
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
+            msp_id: MainStorageProviderId<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             capacity: StorageDataUnit<T>,
             value_prop: ValueProposition<T>,
@@ -412,6 +415,7 @@ pub mod pallet {
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
+            bsp_id: BackupStorageProviderId<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             capacity: StorageDataUnit<T>,
         },
@@ -422,16 +426,23 @@ pub mod pallet {
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
         /// that MSP's account id.
-        MspSignOffSuccess { who: T::AccountId },
+        MspSignOffSuccess {
+            who: T::AccountId,
+            msp_id: MainStorageProviderId<T>,
+        },
 
         /// Event emitted when a Backup Storage Provider has signed off successfully. Provides information about
         /// that BSP's account id.
-        BspSignOffSuccess { who: T::AccountId },
+        BspSignOffSuccess {
+            who: T::AccountId,
+            bsp_id: BackupStorageProviderId<T>,
+        },
 
         /// Event emitted when a SP has changed its capacity successfully. Provides information about
         /// that SP's account id, its old total data that could store, and the new total data.
         CapacityChanged {
             who: T::AccountId,
+            provider_id: StorageProviderId<T>,
             old_capacity: StorageDataUnit<T>,
             new_capacity: StorageDataUnit<T>,
             next_block_when_change_allowed: BlockNumberFor<T>,
@@ -750,10 +761,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_msp_sign_off(&who)?;
+            let msp_id = Self::do_msp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspSignOffSuccess { who });
+            Self::deposit_event(Event::<T>::MspSignOffSuccess { who, msp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -781,10 +792,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_bsp_sign_off(&who)?;
+            let bsp_id = Self::do_bsp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspSignOffSuccess { who });
+            Self::deposit_event(Event::<T>::BspSignOffSuccess { who, bsp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -824,11 +835,12 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            let old_capacity = Self::do_change_capacity(&who, new_capacity)?;
+            let (provider_id, old_capacity) = Self::do_change_capacity(&who, new_capacity)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::CapacityChanged {
                 who,
+                provider_id,
                 old_capacity,
                 new_capacity,
                 next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()

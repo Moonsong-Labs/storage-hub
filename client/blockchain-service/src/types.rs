@@ -7,11 +7,13 @@ use std::{
 
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
-use frame_system::EventRecord;
 use sp_core::H256;
 use sp_runtime::{AccountId32, DispatchError};
 
-use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMutation};
+use shc_common::types::{
+    BlockNumber, ProviderId, RandomnessOutput, RejectedStorageRequestReason, StorageHubEventsVec,
+    TrieRemoveMutation,
+};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -84,6 +86,33 @@ impl ConfirmStoringRequest {
     }
 }
 
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum MspRespondStorageRequest {
+    Accept,
+    Reject(RejectedStorageRequestReason),
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RespondStorageRequest {
+    pub file_key: H256,
+    pub response: MspRespondStorageRequest,
+    pub try_count: u32,
+}
+
+impl RespondStorageRequest {
+    pub fn new(file_key: H256, response: MspRespondStorageRequest) -> Self {
+        Self {
+            file_key,
+            response,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
 /// A struct that holds the information to stop storing all files from an insolvent user.
 /// (Which is only the user's account ID).
 ///
@@ -99,19 +128,6 @@ impl StopStoringForInsolventUserRequest {
     }
 }
 
-/// Type alias for the events vector.
-///
-/// The events vector is a storage element in the FRAME system pallet, which stores all the events that have occurred
-/// in a block. This is syntactic sugar to make the code more readable.
-pub type EventsVec = Vec<
-    Box<
-        EventRecord<
-            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
-            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
-        >,
-    >,
->;
-
 /// Extrinsic struct.
 ///
 /// This struct represents an extrinsic in the blockchain.
@@ -122,7 +138,7 @@ pub struct Extrinsic {
     /// Block hash.
     pub block_hash: H256,
     /// Events vector.
-    pub events: EventsVec,
+    pub events: StorageHubEventsVec,
 }
 
 /// ExtrinsicResult enum.

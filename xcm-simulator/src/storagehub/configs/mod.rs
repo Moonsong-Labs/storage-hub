@@ -479,6 +479,11 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = shp_file_metadata::FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u64;
@@ -564,7 +569,7 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 1_000_000 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 200 * UNIT; // TODO: Change this value into something much higher like 1_000_000 * UNIT
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
@@ -681,6 +686,7 @@ impl pallet_file_system::Config for Runtime {
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
+    type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;

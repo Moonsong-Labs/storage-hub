@@ -1332,6 +1332,7 @@ declare const _default: {
       };
       MspSignUpSuccess: {
         who: string;
+        mspId: string;
         multiaddresses: string;
         capacity: string;
         valueProp: string;
@@ -1343,6 +1344,7 @@ declare const _default: {
       };
       BspSignUpSuccess: {
         who: string;
+        bspId: string;
         multiaddresses: string;
         capacity: string;
       };
@@ -1351,12 +1353,15 @@ declare const _default: {
       };
       MspSignOffSuccess: {
         who: string;
+        mspId: string;
       };
       BspSignOffSuccess: {
         who: string;
+        bspId: string;
       };
       CapacityChanged: {
         who: string;
+        providerId: string;
         oldCapacity: string;
         newCapacity: string;
         nextBlockWhenChangeAllowed: string;
@@ -1376,7 +1381,16 @@ declare const _default: {
     protocols: string;
   };
   /**
-   * Lookup130: pallet_file_system::pallet::Event<T>
+   * Lookup130: pallet_storage_providers::types::StorageProviderId<T>
+   **/
+  PalletStorageProvidersStorageProviderId: {
+    _enum: {
+      BackupStorageProvider: string;
+      MainStorageProvider: string;
+    };
+  };
+  /**
+   * Lookup131: pallet_file_system::pallet::Event<T>
    **/
   PalletFileSystemEvent: {
     _enum: {
@@ -1416,12 +1430,8 @@ declare const _default: {
         size_: string;
         peerIds: string;
       };
-      MspAcceptedStoring: {
-        fileKey: string;
-        mspId: string;
-        bucketId: string;
-        owner: string;
-        newBucketRoot: string;
+      MspRespondedToStorageRequests: {
+        results: string;
       };
       AcceptedBspVolunteer: {
         _alias: {
@@ -1462,7 +1472,7 @@ declare const _default: {
         newRoot: string;
       };
       PriorityChallengeForFileDeletionQueued: {
-        user: string;
+        issuer: string;
         fileKey: string;
       };
       SpStopStoringInsolventUser: {
@@ -1513,7 +1523,64 @@ declare const _default: {
     };
   };
   /**
-   * Lookup135: pallet_proofs_dealer::pallet::Event<T>
+   * Lookup134: pallet_file_system::types::MspRespondStorageRequestsResult<T>
+   **/
+  PalletFileSystemMspRespondStorageRequestsResult: {
+    mspId: string;
+    responses: string;
+  };
+  /**
+   * Lookup136: pallet_file_system::types::BatchResponses<T>
+   **/
+  PalletFileSystemBatchResponses: {
+    _enum: {
+      Accepted: string;
+      Rejected: string;
+      Failed: string;
+    };
+  };
+  /**
+   * Lookup137: pallet_file_system::types::MspAcceptedBatchStorageRequests<T>
+   **/
+  PalletFileSystemMspAcceptedBatchStorageRequests: {
+    fileKeys: string;
+    bucketId: string;
+    newBucketRoot: string;
+    owner: string;
+  };
+  /**
+   * Lookup140: pallet_file_system::types::MspRejectedBatchStorageRequests<T>
+   **/
+  PalletFileSystemMspRejectedBatchStorageRequests: {
+    fileKeys: string;
+    bucketId: string;
+    owner: string;
+  };
+  /**
+   * Lookup143: pallet_file_system::types::RejectedStorageRequestReason
+   **/
+  PalletFileSystemRejectedStorageRequestReason: {
+    _enum: string[];
+  };
+  /**
+   * Lookup145: pallet_file_system::types::MspFailedBatchStorageRequests<T>
+   **/
+  PalletFileSystemMspFailedBatchStorageRequests: {
+    fileKeys: string;
+    bucketId: string;
+    owner: string;
+  };
+  /**
+   * Lookup150: pallet_file_system::types::EitherAccountIdOrMspId<T>
+   **/
+  PalletFileSystemEitherAccountIdOrMspId: {
+    _enum: {
+      AccountId: string;
+      MspId: string;
+    };
+  };
+  /**
+   * Lookup151: pallet_proofs_dealer::pallet::Event<T>
    **/
   PalletProofsDealerEvent: {
     _enum: {
@@ -1557,34 +1624,34 @@ declare const _default: {
     };
   };
   /**
-   * Lookup136: pallet_proofs_dealer::types::Proof<T>
+   * Lookup152: pallet_proofs_dealer::types::Proof<T>
    **/
   PalletProofsDealerProof: {
     forestProof: string;
     keyProofs: string;
   };
   /**
-   * Lookup137: sp_trie::storage_proof::CompactProof
+   * Lookup153: sp_trie::storage_proof::CompactProof
    **/
   SpTrieStorageProofCompactProof: {
     encodedNodes: string;
   };
   /**
-   * Lookup140: pallet_proofs_dealer::types::KeyProof<T>
+   * Lookup156: pallet_proofs_dealer::types::KeyProof<T>
    **/
   PalletProofsDealerKeyProof: {
     proof: string;
     challengeCount: string;
   };
   /**
-   * Lookup141: shp_file_key_verifier::types::FileKeyProof
+   * Lookup157: shp_file_key_verifier::types::FileKeyProof
    **/
   ShpFileKeyVerifierFileKeyProof: {
     fileMetadata: string;
     proof: string;
   };
   /**
-   * Lookup142: shp_file_metadata::FileMetadata
+   * Lookup158: shp_file_metadata::FileMetadata
    **/
   ShpFileMetadataFileMetadata: {
     owner: string;
@@ -1594,15 +1661,15 @@ declare const _default: {
     fingerprint: string;
   };
   /**
-   * Lookup143: shp_file_metadata::Fingerprint
+   * Lookup159: shp_file_metadata::Fingerprint
    **/
   ShpFileMetadataFingerprint: string;
   /**
-   * Lookup149: shp_traits::TrieRemoveMutation
+   * Lookup165: shp_traits::TrieRemoveMutation
    **/
   ShpTraitsTrieRemoveMutation: string;
   /**
-   * Lookup153: pallet_randomness::pallet::Event<T>
+   * Lookup169: pallet_randomness::pallet::Event<T>
    **/
   PalletRandomnessEvent: {
     _enum: {
@@ -1614,7 +1681,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup154: pallet_payment_streams::pallet::Event<T>
+   * Lookup170: pallet_payment_streams::pallet::Event<T>
    **/
   PalletPaymentStreamsEvent: {
     _enum: {
@@ -1668,7 +1735,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup155: pallet_bucket_nfts::pallet::Event<T>
+   * Lookup171: pallet_bucket_nfts::pallet::Event<T>
    **/
   PalletBucketNftsEvent: {
     _enum: {
@@ -1689,7 +1756,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup156: pallet_nfts::pallet::Event<T, I>
+   * Lookup172: pallet_nfts::pallet::Event<T, I>
    **/
   PalletNftsEvent: {
     _enum: {
@@ -1890,7 +1957,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup160: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
+   * Lookup176: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeNamespace: {
     _enum: {
@@ -1901,20 +1968,20 @@ declare const _default: {
     };
   };
   /**
-   * Lookup162: pallet_nfts::types::PriceWithDirection<Amount>
+   * Lookup178: pallet_nfts::types::PriceWithDirection<Amount>
    **/
   PalletNftsPriceWithDirection: {
     amount: string;
     direction: string;
   };
   /**
-   * Lookup163: pallet_nfts::types::PriceDirection
+   * Lookup179: pallet_nfts::types::PriceDirection
    **/
   PalletNftsPriceDirection: {
     _enum: string[];
   };
   /**
-   * Lookup164: pallet_nfts::types::PalletAttributes<CollectionId>
+   * Lookup180: pallet_nfts::types::PalletAttributes<CollectionId>
    **/
   PalletNftsPalletAttributes: {
     _enum: {
@@ -3136,10 +3203,8 @@ declare const _default: {
       bsp_add_data_server_for_move_bucket_request: {
         bucketId: string;
       };
-      msp_accept_storage_request: {
-        fileKey: string;
-        fileProof: string;
-        nonInclusionForestProof: string;
+      msp_respond_storage_requests_multiple_buckets: {
+        fileKeyResponsesInput: string;
       };
       bsp_volunteer: {
         fileKey: string;

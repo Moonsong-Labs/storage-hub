@@ -710,13 +710,34 @@ pub mod pallet {
             }
         }
 
-        // TODO: Document why we need to do this.
-        // TODO: This is related to the limitation of `CheckpointChallengePeriod` having to be greater or equal
-        // TODO: to the largest period of a Provider. The provider with largest period would be the one with the
-        // TODO: smallest stake.
+        /// This integrity test checks that the `CheckpointChallengePeriod` is greater or equal to the
+        /// longest period a Provider can have, and that `BlockFullnessPeriod` is smaller or equal than
+        /// `ChallengeTicksTolerance`.
+        ///
+        /// Any code located in this hook is placed in an auto-generated test, and generated as a part
+        /// of crate::construct_runtime's expansion.
+        /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
-            // TODO: Check that the `CheckpointChallengePeriod` is greater or equal to the largest period of a Provider. plus `ChallengeTicksTolerance`.
-            // TODO: Check that `BlockFullnessPeriod` is smaller or equal than `CheckpointChallengePeriod`.
+            // Calculate longest period a Provider can have.
+            // That would be the period of the Provider with the minimum stake.
+            let min_stake = T::ProvidersPallet::get_min_stake();
+            let max_period = Self::stake_to_challenge_period(min_stake);
+
+            // Check that `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
+            assert!(
+                T::CheckpointChallengePeriod::get() >= max_period,
+                "CheckpointChallengePeriod ({:?}) const in ProofsDealer pallet should be greater or equal than the longest period a Provider can have ({:?}).",
+                T::CheckpointChallengePeriod::get(),
+                max_period
+            );
+
+            // Check that `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
+            assert!(
+                T::BlockFullnessPeriod::get() <= T::ChallengeTicksTolerance::get(),
+                "BlockFullnessPeriod const ({:?}) in ProofsDealer pallet should be smaller or equal than ChallengeTicksTolerance ({:?}).",
+                T::BlockFullnessPeriod::get(),
+                T::ChallengeTicksTolerance::get()
+            );
         }
 
         /// This hook is used to trim down the `ValidProofSubmittersLastTicks` StorageMap up to the `TargetTicksOfProofsStorage`.

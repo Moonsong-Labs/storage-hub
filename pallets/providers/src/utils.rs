@@ -1,6 +1,6 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use crate::*;
-use codec::{Decode, Encode};
+use codec::Encode;
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Pays},
     ensure,
@@ -18,14 +18,13 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
 };
-use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, PaymentStreamsInterface, ProofSubmittersInterface,
-    ReadBucketsInterface, ReadChallengeableProvidersInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, SystemMetricsInterface,
+    FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
+    MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
 use sp_std::vec::Vec;
 use types::{ProviderId, StorageProviderId};
@@ -312,6 +311,7 @@ where
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::MspSignUpSuccess {
             who: who.clone(),
+            msp_id,
             multiaddresses: msp_info.multiaddresses.clone(),
             capacity: msp_info.capacity,
             value_prop: msp_info.value_prop.clone(),
@@ -371,6 +371,7 @@ where
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::BspSignUpSuccess {
             who: who.clone(),
+            bsp_id,
             multiaddresses: bsp_info.multiaddresses.clone(),
             capacity: bsp_info.capacity,
         });
@@ -381,7 +382,7 @@ where
     /// This function holds the logic that checks if a user can sign off as a Main Storage Provider
     /// and, if so, updates the storage to remove the user as a Main Storage Provider, decrements the counter of Main Storage Providers,
     /// and returns the deposit to the user
-    pub fn do_msp_sign_off(who: &T::AccountId) -> DispatchResult {
+    pub fn do_msp_sign_off(who: &T::AccountId) -> Result<MainStorageProviderId<T>, DispatchError> {
         // Check that the signer is registered as a MSP and get its info
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
@@ -415,19 +416,21 @@ where
             match new_amount_of_msps {
                 Some(new_amount_of_msps) => {
                     *n = new_amount_of_msps;
-                    Ok(())
+                    Ok(msp_id)
                 }
                 None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
             }
         })?;
 
-        Ok(())
+        Ok(msp_id)
     }
 
     /// This function holds the logic that checks if a user can sign off as a Backup Storage Provider
     /// and, if so, updates the storage to remove the user as a Backup Storage Provider, decrements the counter of Backup Storage Providers,
     /// decrements the total capacity of the network (which is the sum of all BSPs capacities), and returns the deposit to the user
-    pub fn do_bsp_sign_off(who: &T::AccountId) -> DispatchResult {
+    pub fn do_bsp_sign_off(
+        who: &T::AccountId,
+    ) -> Result<BackupStorageProviderId<T>, DispatchError> {
         // Check that the signer is registered as a BSP and get its info
         let bsp_id =
             AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
@@ -452,7 +455,7 @@ where
         TotalBspsCapacity::<T>::mutate(|n| match n.checked_sub(&bsp.capacity) {
             Some(new_total_bsp_capacity) => {
                 *n = new_total_bsp_capacity;
-                Ok(())
+                Ok(bsp_id)
             }
             None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
         })?;
@@ -470,7 +473,7 @@ where
             match new_amount_of_bsps {
                 Some(new_amount_of_bsps) => {
                     *n = new_amount_of_bsps;
-                    Ok(())
+                    Ok(bsp_id)
                 }
                 None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
             }
@@ -481,7 +484,7 @@ where
             *n = n.saturating_sub(bsp.reputation_weight);
         });
 
-        Ok(())
+        Ok(bsp_id)
     }
 
     /// This function is in charge of dispatching the logic to change the capacity of a Storage Provider
@@ -490,7 +493,7 @@ where
     pub fn do_change_capacity(
         who: &T::AccountId,
         new_capacity: StorageDataUnit<T>,
-    ) -> Result<StorageDataUnit<T>, DispatchError> {
+    ) -> Result<(StorageProviderId<T>, StorageDataUnit<T>), DispatchError> {
         // Check that the new capacity is not zero (there are specific functions to sign off as a SP)
         ensure!(
             new_capacity != T::StorageDataUnit::zero(),
@@ -499,9 +502,15 @@ where
 
         // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
         let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
-            Self::do_change_capacity_msp(who, msp_id, new_capacity)?
+            (
+                StorageProviderId::MainStorageProvider(msp_id),
+                Self::do_change_capacity_msp(who, msp_id, new_capacity)?,
+            )
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
-            Self::do_change_capacity_bsp(who, bsp_id, new_capacity)?
+            (
+                StorageProviderId::BackupStorageProvider(bsp_id),
+                Self::do_change_capacity_bsp(who, bsp_id, new_capacity)?,
+            )
         } else {
             return Err(Error::<T>::NotRegistered.into());
         };
@@ -901,6 +910,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 
     fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash> {
         Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
+    }
+
+    fn get_bucket_owner(bucket_id: &Self::BucketId) -> Result<Self::AccountId, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.user_id)
     }
 
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError> {
@@ -1377,6 +1391,11 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
     fn is_provider(who: Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
     }
+
+    fn get_min_stake(
+    ) -> <Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance {
+        T::SpMinDeposit::get()
+    }
 }
 
 /// Implement the MutateChallengeableProvidersInterface for the Storage Providers pallet.
@@ -1404,16 +1423,21 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
         removed_trie_value: &Vec<u8>,
     ) -> DispatchResult {
         // Get the removed file's metadata
-        let file_metadata: FileMetadata<
-            { shp_constants::H_LENGTH },
-            { shp_constants::FILE_CHUNK_SIZE },
-            { shp_constants::FILE_SIZE_TO_CHALLENGES },
-        > = FileMetadata::decode(&mut removed_trie_value.as_slice())
+        let file_metadata =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::decode(
+                removed_trie_value,
+            )
             .map_err(|_| Error::<T>::InvalidEncodedFileMetadata)?;
 
         // Get the file size as a StorageDataUnit type and the owner as an AccountId type
-        let file_size = StorageDataUnit::<T>::from(file_metadata.file_size);
-        let owner = T::AccountId::decode(&mut file_metadata.owner.as_slice())
+        let file_size =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_size(
+                &file_metadata,
+            );
+        let owner =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_owner(
+                &file_metadata,
+            )
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider
@@ -1519,5 +1543,13 @@ where
 
     pub fn get_slash_amount_per_max_file_size() -> BalanceOf<T> {
         T::SlashAmountPerMaxFileSize::get()
+    }
+
+    pub fn query_msp_id_of_bucket_id(
+        bucket_id: &BucketId<T>,
+    ) -> Result<MainStorageProviderId<T>, QueryMspIdOfBucketIdError> {
+        let bucket =
+            Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
+        Ok(bucket.msp_id)
     }
 }

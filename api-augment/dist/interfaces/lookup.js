@@ -1346,6 +1346,7 @@ export default {
       },
       MspSignUpSuccess: {
         who: "AccountId32",
+        mspId: "H256",
         multiaddresses: "Vec<Bytes>",
         capacity: "u64",
         valueProp: "PalletStorageProvidersValueProposition"
@@ -1357,6 +1358,7 @@ export default {
       },
       BspSignUpSuccess: {
         who: "AccountId32",
+        bspId: "H256",
         multiaddresses: "Vec<Bytes>",
         capacity: "u64"
       },
@@ -1364,13 +1366,16 @@ export default {
         who: "AccountId32"
       },
       MspSignOffSuccess: {
-        who: "AccountId32"
+        who: "AccountId32",
+        mspId: "H256"
       },
       BspSignOffSuccess: {
-        who: "AccountId32"
+        who: "AccountId32",
+        bspId: "H256"
       },
       CapacityChanged: {
         who: "AccountId32",
+        providerId: "PalletStorageProvidersStorageProviderId",
         oldCapacity: "u64",
         newCapacity: "u64",
         nextBlockWhenChangeAllowed: "u32"
@@ -1390,7 +1395,16 @@ export default {
     protocols: "Vec<Bytes>"
   },
   /**
-   * Lookup130: pallet_file_system::pallet::Event<T>
+   * Lookup130: pallet_storage_providers::types::StorageProviderId<T>
+   **/
+  PalletStorageProvidersStorageProviderId: {
+    _enum: {
+      BackupStorageProvider: "H256",
+      MainStorageProvider: "H256"
+    }
+  },
+  /**
+   * Lookup131: pallet_file_system::pallet::Event<T>
    **/
   PalletFileSystemEvent: {
     _enum: {
@@ -1430,12 +1444,8 @@ export default {
         size_: "u64",
         peerIds: "Vec<Bytes>"
       },
-      MspAcceptedStoring: {
-        fileKey: "H256",
-        mspId: "H256",
-        bucketId: "H256",
-        owner: "AccountId32",
-        newBucketRoot: "H256"
+      MspRespondedToStorageRequests: {
+        results: "PalletFileSystemMspRespondStorageRequestsResult"
       },
       AcceptedBspVolunteer: {
         _alias: {
@@ -1476,7 +1486,7 @@ export default {
         newRoot: "H256"
       },
       PriorityChallengeForFileDeletionQueued: {
-        user: "AccountId32",
+        issuer: "PalletFileSystemEitherAccountIdOrMspId",
         fileKey: "H256"
       },
       SpStopStoringInsolventUser: {
@@ -1527,7 +1537,64 @@ export default {
     }
   },
   /**
-   * Lookup135: pallet_proofs_dealer::pallet::Event<T>
+   * Lookup134: pallet_file_system::types::MspRespondStorageRequestsResult<T>
+   **/
+  PalletFileSystemMspRespondStorageRequestsResult: {
+    mspId: "H256",
+    responses: "Vec<PalletFileSystemBatchResponses>"
+  },
+  /**
+   * Lookup136: pallet_file_system::types::BatchResponses<T>
+   **/
+  PalletFileSystemBatchResponses: {
+    _enum: {
+      Accepted: "PalletFileSystemMspAcceptedBatchStorageRequests",
+      Rejected: "PalletFileSystemMspRejectedBatchStorageRequests",
+      Failed: "PalletFileSystemMspFailedBatchStorageRequests"
+    }
+  },
+  /**
+   * Lookup137: pallet_file_system::types::MspAcceptedBatchStorageRequests<T>
+   **/
+  PalletFileSystemMspAcceptedBatchStorageRequests: {
+    fileKeys: "Vec<H256>",
+    bucketId: "H256",
+    newBucketRoot: "H256",
+    owner: "AccountId32"
+  },
+  /**
+   * Lookup140: pallet_file_system::types::MspRejectedBatchStorageRequests<T>
+   **/
+  PalletFileSystemMspRejectedBatchStorageRequests: {
+    fileKeys: "Vec<(H256,PalletFileSystemRejectedStorageRequestReason)>",
+    bucketId: "H256",
+    owner: "AccountId32"
+  },
+  /**
+   * Lookup143: pallet_file_system::types::RejectedStorageRequestReason
+   **/
+  PalletFileSystemRejectedStorageRequestReason: {
+    _enum: ["ReachedMaximumCapacity", "ReceivedInvalidProof", "InternalError"]
+  },
+  /**
+   * Lookup145: pallet_file_system::types::MspFailedBatchStorageRequests<T>
+   **/
+  PalletFileSystemMspFailedBatchStorageRequests: {
+    fileKeys: "Vec<(H256,SpRuntimeDispatchError)>",
+    bucketId: "H256",
+    owner: "AccountId32"
+  },
+  /**
+   * Lookup150: pallet_file_system::types::EitherAccountIdOrMspId<T>
+   **/
+  PalletFileSystemEitherAccountIdOrMspId: {
+    _enum: {
+      AccountId: "AccountId32",
+      MspId: "H256"
+    }
+  },
+  /**
+   * Lookup151: pallet_proofs_dealer::pallet::Event<T>
    **/
   PalletProofsDealerEvent: {
     _enum: {
@@ -1571,34 +1638,34 @@ export default {
     }
   },
   /**
-   * Lookup136: pallet_proofs_dealer::types::Proof<T>
+   * Lookup152: pallet_proofs_dealer::types::Proof<T>
    **/
   PalletProofsDealerProof: {
     forestProof: "SpTrieStorageProofCompactProof",
     keyProofs: "BTreeMap<H256, PalletProofsDealerKeyProof>"
   },
   /**
-   * Lookup137: sp_trie::storage_proof::CompactProof
+   * Lookup153: sp_trie::storage_proof::CompactProof
    **/
   SpTrieStorageProofCompactProof: {
     encodedNodes: "Vec<Bytes>"
   },
   /**
-   * Lookup140: pallet_proofs_dealer::types::KeyProof<T>
+   * Lookup156: pallet_proofs_dealer::types::KeyProof<T>
    **/
   PalletProofsDealerKeyProof: {
     proof: "ShpFileKeyVerifierFileKeyProof",
     challengeCount: "u32"
   },
   /**
-   * Lookup141: shp_file_key_verifier::types::FileKeyProof
+   * Lookup157: shp_file_key_verifier::types::FileKeyProof
    **/
   ShpFileKeyVerifierFileKeyProof: {
     fileMetadata: "ShpFileMetadataFileMetadata",
     proof: "SpTrieStorageProofCompactProof"
   },
   /**
-   * Lookup142: shp_file_metadata::FileMetadata
+   * Lookup158: shp_file_metadata::FileMetadata
    **/
   ShpFileMetadataFileMetadata: {
     owner: "Bytes",
@@ -1608,15 +1675,15 @@ export default {
     fingerprint: "ShpFileMetadataFingerprint"
   },
   /**
-   * Lookup143: shp_file_metadata::Fingerprint
+   * Lookup159: shp_file_metadata::Fingerprint
    **/
   ShpFileMetadataFingerprint: "[u8;32]",
   /**
-   * Lookup149: shp_traits::TrieRemoveMutation
+   * Lookup165: shp_traits::TrieRemoveMutation
    **/
   ShpTraitsTrieRemoveMutation: "Null",
   /**
-   * Lookup153: pallet_randomness::pallet::Event<T>
+   * Lookup169: pallet_randomness::pallet::Event<T>
    **/
   PalletRandomnessEvent: {
     _enum: {
@@ -1628,7 +1695,7 @@ export default {
     }
   },
   /**
-   * Lookup154: pallet_payment_streams::pallet::Event<T>
+   * Lookup170: pallet_payment_streams::pallet::Event<T>
    **/
   PalletPaymentStreamsEvent: {
     _enum: {
@@ -1682,7 +1749,7 @@ export default {
     }
   },
   /**
-   * Lookup155: pallet_bucket_nfts::pallet::Event<T>
+   * Lookup171: pallet_bucket_nfts::pallet::Event<T>
    **/
   PalletBucketNftsEvent: {
     _enum: {
@@ -1703,7 +1770,7 @@ export default {
     }
   },
   /**
-   * Lookup156: pallet_nfts::pallet::Event<T, I>
+   * Lookup172: pallet_nfts::pallet::Event<T, I>
    **/
   PalletNftsEvent: {
     _enum: {
@@ -1904,7 +1971,7 @@ export default {
     }
   },
   /**
-   * Lookup160: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
+   * Lookup176: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeNamespace: {
     _enum: {
@@ -1915,20 +1982,20 @@ export default {
     }
   },
   /**
-   * Lookup162: pallet_nfts::types::PriceWithDirection<Amount>
+   * Lookup178: pallet_nfts::types::PriceWithDirection<Amount>
    **/
   PalletNftsPriceWithDirection: {
     amount: "u128",
     direction: "PalletNftsPriceDirection"
   },
   /**
-   * Lookup163: pallet_nfts::types::PriceDirection
+   * Lookup179: pallet_nfts::types::PriceDirection
    **/
   PalletNftsPriceDirection: {
     _enum: ["Send", "Receive"]
   },
   /**
-   * Lookup164: pallet_nfts::types::PalletAttributes<CollectionId>
+   * Lookup180: pallet_nfts::types::PalletAttributes<CollectionId>
    **/
   PalletNftsPalletAttributes: {
     _enum: {
@@ -3184,10 +3251,8 @@ export default {
       bsp_add_data_server_for_move_bucket_request: {
         bucketId: "H256"
       },
-      msp_accept_storage_request: {
-        fileKey: "H256",
-        fileProof: "ShpFileKeyVerifierFileKeyProof",
-        nonInclusionForestProof: "SpTrieStorageProofCompactProof"
+      msp_respond_storage_requests_multiple_buckets: {
+        fileKeyResponsesInput: "Vec<(H256,PalletFileSystemMspStorageRequestResponse)>"
       },
       bsp_volunteer: {
         fileKey: "H256"
@@ -4100,7 +4165,11 @@ export default {
       "BucketIsBeingMoved",
       "BspAlreadyDataServer",
       "BspDataServersExceeded",
-      "FileMetadataProcessingQueueFull"
+      "FileMetadataProcessingQueueFull",
+      "TooManyBatchResponses",
+      "TooManyStorageRequestResponses",
+      "InvalidBucketIdFileKeyPair",
+      "InconsistentStateKeyAlreadyExists"
     ]
   },
   /**

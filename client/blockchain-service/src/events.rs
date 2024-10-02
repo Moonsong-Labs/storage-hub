@@ -10,7 +10,7 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 
-use crate::types::ConfirmStoringRequest;
+use crate::types::{ConfirmStoringRequest, RespondStorageRequest};
 
 /// New random challenge emitted by the StorageHub runtime.
 ///
@@ -84,6 +84,7 @@ impl EventBusMessage for AcceptedBspVolunteer {}
 pub enum ForestWriteLockTaskData {
     SubmitProofRequest(ProcessSubmitProofRequestData),
     ConfirmStoringRequest(ProcessConfirmStoringRequestData),
+    MspRespondStorageRequest(ProcessMspRespondStoringRequestData),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData),
 }
 
@@ -96,6 +97,12 @@ impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
 impl From<ProcessConfirmStoringRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessConfirmStoringRequestData) -> Self {
         Self::ConfirmStoringRequest(data)
+    }
+}
+
+impl From<ProcessMspRespondStoringRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessMspRespondStoringRequestData) -> Self {
+        Self::MspRespondStorageRequest(data)
     }
 }
 
@@ -119,6 +126,7 @@ pub struct ProcessSubmitProofRequest {
     pub data: ProcessSubmitProofRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
+
 impl EventBusMessage for ProcessSubmitProofRequest {}
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -133,6 +141,19 @@ pub struct ProcessConfirmStoringRequest {
 }
 
 impl EventBusMessage for ProcessConfirmStoringRequest {}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessMspRespondStoringRequestData {
+    pub respond_storing_requests: Vec<RespondStorageRequest>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessMspRespondStoringRequest {
+    pub data: crate::events::ProcessMspRespondStoringRequestData,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+impl EventBusMessage for ProcessMspRespondStoringRequest {}
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessStopStoringForInsolventUserRequestData {
@@ -223,6 +244,7 @@ pub struct BlockchainServiceEventBusProvider {
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
     process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
     process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
+    process_msp_respond_storing_request_event_bus: EventBus<ProcessMspRespondStoringRequest>,
     process_stop_storing_for_insolvent_user_request_event_bus:
         EventBus<ProcessStopStoringForInsolventUserRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
@@ -242,6 +264,7 @@ impl BlockchainServiceEventBusProvider {
             accepted_bsp_volunteer_event_bus: EventBus::new(),
             process_submit_proof_request_event_bus: EventBus::new(),
             process_confirm_storage_request_event_bus: EventBus::new(),
+            process_msp_respond_storing_request_event_bus: EventBus::new(),
             process_stop_storing_for_insolvent_user_request_event_bus: EventBus::new(),
             slashable_provider_event_bus: EventBus::new(),
             finalised_mutations_applied_event_bus: EventBus::new(),
@@ -286,6 +309,12 @@ impl ProvidesEventBus<ProcessSubmitProofRequest> for BlockchainServiceEventBusPr
 impl ProvidesEventBus<ProcessConfirmStoringRequest> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<ProcessConfirmStoringRequest> {
         &self.process_confirm_storage_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProcessMspRespondStoringRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProcessMspRespondStoringRequest> {
+        &self.process_msp_respond_storing_request_event_bus
     }
 }
 
