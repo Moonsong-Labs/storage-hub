@@ -1,4 +1,7 @@
-use crate::{Balance, Runtime, UNIT};
+use crate::{
+    configs::{MinChallengePeriod, SpMinDeposit},
+    Balance, BlockNumber, Runtime, UNIT,
+};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
@@ -15,7 +18,20 @@ pub mod dynamic_params {
 
         #[codec(index = 1)]
         #[allow(non_upper_case_globals)]
-        pub static StakeToChallengePeriod: Balance = 1_000_000_000 * UNIT;
+        // This can be interpreted as "a Provider with 10k UNITs of stake would get the minimum challenge period".
+        pub static StakeToChallengePeriod: Balance =
+            10_000 * UNIT * Into::<u128>::into(MinChallengePeriod::get()); // 300k UNITs
+
+        #[codec(index = 2)]
+        #[allow(non_upper_case_globals)]
+        // The CheckpointChallengePeriod is set to be equal to the longest possible challenge period (i.e. the
+        // StakeToChallengePeriod divided by the SpMinDeposit).
+        pub static CheckpointChallengePeriod: BlockNumber = (StakeToChallengePeriod::get()
+            / SpMinDeposit::get()) // 300k UNITs / 100 UNITs = 3k ticks (i.e. 5 hours with 6 seconds per tick)
+        .try_into()
+        .expect(
+            "StakeToChallengePeriod / SpMinDeposit should be a number of ticks that can fit in BlockNumber numerical type",
+        );
     }
 }
 

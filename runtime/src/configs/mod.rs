@@ -538,7 +538,6 @@ parameter_types! {
     pub const MaxCustomChallengesPerBlock: u32 = 10;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
-    pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
@@ -566,7 +565,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
-    type CheckpointChallengePeriod = CheckpointChallengePeriod;
+    type CheckpointChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
