@@ -252,7 +252,7 @@ impl IndexerService {
                     .await?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
-                // Currently we are not treating the info of dynamic rate update
+                // TODO: Currently we are not treating the info of dynamic rate update
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
@@ -264,7 +264,7 @@ impl IndexerService {
                     .await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
-                // Currently we are not treating the info of fixed rate update
+                // TODO: Currently we are not treating the info of fixed rate update
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::PaymentStreamCharged {
