@@ -4506,7 +4506,9 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 

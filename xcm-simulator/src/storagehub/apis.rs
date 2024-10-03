@@ -10,7 +10,8 @@ use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::*;
 use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, ProviderId, StorageDataUnit, StorageProviderId,
+    BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId, ProviderId,
+    StorageDataUnit, StorageProviderId,
 };
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
@@ -45,7 +46,7 @@ impl_runtime_apis! {
 
     impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
         fn slot_duration() -> sp_consensus_aura::SlotDuration {
-            sp_consensus_aura::SlotDuration::from_millis(storagehub::SLOT_DURATION)
+            sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
         }
 
         fn authorities() -> Vec<AuraId> {
@@ -265,13 +266,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
             FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key)
         }
 
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
             FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
+        }
+
+        fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+            FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
     }
 
@@ -328,13 +333,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
 
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
             Providers::get_storage_provider_id(who)
+        }
+
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderId<Runtime>, QueryMspIdOfBucketIdError> {
+            Providers::query_msp_id_of_bucket_id(bucket_id)
         }
 
         fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryStorageProviderCapacityError> {
@@ -351,6 +360,10 @@ impl_runtime_apis! {
 
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
             Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
+        }
+
+        fn get_slash_amount_per_max_file_size() -> Balance {
+            Providers::get_slash_amount_per_max_file_size()
         }
     }
 }
