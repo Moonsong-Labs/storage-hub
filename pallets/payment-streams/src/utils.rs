@@ -151,6 +151,7 @@ where
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         new_rate: BalanceOf<T>,
+        n: BlockNumberFor<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -191,6 +192,7 @@ where
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged: n,
             });
         }
 
@@ -220,6 +222,7 @@ where
     pub fn do_delete_fixed_rate_payment_stream(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
+        n: BlockNumberFor<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -247,6 +250,7 @@ where
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged: n,
             });
         }
 
@@ -380,6 +384,7 @@ where
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         new_amount_provided: UnitsProvidedFor<T>,
+        n: BlockNumberFor<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -423,6 +428,7 @@ where
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged: n,
             });
         }
 
@@ -456,6 +462,7 @@ where
     pub fn do_delete_dynamic_rate_payment_stream(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
+        n: BlockNumberFor<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -483,6 +490,7 @@ where
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged: n,
             });
         }
 
@@ -1225,8 +1233,10 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         user_account: &Self::AccountId,
         new_rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
+        let n = Self::get_current_tick();
+
         // Execute the logic to update a fixed-rate payment stream
-        Self::do_update_fixed_rate_payment_stream(provider_id, user_account, new_rate)?;
+        Self::do_update_fixed_rate_payment_stream(provider_id, user_account, new_rate, n)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::FixedRatePaymentStreamUpdated {
@@ -1243,8 +1253,10 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
+        let n = Self::get_current_tick();
+
         // Execute the logic to delete a fixed-rate payment stream
-        Self::do_delete_fixed_rate_payment_stream(provider_id, user_account)?;
+        Self::do_delete_fixed_rate_payment_stream(provider_id, user_account, n)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::FixedRatePaymentStreamDeleted {
@@ -1288,11 +1300,14 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         user_account: &Self::AccountId,
         new_amount_provided: &Self::Units,
     ) -> DispatchResult {
+        let n = Self::get_current_tick();
+
         // Execute the logic to update a dynamic-rate payment stream
         Self::do_update_dynamic_rate_payment_stream(
             &provider_id,
             &user_account,
             *new_amount_provided,
+            n,
         )?;
 
         // Emit the corresponding event
@@ -1310,8 +1325,10 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
+        let n = Self::get_current_tick();
+
         // Execute the logic to delete a dynamic-rate payment stream
-        Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
+        Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account, n)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {

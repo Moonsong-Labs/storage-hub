@@ -15,6 +15,8 @@ pub struct PaymentStream {
     pub provider: String,
     // Total amount already paid to this provider from this account for this payment stream
     pub total_amount_paid: BigDecimal,
+    // The last tick for which the payment stream has recorded a payment
+    pub last_tick_charged: i64,
 }
 
 impl PaymentStream {
@@ -55,10 +57,14 @@ impl PaymentStream {
         conn: &mut DbConnection<'a>,
         ps_id: i32,
         new_total_amount: BigDecimal,
+        last_tick_charged: i64,
     ) -> Result<(), diesel::result::Error> {
         diesel::update(paymentstream::table)
             .filter(paymentstream::id.eq(ps_id))
-            .set(paymentstream::total_amount_paid.eq(new_total_amount))
+            .set((
+                paymentstream::total_amount_paid.eq(new_total_amount),
+                paymentstream::last_tick_charged.eq(last_tick_charged),
+            ))
             .execute(conn)
             .await?;
         Ok(())

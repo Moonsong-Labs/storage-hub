@@ -271,13 +271,20 @@ impl IndexerService {
                 user_account,
                 provider_id,
                 amount,
+                last_tick_charged,
             } => {
                 // We want to handle this and update the payment stream total amount
                 let ps =
                     PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
                         .await?;
                 let new_total_amount = ps.total_amount_paid + amount;
-                PaymentStream::update_total_amount(conn, ps.id, new_total_amount).await?;
+                PaymentStream::update_total_amount(
+                    conn,
+                    ps.id,
+                    new_total_amount,
+                    *last_tick_charged as i64,
+                )
+                .await?;
             }
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}

@@ -667,6 +667,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -928,6 +929,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1009,6 +1011,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1084,6 +1087,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1181,6 +1185,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * new_rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1266,6 +1271,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1307,6 +1313,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 20 * rate,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1492,6 +1499,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1586,6 +1594,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -1612,6 +1621,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: charlie_msp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -2418,6 +2428,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: paid_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -2715,6 +2726,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -2806,6 +2818,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -2889,6 +2902,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -2992,6 +3006,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -3082,6 +3097,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -3125,6 +3141,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -3323,6 +3340,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -3441,6 +3459,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -3468,6 +3487,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: charlie_bsp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -3658,6 +3678,7 @@ mod user_without_funds {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -4107,6 +4128,7 @@ mod user_without_funds {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );
@@ -4306,6 +4328,7 @@ mod user_without_funds {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: System::block_number(),
                     }
                     .into(),
                 );

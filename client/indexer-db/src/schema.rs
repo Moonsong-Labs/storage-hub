@@ -66,6 +66,7 @@ diesel::table! {
         account -> Varchar,
         provider -> Varchar,
         total_amount_paid -> Numeric,
+        last_tick_charged -> Int8,
     }
 }
 
