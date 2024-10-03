@@ -247,9 +247,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * Key already exists in mapping when it should not.
+       **/
+      InconsistentStateKeyAlreadyExists: AugmentedError<ApiType>;
+      /**
        * SP does not have enough storage capacity to store the file.
        **/
       InsufficientAvailableCapacity: AugmentedError<ApiType>;
+      /**
+       * Bucket id and file key pair is invalid.
+       **/
+      InvalidBucketIdFileKeyPair: AugmentedError<ApiType>;
       /**
        * Metadata does not correspond to expected file key.
        **/
@@ -375,6 +383,14 @@ declare module "@polkadot/api-base/types/errors" {
        * Tick range to maximum threshold cannot be zero.
        **/
       TickRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
+      /**
+       * Too many batch responses to process.
+       **/
+      TooManyBatchResponses: AugmentedError<ApiType>;
+      /**
+       * Too many storage request responses.
+       **/
+      TooManyStorageRequestResponses: AugmentedError<ApiType>;
       /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
@@ -823,6 +839,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       TooManyReserves: AugmentedError<ApiType>;
       /**
+       * Could not decode XCM.
+       **/
+      UnableToDecode: AugmentedError<ApiType>;
+      /**
        * The desired destination was unreachable, generally because there is a no way of routing
        * to it.
        **/
@@ -831,6 +851,11 @@ declare module "@polkadot/api-base/types/errors" {
        * The message's weight could not be determined.
        **/
       UnweighableMessage: AugmentedError<ApiType>;
+      /**
+       * XCM encoded length is too large.
+       * Returned when an XCM encoded length is larger than `MaxXcmEncodedSize`.
+       **/
+      XcmTooLarge: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

@@ -34,6 +34,8 @@ serde = { workspace = true }
 
 # Local
 pallet-storage-providers = { workspace = true }
+shp-constants = { workspace = true }
+shp-file-metadata = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }

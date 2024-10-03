@@ -46,11 +46,14 @@ import type {
   GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
   GetUsersWithDebtOverThresholdError,
+  MainStorageProviderId,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryMspConfirmChunksToProveForFileError,
+  QueryMspIdOfBucketIdError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   StorageDataUnit,
@@ -234,6 +237,16 @@ declare module "@polkadot/api-base/types/calls" {
           bspId: BackupStorageProviderId | string | Uint8Array,
           fileKey: H256 | string | Uint8Array
         ) => Observable<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>
+      >;
+      /**
+       * Query the chunks that a MSP needs to prove to confirm that it is storing a file.
+       **/
+      queryMspConfirmChunksToProveForFile: AugmentedCall<
+        ApiType,
+        (
+          mspId: MainStorageProviderId | string | Uint8Array,
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>>
       >;
       /**
        * Generic call
@@ -452,6 +465,10 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<BackupStorageProvider, GetBspInfoError>>
       >;
       /**
+       * Get the slashable amount corresponding to the configured max file size.
+       **/
+      getSlashAmountPerMaxFileSize: AugmentedCall<ApiType, () => Observable<Balance>>;
+      /**
        * Get the Storage Provider ID for a given Account ID.
        **/
       getStorageProviderId: AugmentedCall<
@@ -482,6 +499,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: BackupStorageProviderId | string | Uint8Array
         ) => Observable<Result<BlockNumber, QueryEarliestChangeCapacityBlockError>>
+      >;
+      /**
+       * Query the MSP ID of a bucket ID.
+       **/
+      queryMspIdOfBucketId: AugmentedCall<
+        ApiType,
+        (
+          bucketId: H256 | string | Uint8Array
+        ) => Observable<Result<ProviderId, QueryMspIdOfBucketIdError>>
       >;
       /**
        * Query the storage provider capacity.

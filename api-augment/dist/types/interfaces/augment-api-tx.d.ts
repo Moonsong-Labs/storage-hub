@@ -13,6 +13,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
+  PalletFileSystemMspStorageRequestResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -32,6 +33,7 @@ import type {
   SpWeightsWeightV2Weight,
   StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV4Location,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
   StorageHubRuntimeSessionKeys,
   XcmV3WeightLimit,
   XcmVersionedAssetId,
@@ -619,35 +621,6 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, H256, u64, H256, Vec<Bytes>]
       >;
-      /**
-       * Used by a MSP to confirm storing a file that was assigned to it.
-       *
-       * The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-       * in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-       * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
-       * wasn't storing it before.
-       **/
-      mspAcceptStorageRequest: AugmentedSubmittable<
-        (
-          fileKey: H256 | string | Uint8Array,
-          fileProof:
-            | ShpFileKeyVerifierFileKeyProof
-            | {
-                fileMetadata?: any;
-                proof?: any;
-              }
-            | string
-            | Uint8Array,
-          nonInclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | {
-                encodedNodes?: any;
-              }
-            | string
-            | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, ShpFileKeyVerifierFileKeyProof, SpTrieStorageProofCompactProof]
-      >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
@@ -659,6 +632,36 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [H256, PalletFileSystemBucketMoveRequestResponse]
+      >;
+      /**
+       * Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
+       *
+       * This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
+       * accepted, rejected or have failed to be processed in the results of the event emitted.
+       *
+       * The MSP has to provide a file proof for all the file keys that are being accepted and a non-inclusion proof for the file keys
+       * in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
+       * the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
+       * wasn't storing it before.
+       **/
+      mspRespondStorageRequestsMultipleBuckets: AugmentedSubmittable<
+        (
+          fileKeyResponsesInput:
+            | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
+            | [
+                H256 | string | Uint8Array,
+                (
+                  | PalletFileSystemMspStorageRequestResponse
+                  | {
+                      accept?: any;
+                      reject?: any;
+                    }
+                  | string
+                  | Uint8Array
+                )
+              ][]
+        ) => SubmittableExtrinsic<ApiType>,
+        [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
@@ -2232,6 +2235,30 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       [key: string]: SubmittableExtrinsicFunction<ApiType>;
     };
+    parameters: {
+      /**
+       * Set the value of a parameter.
+       *
+       * The dispatch origin of this call must be `AdminOrigin` for the given `key`. Values be
+       * deleted by setting them to `None`.
+       **/
+      setParameter: AugmentedSubmittable<
+        (
+          keyValue:
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters
+            | {
+                RuntimeConfig: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters]
+      >;
+      /**
+       * Generic tx
+       **/
+      [key: string]: SubmittableExtrinsicFunction<ApiType>;
+    };
     paymentStreams: {
       /**
        * Dispatchable extrinsic that allows Providers to charge a payment stream from a User.
@@ -2523,6 +2550,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * No more than `max_weight` will be used in its attempted execution. If this is less than
        * the maximum amount of weight that the message could take to be executed, then no
        * execution attempt will be made.
+       *
+       * WARNING: DEPRECATED. `execute` will be removed after June 2024. Use `execute_blob`
+       * instead.
        **/
       execute: AugmentedSubmittable<
         (
@@ -2549,6 +2579,32 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedXcm, SpWeightsWeightV2Weight]
+      >;
+      /**
+       * Execute an XCM from a local, signed, origin.
+       *
+       * An event is deposited indicating whether the message could be executed completely
+       * or only partially.
+       *
+       * No more than `max_weight` will be used in its attempted execution. If this is less than
+       * the maximum amount of weight that the message could take to be executed, then no
+       * execution attempt will be made.
+       *
+       * The message is passed in encoded. It needs to be decodable as a [`VersionedXcm`].
+       **/
+      executeBlob: AugmentedSubmittable<
+        (
+          encodedMessage: Bytes | string | Uint8Array,
+          maxWeight:
+            | SpWeightsWeightV2Weight
+            | {
+                refTime?: any;
+                proofSize?: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [Bytes, SpWeightsWeightV2Weight]
       >;
       /**
        * Set a safe XCM version (the version that XCM should be encoded with if the most recent
@@ -2884,6 +2940,9 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32]
       >;
+      /**
+       * WARNING: DEPRECATED. `send` will be removed after June 2024. Use `send_blob` instead.
+       **/
       send: AugmentedSubmittable<
         (
           dest:
@@ -2914,6 +2973,33 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedLocation, XcmVersionedXcm]
+      >;
+      /**
+       * Send an XCM from a local, signed, origin.
+       *
+       * The destination, `dest`, will receive this message with a `DescendOrigin` instruction
+       * that makes the origin of the message be the origin on this system.
+       *
+       * The message is passed in encoded. It needs to be decodable as a [`VersionedXcm`].
+       **/
+      sendBlob: AugmentedSubmittable<
+        (
+          dest:
+            | XcmVersionedLocation
+            | {
+                V2: any;
+              }
+            | {
+                V3: any;
+              }
+            | {
+                V4: any;
+              }
+            | string
+            | Uint8Array,
+          encodedMessage: Bytes | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [XcmVersionedLocation, Bytes]
       >;
       /**
        * Teleport some assets from the local chain to some destination chain.
