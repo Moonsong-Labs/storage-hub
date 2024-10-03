@@ -12,7 +12,7 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
-use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
+use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
 use shc_common::types::{BlockHash, OpaqueBlock, BCSV_KEY_TYPE};
@@ -34,7 +34,7 @@ use cumulus_client_service::{
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
 use cumulus_primitives_core::{
-    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair},
+    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair, ValidationCode},
     ParaId,
 };
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};

@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod apis;
-mod configs;
+pub mod configs;
 mod weights;
 
 use smallvec::smallvec;
@@ -39,7 +39,7 @@ pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
 
-pub use crate::configs::{StorageDataUnit, StorageProofsMerkleTrieLayout};
+pub use crate::configs::{xcm_config, StorageDataUnit, StorageProofsMerkleTrieLayout};
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -209,15 +209,6 @@ const UNINCLUDED_SEGMENT_CAPACITY: u32 = 2;
 const BLOCK_PROCESSING_VELOCITY: u32 = 1;
 /// Relay chain slot duration, in milliseconds.
 const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
-
-/// The version information used to identify this runtime when compiled natively.
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-    NativeVersion {
-        runtime_version: VERSION,
-        can_author_with: Default::default(),
-    }
-}
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(

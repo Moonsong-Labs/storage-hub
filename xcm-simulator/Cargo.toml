@@ -85,6 +85,7 @@ xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
 xcm-simulator = { workspace = true }
+xcm-fee-payment-runtime-api = { workspace = true }
 runtime-constants = { workspace = true }
 
 # Cumulus
