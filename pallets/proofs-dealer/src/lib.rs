@@ -225,7 +225,6 @@ pub mod pallet {
     /// This is used to keep track of the challenges' seed in the past.
     /// This mapping goes back only [`ChallengeHistoryLengthFor`] blocks. Previous challenges are removed.
     #[pallet::storage]
-    #[pallet::getter(fn tick_to_challenges)]
     pub type TickToChallengesSeed<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, RandomnessOutputFor<T>>;
 
@@ -236,7 +235,6 @@ pub mod pallet {
     /// The vector is bounded by [`MaxCustomChallengesPerBlockFor`].
     /// This mapping goes back only [`ChallengeHistoryLengthFor`] ticks. Previous challenges are removed.
     #[pallet::storage]
-    #[pallet::getter(fn tick_to_checkpoint_challenges)]
     pub type TickToCheckpointChallenges<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -251,7 +249,6 @@ pub mod pallet {
     /// challenge rounds have to be answered by ALL Providers, and this is enforced by the
     /// `submit_proof` extrinsic.
     #[pallet::storage]
-    #[pallet::getter(fn last_checkpoint_tick)]
     pub type LastCheckpointTick<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A mapping from challenge tick to a vector of challenged Providers for that tick.
@@ -263,7 +260,6 @@ pub mod pallet {
     /// Those who are still in the entry by the time the tick is reached are considered to
     /// have failed to submit a proof and subject to slashing.
     #[pallet::storage]
-    #[pallet::getter(fn tick_to_challenged_providers)]
     pub type TickToProvidersDeadlines<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -283,7 +279,6 @@ pub mod pallet {
     /// If the Provider fails to submit a proof in time and is slashed, this will still get updated
     /// to the tick it should have submitted a proof for.
     #[pallet::storage]
-    #[pallet::getter(fn last_tick_provider_submitted_proof_for)]
     pub type LastTickProviderSubmittedAProofFor<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>>;
 
@@ -294,7 +289,6 @@ pub mod pallet {
     /// A `BoundedVec` is used because the `parity_scale_codec::MaxEncodedLen` trait
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
-    #[pallet::getter(fn challenges_queue)]
     pub type ChallengesQueue<T: Config> =
         StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
@@ -309,7 +303,6 @@ pub mod pallet {
     /// A `BoundedVec` is used because the `parity_scale_codec::MaxEncodedLen` trait
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
-    #[pallet::getter(fn priority_challenges_queue)]
     pub type PriorityChallengesQueue<T: Config> = StorageValue<
         _,
         BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), ChallengesQueueLengthFor<T>>,
@@ -323,11 +316,9 @@ pub mod pallet {
     /// so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
     /// During MBMsm, the block number increases, but [`ChallengesTicker`] does not.
     #[pallet::storage]
-    #[pallet::getter(fn challenges_ticker)]
     pub type ChallengesTicker<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     #[pallet::storage]
-    #[pallet::getter(fn slashable_providers)]
     pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, u32>;
 
     /// A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.

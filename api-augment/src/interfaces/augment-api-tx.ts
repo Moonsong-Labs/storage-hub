@@ -228,7 +228,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This will waive the transaction fee if at least all but 10% of the accounts needed to
        * be upgraded. (We let some not have to be upgraded just in order to allow for the
-       * possibililty of churn).
+       * possibility of churn).
        **/
       upgradeAccounts: AugmentedSubmittable<
         (
@@ -2195,6 +2195,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * No more than `max_weight` will be used in its attempted execution. If this is less than
        * the maximum amount of weight that the message could take to be executed, then no
        * execution attempt will be made.
+       *
+       * WARNING: DEPRECATED. `execute` will be removed after June 2024. Use `execute_blob`
+       * instead.
        **/
       execute: AugmentedSubmittable<
         (
@@ -2206,6 +2209,29 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedXcm, SpWeightsWeightV2Weight]
+      >;
+      /**
+       * Execute an XCM from a local, signed, origin.
+       *
+       * An event is deposited indicating whether the message could be executed completely
+       * or only partially.
+       *
+       * No more than `max_weight` will be used in its attempted execution. If this is less than
+       * the maximum amount of weight that the message could take to be executed, then no
+       * execution attempt will be made.
+       *
+       * The message is passed in encoded. It needs to be decodable as a [`VersionedXcm`].
+       **/
+      executeBlob: AugmentedSubmittable<
+        (
+          encodedMessage: Bytes | string | Uint8Array,
+          maxWeight:
+            | SpWeightsWeightV2Weight
+            | { refTime?: any; proofSize?: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [Bytes, SpWeightsWeightV2Weight]
       >;
       /**
        * Set a safe XCM version (the version that XCM should be encoded with if the most recent
@@ -2300,7 +2326,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Fee payment on the destination side is made from the asset in the `assets` vector of
        * index `fee_asset_item`, up to enough to pay for `weight_limit` of weight. If more weight
-       * is needed than `weight_limit`, then the operation will fail and the assets send may be
+       * is needed than `weight_limit`, then the operation will fail and the sent assets may be
        * at risk.
        *
        * - `origin`: Must be capable of withdrawing the `assets` and executing XCM.
@@ -2353,7 +2379,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Fee payment on the destination side is made from the asset in the `assets` vector of
        * index `fee_asset_item`, up to enough to pay for `weight_limit` of weight. If more weight
-       * is needed than `weight_limit`, then the operation will fail and the assets send may be
+       * is needed than `weight_limit`, then the operation will fail and the sent assets may be
        * at risk.
        *
        * - `origin`: Must be capable of withdrawing the `assets` and executing XCM.
@@ -2460,6 +2486,9 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32]
       >;
+      /**
+       * WARNING: DEPRECATED. `send` will be removed after June 2024. Use `send_blob` instead.
+       **/
       send: AugmentedSubmittable<
         (
           dest:
@@ -2472,6 +2501,27 @@ declare module "@polkadot/api-base/types/submittable" {
           message: XcmVersionedXcm | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [XcmVersionedLocation, XcmVersionedXcm]
+      >;
+      /**
+       * Send an XCM from a local, signed, origin.
+       *
+       * The destination, `dest`, will receive this message with a `DescendOrigin` instruction
+       * that makes the origin of the message be the origin on this system.
+       *
+       * The message is passed in encoded. It needs to be decodable as a [`VersionedXcm`].
+       **/
+      sendBlob: AugmentedSubmittable<
+        (
+          dest:
+            | XcmVersionedLocation
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
+          encodedMessage: Bytes | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [XcmVersionedLocation, Bytes]
       >;
       /**
        * Teleport some assets from the local chain to some destination chain.
@@ -2527,7 +2577,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * Fee payment on the destination side is made from the asset in the `assets` vector of
        * index `fee_asset_item` (hence referred to as `fees`), up to enough to pay for
        * `weight_limit` of weight. If more weight is needed than `weight_limit`, then the
-       * operation will fail and the assets sent may be at risk.
+       * operation will fail and the sent assets may be at risk.
        *
        * `assets` (excluding `fees`) must have same reserve location or otherwise be teleportable
        * to `dest`, no limitations imposed on `fees`.

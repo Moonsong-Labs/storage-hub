@@ -6,6 +6,7 @@ use frame_support::{
     BoundedVec,
 };
 use pallet_balances;
+use pallet_file_system;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
 use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
 use sp_core::H256;
@@ -1338,7 +1339,10 @@ mod users {
         // We check that the storage request exists in StorageHub and volunteer Bob
         StorageHub::execute_with(|| {
             // Check that the storage request exists
-            assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
+            assert!(
+                pallet_file_system::StorageRequests::<storagehub::Runtime>::get(file_key.clone())
+                    .is_some()
+            );
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
             // In the config we set to reach the maximum threshold after 1 block
@@ -1409,7 +1413,7 @@ mod users {
         // We check now that there's a pending file deletion request for this file
         StorageHub::execute_with(|| {
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     parachain_account_in_sh.clone()
                 )
                 .len(),
@@ -1421,7 +1425,7 @@ mod users {
             > = BoundedVec::new();
             file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     parachain_account_in_sh.clone()
                 ),
                 file_deletion_requests_vec
@@ -1574,9 +1578,9 @@ mod users {
                 ]
                 .into(),
             );
-            assert_ok!(parachain::PolkadotXcm::execute(
+            assert_ok!(parachain::PolkadotXcm::execute_blob(
                 parachain::RuntimeOrigin::signed(CHARLIE.into()),
-                message.into(),
+                message.encode().try_into().unwrap(),
                 Weight::MAX
             ));
         });
@@ -1712,7 +1716,10 @@ mod users {
         // We check that the storage request exists in StorageHub and volunteer Bob
         StorageHub::execute_with(|| {
             // Check that the storage request exists
-            assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
+            assert!(
+                pallet_file_system::StorageRequests::<storagehub::Runtime>::get(file_key.clone())
+                    .is_some()
+            );
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
             // In the config we set to reach the maximum threshold after 1 block
@@ -1794,7 +1801,7 @@ mod users {
         // We check now that there's a pending file deletion request for this file
         StorageHub::execute_with(|| {
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     charlie_parachain_account_in_sh.clone()
                 )
                 .len(),
@@ -1806,7 +1813,7 @@ mod users {
             > = BoundedVec::new();
             file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     charlie_parachain_account_in_sh.clone()
                 ),
                 file_deletion_requests_vec

@@ -270,7 +270,6 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    #[pallet::getter(fn storage_requests)]
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
@@ -281,7 +280,6 @@ pub mod pallet {
     ///
     /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_bsps)]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -294,7 +292,6 @@ pub mod pallet {
 
     /// Bookkeeping of the buckets containing open storage requests.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_buckets)]
     pub type BucketsWithStorageRequests<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -307,7 +304,6 @@ pub mod pallet {
 
     /// A map of blocks to expired storage requests.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_expirations)]
     pub type StorageRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -318,7 +314,6 @@ pub mod pallet {
 
     /// A map of blocks to expired file deletion requests.
     #[pallet::storage]
-    #[pallet::getter(fn file_deletion_request_expirations)]
     pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -329,7 +324,6 @@ pub mod pallet {
 
     /// A map of blocks to expired move bucket requests.
     #[pallet::storage]
-    #[pallet::getter(fn move_bucket_request_expirations)]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -342,7 +336,6 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_storage_request_expiration_block)]
     pub type NextAvailableStorageRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -350,7 +343,6 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_file_deletion_request_expiration_block)]
     pub type NextAvailableFileDeletionRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -358,7 +350,6 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_move_bucket_request_expiration_block)]
     pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -368,14 +359,12 @@ pub mod pallet {
     /// attempt to accelerate this block pointer as close to or up to the current block number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
-    #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// Pending file deletion requests.
     ///
     /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
     #[pallet::storage]
-    #[pallet::getter(fn pending_file_deletion_requests)]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -391,7 +380,6 @@ pub mod pallet {
     /// The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
     /// of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
     #[pallet::storage]
-    #[pallet::getter(fn pending_stop_storing_requests)]
     pub type PendingStopStoringRequests<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -406,7 +394,6 @@ pub mod pallet {
     /// A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
     /// The value is the user who requested the move.
     #[pallet::storage]
-    #[pallet::getter(fn pending_move_bucket_requests)]
     pub type PendingMoveBucketRequests<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -418,7 +405,6 @@ pub mod pallet {
 
     /// BSP data servers for move bucket requests.
     #[pallet::storage]
-    #[pallet::getter(fn data_servers_for_move_bucket)]
     pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -430,7 +416,6 @@ pub mod pallet {
 
     /// Bookkeeping of buckets that are pending to be moved to a new MSP.
     #[pallet::storage]
-    #[pallet::getter(fn pending_buckets_to_move)]
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
@@ -438,12 +423,10 @@ pub mod pallet {
     ///
     /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
     #[pallet::storage]
-    #[pallet::getter(fn replication_target)]
     pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
     /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
-    #[pallet::getter(fn tick_range_to_maximum_threshold)]
     pub type TickRangeToMaximumThreshold<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
 
     #[pallet::genesis_config]

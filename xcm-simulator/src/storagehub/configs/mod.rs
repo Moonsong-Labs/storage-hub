@@ -31,8 +31,8 @@ use crate::storagehub::configs::xcm_config::XcmConfig;
 use crate::storagehub::MessageQueue;
 use crate::storagehub::PolkadotXcm;
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
-use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
+use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
+use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -59,7 +59,7 @@ use polkadot_runtime_common::{
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{Get, Hasher, H256};
+use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -75,12 +75,12 @@ use xcm_simulator::XcmExecutor;
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams, ProofsDealer,
-    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
-    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
-    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
-    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
-    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    Nfts, Nonce, PalletInfo, ParachainSystem, PaymentStreams, ProofsDealer, Providers, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
+    Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
+    BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
+    MINUTES, NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
+    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
@@ -260,6 +260,7 @@ impl pallet_message_queue::Config for Runtime {
     type HeapSize = sp_core::ConstU32<{ 64 * 1024 }>;
     type MaxStale = sp_core::ConstU32<8>;
     type ServiceWeight = MessageQueueServiceWeight;
+    type IdleMaxServiceWeight = ();
 }
 
 impl cumulus_pallet_aura_ext::Config for Runtime {}
@@ -301,7 +302,6 @@ impl pallet_aura::Config for Runtime {
     type DisabledValidators = ();
     type MaxAuthorities = ConstU32<100_000>;
     type AllowMultipleBlocksPerSlot = ConstBool<true>;
-    #[cfg(feature = "experimental")]
     type SlotDuration = ConstU64<SLOT_DURATION>;
 }
 
@@ -377,15 +377,20 @@ impl pallet_nfts::Config for Runtime {
 }
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
-fn relay_chain_state_proof() -> RelayChainStateProof {
-    let relay_storage_root = ParachainSystem::validation_data()
-        .expect("set in `set_validation_data`")
-        .relay_parent_storage_root;
-    let relay_chain_state =
-        ParachainSystem::relay_state_proof().expect("set in `set_validation_data`");
+/// CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+/* fn relay_chain_state_proof() -> RelayChainStateProof {
+    // CRITICAL TODO: Change this to the actual relay storage root after upgrading to polkadot-sdk v1.13.0
+    let relay_storage_root = DefaultMerkleRoot::<StorageProofsMerkleTrieLayout>::get();
+    /* let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
+    .expect("set in `set_validation_data`")
+    .relay_parent_storage_root; */
+    let root_vec: vec::Vec<vec::Vec<u8>> = vec![relay_storage_root.as_bytes().to_vec()];
+    let relay_chain_state = StorageProof::new(root_vec);
+    /* let relay_chain_state = cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get()
+    .expect("set in `set_validation_data`"); */
     RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
         .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
-}
+} */
 
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
@@ -393,46 +398,63 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     fn get_epoch_index() -> u64 {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            let _relay_storage_root = ParachainSystem::validation_data();
-            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+            /* let _relay_storage_root =
+                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
+            let _relay_chain_state =
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
             const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
             return BENCHMARKING_NEW_EPOCH;
         }
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::EPOCH_INDEX)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read epoch index from relay chain state proof")
+        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove frame_system::Pallet::<Runtime>::block_number()
+        /* relay_chain_state_proof()
+        .read_optional_entry(well_known_keys::EPOCH_INDEX)
+        .ok()
+        .flatten()
+        .expect("expected to be able to read epoch index from relay chain state proof") */
+        frame_system::Pallet::<Runtime>::block_number().into()
     }
     fn get_epoch_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            let _relay_storage_root = ParachainSystem::validation_data();
-            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+            /* let _relay_storage_root =
+                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
+            let _relay_chain_state =
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read epoch randomness from relay chain state proof")
+        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
+        /* relay_chain_state_proof()
+        .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
+        .ok()
+        .flatten()
+        .expect("expected to be able to read epoch randomness from relay chain state proof") */
+        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
     }
     fn get_parent_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            let _relay_storage_root = ParachainSystem::validation_data();
-            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
+            /* let _relay_storage_root =
+                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
+            let _relay_chain_state =
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }
         // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
         // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read parent randomness from relay chain state proof")
+        /* relay_chain_state_proof()
+        .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
+        .ok()
+        .flatten()
+        .expect("expected to be able to read parent randomness from relay chain state proof") */
+        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove H256::from_slice(&blake2_256(&Self::get_epoch_index().saturating_sub(1).to_le_bytes()))
+        H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
+        ))
     }
 }
 

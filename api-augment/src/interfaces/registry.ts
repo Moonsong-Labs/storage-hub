@@ -163,12 +163,12 @@ import type {
   PolkadotCorePrimitivesInboundDownwardMessage,
   PolkadotCorePrimitivesInboundHrmpMessage,
   PolkadotCorePrimitivesOutboundHrmpMessage,
-  PolkadotPrimitivesV6AbridgedHostConfiguration,
-  PolkadotPrimitivesV6AbridgedHrmpChannel,
-  PolkadotPrimitivesV6AsyncBackingAsyncBackingParams,
-  PolkadotPrimitivesV6PersistedValidationData,
-  PolkadotPrimitivesV6UpgradeGoAhead,
-  PolkadotPrimitivesV6UpgradeRestriction,
+  PolkadotPrimitivesV7AbridgedHostConfiguration,
+  PolkadotPrimitivesV7AbridgedHrmpChannel,
+  PolkadotPrimitivesV7AsyncBackingAsyncBackingParams,
+  PolkadotPrimitivesV7PersistedValidationData,
+  PolkadotPrimitivesV7UpgradeGoAhead,
+  PolkadotPrimitivesV7UpgradeRestriction,
   ShpFileKeyVerifierFileKeyProof,
   ShpFileMetadataFileMetadata,
   ShpFileMetadataFingerprint,
@@ -176,10 +176,6 @@ import type {
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
-  SpCoreEcdsaSignature,
-  SpCoreEd25519Signature,
-  SpCoreSr25519Public,
-  SpCoreSr25519Signature,
   SpRuntimeDigest,
   SpRuntimeDigestDigestItem,
   SpRuntimeDispatchError,
@@ -433,12 +429,12 @@ declare module "@polkadot/types/types/registry" {
     PolkadotCorePrimitivesInboundDownwardMessage: PolkadotCorePrimitivesInboundDownwardMessage;
     PolkadotCorePrimitivesInboundHrmpMessage: PolkadotCorePrimitivesInboundHrmpMessage;
     PolkadotCorePrimitivesOutboundHrmpMessage: PolkadotCorePrimitivesOutboundHrmpMessage;
-    PolkadotPrimitivesV6AbridgedHostConfiguration: PolkadotPrimitivesV6AbridgedHostConfiguration;
-    PolkadotPrimitivesV6AbridgedHrmpChannel: PolkadotPrimitivesV6AbridgedHrmpChannel;
-    PolkadotPrimitivesV6AsyncBackingAsyncBackingParams: PolkadotPrimitivesV6AsyncBackingAsyncBackingParams;
-    PolkadotPrimitivesV6PersistedValidationData: PolkadotPrimitivesV6PersistedValidationData;
-    PolkadotPrimitivesV6UpgradeGoAhead: PolkadotPrimitivesV6UpgradeGoAhead;
-    PolkadotPrimitivesV6UpgradeRestriction: PolkadotPrimitivesV6UpgradeRestriction;
+    PolkadotPrimitivesV7AbridgedHostConfiguration: PolkadotPrimitivesV7AbridgedHostConfiguration;
+    PolkadotPrimitivesV7AbridgedHrmpChannel: PolkadotPrimitivesV7AbridgedHrmpChannel;
+    PolkadotPrimitivesV7AsyncBackingAsyncBackingParams: PolkadotPrimitivesV7AsyncBackingAsyncBackingParams;
+    PolkadotPrimitivesV7PersistedValidationData: PolkadotPrimitivesV7PersistedValidationData;
+    PolkadotPrimitivesV7UpgradeGoAhead: PolkadotPrimitivesV7UpgradeGoAhead;
+    PolkadotPrimitivesV7UpgradeRestriction: PolkadotPrimitivesV7UpgradeRestriction;
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
     ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
     ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
@@ -446,10 +442,6 @@ declare module "@polkadot/types/types/registry" {
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;
     SpCoreCryptoKeyTypeId: SpCoreCryptoKeyTypeId;
-    SpCoreEcdsaSignature: SpCoreEcdsaSignature;
-    SpCoreEd25519Signature: SpCoreEd25519Signature;
-    SpCoreSr25519Public: SpCoreSr25519Public;
-    SpCoreSr25519Signature: SpCoreSr25519Signature;
     SpRuntimeDigest: SpRuntimeDigest;
     SpRuntimeDigestDigestItem: SpRuntimeDigestDigestItem;
     SpRuntimeDispatchError: SpRuntimeDispatchError;
