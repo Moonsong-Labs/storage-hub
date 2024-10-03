@@ -257,6 +257,7 @@ construct_runtime!(
 
         // Miscellaneous
         Nfts: pallet_nfts = 50,
+        Parameters: pallet_parameters = 51,
     }
 );
 
@@ -272,6 +273,8 @@ mod benches {
         [pallet_collator_selection, CollatorSelection]
         [cumulus_pallet_parachain_system, ParachainSystem]
         [cumulus_pallet_xcmp_queue, XcmpQueue]
+        [nfts, Nfts]
+        [pallet_parameters, Parameters]
     );
 }
 

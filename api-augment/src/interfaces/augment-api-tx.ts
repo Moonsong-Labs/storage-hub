@@ -19,6 +19,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
+  PalletFileSystemMspStorageRequestResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -37,6 +38,7 @@ import type {
   SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
   StagingXcmV4Location,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
   StorageHubRuntimeSessionKeys,
   XcmV3WeightLimit,
   XcmVersionedAssets,
@@ -534,30 +536,6 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, H256, u64, H256, Vec<Bytes>]
       >;
-      /**
-       * Used by a MSP to confirm storing a file that was assigned to it.
-       *
-       * The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-       * in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-       * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
-       * wasn't storing it before.
-       **/
-      mspAcceptStorageRequest: AugmentedSubmittable<
-        (
-          fileKey: H256 | string | Uint8Array,
-          fileProof:
-            | ShpFileKeyVerifierFileKeyProof
-            | { fileMetadata?: any; proof?: any }
-            | string
-            | Uint8Array,
-          nonInclusionForestProof:
-            | SpTrieStorageProofCompactProof
-            | { encodedNodes?: any }
-            | string
-            | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, ShpFileKeyVerifierFileKeyProof, SpTrieStorageProofCompactProof]
-      >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
@@ -569,6 +547,33 @@ declare module "@polkadot/api-base/types/submittable" {
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [H256, PalletFileSystemBucketMoveRequestResponse]
+      >;
+      /**
+       * Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
+       *
+       * This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
+       * accepted, rejected or have failed to be processed in the results of the event emitted.
+       *
+       * The MSP has to provide a file proof for all the file keys that are being accepted and a non-inclusion proof for the file keys
+       * in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
+       * the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
+       * wasn't storing it before.
+       **/
+      mspRespondStorageRequestsMultipleBuckets: AugmentedSubmittable<
+        (
+          fileKeyResponsesInput:
+            | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
+            | [
+                H256 | string | Uint8Array,
+                (
+                  | PalletFileSystemMspStorageRequestResponse
+                  | { accept?: any; reject?: any }
+                  | string
+                  | Uint8Array
+                )
+              ][]
+        ) => SubmittableExtrinsic<ApiType>,
+        [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
@@ -1883,6 +1888,28 @@ declare module "@polkadot/api-base/types/submittable" {
       sudoSendUpwardMessage: AugmentedSubmittable<
         (message: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [Bytes]
+      >;
+      /**
+       * Generic tx
+       **/
+      [key: string]: SubmittableExtrinsicFunction<ApiType>;
+    };
+    parameters: {
+      /**
+       * Set the value of a parameter.
+       *
+       * The dispatch origin of this call must be `AdminOrigin` for the given `key`. Values be
+       * deleted by setting them to `None`.
+       **/
+      setParameter: AugmentedSubmittable<
+        (
+          keyValue:
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters
+            | { RuntimeConfig: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters]
       >;
       /**
        * Generic tx

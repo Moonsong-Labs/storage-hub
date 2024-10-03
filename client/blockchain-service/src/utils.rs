@@ -32,13 +32,14 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
-        ProcessSubmitProofRequestData,
+        ProcessConfirmStoringRequestData, ProcessMspRespondStoringRequest,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::{
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{Extrinsic, Tip},
@@ -132,8 +133,9 @@ impl BlockchainService {
                             StorageProviderId::BackupStorageProvider(bsp_id) => {
                                 self.provider_ids.insert(bsp_id);
                             }
-                            // TODO: For now, we only care about BSPs.
-                            StorageProviderId::MainStorageProvider(_msp_id) => {}
+                            StorageProviderId::MainStorageProvider(msp_id) => {
+                                self.provider_ids.insert(msp_id);
+                            }
                         }
                     } else {
                         warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", key);
@@ -465,6 +467,9 @@ impl BlockchainService {
                         .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
                     state_store_context
+                        .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                        .delete();
+                    state_store_context
                         .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
                         .delete();
                     state_store_context.commit();
@@ -474,6 +479,9 @@ impl BlockchainService {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
                         .access_value(&OngoingProcessConfirmStoringRequestCf)
+                        .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessMspRespondStorageRequestCf)
                         .delete();
                     state_store_context
                         .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
@@ -500,7 +508,7 @@ impl BlockchainService {
                 }
             };
 
-            // Thi is to avoid starting a new task if the proof is not the next one to be submitted.
+            // This is to avoid starting a new task if the proof is not the next one to be submitted.
             if next_challenge_tick == request.tick {
                 // If the proof is still the next one to be submitted, we can process it.
                 next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
@@ -608,6 +616,12 @@ impl BlockchainService {
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 self.emit(ProcessConfirmStoringRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
+                self.emit(ProcessMspRespondStoringRequest {
                     data,
                     forest_root_write_tx,
                 });

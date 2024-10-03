@@ -11,7 +11,8 @@ use sp_core::H256;
 use sp_runtime::{AccountId32, DispatchError};
 
 use shc_common::types::{
-    BlockNumber, ProviderId, RandomnessOutput, StorageHubEventsVec, TrieRemoveMutation,
+    BlockNumber, ProviderId, RandomnessOutput, RejectedStorageRequestReason, StorageHubEventsVec,
+    TrieRemoveMutation,
 };
 
 /// A struct that holds the information to submit a storage proof.
@@ -76,6 +77,33 @@ impl ConfirmStoringRequest {
     pub fn new(file_key: H256) -> Self {
         Self {
             file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum MspRespondStorageRequest {
+    Accept,
+    Reject(RejectedStorageRequestReason),
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RespondStorageRequest {
+    pub file_key: H256,
+    pub response: MspRespondStorageRequest,
+    pub try_count: u32,
+}
+
+impl RespondStorageRequest {
+    pub fn new(file_key: H256, response: MspRespondStorageRequest) -> Self {
+        Self {
+            file_key,
+            response,
             try_count: 0,
         }
     }

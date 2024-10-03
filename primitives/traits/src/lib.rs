@@ -136,6 +136,9 @@ pub trait ReadBucketsInterface {
     /// Get the root of a bucket.
     fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash>;
 
+    /// Get the bucket owner.
+    fn get_bucket_owner(bucket_id: &Self::BucketId) -> Result<Self::AccountId, DispatchError>;
+
     /// Get bucket size.
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError>;
 
@@ -470,6 +473,9 @@ pub trait ReadChallengeableProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Get the minimum stake for a registered challengeable Provider.
+    fn get_min_stake() -> <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance;
 }
 
 /// A trait to mutate the state of challengeable Providers, such as updating their root.
@@ -671,6 +677,9 @@ pub trait ProofsDealerInterface {
         + AsRef<[u8]>
         + AsMut<[u8]>
         + MaxEncodedLen
+        + PartialEq
+        + Eq
+        + Clone
         + FullCodec;
     /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
@@ -1019,4 +1028,32 @@ pub trait ProofSubmittersInterface {
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32>;
 
     fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId);
+}
+
+/// A trait to encode, decode and read information from file metadata.
+pub trait FileMetadataInterface {
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a file's metadata
+    type Metadata: Parameter + Member + MaybeSerializeDeserialize + Debug + Encode + Decode;
+
+    /// The type which represents the unit that we use to measure file size (e.g. bytes)
+    type StorageDataUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u64>;
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error>;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8>;
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit;
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error>;
 }

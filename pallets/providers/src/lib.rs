@@ -45,7 +45,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{PaymentStreamsInterface, ProofSubmittersInterface};
+    use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
     use sp_runtime::traits::{Bounded, CheckedDiv};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -63,6 +63,12 @@ pub mod pallet {
             AccountId = Self::AccountId,
             ProviderId = HashId<Self>,
             Units = Self::StorageDataUnit,
+        >;
+
+        /// Trait that allows the pallet to manage generic file metadatas
+        type FileMetadataManager: FileMetadataInterface<
+            AccountId = Self::AccountId,
+            StorageDataUnit = Self::StorageDataUnit,
         >;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
@@ -92,11 +98,7 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact
             + Into<BalanceOf<Self>>
-            + Into<u64>
-            // Note: this is the same as just making it a u64, but since we need to interact with the FileMetadata type which is a u64,
-            // we kinda have no clean way to achieve this (at least, not one that comes to mind).
-            // TODO: Remove this and create a FileMetadata trait that implements `decode`, `encode`, `file_key` and `get_size`.
-            + From<u64>;
+            + Into<u64>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter

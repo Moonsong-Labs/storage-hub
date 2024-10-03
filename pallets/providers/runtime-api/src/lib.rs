@@ -6,7 +6,7 @@ use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance>
+    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId>
     where
         BlockNumber: Codec,
         BspId: Codec,
@@ -16,13 +16,16 @@ sp_api::decl_runtime_apis! {
         StorageProviderId: Codec,
         StorageDataUnit: Codec,
         Balance: Codec,
+        BucketId: Codec,
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId>;
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId) -> Result<ProviderId, QueryMspIdOfBucketIdError>;
         fn query_storage_provider_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
         fn query_available_storage_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
         fn query_earliest_change_capacity_block(who: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
+        fn get_slash_amount_per_max_file_size() -> Balance;
     }
 }
 
@@ -51,5 +54,12 @@ pub enum QueryAvailableStorageCapacityError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryEarliestChangeCapacityBlockError {
     ProviderNotRegistered,
+    InternalError,
+}
+
+/// Error type for the `query_msp_id_of_bucket_id` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryMspIdOfBucketIdError {
+    BucketNotFound,
     InternalError,
 }
