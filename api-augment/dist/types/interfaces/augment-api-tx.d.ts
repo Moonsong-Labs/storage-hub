@@ -32,6 +32,7 @@ import type {
   SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
   StagingXcmV4Location,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
   StorageHubRuntimeSessionKeys,
   XcmV3WeightLimit,
   XcmVersionedAssets,
@@ -2226,6 +2227,30 @@ declare module "@polkadot/api-base/types/submittable" {
       sudoSendUpwardMessage: AugmentedSubmittable<
         (message: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [Bytes]
+      >;
+      /**
+       * Generic tx
+       **/
+      [key: string]: SubmittableExtrinsicFunction<ApiType>;
+    };
+    parameters: {
+      /**
+       * Set the value of a parameter.
+       *
+       * The dispatch origin of this call must be `AdminOrigin` for the given `key`. Values be
+       * deleted by setting them to `None`.
+       **/
+      setParameter: AugmentedSubmittable<
+        (
+          keyValue:
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters
+            | {
+                RuntimeConfig: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters]
       >;
       /**
        * Generic tx

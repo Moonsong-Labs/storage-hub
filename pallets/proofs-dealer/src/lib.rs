@@ -710,9 +710,9 @@ pub mod pallet {
             }
         }
 
-        /// This integrity test checks that the `CheckpointChallengePeriod` is greater or equal to the
-        /// longest period a Provider can have, and that `BlockFullnessPeriod` is smaller or equal than
-        /// `ChallengeTicksTolerance`.
+        /// This integrity test checks that:
+        /// 1. `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
+        /// 2. `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
         ///
         /// Any code located in this hook is placed in an auto-generated test, and generated as a part
         /// of crate::construct_runtime's expansion.

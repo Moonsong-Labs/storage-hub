@@ -813,7 +813,7 @@ where
     ///
     /// Every failed proof submission counts as for two files which should have been proven due to the low probability of a challenge
     /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
-    /// submit a proof of storage for the neighboring file keys of the missing challenged file key.
+    /// submit a proof of storage for the neighbouring file keys of the missing challenged file key.
     ///
     /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
     pub fn compute_worst_case_scenario_slashable_amount(
@@ -1539,6 +1539,10 @@ where
         provider_id: &ProviderId<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         Self::compute_worst_case_scenario_slashable_amount(provider_id)
+    }
+
+    pub fn get_slash_amount_per_max_file_size() -> BalanceOf<T> {
+        T::SlashAmountPerMaxFileSize::get()
     }
 
     pub fn query_msp_id_of_bucket_id(

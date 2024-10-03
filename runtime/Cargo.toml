@@ -29,6 +29,7 @@ scale-info = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
+pallet-parameters = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
@@ -127,6 +128,7 @@ std = [
 	"pallet-file-system-runtime-api/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
+	"pallet-parameters/std",
 	"pallet-payment-streams/std",
 	"pallet-payment-streams-runtime-api/std",
 	"pallet-proofs-dealer/std",
@@ -186,6 +188,8 @@ runtime-benchmarks = [
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-message-queue/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
+	"pallet-parameters/runtime-benchmarks",
+	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-randomness/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
@@ -222,6 +226,7 @@ try-runtime = [
 	"pallet-file-system/try-runtime",
 	"pallet-message-queue/try-runtime",
 	"pallet-nfts/try-runtime",
+	"pallet-parameters/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-randomness/try-runtime",
 	"pallet-session/try-runtime",

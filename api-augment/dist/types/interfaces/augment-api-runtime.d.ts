@@ -483,6 +483,10 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<BackupStorageProvider, GetBspInfoError>>
       >;
       /**
+       * Get the slashable amount corresponding to the configured max file size.
+       **/
+      getSlashAmountPerMaxFileSize: AugmentedCall<ApiType, () => Observable<Balance>>;
+      /**
        * Get the Storage Provider ID for a given Account ID.
        **/
       getStorageProviderId: AugmentedCall<

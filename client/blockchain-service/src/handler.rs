@@ -822,6 +822,23 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QuerySlashAmountPerMaxFileSize { callback } => {
+                    // Get the current block hash.
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let slash_amount_per_max_file_size = self
+                        .client
+                        .runtime_api()
+                        .get_slash_amount_per_max_file_size(current_block_hash)
+                        .map_err(|_| anyhow!("Internal API error"));
+
+                    match callback.send(slash_amount_per_max_file_size) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back `SlashAmountPerMaxFileSize`: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryMspIdOfBucketId {
                     bucket_id,
                     callback,
