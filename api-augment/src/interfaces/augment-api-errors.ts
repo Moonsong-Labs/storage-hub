@@ -847,10 +847,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       TooManyReserves: AugmentedError<ApiType>;
       /**
-       * Could not decode XCM.
-       **/
-      UnableToDecode: AugmentedError<ApiType>;
-      /**
        * The desired destination was unreachable, generally because there is a no way of routing
        * to it.
        **/
@@ -859,11 +855,6 @@ declare module "@polkadot/api-base/types/errors" {
        * The message's weight could not be determined.
        **/
       UnweighableMessage: AugmentedError<ApiType>;
-      /**
-       * XCM encoded length is too large.
-       * Returned when an XCM encoded length is larger than `MaxXcmEncodedSize`.
-       **/
-      XcmTooLarge: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

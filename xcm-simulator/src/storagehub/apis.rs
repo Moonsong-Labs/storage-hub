@@ -346,6 +346,10 @@ impl_runtime_apis! {
             Providers::get_storage_provider_id(who)
         }
 
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderId<Runtime>, QueryMspIdOfBucketIdError> {
+            Providers::query_msp_id_of_bucket_id(bucket_id)
+        }
+
         fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryStorageProviderCapacityError> {
             Providers::query_storage_provider_capacity(provider_id)
         }
