@@ -301,13 +301,15 @@ impl IndexerService {
 
     async fn index_proofs_dealer_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
-            pallet_proofs_dealer::Event::ProofAccepted { .. } => {}
+            pallet_proofs_dealer::Event::ProofAccepted { provider, proof } => {
+                Proofs::create(conn, provider.to_string(), proof)
+            }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
             pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
