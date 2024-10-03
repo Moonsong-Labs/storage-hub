@@ -1122,7 +1122,7 @@ declare module "@polkadot/api-base/types/events" {
       DynamicRatePaymentStreamCreated: AugmentedEvent<
         ApiType,
         [userAccount: AccountId32, providerId: H256, amountProvided: u64, lastTickCharged: u32],
-        { userAccount: AccountId32; providerId: H256; amountProvided: u64, lastTickCharged: u32 }
+        { userAccount: AccountId32; providerId: H256; amountProvided: u64; lastTickCharged: u32 }
       >;
       /**
        * Event emitted when a dynamic-rate payment stream is removed. Provides information about the User and Provider of the stream.
