@@ -43,6 +43,7 @@ shp-traits = { workspace = true }
 # Substrate
 frame-support = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
+frame-metadata-hash-extension = { workspace = true }
 frame-executive = { workspace = true }
 frame-system = { workspace = true }
 frame-system-benchmarking = { workspace = true, optional = true }
@@ -238,5 +239,3 @@ try-runtime = [
 	"polkadot-runtime-common/try-runtime",
 	"sp-runtime/try-runtime",
 ]
-
-experimental = ["pallet-aura/experimental"]

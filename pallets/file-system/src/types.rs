@@ -2,7 +2,7 @@ use core::cmp::max;
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-    traits::{nonfungibles_v2::Inspect as NonFungiblesInspect, Currency, Get},
+    traits::{fungible::Inspect, nonfungibles_v2::Inspect as NonFungiblesInspect, Get},
     BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -428,8 +428,8 @@ pub type MaxMultiAddresses<T> =
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
 
 /// Alias for the `Balance` type used in the FileSystem pallet.
-type BalanceOf<T> =
-    <<T as crate::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+pub type BalanceOf<T> =
+    <<T as Config>::Currency as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// Alias for the `CollectionId` type used in the Nfts pallet.
 pub(super) type CollectionIdFor<T> = <<T as crate::Config>::Nfts as NonFungiblesInspect<

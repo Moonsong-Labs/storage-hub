@@ -1578,9 +1578,9 @@ mod users {
                 ]
                 .into(),
             );
-            assert_ok!(parachain::PolkadotXcm::execute_blob(
+            assert_ok!(parachain::PolkadotXcm::execute(
                 parachain::RuntimeOrigin::signed(CHARLIE.into()),
-                message.encode().try_into().unwrap(),
+                message.into(),
                 Weight::MAX
             ));
         });
