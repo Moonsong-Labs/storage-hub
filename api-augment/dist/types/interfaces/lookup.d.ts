@@ -1717,6 +1717,7 @@ declare const _default: {
         userAccount: string;
         providerId: string;
         amount: string;
+        lastTickCharged: string;
       };
       LastChargeableInfoUpdated: {
         providerId: string;

@@ -1730,7 +1730,8 @@ export default {
       PaymentStreamCharged: {
         userAccount: "AccountId32",
         providerId: "H256",
-        amount: "u128"
+        amount: "u128",
+        lastTickCharged: "u32"
       },
       LastChargeableInfoUpdated: {
         providerId: "H256",
