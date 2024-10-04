@@ -642,6 +642,8 @@ where
                         let mocked_parachain = {
                             MockValidationDataInherentDataProvider {
                                 current_para_block,
+								para_id,
+								current_para_block_head: para_head_data,
                                 relay_offset: 1000,
                                 relay_blocks_per_para_block: 2,
                                 para_blocks_per_relay_epoch: 0,
@@ -649,7 +651,6 @@ where
                                 xcm_config: MockXcmConfig::new(
                                     &*client_for_xcm,
                                     block,
-                                    Default::default(),
                                     Default::default(),
                                 ),
                                 raw_downward_messages: vec![],

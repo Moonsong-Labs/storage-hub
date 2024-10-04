@@ -19,7 +19,6 @@ workspace = true
 prost = { workspace = true }
 async-channel = { workspace = true }
 tokio = { workspace = true }
-libp2p-identity = { workspace = true, features = ["peerid"] }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
