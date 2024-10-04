@@ -58,12 +58,14 @@ impl PaymentStream {
         ps_id: i32,
         new_total_amount: BigDecimal,
         last_tick_charged: i64,
+        charged_at_tick: i64,
     ) -> Result<(), diesel::result::Error> {
         diesel::update(paymentstream::table)
             .filter(paymentstream::id.eq(ps_id))
             .set((
                 paymentstream::total_amount_paid.eq(new_total_amount),
                 paymentstream::last_tick_charged.eq(last_tick_charged),
+                paymentstream::charged_at_tick.eq(charged_at_tick),
             ))
             .execute(conn)
             .await?;

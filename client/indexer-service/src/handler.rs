@@ -272,6 +272,7 @@ impl IndexerService {
                 provider_id,
                 amount,
                 last_tick_charged,
+                charged_at_tick,
             } => {
                 // We want to handle this and update the payment stream total amount
                 let ps =
@@ -283,6 +284,7 @@ impl IndexerService {
                     ps.id,
                     new_total_amount,
                     *last_tick_charged as i64,
+                    *charged_at_tick as i64,
                 )
                 .await?;
             }
