@@ -275,7 +275,7 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
         },
         /// Event emitted when a payment is charged. Provides information about the user that was charged,
-        /// the Provider that received the funds, the tick at which it happened and the amount that was charged.
+        /// the Provider that received the funds, the tick up to which it was charged and the amount that was charged.
         PaymentStreamCharged {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,

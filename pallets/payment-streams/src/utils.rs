@@ -1249,8 +1249,6 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         user_account: &Self::AccountId,
         new_rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
-        let n = Self::get_current_tick();
-
         // Execute the logic to update a fixed-rate payment stream
         Self::do_update_fixed_rate_payment_stream(provider_id, user_account, new_rate)?;
 
@@ -1269,8 +1267,6 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
-        let n = Self::get_current_tick();
-
         // Execute the logic to delete a fixed-rate payment stream
         Self::do_delete_fixed_rate_payment_stream(provider_id, user_account)?;
 
@@ -1316,8 +1312,6 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         user_account: &Self::AccountId,
         new_amount_provided: &Self::Units,
     ) -> DispatchResult {
-        let n = Self::get_current_tick();
-
         // Execute the logic to update a dynamic-rate payment stream
         Self::do_update_dynamic_rate_payment_stream(
             &provider_id,
@@ -1340,8 +1334,6 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
-        let n = Self::get_current_tick();
-
         // Execute the logic to delete a dynamic-rate payment stream
         Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
 

@@ -17,6 +17,8 @@ pub struct PaymentStream {
     pub total_amount_paid: BigDecimal,
     // The last tick for which the payment stream has recorded a payment
     pub last_tick_charged: i64,
+    // The tick at which the payment actually happened
+    pub charged_at_tick: i64,
 }
 
 impl PaymentStream {
