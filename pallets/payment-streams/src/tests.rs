@@ -1665,7 +1665,7 @@ mod fixed_rate_streams {
                 // The payment stream should be updated with the correct last valid proof
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_tick,
-                    System::block_number() - 1 // We subtract one since the chargeable info is set for the previous block always
+                    System::block_number()
                 );
             });
         }

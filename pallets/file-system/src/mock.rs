@@ -295,6 +295,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         None
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+
     fn get_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) -> Option<u32> {
         None
     }
