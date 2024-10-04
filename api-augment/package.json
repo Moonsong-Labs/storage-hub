@@ -25,12 +25,12 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "14.0.1",
-    "@polkadot/api-base": "14.0.1",
-    "@polkadot/rpc-core": "14.0.1",
-    "@polkadot/typegen": "14.0.1",
-    "@polkadot/types": "14.0.1",
-    "@polkadot/types-codec": "14.0.1",
+    "@polkadot/api": "12.4.2",
+    "@polkadot/api-base": "12.4.2",
+    "@polkadot/rpc-core": "12.4.2",
+    "@polkadot/typegen": "12.4.2",
+    "@polkadot/types": "12.4.2",
+    "@polkadot/types-codec": "12.4.2",
     "@storagehub/types-bundle": "workspace:*",
     "tsx": "4.19.0",
     "typescript": "5.5.4"
