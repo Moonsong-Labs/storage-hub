@@ -1,4 +1,5 @@
 use sc_client_api::BlockBackend;
+use sc_network::service::traits::NetworkService;
 use sc_network::ProtocolName;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,7 +8,7 @@ use sc_network::request_responses::IncomingRequest;
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::{ParachainClient, ParachainNetworkService};
+use shc_common::types::{BlockHash, OpaqueBlock, ParachainClient};
 
 pub use self::handler::FileTransferService;
 
@@ -33,10 +34,12 @@ const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 
 /// Updates the network configuration with the file transfer request response protocol.
 /// Returns the protocol name and the channel receiver to be used for reading requests.
-pub fn configure_file_transfer_network(
+pub fn configure_file_transfer_network<
+    Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
+>(
     client: Arc<ParachainClient>,
     parachain_config: &Configuration,
-    net_config: &mut FullNetworkConfiguration,
+    net_config: &mut FullNetworkConfiguration<OpaqueBlock, BlockHash, Network>,
 ) -> (ProtocolName, async_channel::Receiver<IncomingRequest>) {
     let genesis_hash = client
         .block_hash(0u32.into())
@@ -50,18 +53,25 @@ pub fn configure_file_transfer_network(
         generate_protocol_config(genesis_hash, parachain_config.chain_spec.fork_id());
     protocol_config.inbound_queue = Some(tx);
 
-    let protocol_name = protocol_config.name.clone();
+    let request_response_config = Network::request_response_config(
+        protocol_config.name.clone(),
+        protocol_config.fallback_names.clone(),
+        protocol_config.max_request_size,
+        protocol_config.max_response_size,
+        protocol_config.request_timeout,
+        protocol_config.inbound_queue,
+    );
 
-    net_config.add_request_response_protocol(protocol_config);
+    net_config.add_request_response_protocol(request_response_config);
 
-    (protocol_name, request_receiver)
+    (protocol_config.name, request_receiver)
 }
 
 pub async fn spawn_file_transfer_service(
     task_spawner: &TaskSpawner,
     request_receiver: async_channel::Receiver<IncomingRequest>,
     protocol_name: ProtocolName,
-    network: Arc<ParachainNetworkService>,
+    network: Arc<dyn NetworkService>,
 ) -> ActorHandle<FileTransferService> {
     let task_spawner = task_spawner
         .with_name("file-transfer-service")

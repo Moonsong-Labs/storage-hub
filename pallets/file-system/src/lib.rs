@@ -50,8 +50,8 @@ pub mod pallet {
         pallet_prelude::{ValueQuery, *},
         sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
+            fungible::*,
             nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
-            Currency,
         },
         Blake2_128Concat,
     };
@@ -195,7 +195,11 @@ pub mod pallet {
         >;
 
         /// The currency mechanism, used for paying for reserves.
-        type Currency: Currency<Self::AccountId>;
+        type Currency: Inspect<Self::AccountId>
+            + Mutate<Self::AccountId>
+            + hold::Balanced<Self::AccountId>
+            + freeze::Inspect<Self::AccountId>
+            + freeze::Mutate<Self::AccountId>;
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
