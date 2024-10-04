@@ -2203,6 +2203,8 @@ declare module "@polkadot/types/types/registry" {
     QueryId: QueryId;
     QueryMspConfirmChunksToProveForFileError: QueryMspConfirmChunksToProveForFileError;
     QueryMspIdOfBucketIdError: QueryMspIdOfBucketIdError;
+    QueryResponseInfoV3: QueryResponseInfoV3;
+    QueryResponseInfoV4: QueryResponseInfoV4;
     QueryStatus: QueryStatus;
     QueryStorageProviderCapacityError: QueryStorageProviderCapacityError;
     QueueConfigData: QueueConfigData;
