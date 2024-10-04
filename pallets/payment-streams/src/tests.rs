@@ -1654,7 +1654,7 @@ mod fixed_rate_streams {
                 );
 
                 // Set the last valid proof of the payment stream from Bob to Alice to block 123 (represented by Alice's account ID)
-                // Since we are using the mocked ReadProofSubmittersInterface, we can pass the account ID as the
+                // Since we are using the mocked ProofSubmittersInterface, we can pass the account ID as the
                 // block number to the `on_poll` hook and it will consider that Provider as one that submitted a proof
                 run_to_block(alice_on_poll);
 
@@ -1666,6 +1666,61 @@ mod fixed_rate_streams {
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_tick,
                     System::block_number()
+                );
+            });
+        }
+
+        #[test]
+        fn update_last_chargeable_tick_with_submitters_paused_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice_on_poll: AccountId = 123;
+                let bob: AccountId = 1;
+
+                // Register Alice as a MSP with 100 units of data and get her MSP ID
+                register_account_as_msp(alice_on_poll, 100);
+                let alice_msp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
+                        .unwrap();
+
+                // Create a payment stream from Bob to Alice of 10 units per block
+                let rate: BalanceOf<Test> = 10;
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &alice_msp_id,
+                        &bob,
+                        rate
+                    )
+                );
+
+                // Set the last valid proof of the payment stream from Bob to Alice to block 123 (represented by Alice's account ID)
+                // Since we are using the mocked ProofSubmittersInterface, we can pass the account ID as the
+                // block number to the `on_poll` hook and it will consider that Provider as one that submitted a proof.
+                // We advance to one block before Alice's turn.
+                run_to_block(alice_on_poll - 1);
+
+                // Mock blocks advancing where the Proofs Submitters' tick is stopped.
+                let tick_before = crate::OnPollTicker::<Test>::get();
+                for _ in 0..10 {
+                    // For that, we run `on_poll` hooks of this Payment Stream's pallet, without actually advancing blocks.
+                    PaymentStreams::on_poll(System::block_number(), &mut WeightMeter::new());
+                }
+                let tick_after = crate::OnPollTicker::<Test>::get();
+                assert!(tick_before == tick_after - 10);
+
+                // Now the Proof Submitters pallet "resumes", so we advance one more block to when
+                // it is Alice's turn to be in the valid proofs submitters set.
+                run_to_block(alice_on_poll);
+
+                // Get Alice's last chargeable information
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                let current_tick = crate::OnPollTicker::<Test>::get();
+
+                // The payment stream should be updated and considering that the last chargeable tick
+                // is the current tick for the Payment Streams pallet.
+                assert_eq!(
+                    alice_last_chargeable_info.last_chargeable_tick,
+                    current_tick
                 );
             });
         }

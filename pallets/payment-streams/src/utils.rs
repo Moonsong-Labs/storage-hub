@@ -967,7 +967,7 @@ where
         Ok(())
     }
 
-    /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
+    /// This function gets the Providers that submitted a valid proof in the last tick using the `ProofSubmittersInterface`,
     /// and updates the last chargeable tick and last chargeable price index of those Providers.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
