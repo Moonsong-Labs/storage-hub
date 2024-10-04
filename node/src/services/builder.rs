@@ -1,5 +1,5 @@
 use async_channel::Receiver;
-use sc_network::{config::IncomingRequest, ProtocolName};
+use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use sp_keystore::KeystorePtr;
@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
-use shc_common::types::{ParachainClient, ParachainNetworkService};
+use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::{
@@ -132,7 +132,7 @@ where
         &mut self,
         file_transfer_request_receiver: Receiver<IncomingRequest>,
         file_transfer_request_protocol_name: ProtocolName,
-        network: Arc<ParachainNetworkService>,
+        network: Arc<dyn NetworkService>,
     ) -> &mut Self {
         let file_transfer_service_handle = spawn_file_transfer_service(
             self.task_spawner
