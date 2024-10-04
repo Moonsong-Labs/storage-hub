@@ -33,7 +33,8 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError, StorageProvidersApi,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
@@ -475,6 +476,30 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send chunks to prove file: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryProviderMultiaddresses {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let multiaddresses = self
+                        .client
+                        .runtime_api()
+                        .query_provider_multiaddresses(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| {
+                            error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
+                            Err(QueryProviderMultiaddressesError::InternalError)
+                        });
+
+                    match callback.send(multiaddresses) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Provider multiaddresses sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send provider multiaddresses: {:?}", e);
                         }
                     }
                 }

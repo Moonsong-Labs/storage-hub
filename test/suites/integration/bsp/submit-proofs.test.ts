@@ -305,35 +305,41 @@ describeBspNet(
       );
     });
 
-    it("Resume BSPs, and they shouldn't volunteer for the expired storage request", async () => {
-      // Advance a number of blocks up to when the storage request times out for sure.
-      const storageRequestTtl = Number(userApi.consts.fileSystem.storageRequestTtl);
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      await userApi.advanceToBlock(currentBlockNumber + storageRequestTtl, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID]
-      });
+    // This is skipped and should be moved to a separate test suite which includes MSP confirming the storage request,
+    // since storage requests are only fullfilled when both BSPs and MSP confirm them.
+    it(
+      "Resume BSPs, and they shouldn't volunteer for the expired storage request",
+      { skip: true },
+      async () => {
+        // Advance a number of blocks up to when the storage request times out for sure.
+        const storageRequestTtl = Number(userApi.consts.fileSystem.storageRequestTtl);
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        await userApi.advanceToBlock(currentBlockNumber + storageRequestTtl, {
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID]
+        });
 
-      // Resume BSP-Two and BSP-Three.
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
+        // Resume BSP-Two and BSP-Three.
+        await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
+        await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
 
-      // Wait for BSPs to resync.
-      await sleep(1000);
+        // Wait for BSPs to resync.
+        await sleep(1000);
 
-      // There shouldn't be any pending volunteer transactions.
-      await assert.rejects(
-        async () => {
-          await userApi.assert.extrinsicPresent({
-            module: "fileSystem",
-            method: "bspVolunteer",
-            checkTxPool: true
-          });
-        },
-        /No matching extrinsic found for fileSystem\.bspVolunteer/,
-        "There should be no pending volunteer transactions"
-      );
-    });
+        // There shouldn't be any pending volunteer transactions.
+        await assert.rejects(
+          async () => {
+            await userApi.assert.extrinsicPresent({
+              module: "fileSystem",
+              method: "bspVolunteer",
+              checkTxPool: true
+            });
+          },
+          /No matching extrinsic found for fileSystem\.bspVolunteer/,
+          "There should be no pending volunteer transactions"
+        );
+      }
+    );
 
     it("BSP-Two still correctly responds to challenges with same forest root", async () => {
       // Advance some blocks to allow the BSP to process the challenges and submit proofs.

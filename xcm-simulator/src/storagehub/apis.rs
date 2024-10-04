@@ -10,8 +10,8 @@ use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::*;
 use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId, ProviderId,
-    StorageDataUnit, StorageProviderId,
+    BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId,
+    Multiaddresses, ProviderId, StorageDataUnit, StorageProviderId,
 };
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
@@ -333,7 +333,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>, Multiaddresses<Runtime>> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
@@ -364,6 +364,10 @@ impl_runtime_apis! {
 
         fn get_slash_amount_per_max_file_size() -> Balance {
             Providers::get_slash_amount_per_max_file_size()
+        }
+
+        fn query_provider_multiaddresses(who: &ProviderId<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
+            Providers::query_provider_multiaddresses(who)
         }
     }
 }

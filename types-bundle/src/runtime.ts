@@ -220,6 +220,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<ProviderId, QueryMspIdOfBucketIdError>"
+  },
+  query_provider_multiaddresses: {
+    description: "Query the provider's multiaddresses.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<Multiaddresses, QueryProviderMultiaddressesError>"
   }
 };
 

@@ -38,6 +38,7 @@ export const ALL_TYPES: RegistryTypes = {
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
   StorageDataUnit: "u32",
+  Multiaddresses: "BoundedVec<u8, 5>",
   BackupStorageProvider: {
     capacity: "StorageData",
     data_used: "StorageData",
@@ -115,6 +116,12 @@ export const ALL_TYPES: RegistryTypes = {
       StorageRequestNotFound: null,
       ConfirmChunks: "QueryConfirmChunksToProveForFileError",
       InternalError: null
+    }
+  },
+  QueryProviderMultiaddressesError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalApiError: null
     }
   },
   QueryConfirmChunksToProveForFileError: {
