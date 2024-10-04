@@ -54,7 +54,7 @@ where
     async fn send_chunks_to_provider(
         &mut self,
         peer_ids: Vec<PeerId>,
-        file_metadata: &shp_file_metadata::FileMetadata<32, 1024, 33554432>,
+        file_metadata: &FileMetadata,
     ) -> Option<Result<(), anyhow::Error>> {
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
         let chunk_count = file_metadata.chunks_count();
