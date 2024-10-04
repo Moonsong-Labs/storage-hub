@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info};
 use sc_network::{Multiaddr, PeerId};
@@ -8,7 +6,10 @@ use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
-use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
+use shc_common::{
+    blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
+    types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout},
+};
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
@@ -179,26 +180,7 @@ where
                 )
             })?;
 
-        // Here the Multiaddresses come as a BoundedVec of BoundedVecs of bytes,
-        // and we need to convert them. Returns if any of the provided multiaddresses are invalid.
-        let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
-        for raw_multiaddr in msp_multiaddresses.into_iter() {
-            let multiaddress = match std::str::from_utf8(&raw_multiaddr) {
-                Ok(s) => match Multiaddr::from_str(s) {
-                    Ok(multiaddr) => multiaddr,
-                    Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to parse Multiaddress from string in MSP declared multiaddresses. msp: {:?}, \n Error: {:?}", msp_id, e);
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to parse Multiaddress from bytes in MSP declared multiaddresses. msp: {:?}, \n Error: {:?}", msp_id, e);
-                    continue;
-                }
-            };
-
-            multiaddress_vec.push(multiaddress);
-        }
+        let multiaddress_vec = convert_raw_multiaddresses_to_multiaddr(msp_multiaddresses);
 
         // Adds the multiaddresses of the MSP to the known addresses of the file transfer service.
         // This is required to establish a connection to the MSP.
