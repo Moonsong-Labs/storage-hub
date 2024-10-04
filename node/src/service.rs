@@ -15,7 +15,7 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_common::types::BCSV_KEY_TYPE;
+use shc_common::types::{BlockHash, OpaqueBlock, BCSV_KEY_TYPE};
 use shc_rpc::StorageHubClientRpcConfig;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
@@ -44,7 +44,10 @@ use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{config::IncomingRequest, NetworkBlock, ProtocolName};
+use sc_network::{
+    config::IncomingRequest, service::traits::NetworkService, NetworkBackend, NetworkBlock,
+    ProtocolName,
+};
 use sc_network_sync::SyncingService;
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
@@ -71,7 +74,6 @@ use crate::{
 //* the StorageHub services crates
 type ParachainExecutor = shc_common::types::ParachainExecutor;
 type ParachainClient = shc_common::types::ParachainClient;
-type ParachainNetworkService = shc_common::types::ParachainNetworkService;
 
 pub(crate) type ParachainBackend = TFullBackend<Block>;
 
@@ -168,7 +170,7 @@ pub fn new_partial(
             config,
             telemetry.as_ref().map(|telemetry| telemetry.handle()),
             &task_manager,
-        )?
+        )
     };
 
     let select_chain = if dev_service {
@@ -193,7 +195,7 @@ async fn init_sh_builder<R, S>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
-    network: Arc<ParachainNetworkService>,
+    network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
 ) -> Option<(
     StorageHubBuilder<R, S>,
@@ -285,7 +287,7 @@ where
 }
 
 /// Start a development node with the given solo chain `Configuration`.
-async fn start_dev_impl<R, S>(
+async fn start_dev_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -301,6 +303,7 @@ where
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
+    Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -348,7 +351,8 @@ where
         .sr25519_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
         .expect("Invalid dev signing key provided.");
 
-    let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
+    let mut net_config =
+        sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(&config.network);
     let collator = config.role.is_authority();
     let prometheus_registry = config.prometheus_registry().cloned();
     let select_chain = maybe_select_chain
@@ -364,6 +368,10 @@ where
         ));
     }
 
+    let metrics = Network::register_notification_metrics(
+        config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+    );
+
     let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
@@ -375,6 +383,7 @@ where
             block_announce_validator_builder: None,
             warp_sync_params: None,
             block_relay: None,
+            metrics,
         })?;
 
     if config.offchain_worker.enabled {
@@ -390,7 +399,7 @@ where
                 transaction_pool: Some(OffchainTransactionPoolFactory::new(
                     transaction_pool.clone(),
                 )),
-                network_provider: network.clone(),
+                network_provider: Arc::new(network.clone()),
                 is_validator: config.role.is_authority(),
                 enable_http_requests: false,
                 custom_extensions: move |_| vec![],
@@ -665,7 +674,7 @@ where
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-async fn start_node_impl<R, S>(
+async fn start_node_impl<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -682,13 +691,15 @@ where
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
+    Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
     let params = new_partial(&parachain_config, false)?;
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
-    let mut net_config =
-        sc_network::config::FullNetworkConfiguration::new(&parachain_config.network);
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
+        &parachain_config.network,
+    );
 
     let client = params.client.clone();
     let backend = params.backend.clone();
@@ -768,7 +779,7 @@ where
                 transaction_pool: Some(OffchainTransactionPoolFactory::new(
                     transaction_pool.clone(),
                 )),
-                network_provider: network.clone(),
+                network_provider: Arc::new(network.clone()),
                 is_validator: parachain_config.role.is_authority(),
                 enable_http_requests: false,
                 custom_extensions: move |_| vec![],
@@ -923,34 +934,24 @@ fn build_import_queue(
     config: &Configuration,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
-) -> Result<sc_consensus::DefaultImportQueue<Block>, sc_service::Error> {
-    let slot_duration = cumulus_client_consensus_aura::slot_duration(&*client)?;
+) -> sc_consensus::DefaultImportQueue<Block> {
+    cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
+        sp_consensus_aura::sr25519::AuthorityPair,
+        _,
+        _,
+        _,
+        _,
+    >(
+        client,
+        block_import,
+        move |_, _| async move {
+            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
-    Ok(
-        cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
-            sp_consensus_aura::sr25519::AuthorityPair,
-            _,
-            _,
-            _,
-            _,
-        >(
-            client,
-            block_import,
-            move |_, _| async move {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-
-                let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                    *timestamp,
-                    slot_duration,
-                );
-
-                Ok((slot, timestamp))
-            },
-            slot_duration,
-            &task_manager.spawn_essential_handle(),
-            config.prometheus_registry(),
-            telemetry,
-        ),
+            Ok(timestamp)
+        },
+        &task_manager.spawn_essential_handle(),
+        config.prometheus_registry(),
+        telemetry,
     )
 }
 
@@ -1028,7 +1029,7 @@ fn start_consensus(
     Ok(())
 }
 
-pub async fn start_dev_node(
+pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -1042,7 +1043,7 @@ pub async fn start_dev_node(
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_dev_impl::<BspProvider, InMemoryStorageLayer>(
+                start_dev_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1053,7 +1054,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<BspProvider, RocksDbStorageLayer>(
+                start_dev_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1064,7 +1065,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_dev_impl::<MspProvider, InMemoryStorageLayer>(
+                start_dev_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1075,7 +1076,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<MspProvider, RocksDbStorageLayer>(
+                start_dev_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1086,7 +1087,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::User, _) => {
-                start_dev_impl::<UserRole, NoStorageLayer>(
+                start_dev_impl::<UserRole, NoStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1099,7 +1100,7 @@ pub async fn start_dev_node(
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_dev_impl::<UserRole, NoStorageLayer>(
+        start_dev_impl::<UserRole, NoStorageLayer, Network>(
             config,
             None,
             indexer_options,
@@ -1111,7 +1112,7 @@ pub async fn start_dev_node(
     }
 }
 
-pub async fn start_parachain_node(
+pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -1126,7 +1127,7 @@ pub async fn start_parachain_node(
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_node_impl::<BspProvider, InMemoryStorageLayer>(
+                start_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1138,7 +1139,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_node_impl::<BspProvider, RocksDbStorageLayer>(
+                start_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1150,7 +1151,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_node_impl::<MspProvider, InMemoryStorageLayer>(
+                start_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1162,7 +1163,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_node_impl::<MspProvider, RocksDbStorageLayer>(
+                start_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1174,7 +1175,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::User, _) => {
-                start_node_impl::<UserRole, NoStorageLayer>(
+                start_node_impl::<UserRole, NoStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1188,7 +1189,7 @@ pub async fn start_parachain_node(
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_node_impl::<UserRole, NoStorageLayer>(
+        start_node_impl::<UserRole, NoStorageLayer, Network>(
             parachain_config,
             polkadot_config,
             collator_options,
