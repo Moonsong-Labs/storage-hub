@@ -11,7 +11,7 @@ import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/con
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard"},
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -305,11 +305,8 @@ describeBspNet(
       );
     });
 
-    // This is skipped and should be moved to a separate test suite which includes MSP confirming the storage request,
-    // since storage requests are only fullfilled when both BSPs and MSP confirm them.
     it(
       "Resume BSPs, and they shouldn't volunteer for the expired storage request",
-      { skip: true },
       async () => {
         // Advance a number of blocks up to when the storage request times out for sure.
         const storageRequestTtl = Number(userApi.consts.fileSystem.storageRequestTtl);
@@ -663,6 +660,8 @@ describeBspNet(
         "The root should have been updated on chain"
       );
 
+      // Wait for BSP to update his local forest root.
+      await sleep(500);
       // Check that the runtime root matches the forest root of the BSP.
       const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
       strictEqual(
