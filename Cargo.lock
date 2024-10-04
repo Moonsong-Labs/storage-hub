@@ -13246,6 +13246,7 @@ dependencies = [
  "prost-build 0.12.6",
  "sc-client-api",
  "sc-network",
+ "sc-network-types",
  "sc-service",
  "sc-tracing",
  "sc-utils",

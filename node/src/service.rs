@@ -592,21 +592,22 @@ where
                 ))),
                 create_inherent_data_providers: move |block: Hash, ()| {
                     let current_para_block = client_for_cidp
-                    .number(block)
-                    .expect("Header lookup should succeed")
-                    .expect("Header passed in as parent should be present in backend.");
+                    	.number(block)
+                    	.expect("Header lookup should succeed")
+                    	.expect("Header passed in as parent should be present in backend.");
 
                     let hash = client
                         .hash(current_para_block.saturating_sub(1))
                         .expect("Hash of the desired block must be present")
                         .expect("Hash of the desired block should exist");
 
-                    let para_header = client
-                        .expect_header(hash)
-                        .expect("Expected parachain header should exist")
-                        .encode();
+					let para_header = client
+						.expect_header(hash)
+						.expect("Expected parachain header should exist")
+						.encode();
 
-                    let para_head_data = HeadData(para_header).encode();
+                    let raw_para_head_data = HeadData(para_header);
+					let para_head_data = raw_para_head_data.encode();
 
                     let client_for_xcm = client_for_cidp.clone();
 
@@ -643,7 +644,7 @@ where
                             MockValidationDataInherentDataProvider {
                                 current_para_block,
 								para_id,
-								current_para_block_head: para_head_data,
+								current_para_block_head: Some(raw_para_head_data),
                                 relay_offset: 1000,
                                 relay_blocks_per_para_block: 2,
                                 para_blocks_per_relay_epoch: 0,

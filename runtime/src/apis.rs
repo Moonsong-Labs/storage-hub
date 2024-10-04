@@ -1,5 +1,4 @@
 use crate::*;
-use codec::Encode;
 use frame_support::{
     genesis_builder_helper::{build_state, get_preset},
     weights::Weight,
@@ -26,11 +25,10 @@ use sp_runtime::{
 use sp_std::prelude::Vec;
 use sp_version::RuntimeVersion;
 use xcm::{
-    latest::prelude::AssetId, IntoVersion, VersionedAssetId, VersionedAssets, VersionedLocation,
-    VersionedXcm,
+    latest::prelude::AssetId, VersionedAssetId, VersionedAssets, VersionedLocation, VersionedXcm,
 };
 use xcm_fee_payment_runtime_api::{
-    dry_run::{Error as XcmDryRunApiError, ExtrinsicDryRunEffects, XcmDryRunEffects},
+    dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
     fees::Error as XcmPaymentApiError,
 };
 

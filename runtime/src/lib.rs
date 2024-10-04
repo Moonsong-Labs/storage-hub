@@ -18,8 +18,6 @@ use sp_runtime::{
 };
 
 use sp_std::prelude::*;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 use frame_support::{

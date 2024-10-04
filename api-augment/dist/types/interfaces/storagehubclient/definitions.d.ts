@@ -1,5 +1,5 @@
 declare const _default: {
-  types: import("@polkadot/types-codec/types").RegistryTypes | undefined;
+  types: import("@polkadot/types/types").RegistryTypes | undefined;
   runtime: import("@polkadot/types/types").DefinitionsCall | undefined;
   rpc:
     | Record<
