@@ -69,11 +69,20 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletCollatorSelectionError,
   PalletCollatorSelectionEvent,
+  PalletFileSystemAcceptedStorageRequestParameters,
+  PalletFileSystemBatchResponses,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
+  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemMspAcceptedBatchStorageRequests,
+  PalletFileSystemMspFailedBatchStorageRequests,
+  PalletFileSystemMspRejectedBatchStorageRequests,
+  PalletFileSystemMspRespondStorageRequestsResult,
+  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -111,6 +120,8 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceDirection,
   PalletNftsPriceWithDirection,
+  PalletParametersCall,
+  PalletParametersEvent,
   PalletPaymentStreamsCall,
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsError,
@@ -200,6 +211,16 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntime,
   StorageHubRuntimeRuntimeHoldReason,
   StorageHubRuntimeSessionKeys,
@@ -318,11 +339,20 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionCandidateInfo: PalletCollatorSelectionCandidateInfo;
     PalletCollatorSelectionError: PalletCollatorSelectionError;
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
+    PalletFileSystemAcceptedStorageRequestParameters: PalletFileSystemAcceptedStorageRequestParameters;
+    PalletFileSystemBatchResponses: PalletFileSystemBatchResponses;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
+    PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
+    PalletFileSystemMspAcceptedBatchStorageRequests: PalletFileSystemMspAcceptedBatchStorageRequests;
+    PalletFileSystemMspFailedBatchStorageRequests: PalletFileSystemMspFailedBatchStorageRequests;
+    PalletFileSystemMspRejectedBatchStorageRequests: PalletFileSystemMspRejectedBatchStorageRequests;
+    PalletFileSystemMspRespondStorageRequestsResult: PalletFileSystemMspRespondStorageRequestsResult;
+    PalletFileSystemMspStorageRequestResponse: PalletFileSystemMspStorageRequestResponse;
+    PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
     PalletMessageQueueBookState: PalletMessageQueueBookState;
@@ -360,6 +390,8 @@ declare module "@polkadot/types/types/registry" {
     PalletNftsPreSignedMint: PalletNftsPreSignedMint;
     PalletNftsPriceDirection: PalletNftsPriceDirection;
     PalletNftsPriceWithDirection: PalletNftsPriceWithDirection;
+    PalletParametersCall: PalletParametersCall;
+    PalletParametersEvent: PalletParametersEvent;
     PalletPaymentStreamsCall: PalletPaymentStreamsCall;
     PalletPaymentStreamsDynamicRatePaymentStream: PalletPaymentStreamsDynamicRatePaymentStream;
     PalletPaymentStreamsError: PalletPaymentStreamsError;
@@ -449,6 +481,16 @@ declare module "@polkadot/types/types/registry" {
     StagingXcmV4Response: StagingXcmV4Response;
     StagingXcmV4TraitsOutcome: StagingXcmV4TraitsOutcome;
     StagingXcmV4Xcm: StagingXcmV4Xcm;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters: StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue;
     StorageHubRuntimeRuntime: StorageHubRuntimeRuntime;
     StorageHubRuntimeRuntimeHoldReason: StorageHubRuntimeRuntimeHoldReason;
     StorageHubRuntimeSessionKeys: StorageHubRuntimeSessionKeys;

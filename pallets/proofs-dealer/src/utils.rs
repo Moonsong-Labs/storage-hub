@@ -766,10 +766,13 @@ where
     /// for a Provider. The result is then converted to `BlockNumber` type. The division saturates at [`MinChallengePeriodFor`].
     pub(crate) fn stake_to_challenge_period(stake: BalanceFor<T>) -> BlockNumberFor<T> {
         let min_challenge_period = MinChallengePeriodFor::<T>::get();
-        match StakeToChallengePeriodFor::<T>::get().checked_div(&stake) {
+        let challenge_period = match StakeToChallengePeriodFor::<T>::get().checked_div(&stake) {
             Some(block_period) => T::StakeToBlockNumber::convert(block_period),
             None => min_challenge_period,
-        }
+        };
+
+        // Return the maximum between the calculated challenge period and the minimum challenge period.
+        min_challenge_period.max(challenge_period)
     }
 
     /// Add challenge to ChallengesQueue.

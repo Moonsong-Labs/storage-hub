@@ -541,8 +541,8 @@ describeBspNet(
           : bspTwoNextChallengeTick;
       const secondBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
-          ? bspTwoNextChallengeTick + bspTwoChallengePeriod
-          : dummyBspNextChallengeTick + dummyBspChallengePeriod;
+          ? bspTwoNextChallengeTick
+          : dummyBspNextChallengeTick;
 
       // Advance to first next challenge block.
       await userApi.advanceToBlock(firstBlockToAdvance, {

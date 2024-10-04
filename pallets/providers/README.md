@@ -404,9 +404,8 @@ The runtime automatically processes any expired grace periods within the `on_pol
 > [!IMPORTANT]
 > The runtime cannot ensure that all the data stored from an insolvent Storage Provider would be recovered. Given that the runtime has no knowledge of file keys stored by whom, it is up to external services to expose information of the files that are lost so that new storage requests can be initiated. Such external services can be indexer services or MSPs which are expected to run an indexer as well.
 
-Any account can call the `add_redundancy` extrinsic which requires a proof of inclusion of a given file key and the number of required BSPs needed to fulfill this request. The root is checked to be the current forest root of insolvent Storage Provider to ensure that the file key does indeed exist as part of a Storage Provider's forest.
-
-This creates a traditional storage request with the specified amount of BSPs required. The caller of the extrinsic can optionally pass a list of data servers for the file key, which then is marked in the storage request for the volunteers to request the data from. The caller is able to obtain this information from the off-chain indexer.
+In the event where a BSP loses all of their held file data, to avoid being slashed at every challenge interval, the BSP should request to stop storing every file key they currently have in their forest which they can no
+longer respond to proofs for.
 
 #### Incentives and Storage Cleanup
 

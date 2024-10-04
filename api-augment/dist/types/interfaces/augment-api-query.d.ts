@@ -71,7 +71,12 @@ import type {
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
+<<<<<<< HEAD
   StagingXcmV4Instruction,
+=======
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
+>>>>>>> main
   StorageHubRuntimeRuntimeHoldReason,
   StorageHubRuntimeSessionKeys,
   XcmVersionedAssetId,
@@ -959,6 +964,29 @@ declare module "@polkadot/api-base/types/storage" {
         []
       > &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Generic query
+       **/
+      [key: string]: QueryableStorageEntry<ApiType>;
+    };
+    parameters: {
+      /**
+       * Stored parameters.
+       **/
+      parameters: AugmentedQuery<
+        ApiType,
+        (
+          arg:
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey
+            | {
+                RuntimeConfig: any;
+              }
+            | string
+            | Uint8Array
+        ) => Observable<Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>>,
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey]
+      > &
+        QueryableStorageEntry<ApiType, [StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey]>;
       /**
        * Generic query
        **/

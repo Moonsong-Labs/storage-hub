@@ -4,8 +4,7 @@ use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::Trie;
-use sp_trie::{TrieDBBuilder, TrieLayout};
+use sp_trie::{Trie, TrieDBBuilder, TrieLayout};
 use types::FileKeyProof;
 
 #[cfg(test)]

@@ -13,10 +13,15 @@ use sp_runtime::{
     },
     ArithmeticError, BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
+use sp_std::{
+    collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+    vec,
+    vec::Vec,
+};
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
+    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
@@ -26,14 +31,18 @@ use shp_traits::{
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
+use crate::types::AcceptedStorageRequestParameters;
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, ExpirationItem, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
-        KeyProof, MaxBspsPerStorageRequest, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, ProviderIdFor, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, TickNumber,
+        BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
+        FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
+        MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
+        MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
+        MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
+        ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
     },
     BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
@@ -163,9 +172,34 @@ where
             }
         };
 
+        Self::query_confirm_chunks_to_prove_for_file(bsp_id, storage_request_metadata, file_key)
+            .map_err(|e| QueryBspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    pub fn query_msp_confirm_chunks_to_prove_for_file(
+        msp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+        // Get the storage request metadata.
+        let storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
+            Some(storage_request) => storage_request,
+            None => {
+                return Err(QueryMspConfirmChunksToProveForFileError::StorageRequestNotFound);
+            }
+        };
+
+        Self::query_confirm_chunks_to_prove_for_file(msp_id, storage_request_metadata, file_key)
+            .map_err(|e| QueryMspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    fn query_confirm_chunks_to_prove_for_file(
+        provider_id: ProviderIdFor<T>,
+        storage_request_metadata: StorageRequestMetadata<T>,
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ChunkId>, QueryConfirmChunksToProveForFileError> {
         // Generate the list of chunks to prove.
         let challenges = Self::generate_chunk_challenges_on_sp_confirm(
-            bsp_id,
+            provider_id,
             file_key,
             &storage_request_metadata,
         );
@@ -176,11 +210,10 @@ where
             .iter()
             .map(|challenge| {
                 let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-                let challenged_chunk: ChunkId = ChunkId::new(
-                    challenged_chunk
-                        .try_into()
-                        .map_err(|_| QueryBspConfirmChunksToProveForFileError::InternalError)?,
-                );
+                let challenged_chunk: ChunkId =
+                    ChunkId::new(challenged_chunk.try_into().map_err(|_| {
+                        QueryConfirmChunksToProveForFileError::ChallengedChunkToChunkIdError
+                    })?);
 
                 Ok(challenged_chunk)
             })
@@ -578,49 +611,370 @@ where
         Ok(file_key)
     }
 
-    pub(crate) fn do_msp_accept_storage_request(
+    /// Accepts or rejects batches of storage requests assumed to be grouped by bucket.
+    ///
+    /// This is using a best-effort strategy to process as many file keys as possible, returning
+    /// the ones that were accepted, rejected, or failed to be processed.
+    ///
+    /// File keys that are not part of the bucket they belong to will be skipped (failed).
+    ///
+    /// All file keys will be processed (unless there are duplicates, they are simply skipped) and any errors
+    /// while processing them will be marked as a failed key and continue processing the rest. It is up to the
+    /// caller to verify the final result and apply only the file keys that have been successfully accepted.
+    pub(crate) fn do_msp_respond_storage_request(
         sender: T::AccountId,
-        file_key: MerkleHash<T>,
-        file_proof: KeyProof<T>,
-        non_inclusion_forest_proof: ForestProof<T>,
-    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>, StorageRequestMetadata<T>), DispatchError> {
-        // Check that the storage request exists for the file key.
-        let mut storage_request_metadata =
-            <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
-
-        // Check that the sender is a Storage Provider and get its SP ID
-        let sp_id =
+        file_key_responses_input: FileKeyResponsesInput<T>,
+    ) -> Result<MspRespondStorageRequestsResult<T>, DispatchError> {
+        // Check that the sender is a Storage Provider and get its MSP ID
+        let msp_id =
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotASp)?;
 
-        // Check that the sender is a MSP.
+        // Check that the sender is an MSP
         ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::is_msp(&sp_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
         );
 
-        // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
-        let (request_msp_id, confirm_status) = storage_request_metadata
-            .msp
-            .ok_or(Error::<T>::RequestWithoutMsp)?;
-        ensure!(request_msp_id == sp_id, Error::<T>::NotSelectedMsp);
-        ensure!(!confirm_status, Error::<T>::MspAlreadyConfirmed);
+        // Initialize batch responses
+        let mut batch_responses: BoundedVec<
+            BatchResponses<T>,
+            MaxBatchMspRespondStorageRequests<T>,
+        > = BoundedVec::default();
 
-        // Get the bucket ID from the storage request metadata
-        let bucket_id = storage_request_metadata.bucket_id;
+        // Preliminary check to ensure that the MSP is the one storing each bucket in the responses
+        for (bucket_id, _) in file_key_responses_input.iter() {
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                    &msp_id, &bucket_id
+                ),
+                Error::<T>::MspNotStoringBucket
+            );
+        }
 
-        // Check that the MSP is the one storing the bucket.
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&sp_id, &bucket_id),
-            Error::<T>::MspNotStoringBucket
-        );
+        // Process each bucket's responses
+        for (bucket_id, file_key_responses) in file_key_responses_input {
+            let mut failed: BoundedVec<
+                (MerkleHash<T>, DispatchError),
+                MaxBatchMspRespondStorageRequests<T>,
+            > = BoundedVec::default();
 
-        // Check that the MSP still has enough available capacity to store the file.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&sp_id)
-                >= storage_request_metadata.size,
-            Error::<T>::InsufficientAvailableCapacity
-        );
+            let owner = <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)
+                .map_err(|_| Error::<T>::BucketNotFound)?;
+
+            if let Some(accepted_file_keys) = file_key_responses.accept {
+                // Call do_msp_accept_storage_request, which returns the new_bucket_root
+                let (new_bucket_root, accepted_file_keys, failed_file_keys) =
+                    Self::do_msp_accept_storage_request(msp_id, bucket_id, accepted_file_keys)?;
+
+                // Create batch responses
+                if !accepted_file_keys.is_empty() {
+                    let accepted_batch = MspAcceptedBatchStorageRequests {
+                        file_keys: accepted_file_keys,
+                        bucket_id,
+                        new_bucket_root,
+                        owner: owner.clone(),
+                    };
+
+                    batch_responses
+                        .try_push(BatchResponses::Accepted(accepted_batch))
+                        .map_err(|_| Error::<T>::TooManyBatchResponses)?;
+                }
+
+                if !failed_file_keys.is_empty() {
+                    for rejected_file_key in failed_file_keys {
+                        failed
+                            .try_push(rejected_file_key)
+                            .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                    }
+                }
+            }
+
+            if let Some(rejected_file_keys) = file_key_responses.reject {
+                let mut rejected: BoundedVec<
+                    (MerkleHash<T>, RejectedStorageRequestReason),
+                    MaxBatchMspRespondStorageRequests<T>,
+                > = BoundedVec::default();
+
+                for file_key in rejected_file_keys.iter() {
+                    let storage_request_metadata = match <StorageRequests<T>>::get(&file_key.0) {
+                        Some(metadata) => metadata,
+                        None => {
+                            failed
+                                .try_push((file_key.0, Error::<T>::StorageRequestNotFound.into()))
+                                .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                            continue;
+                        }
+                    };
+
+                    if let Err(e) = Self::cleanup_storage_request(
+                        EitherAccountIdOrMspId::MspId(msp_id),
+                        file_key.0,
+                        &storage_request_metadata,
+                    ) {
+                        failed
+                            .try_push((file_key.0, e))
+                            .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                        continue;
+                    }
+
+                    rejected
+                        .try_push((file_key.0, file_key.1.clone()))
+                        .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                }
+
+                if !rejected.is_empty() {
+                    let rejected_batch = MspRejectedBatchStorageRequests {
+                        file_keys: rejected,
+                        bucket_id,
+                        owner: owner.clone(),
+                    };
+
+                    batch_responses
+                        .try_push(BatchResponses::Rejected(rejected_batch))
+                        .map_err(|_| Error::<T>::TooManyBatchResponses)?;
+                }
+            }
+
+            if !failed.is_empty() {
+                let failed_batch = MspFailedBatchStorageRequests {
+                    file_keys: failed,
+                    bucket_id,
+                    owner: owner.clone(),
+                };
+
+                batch_responses
+                    .try_push(BatchResponses::Failed(failed_batch))
+                    .map_err(|_| Error::<T>::TooManyBatchResponses)?;
+            }
+        }
+
+        // Construct the result
+        let result = MspRespondStorageRequestsResult {
+            msp_id,
+            responses: batch_responses,
+        };
+
+        Ok(result)
+    }
+
+    /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
+    ///
+    /// There should be a single non-inclusion forest proof for all file keys, and finally there should
+    /// be a list of file key(s) with a key proof for each of them.
+    ///
+    /// The implementation follows this sequence:
+    /// 1. Verify the non-inclusion proof.
+    /// 2. For each file key: Record a successful acceptance or a failure. Any failed operation while processing a file key
+    /// will not result in the function failing, but the file key will be marked as failed and the function will continue processing the rest.
+    /// 3. Apply the delta with all the keys that were successfully accepted to the root of the bucket.
+    fn do_msp_accept_storage_request(
+        msp_id: ProviderIdFor<T>,
+        bucket_id: BucketIdFor<T>,
+        accepted_file_keys: AcceptedStorageRequestParameters<T>,
+    ) -> Result<
+        (
+            MerkleHash<T>,
+            BoundedVec<MerkleHash<T>, T::MaxBatchMspRespondStorageRequests>,
+            BoundedVec<
+                (
+                    <T::Providers as ReadProvidersInterface>::MerkleHash,
+                    DispatchError,
+                ),
+                T::MaxBatchMspRespondStorageRequests,
+            >,
+        ),
+        DispatchError,
+    > {
+        let file_keys = accepted_file_keys
+            .file_keys_and_proofs
+            .iter()
+            .map(|(fk, _)| *fk)
+            .collect::<Vec<_>>();
+
+        // Get the Bucket's root
+        let bucket_root =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                .ok_or(Error::<T>::BucketNotFound)?;
+
+        // Verify the proof of non-inclusion.
+        let proven_keys: BTreeSet<MerkleHash<T>> =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                &bucket_root,
+                file_keys.as_slice(),
+                &accepted_file_keys.non_inclusion_forest_proof,
+            )?;
+
+        // Initialize accepted, rejected, and failed file keys
+        let mut accepted_file_keys_and_metadata = BTreeMap::new();
+        let mut failed_file_keys: BoundedVec<
+            (MerkleHash<T>, DispatchError),
+            T::MaxBatchMspRespondStorageRequests,
+        > = BoundedVec::default();
+
+        for (file_key, key_proof) in accepted_file_keys.file_keys_and_proofs {
+            // Skip any duplicates.
+            if accepted_file_keys_and_metadata.contains_key(&file_key) {
+                continue;
+            }
+
+            let mut storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
+                Some(metadata) => metadata,
+                None => {
+                    failed_file_keys
+                        .try_push((file_key, Error::<T>::StorageRequestNotFound.into()))
+                        .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                    continue;
+                }
+            };
+
+            // Ensure that the file key IS NOT part of the bucket's forest.
+            if proven_keys.contains(&file_key) {
+                failed_file_keys
+                    .try_push((file_key, Error::<T>::ExpectedNonInclusionProof.into()))
+                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                continue;
+            }
+
+            if storage_request_metadata.bucket_id != bucket_id {
+                failed_file_keys
+                    .try_push((file_key, Error::<T>::InvalidBucketIdFileKeyPair.into()))
+                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                continue;
+            }
+
+            // Check that the MSP is the one storing the bucket.
+            if !<T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                &msp_id,
+                &storage_request_metadata.bucket_id,
+            ) {
+                failed_file_keys
+                    .try_push((file_key, Error::<T>::MspNotStoringBucket.into()))
+                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                continue;
+            }
+
+            // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
+            match storage_request_metadata.msp {
+                Some((request_msp_id, confirm_status)) => {
+                    if request_msp_id != msp_id {
+                        failed_file_keys
+                            .try_push((file_key, Error::<T>::NotSelectedMsp.into()))
+                            .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                        continue;
+                    }
+
+                    if confirm_status {
+                        failed_file_keys
+                            .try_push((file_key, Error::<T>::MspAlreadyConfirmed.into()))
+                            .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                        continue;
+                    }
+                }
+                None => {
+                    failed_file_keys
+                        .try_push((file_key, Error::<T>::RequestWithoutMsp.into()))
+                        .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                    continue;
+                }
+            }
+
+            // Check that the MSP still has enough available capacity to store the file.
+            if <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
+                < storage_request_metadata.size
+            {
+                failed_file_keys
+                    .try_push((file_key, Error::<T>::InsufficientAvailableCapacity.into()))
+                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                continue;
+            }
+
+            // Get the file metadata to insert into the bucket under the file key.
+            let file_metadata = storage_request_metadata.clone().to_file_metadata();
+            let encoded_trie_value = file_metadata.encode();
+
+            let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
+                msp_id,
+                file_key,
+                &storage_request_metadata,
+            );
+
+            // Check that the key proof is valid.
+            if let Err(e) = <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
+                &file_key,
+                &chunk_challenges,
+                &key_proof,
+            ) {
+                failed_file_keys
+                    .try_push((file_key, e))
+                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                continue;
+            }
+
+            // Increase size of the bucket.
+            if let Err(e) = <T::Providers as MutateBucketsInterface>::increase_bucket_size(
+                &storage_request_metadata.bucket_id,
+                storage_request_metadata.size,
+            ) {
+                failed_file_keys
+                    .try_push((file_key, e))
+                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
+                continue;
+            }
+
+            // Increase the used capacity of the MSP
+            // This should not fail since we checked that the MSP has enough available capacity to store the file.
+            expect_or_err!(
+                <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
+                    &msp_id,
+                    storage_request_metadata.size,
+                ),
+                "Failed to increase capacity used for MSP",
+                Error::<T>::TooManyStorageRequestResponses,
+                result
+            );
+
+            // Check if all BSPs have confirmed storing the file.
+            if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
+                // Remove storage request metadata.
+                <StorageRequests<T>>::remove(&file_key);
+                <BucketsWithStorageRequests<T>>::remove(
+                    &storage_request_metadata.bucket_id,
+                    &file_key,
+                );
+
+                // Remove storage request bsps
+                let removed =
+                    <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
+
+                // Make sure that the expected number of bsps were removed.
+                expect_or_err!(
+                    storage_request_metadata.bsps_volunteered == removed.into(),
+                    "Number of volunteered bsps for storage request should have been removed",
+                    Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
+                    bool
+                );
+
+                // Notify that the storage request has been fulfilled.
+                Self::deposit_event(Event::StorageRequestFulfilled { file_key });
+            } else {
+                // Set as confirmed the MSP in the storage request metadata.
+                storage_request_metadata.msp = Some((msp_id, true));
+
+                // Update storage request metadata.
+                <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
+            }
+
+            // This should not fail since we checked that the key is not already in the map.
+            expect_or_err!(
+                accepted_file_keys_and_metadata
+                    .insert(file_key, encoded_trie_value)
+                    .is_none(),
+                "Failed to insert file key and metadata into accepted_file_keys_and_metadata",
+                Error::<T>::InconsistentStateKeyAlreadyExists,
+                bool
+            );
+        }
 
         // Get the current root of the bucket where the file will be stored.
         let bucket_root = expect_or_err!(
@@ -629,44 +983,16 @@ where
             Error::<T>::BucketNotFound
         );
 
-        // Verify the proof of non-inclusion.
-        let proven_keys: BTreeSet<MerkleHash<T>> =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
-                &bucket_root,
-                &[file_key],
-                &non_inclusion_forest_proof,
-            )?;
-
-        // Ensure that the file key IS NOT part of the bucket's forest.
-        ensure!(
-            !proven_keys.contains(&file_key),
-            Error::<T>::ExpectedNonInclusionProof
-        );
-
-        // Generate the challenges to verify that the file proof is valid.
-        let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
-            sp_id,
-            file_key,
-            &storage_request_metadata,
-        );
-
-        // Check that the key proof is valid.
-        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
-            &file_key,
-            &chunk_challenges,
-            &file_proof,
-        )?;
-
-        // Get the file metadata to insert into the bucket under the file key.
-        let file_metadata = storage_request_metadata.clone().to_file_metadata();
-        let encoded_trie_value = file_metadata.encode();
-
         // Compute the new bucket root after inserting new file key in its forest partial trie.
         let new_bucket_root =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
                 &bucket_root,
-                &[(file_key, TrieAddMutation::new(encoded_trie_value).into())],
-                &non_inclusion_forest_proof,
+                accepted_file_keys_and_metadata
+                    .iter()
+                    .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                &accepted_file_keys.non_inclusion_forest_proof,
             )?;
 
         // Update root of the bucket.
@@ -675,47 +1001,16 @@ where
             new_bucket_root,
         )?;
 
-        // Increase size of the bucket.
-        <T::Providers as MutateBucketsInterface>::increase_bucket_size(
-            &bucket_id,
-            storage_request_metadata.size,
-        )?;
+        let accepted_file_keys: Vec<MerkleHash<T>> =
+            accepted_file_keys_and_metadata.keys().cloned().collect();
 
-        // Increase the used capacity of the MSP
-        <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
-            &sp_id,
-            storage_request_metadata.size,
-        )?;
-
-        // Check if all BSPs have confirmed storing the file.
-        if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
-            // Remove storage request metadata.
-            <StorageRequests<T>>::remove(&file_key);
-            <BucketsWithStorageRequests<T>>::remove(&bucket_id, &file_key);
-
-            // Remove storage request bsps
-            let removed =
-                <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
-
-            // Make sure that the expected number of bsps were removed.
-            expect_or_err!(
-                storage_request_metadata.bsps_volunteered == removed.into(),
-                "Number of volunteered bsps for storage request should have been removed",
-                Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
-                bool
-            );
-
-            // Notify that the storage request has been fulfilled.
-            Self::deposit_event(Event::StorageRequestFulfilled { file_key: file_key });
-        } else {
-            // Set as confirmed the MSP in the storage request metadata.
-            storage_request_metadata.msp = Some((request_msp_id, true));
-
-            // Update storage request metadata.
-            <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
-        }
-
-        Ok((sp_id, new_bucket_root, storage_request_metadata))
+        Ok((
+            new_bucket_root,
+            accepted_file_keys
+                .try_into()
+                .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?,
+            failed_file_keys,
+        ))
     }
 
     /// Volunteer to store a file.
@@ -906,14 +1201,6 @@ where
             // Check that the storage provider has not already confirmed storing the file.
             ensure!(!requests.confirmed, Error::<T>::BspAlreadyConfirmed);
 
-            // Check that the number of confirmed bsps is less than the required bsps and increment it.
-            expect_or_err!(
-                storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
-                "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
-                Error::<T>::StorageRequestBspsRequiredFulfilled,
-                bool
-            );
-
             let available_capacity =
                 <T::Providers as ReadStorageProvidersInterface>::available_capacity(&bsp_id);
 
@@ -997,7 +1284,8 @@ where
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required
                 && storage_request_metadata
                     .msp
-                    .map_or(false, |(_, confirmed)| confirmed)
+                    .map(|(_, confirmed)| confirmed)
+                    .unwrap_or(true)
             {
                 // Remove storage request metadata.
                 <StorageRequests<T>>::remove(&file_key.0);
@@ -1082,12 +1370,7 @@ where
 
     /// Revoke a storage request.
     ///
-    /// *Callable by the owner of the storage request. Users, BSPs and MSPs can be the owners.*
-    ///
-    /// When the owner revokes a storage request which has already been confirmed by some BSPs, a challenge (with priority) is
-    /// issued to force the BSPs to update their storage root to uninclude the file from their storage.
-    ///
-    /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
+    /// *Callable by the owner of the storage request*
     pub(crate) fn do_revoke_storage_request(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
@@ -1105,12 +1388,30 @@ where
             Error::<T>::StorageRequestNotFound
         );
 
-        // Check that the sender is the same as the one who requested the storage.
+        // Check that the sender is the owner of the storage request.
         ensure!(
             storage_request_metadata.owner == sender,
             Error::<T>::StorageRequestNotAuthorized
         );
 
+        Self::cleanup_storage_request(
+            EitherAccountIdOrMspId::AccountId(sender),
+            file_key,
+            &storage_request_metadata,
+        )?;
+
+        Ok(())
+    }
+
+    /// When a storage request is revoked and has already been confirmed by some BSPs, a challenge (with priority) is
+    /// issued to force the BSPs to update their storage root to uninclude the file from their storage.
+    ///
+    /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
+    fn cleanup_storage_request(
+        revoker: EitherAccountIdOrMspId<T>,
+        file_key: MerkleHash<T>,
+        storage_request_metadata: &StorageRequestMetadata<T>,
+    ) -> DispatchResult {
         // Check if there are already BSPs who have confirmed to store the file.
         if storage_request_metadata.bsps_confirmed >= ReplicationTargetType::<T>::one() {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
@@ -1121,7 +1422,7 @@ where
 
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                user: sender,
+                issuer: revoker,
                 file_key,
             });
         }
@@ -1577,7 +1878,7 @@ where
 
                 // Emit event.
                 Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                    user: sender,
+                    issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
                     file_key,
                 });
 
@@ -1642,7 +1943,7 @@ where
 
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                user: user.clone(),
+                issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
                 file_key,
             });
         }
@@ -1811,7 +2112,7 @@ mod hooks {
     use crate::{
         pallet,
         types::MerkleHash,
-        utils::{BucketIdFor, ProviderIdFor},
+        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
         DataServersForMoveBucket, Event, FileDeletionRequestExpirations,
         NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests,
         ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
@@ -1978,7 +2279,7 @@ mod hooks {
             });
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                user: user.clone(),
+                issuer: EitherAccountIdOrMspId::<T>::AccountId(user),
                 file_key,
             });
 
