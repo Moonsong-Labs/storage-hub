@@ -1,16 +1,11 @@
 import "@polkadot/api-base/types/calls";
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
-import type { Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
+import type { Bytes, Null, Option, Result, Vec, bool, u32 } from "@polkadot/types-codec";
 import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
 import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
 import type { BlockHash } from "@polkadot/types/interfaces/chain";
 import type { AuthorityId } from "@polkadot/types/interfaces/consensus";
 import type { CollationInfo } from "@polkadot/types/interfaces/cumulus";
-import type {
-  CallDryRunEffects,
-  XcmDryRunApiError,
-  XcmDryRunEffects
-} from "@polkadot/types/interfaces/dryRunApi";
 import type { Extrinsic } from "@polkadot/types/interfaces/extrinsics";
 import type { GenesisBuildErr } from "@polkadot/types/interfaces/genesisBuilder";
 import type { OpaqueMetadata } from "@polkadot/types/interfaces/metadata";
@@ -26,19 +21,13 @@ import type {
   Header,
   Index,
   KeyTypeId,
-  OriginCaller,
-  RuntimeCall,
   Slot,
   SlotDuration,
-  Weight,
-  WeightV2
+  Weight
 } from "@polkadot/types/interfaces/runtime";
 import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
 import type { ApplyExtrinsicResult, Key } from "@polkadot/types/interfaces/system";
 import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
-import type { VersionedMultiLocation, VersionedXcm } from "@polkadot/types/interfaces/xcm";
-import type { XcmPaymentApiError } from "@polkadot/types/interfaces/xcmPaymentApi";
-import type { XcmVersionedAssetId, XcmVersionedXcm } from "@polkadot/types/lookup";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   BackupStorageProvider,
@@ -240,75 +229,6 @@ declare module "@polkadot/api-base/types/calls" {
        * Returns the version of the runtime.
        **/
       version: AugmentedCall<ApiType, () => Observable<RuntimeVersion>>;
-      /**
-       * Generic call
-       **/
-      [key: string]: DecoratedCallBase<ApiType>;
-    };
-    /** 0x91b1c8b16328eb92/1 */
-    dryRunApi: {
-      /**
-       * Dry run call
-       **/
-      dryRunCall: AugmentedCall<
-        ApiType,
-        (
-          origin:
-            | OriginCaller
-            | {
-                System: any;
-              }
-            | string
-            | Uint8Array,
-          call: RuntimeCall | IMethod | string | Uint8Array
-        ) => Observable<Result<CallDryRunEffects, XcmDryRunApiError>>
-      >;
-      /**
-       * Dry run XCM program
-       **/
-      dryRunXcm: AugmentedCall<
-        ApiType,
-        (
-          originLocation:
-            | VersionedMultiLocation
-            | {
-                V0: any;
-              }
-            | {
-                V1: any;
-              }
-            | {
-                V2: any;
-              }
-            | {
-                V3: any;
-              }
-            | {
-                V4: any;
-              }
-            | string
-            | Uint8Array,
-          xcm:
-            | VersionedXcm
-            | {
-                V0: any;
-              }
-            | {
-                V1: any;
-              }
-            | {
-                V2: any;
-              }
-            | {
-                V3: any;
-              }
-            | {
-                V4: any;
-              }
-            | string
-            | Uint8Array
-        ) => Observable<Result<XcmDryRunEffects, XcmDryRunApiError>>
-      >;
       /**
        * Generic call
        **/
@@ -733,69 +653,6 @@ declare module "@polkadot/api-base/types/calls" {
             | string
             | Uint8Array
         ) => Observable<Balance>
-      >;
-      /**
-       * Generic call
-       **/
-      [key: string]: DecoratedCallBase<ApiType>;
-    };
-    /** 0x6ff52ee858e6c5bd/1 */
-    xcmPaymentApi: {
-      /**
-       * The API to query acceptable payment assets
-       **/
-      queryAcceptablePaymentAssets: AugmentedCall<
-        ApiType,
-        (
-          version: u32 | AnyNumber | Uint8Array
-        ) => Observable<Result<Vec<XcmVersionedAssetId>, XcmPaymentApiError>>
-      >;
-      /**
-       *
-       **/
-      queryWeightToAssetFee: AugmentedCall<
-        ApiType,
-        (
-          weight:
-            | WeightV2
-            | {
-                refTime?: any;
-                proofSize?: any;
-              }
-            | string
-            | Uint8Array,
-          asset:
-            | XcmVersionedAssetId
-            | {
-                V3: any;
-              }
-            | {
-                V4: any;
-              }
-            | string
-            | Uint8Array
-        ) => Observable<Result<u128, XcmPaymentApiError>>
-      >;
-      /**
-       *
-       **/
-      queryXcmWeight: AugmentedCall<
-        ApiType,
-        (
-          message:
-            | XcmVersionedXcm
-            | {
-                V2: any;
-              }
-            | {
-                V3: any;
-              }
-            | {
-                V4: any;
-              }
-            | string
-            | Uint8Array
-        ) => Observable<Result<WeightV2, XcmPaymentApiError>>
       >;
       /**
        * Generic call

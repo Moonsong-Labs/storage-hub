@@ -10,7 +10,8 @@ use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::*;
 use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, ProviderId, StorageDataUnit, StorageProviderId,
+    BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId, ProviderId,
+    StorageDataUnit, StorageProviderId,
 };
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
@@ -25,10 +26,6 @@ use sp_runtime::{
 };
 use sp_std::prelude::Vec;
 use sp_version::RuntimeVersion;
-use xcm_fee_payment_runtime_api::{
-    dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
-    fees::Error as XcmPaymentApiError,
-};
 
 // Local module imports
 use super::{
@@ -184,45 +181,6 @@ impl_runtime_apis! {
         }
     }
 
-    impl xcm_fee_payment_runtime_api::fees::XcmPaymentApi<Block> for Runtime {
-        fn query_acceptable_payment_assets(xcm_version: xcm::Version) -> Result<Vec<VersionedAssetId>, XcmPaymentApiError> {
-
-            let acceptable_assets = vec![AssetId(configs::xcm_config::RelayLocation::get())];
-            PolkadotXcm::query_acceptable_payment_assets(xcm_version, acceptable_assets)
-        }
-        fn query_weight_to_asset_fee(weight: Weight, asset: VersionedAssetId) -> Result<u128, XcmPaymentApiError> {
-            match asset.try_as::<AssetId>() {
-                Ok(asset_id) if asset_id.0 == configs::xcm_config::RelayLocation::get() => {
-                    // for native token
-                    Ok(<WeightToFee as sp_weights::WeightToFee>::weight_to_fee(&weight))
-                },
-                Ok(asset_id) => {
-                    log::trace!(target: "xcm::xcm_fee_payment_runtime_api", "query_weight_to_asset_fee - unhandled asset_id: {asset_id:?}!");
-                    Err(XcmPaymentApiError::AssetNotFound)
-                },
-                Err(_) => {
-                    log::trace!(target: "xcm::xcm_fee_payment_runtime_api", "query_weight_to_asset_fee - failed to convert asset: {asset:?}!");
-                    Err(XcmPaymentApiError::VersionedConversionFailed)
-                }
-            }
-        }
-        fn query_xcm_weight(message: VersionedXcm<()>) -> Result<Weight, XcmPaymentApiError> {
-            PolkadotXcm::query_xcm_weight(message)
-        }
-        fn query_delivery_fees(destination: VersionedLocation, message: VersionedXcm<()>) -> Result<VersionedAssets, XcmPaymentApiError> {
-            PolkadotXcm::query_delivery_fees(destination, message)
-        }
-    }
-
-    impl xcm_fee_payment_runtime_api::dry_run::DryRunApi<Block, RuntimeCall, RuntimeEvent, OriginCaller> for Runtime {
-        fn dry_run_call(origin: OriginCaller, call: RuntimeCall) -> Result<CallDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
-            PolkadotXcm::dry_run_call::<Runtime, configs::xcm_config::XcmRouter, OriginCaller, RuntimeCall>(origin, call)
-        }
-        fn dry_run_xcm(origin_location: VersionedLocation, xcm: VersionedXcm<RuntimeCall>) -> Result<XcmDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
-            PolkadotXcm::dry_run_xcm::<Runtime, configs::xcm_config::XcmRouter, RuntimeCall, configs::xcm_config::XcmConfig>(origin_location, xcm)
-        }
-    }
-
     impl cumulus_primitives_core::CollectCollationInfo<Block> for Runtime {
         fn collect_collation_info(header: &<Block as BlockT>::Header) -> cumulus_primitives_core::CollationInfo {
             ParachainSystem::collect_collation_info(header)
@@ -312,13 +270,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
             FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key)
         }
 
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
             FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
+        }
+
+        fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+            FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
     }
 
@@ -375,13 +337,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
 
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
             Providers::get_storage_provider_id(who)
+        }
+
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderId<Runtime>, QueryMspIdOfBucketIdError> {
+            Providers::query_msp_id_of_bucket_id(bucket_id)
         }
 
         fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryStorageProviderCapacityError> {
@@ -398,6 +364,10 @@ impl_runtime_apis! {
 
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
             Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
+        }
+
+        fn get_slash_amount_per_max_file_size() -> Balance {
+            Providers::get_slash_amount_per_max_file_size()
         }
     }
 }

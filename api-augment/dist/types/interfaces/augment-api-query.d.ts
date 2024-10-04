@@ -71,12 +71,9 @@ import type {
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
-<<<<<<< HEAD
   StagingXcmV4Instruction,
-=======
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
->>>>>>> main
   StorageHubRuntimeRuntimeHoldReason,
   StorageHubRuntimeSessionKeys,
   XcmVersionedAssetId,
