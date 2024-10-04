@@ -29,10 +29,8 @@ pub mod xcm_config;
 use crate::mock_message_queue;
 use crate::storagehub::{configs::xcm_config::XcmConfig, MessageQueue, ParachainInfo, PolkadotXcm};
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::RelayChainStateProof;
-use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
-use cumulus_primitives_core::relay_chain::well_known_keys;
-use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
+use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
+use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -59,7 +57,7 @@ use polkadot_runtime_common::{
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{Get, Hasher, H256};
+use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -486,6 +484,11 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = shp_file_metadata::FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u64;
@@ -569,9 +572,9 @@ parameter_types! {
     pub const MaxCustomChallengesPerBlock: u32 = 10;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
-    pub const CheckpointChallengePeriod: u32 = 10;
+    pub const CheckpointChallengePeriod: u32 = 30;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 1_000_000 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 200 * UNIT;
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
@@ -688,6 +691,7 @@ impl pallet_file_system::Config for Runtime {
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
+    type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;

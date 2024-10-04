@@ -26,6 +26,8 @@ import type {
   FrameSupportDispatchDispatchInfo,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  PalletFileSystemEitherAccountIdOrMspId,
+  PalletFileSystemMspRespondStorageRequestsResult,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
@@ -40,6 +42,8 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   XcmV3TraitsError,
   XcmVersionedAssets,
   XcmVersionedLocation
@@ -488,12 +492,12 @@ declare module "@polkadot/api-base/types/events" {
         { mspId: H256; bucketId: H256 }
       >;
       /**
-       * Notifies that a MSP has accepted to store a file.
+       * Notifies that a MSP has responded to storage request(s).
        **/
-      MspAcceptedStoring: AugmentedEvent<
+      MspRespondedToStorageRequests: AugmentedEvent<
         ApiType,
-        [fileKey: H256, mspId: H256, bucketId: H256, owner: AccountId32, newBucketRoot: H256],
-        { fileKey: H256; mspId: H256; bucketId: H256; owner: AccountId32; newBucketRoot: H256 }
+        [results: PalletFileSystemMspRespondStorageRequestsResult],
+        { results: PalletFileSystemMspRespondStorageRequestsResult }
       >;
       /**
        * Notifies that a new bucket has been created.
@@ -554,8 +558,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       PriorityChallengeForFileDeletionQueued: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256],
-        { user: AccountId32; fileKey: H256 }
+        [issuer: PalletFileSystemEitherAccountIdOrMspId, fileKey: H256],
+        { issuer: PalletFileSystemEitherAccountIdOrMspId; fileKey: H256 }
       >;
       /**
        * Notifies that a proof has been submitted for a pending file deletion request.
@@ -1080,6 +1084,30 @@ declare module "@polkadot/api-base/types/events" {
        * The validation function has been scheduled to apply.
        **/
       ValidationFunctionStored: AugmentedEvent<ApiType, []>;
+      /**
+       * Generic event
+       **/
+      [key: string]: AugmentedEvent<ApiType>;
+    };
+    parameters: {
+      /**
+       * A Parameter was set.
+       *
+       * Is also emitted when the value was not changed.
+       **/
+      Updated: AugmentedEvent<
+        ApiType,
+        [
+          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>,
+          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>
+        ],
+        {
+          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+        }
+      >;
       /**
        * Generic event
        **/

@@ -12,7 +12,9 @@ use frame_support::{
     weights::WeightMeter,
     BoundedBTreeSet,
 };
-use frame_system::{limits::BlockWeights, BlockWeight, ConsumedWeight};
+use frame_system::{
+    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight,
+};
 use pallet_storage_providers::HoldReason;
 use shp_traits::{ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
@@ -28,9 +30,9 @@ use crate::{
     types::{
         BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor,
-        KeyProof, MaxCustomChallengesPerBlockFor, MaxSubmittersPerTickFor,
+        KeyProof, MaxCustomChallengesPerBlockFor, MaxSubmittersPerTickFor, MinChallengePeriodFor,
         MinNotFullBlocksRatioFor, Proof, ProviderIdFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, TargetTicksStorageOfSubmittersFor,
+        RandomChallengesPerBlockFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
     },
     ChallengesTicker, ChallengesTickerPaused, LastCheckpointTick, LastDeletedTick,
     LastTickProviderSubmittedAProofFor, NotFullBlocksCount, SlashableProviders,
@@ -4076,6 +4078,43 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
         assert_eq!(
             TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
+        );
+    });
+}
+
+#[test]
+fn stake_to_challenge_period_saturates_properly() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        let stake_to_challenge_period = StakeToChallengePeriodFor::<Test>::get();
+        let min_challenge_period: BlockNumberFor<Test> = MinChallengePeriodFor::<Test>::get();
+
+        // A provider with stake equal to `StakeToChallengePeriod` should have a challenge period equal to `MinChallengePeriod`.
+        assert_eq!(
+            crate::Pallet::<Test>::stake_to_challenge_period(stake_to_challenge_period),
+            min_challenge_period
+        );
+
+        // A provider with stake greater than `StakeToChallengePeriod` should have a challenge period equal to `MinChallengePeriod`.
+        assert_eq!(
+            crate::Pallet::<Test>::stake_to_challenge_period(stake_to_challenge_period * 2),
+            min_challenge_period
+        );
+
+        // A provider with stake 1 should have a challenge period equal to `StakeToChallengePeriod`.
+        assert_eq!(
+            crate::Pallet::<Test>::stake_to_challenge_period(1) as u128,
+            stake_to_challenge_period
+        );
+
+        // A provider with a stake somewhere in between should have a challenge period given by the formula.
+        let half_stake_to_challenge_period =
+            stake_to_challenge_period / (2 * min_challenge_period as u128);
+        assert_eq!(
+            crate::Pallet::<Test>::stake_to_challenge_period(half_stake_to_challenge_period),
+            2 * min_challenge_period
         );
     });
 }

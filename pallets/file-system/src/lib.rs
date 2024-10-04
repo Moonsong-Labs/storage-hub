@@ -221,6 +221,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
+        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
+        #[pallet::constant]
+        type MaxBatchMspRespondStorageRequests: Get<u32>;
+
         /// Maximum byte size of a file path.
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
@@ -499,13 +503,9 @@ pub mod pallet {
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
         },
-        /// Notifies that a MSP has accepted to store a file.
-        MspAcceptedStoring {
-            file_key: MerkleHash<T>,
-            msp_id: ProviderIdFor<T>,
-            bucket_id: BucketIdFor<T>,
-            owner: T::AccountId,
-            new_bucket_root: MerkleHash<T>,
+        /// Notifies that a MSP has responded to storage request(s).
+        MspRespondedToStorageRequests {
+            results: MspRespondStorageRequestsResult<T>,
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
@@ -545,7 +545,7 @@ pub mod pallet {
         },
         /// Notifies that a file key has been queued for a priority challenge for file deletion.
         PriorityChallengeForFileDeletionQueued {
-            user: T::AccountId,
+            issuer: EitherAccountIdOrMspId<T>,
             file_key: MerkleHash<T>,
         },
         /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -723,6 +723,14 @@ pub mod pallet {
         BspDataServersExceeded,
         /// The bounded vector that holds file metadata to process it is full but there's still more to process.
         FileMetadataProcessingQueueFull,
+        /// Too many batch responses to process.
+        TooManyBatchResponses,
+        /// Too many storage request responses.
+        TooManyStorageRequestResponses,
+        /// Bucket id and file key pair is invalid.
+        InvalidBucketIdFileKeyPair,
+        /// Key already exists in mapping when it should not.
+        InconsistentStateKeyAlreadyExists,
     }
 
     #[pallet::call]
@@ -917,40 +925,28 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Used by a MSP to confirm storing a file that was assigned to it.
+        /// Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
         ///
-        /// The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-        /// in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-        /// the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
+        /// This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
+        /// accepted, rejected or have failed to be processed in the results of the event emitted.
+        ///
+        /// The MSP has to provide a file proof for all the file keys that are being accepted and a non-inclusion proof for the file keys
+        /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
+        /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn msp_accept_storage_request(
+        pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
-            file_key: MerkleHash<T>,
-            file_proof: KeyProof<T>,
-            non_inclusion_forest_proof: ForestProof<T>,
+            file_key_responses_input: FileKeyResponsesInput<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            // Perform validations and confirm storage of the file by the MSP.
-            let (msp_id, new_bucket_root, storage_request_metadata) =
-                Self::do_msp_accept_storage_request(
-                    who.clone(),
-                    file_key,
-                    file_proof,
-                    non_inclusion_forest_proof,
-                )?;
+            let results =
+                Self::do_msp_respond_storage_request(who.clone(), file_key_responses_input)?;
 
-            // Emit MSP accepted storing event.
-            Self::deposit_event(Event::MspAcceptedStoring {
-                file_key,
-                msp_id,
-                bucket_id: storage_request_metadata.bucket_id,
-                owner: storage_request_metadata.owner,
-                new_bucket_root,
-            });
+            Self::deposit_event(Event::MspRespondedToStorageRequests { results });
 
             Ok(())
         }

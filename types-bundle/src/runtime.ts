@@ -28,6 +28,20 @@ const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>"
+  },
+  query_msp_confirm_chunks_to_prove_for_file: {
+    description: "Query the chunks that a MSP needs to prove to confirm that it is storing a file.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      },
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>"
   }
 };
 
@@ -162,6 +176,11 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
     ],
     type: "Option<Balance>"
   },
+  get_slash_amount_per_max_file_size: {
+    description: "Get the slashable amount corresponding to the configured max file size.",
+    params: [],
+    type: "Balance"
+  },
   query_storage_provider_capacity: {
     description: "Query the storage provider capacity.",
     params: [
@@ -191,6 +210,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<BlockNumber, QueryEarliestChangeCapacityBlockError>"
+  },
+  query_msp_id_of_bucket_id: {
+    description: "Query the MSP ID of a bucket ID.",
+    params: [
+      {
+        name: "bucketId",
+        type: "H256"
+      }
+    ],
+    type: "Result<ProviderId, QueryMspIdOfBucketIdError>"
   }
 };
 

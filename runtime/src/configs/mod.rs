@@ -23,12 +23,13 @@
 //
 // For more information, please refer to <http://unlicense.org>
 
+mod runtime_params;
 pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
-use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
+use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
+use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -53,11 +54,11 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use shp_file_key_verifier::FileKeyVerifier;
-use shp_file_metadata::ChunkId;
+use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, Hasher, H256};
+use sp_core::{blake2_256, ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -72,14 +73,14 @@ use xcm::latest::prelude::BodyId;
 use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
-    PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
+    MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, PaymentStreams, PolkadotXcm,
+    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
     RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
     WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MILLIUNIT, MINUTES,
-    NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
-    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
+use runtime_params::RuntimeParameters;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
@@ -92,7 +93,7 @@ parameter_types! {
 
     // This part is copied from Substrate's `bin/node/runtime/src/lib.rs`.
     //  The `RuntimeBlockLength` and `RuntimeBlockWeights` exist here because the
-    // `DeletionWeightLimit` and `DeletionQueueDepth` depend on those to parameterize
+    // `DeletionWeightLimit` and `DeletionQueueDepth` depend on those to parametrise
     // the lazy contract deletion.
     pub RuntimeBlockLength: BlockLength =
         BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
@@ -376,6 +377,13 @@ impl pallet_nfts::Config for Runtime {
     type Locker = ();
 }
 
+impl pallet_parameters::Config for Runtime {
+    type AdminOrigin = EnsureRoot<AccountId>;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeParameters = RuntimeParameters;
+    type WeightInfo = ();
+}
+
 /// Only callable after `set_validation_data` is called which forms this proof the same way
 fn relay_chain_state_proof() -> RelayChainStateProof {
     let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
@@ -459,9 +467,8 @@ impl pallet_randomness::Config for Runtime {
 }
 
 parameter_types! {
-    pub const SpMinDeposit: Balance = 20 * UNIT;
-    pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashAmountPerMaxFileSize: Balance = 20 * MILLIUNIT; // TODO: Change this to a more realistic slashing amount.
+    pub const SpMinDeposit: Balance = 100 * UNIT;
+    pub const BucketDeposit: Balance = 100 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -475,6 +482,11 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
@@ -498,7 +510,8 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
-    type SlashAmountPerMaxFileSize = SlashAmountPerMaxFileSize;
+    type SlashAmountPerMaxFileSize =
+        runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
 }
 
@@ -558,10 +571,7 @@ parameter_types! {
     pub const MaxCustomChallengesPerBlock: u32 = 10;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
-    pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 200 * UNIT; // TODO: Change this value into something much higher like 1_000_000 * UNIT
-    pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
@@ -587,12 +597,14 @@ impl pallet_proofs_dealer::Config for Runtime {
     type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
-    type CheckpointChallengePeriod = CheckpointChallengePeriod;
+    type CheckpointChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
-    type StakeToChallengePeriod = StakeToChallengePeriod;
-    type MinChallengePeriod = MinChallengePeriod;
+    type StakeToChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
+    type MinChallengePeriod = runtime_params::dynamic_params::runtime_config::MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
@@ -652,6 +664,7 @@ impl pallet_file_system::Config for Runtime {
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;

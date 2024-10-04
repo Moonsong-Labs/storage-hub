@@ -1,6 +1,6 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use crate::*;
-use codec::{Decode, Encode};
+use codec::Encode;
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Pays},
     ensure,
@@ -18,14 +18,13 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
 };
-use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, PaymentStreamsInterface, ProofSubmittersInterface,
-    ReadBucketsInterface, ReadChallengeableProvidersInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, SystemMetricsInterface,
+    FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
+    MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
 use sp_std::vec::Vec;
 use types::{ProviderId, StorageProviderId};
@@ -814,7 +813,7 @@ where
     ///
     /// Every failed proof submission counts as for two files which should have been proven due to the low probability of a challenge
     /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
-    /// submit a proof of storage for the neighboring file keys of the missing challenged file key.
+    /// submit a proof of storage for the neighbouring file keys of the missing challenged file key.
     ///
     /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
     pub fn compute_worst_case_scenario_slashable_amount(
@@ -911,6 +910,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 
     fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash> {
         Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
+    }
+
+    fn get_bucket_owner(bucket_id: &Self::BucketId) -> Result<Self::AccountId, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.user_id)
     }
 
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError> {
@@ -1387,6 +1391,11 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
     fn is_provider(who: Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
     }
+
+    fn get_min_stake(
+    ) -> <Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance {
+        T::SpMinDeposit::get()
+    }
 }
 
 /// Implement the MutateChallengeableProvidersInterface for the Storage Providers pallet.
@@ -1414,16 +1423,21 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
         removed_trie_value: &Vec<u8>,
     ) -> DispatchResult {
         // Get the removed file's metadata
-        let file_metadata: FileMetadata<
-            { shp_constants::H_LENGTH },
-            { shp_constants::FILE_CHUNK_SIZE },
-            { shp_constants::FILE_SIZE_TO_CHALLENGES },
-        > = FileMetadata::decode(&mut removed_trie_value.as_slice())
+        let file_metadata =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::decode(
+                removed_trie_value,
+            )
             .map_err(|_| Error::<T>::InvalidEncodedFileMetadata)?;
 
         // Get the file size as a StorageDataUnit type and the owner as an AccountId type
-        let file_size = StorageDataUnit::<T>::from(file_metadata.file_size);
-        let owner = T::AccountId::decode(&mut file_metadata.owner.as_slice())
+        let file_size =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_size(
+                &file_metadata,
+            );
+        let owner =
+            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_owner(
+                &file_metadata,
+            )
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider
@@ -1525,5 +1539,17 @@ where
         provider_id: &ProviderId<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         Self::compute_worst_case_scenario_slashable_amount(provider_id)
+    }
+
+    pub fn get_slash_amount_per_max_file_size() -> BalanceOf<T> {
+        T::SlashAmountPerMaxFileSize::get()
+    }
+
+    pub fn query_msp_id_of_bucket_id(
+        bucket_id: &BucketId<T>,
+    ) -> Result<MainStorageProviderId<T>, QueryMspIdOfBucketIdError> {
+        let bucket =
+            Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
+        Ok(bucket.msp_id)
     }
 }

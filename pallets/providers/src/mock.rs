@@ -1,5 +1,5 @@
 use crate as pallet_storage_providers;
-use codec::Encode;
+use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
@@ -9,9 +9,10 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
+use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
+    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
@@ -236,6 +237,7 @@ impl crate::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type FileMetadataManager = MockFileMetadataManager;
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
@@ -245,7 +247,7 @@ impl crate::Config for Test {
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -267,6 +269,37 @@ pub struct DefaultMerkleRoot<T>(PhantomData<T>);
 impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     fn get() -> HasherOutT<T> {
         sp_trie::empty_trie_root::<T>()
+    }
+}
+
+pub struct MockFileMetadataManager;
+impl FileMetadataInterface for MockFileMetadataManager {
+    type AccountId = AccountId;
+    type Metadata = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
     }
 }
 
@@ -335,13 +368,15 @@ pub fn _new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub mod accounts {
-    pub const ALICE: (u64, u128) = (0, 5_000_000);
-    pub const BOB: (u64, u128) = (1, 10_000_000);
-    pub const CHARLIE: (u64, u128) = (2, 20_000_000);
-    pub const DAVID: (u64, u128) = (3, 30_000_000);
-    pub const EVE: (u64, u128) = (4, 400_000_000);
-    pub const FERDIE: (u64, u128) = (5, 5_000_000_000);
-    pub const GEORGE: (u64, u128) = (6, 600_000_000_000);
+    use super::UNITS;
+
+    pub const ALICE: (u64, u128) = (0, 5_000_000 * UNITS);
+    pub const BOB: (u64, u128) = (1, 10_000_000 * UNITS);
+    pub const CHARLIE: (u64, u128) = (2, 20_000_000 * UNITS);
+    pub const DAVID: (u64, u128) = (3, 30_000_000 * UNITS);
+    pub const EVE: (u64, u128) = (4, 400_000_000 * UNITS);
+    pub const FERDIE: (u64, u128) = (5, 5_000_000_000 * UNITS);
+    pub const GEORGE: (u64, u128) = (6, 600_000_000_000 * UNITS);
 }
 
 // Externalities builder with predefined balances for accounts and starting at block number 1

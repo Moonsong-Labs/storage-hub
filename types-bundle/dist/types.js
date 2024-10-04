@@ -104,7 +104,20 @@ export const ALL_TYPES = {
   QueryBspConfirmChunksToProveForFileError: {
     _enum: {
       StorageRequestNotFound: null,
+      ConfirmChunks: "QueryConfirmChunksToProveForFileError",
       InternalError: null
+    }
+  },
+  QueryMspConfirmChunksToProveForFileError: {
+    _enum: {
+      StorageRequestNotFound: null,
+      ConfirmChunks: "QueryConfirmChunksToProveForFileError",
+      InternalError: null
+    }
+  },
+  QueryConfirmChunksToProveForFileError: {
+    _enum: {
+      ChallengedChunkToChunkIdError: null
     }
   },
   GetUsersWithDebtOverThresholdError: {
@@ -131,6 +144,12 @@ export const ALL_TYPES = {
   QueryEarliestChangeCapacityBlockError: {
     _enum: {
       ProviderNotRegistered: null,
+      InternalApiError: null
+    }
+  },
+  QueryMspIdOfBucketIdError: {
+    _enum: {
+      BucketNotFound: null,
       InternalApiError: null
     }
   }
