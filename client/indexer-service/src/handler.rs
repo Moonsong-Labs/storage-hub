@@ -307,9 +307,14 @@ impl IndexerService {
         match event {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
-            pallet_proofs_dealer::Event::ProofAccepted { provider, proof } => {
+            pallet_proofs_dealer::Event::ProofAccepted {
+                provider,
+                proof,
+                last_tick_proof,
+            } => {
+                let proof = Proofs::get()
                 Proofs::create(conn, provider.to_string(), proof)
-            }
+            },
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
             pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
