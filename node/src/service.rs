@@ -605,7 +605,7 @@ where
 						.expect_header(hash)
 						.expect("Expected parachain header should exist")
 						.encode();
-					
+
 					let raw_para_head_data = HeadData(para_header);
 					let para_head_data = raw_para_head_data.encode();
 
