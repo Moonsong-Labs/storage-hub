@@ -12,7 +12,7 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
-use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
+use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
 use shc_common::types::{BlockHash, OpaqueBlock, BCSV_KEY_TYPE};
@@ -34,7 +34,7 @@ use cumulus_client_service::{
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
 use cumulus_primitives_core::{
-    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair},
+    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair, ValidationCode},
     ParaId,
 };
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
@@ -592,21 +592,22 @@ where
                 ))),
                 create_inherent_data_providers: move |block: Hash, ()| {
                     let current_para_block = client_for_cidp
-                    .number(block)
-                    .expect("Header lookup should succeed")
-                    .expect("Header passed in as parent should be present in backend.");
+                    	.number(block)
+                    	.expect("Header lookup should succeed")
+                    	.expect("Header passed in as parent should be present in backend.");
 
-                    let hash = client
-                        .hash(current_para_block.saturating_sub(1))
-                        .expect("Hash of the desired block must be present")
-                        .expect("Hash of the desired block should exist");
+					let hash = client
+						.hash(current_para_block.saturating_sub(1))
+						.expect("Hash of the desired block must be present")
+						.expect("Hash of the desired block should exist");
 
-                    let para_header = client
-                        .expect_header(hash)
-                        .expect("Expected parachain header should exist")
-                        .encode();
+					let para_header = client
+						.expect_header(hash)
+						.expect("Expected parachain header should exist")
+						.encode();
 
-                    let para_head_data = HeadData(para_header).encode();
+					let raw_para_head_data = HeadData(para_header);
+					let para_head_data = raw_para_head_data.encode();
 
                     let client_for_xcm = client_for_cidp.clone();
 
@@ -642,6 +643,8 @@ where
                         let mocked_parachain = {
                             MockValidationDataInherentDataProvider {
                                 current_para_block,
+								para_id,
+								current_para_block_head: Some(raw_para_head_data),
                                 relay_offset: 1000,
                                 relay_blocks_per_para_block: 2,
                                 para_blocks_per_relay_epoch: 0,
@@ -649,7 +652,6 @@ where
                                 xcm_config: MockXcmConfig::new(
                                     &*client_for_xcm,
                                     block,
-                                    Default::default(),
                                     Default::default(),
                                 ),
                                 raw_downward_messages: vec![],

@@ -9,9 +9,12 @@ use polkadot_parachain_primitives::primitives::{
 use sp_runtime::traits::{Get, Hash};
 
 use sp_std::prelude::*;
-use xcm::{latest::prelude::*, VersionedXcm};
+use xcm::{latest::prelude::*, VersionedLocation, VersionedXcm};
 
 pub use pallet::*;
+use xcm_builder::InspectMessageQueues;
+
+use crate::ParachainXcmRouter;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -201,5 +204,11 @@ pub mod pallet {
             }
             limit
         }
+    }
+}
+
+impl<T: Config> InspectMessageQueues for ParachainXcmRouter<Pallet<T>> {
+    fn get_messages() -> Vec<(VersionedLocation, Vec<VersionedXcm<()>>)> {
+        vec![]
     }
 }
