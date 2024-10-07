@@ -1187,6 +1187,14 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BadQueueConfig: AugmentedError<ApiType>;
       /**
+       * The message is too big.
+       **/
+      TooBig: AugmentedError<ApiType>;
+      /**
+       * There are too many active outbound channels.
+       **/
+      TooManyActiveOutboundChannels: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;
