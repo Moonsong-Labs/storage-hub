@@ -1640,7 +1640,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: charlie_msp_id,
                         amount: 0,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: 0,
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
