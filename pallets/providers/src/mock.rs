@@ -366,6 +366,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         Some(set)
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
         SlashableProviders::<Test>::get(provider_id)
     }
