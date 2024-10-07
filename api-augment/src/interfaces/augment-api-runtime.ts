@@ -7,6 +7,7 @@ import "@polkadot/api-base/types/calls";
 
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
 import type { Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
+import type { Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
 import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
 import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
 import type { BlockHash } from "@polkadot/types/interfaces/chain";
@@ -29,6 +30,8 @@ import type {
   KeyTypeId,
   Slot,
   SlotDuration,
+  Weight,
+  WeightV2
   Weight,
   WeightV2
 } from "@polkadot/types/interfaces/runtime";
@@ -651,6 +654,41 @@ declare module "@polkadot/api-base/types/calls" {
         (
           weight: Weight | { refTime?: any; proofSize?: any } | string | Uint8Array
         ) => Observable<Balance>
+      >;
+      /**
+       * Generic call
+       **/
+      [key: string]: DecoratedCallBase<ApiType>;
+    };
+    /** 0x6ff52ee858e6c5bd/1 */
+    xcmPaymentApi: {
+      /**
+       * The API to query acceptable payment assets
+       **/
+      queryAcceptablePaymentAssets: AugmentedCall<
+        ApiType,
+        (
+          version: u32 | AnyNumber | Uint8Array
+        ) => Observable<Result<Vec<XcmVersionedAssetId>, XcmPaymentApiError>>
+      >;
+      /**
+       *
+       **/
+      queryWeightToAssetFee: AugmentedCall<
+        ApiType,
+        (
+          weight: WeightV2 | { refTime?: any; proofSize?: any } | string | Uint8Array,
+          asset: XcmVersionedAssetId | { V3: any } | { V4: any } | string | Uint8Array
+        ) => Observable<Result<u128, XcmPaymentApiError>>
+      >;
+      /**
+       *
+       **/
+      queryXcmWeight: AugmentedCall<
+        ApiType,
+        (
+          message: XcmVersionedXcm | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+        ) => Observable<Result<WeightV2, XcmPaymentApiError>>
       >;
       /**
        * Generic call
