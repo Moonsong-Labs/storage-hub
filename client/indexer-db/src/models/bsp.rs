@@ -18,8 +18,8 @@ pub struct Bsp {
     pub capacity: BigDecimal,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub onchain_bsp_id: String,
     pub total_amount_slashed: BigDecimal,
+    pub onchain_bsp_id: String,
 }
 
 /// Association table between BSP and MultiAddress
@@ -87,6 +87,30 @@ impl Bsp {
         diesel::update(bsp::table)
             .filter(bsp::account.eq(account))
             .set(bsp::capacity.eq(capacity))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_by_onchain_bsp_id<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bsp_id: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let bsp = bsp::table
+            .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
+            .first(conn)
+            .await?;
+        Ok(bsp)
+    }
+
+    pub async fn update_total_amount_slashed<'a>(
+        conn: &mut DbConnection<'a>,
+        id: i32,
+        total_amount_slashed: BigDecimal,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(bsp::table)
+            .filter(bsp::id.eq(id))
+            .set(bsp::total_amount_slashed.eq(total_amount_slashed))
             .execute(conn)
             .await?;
         Ok(())
