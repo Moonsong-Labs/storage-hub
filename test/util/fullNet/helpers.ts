@@ -93,6 +93,8 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
+    console.log(`SH MSP id: ${mspKey.address}`);
+
     let file = "local-dev-full-compose.yml";
     if (bspNetConfig.rocksdb) {
       file = "local-dev-full-rocksdb-compose.yml";
@@ -149,7 +151,8 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
         ...process.env,
         NODE_KEY: ShConsts.NODE_INFOS.msp.nodeKey,
         BSP_IP: bspIp,
-        BSP_PEER_ID: bspPeerId
+        BSP_PEER_ID: bspPeerId,
+        MSP_ID: ShConsts.DUMMY_MSP_ID
       }
     });
 

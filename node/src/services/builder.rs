@@ -474,9 +474,6 @@ where
         jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
     ) {
-        if storage_path.is_none() {
-            panic!("Storage path not set");
-        }
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
