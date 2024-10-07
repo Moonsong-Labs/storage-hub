@@ -2917,8 +2917,8 @@ declare module "@polkadot/types/lookup" {
     readonly isPaymentStreamDeposit: boolean;
     readonly type: "PaymentStreamDeposit";
   }
-  /** @name PalletBalancesIdAmount (270) */
-  interface PalletBalancesIdAmount extends Struct {
+  /** @name FrameSupportTokensMiscIdAmount (270) */
+  interface FrameSupportTokensMiscIdAmount extends Struct {
     readonly id: Null;
     readonly amount: u128;
   }

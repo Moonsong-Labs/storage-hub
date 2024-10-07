@@ -1,13 +1,15 @@
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl,
+    derive_impl,
     dispatch::DispatchClass,
     parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
     weights::{constants::RocksDbWeight, Weight, WeightMeter},
     BoundedBTreeSet,
 };
-use frame_system::{self as system, limits::BlockWeights, BlockWeight, ConsumedWeight};
+use frame_system::{
+    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight,
+};
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
@@ -23,7 +25,6 @@ use sp_runtime::{
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
-use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -113,19 +114,39 @@ fn roll_one_block(spammed: bool) -> BlockNumber {
 }
 
 // Configure a mock runtime to test the pallet.
-construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        FileSystem: crate::{Pallet, Call, Storage, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
-        ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
-        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
-        BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
-        Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type FileSystem = crate;
+    #[runtime::pallet_index(3)]
+    pub type Providers = pallet_storage_providers;
+    #[runtime::pallet_index(4)]
+    pub type ProofsDealer = pallet_proofs_dealer;
+    #[runtime::pallet_index(5)]
+    pub type PaymentStreams = pallet_payment_streams;
+    #[runtime::pallet_index(6)]
+    pub type BucketNfts = pallet_bucket_nfts;
+    #[runtime::pallet_index(7)]
+    pub type Nfts = pallet_nfts;
+}
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -134,7 +155,7 @@ parameter_types! {
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -473,7 +494,7 @@ impl ReadUserSolvencyInterface for MockUserSolvency {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-    let mut t = system::GenesisConfig::<Test>::default()
+    let mut t = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap();
 
