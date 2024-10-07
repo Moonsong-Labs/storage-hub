@@ -569,7 +569,9 @@ where
         // Initiate the variable that will hold the total amount that has been charged
         let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
-        let mut last_chargeable_tick: BlockNumberFor<T> = Default::default();
+        // Get the last chargeable info for this provider
+        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
 
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
@@ -586,8 +588,6 @@ where
                 None => {
                     // If the user hasn't been flagged as without funds, charge the payment stream
                     // Calculate the time passed between the last chargeable tick and the last charged tick
-                    last_chargeable_tick =
-                        LastChargeableInfo::<T>::get(provider_id).last_chargeable_tick;
                     if let Some(time_passed) = last_chargeable_tick
                         .checked_sub(&fixed_rate_payment_stream.last_charged_tick)
                     {
@@ -729,9 +729,7 @@ where
                     // Calculate the difference between the last charged price index and the price index at the last chargeable tick
                     // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
 
-                    let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
                     let price_index_at_last_chargeable_tick = last_chargeable_info.price_index;
-                    last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
 
                     if let Some(price_index_difference) = price_index_at_last_chargeable_tick
                         .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
