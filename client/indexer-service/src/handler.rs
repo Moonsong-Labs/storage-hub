@@ -312,9 +312,9 @@ impl IndexerService {
                 proof,
                 last_tick_proof,
             } => {
-                let proof = Proofs::get()
-                Proofs::create(conn, provider.to_string(), proof)
-            },
+                let proof = Proofs::get_by_provider_id(provider.to_string()).await?;
+                Proofs::update_last_tick_proof(conn, proof.id, last_tick_proof.into()).await?;
+            }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
             pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
@@ -410,7 +410,14 @@ impl IndexerService {
             } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
-            pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::Slashed {
+                provider_id,
+                amount_slashed,
+            } => {
+                let bsp = Bsp::get_by_provider_id(conn, provider.to_string()).await?;
+                let new_total_amount_slashed = bsp.total_amount_slashed + amount_slashed;
+                Bsp::update_total_amount_slashed(conn, bsp.id, new_total_amount_slashed).await?;
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

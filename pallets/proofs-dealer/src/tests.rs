@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, vec};
+use std::{alloc::System, collections::BTreeMap, vec};
 
 use codec::Encode;
 use frame_support::{
@@ -3391,6 +3391,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             Event::ProofAccepted {
                 provider: alice_provider_id,
                 proof,
+                last_tick_proof: System::block_number(),
             }
             .into(),
         );

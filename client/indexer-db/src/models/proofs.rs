@@ -1,4 +1,5 @@
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 
 use crate::{schema::proofs, DbConnection};
 
@@ -15,7 +16,6 @@ impl Proofs {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
         provider_id: String,
-        proof: String,
         last_tick_proof: i64,
     ) -> Result<Self, diesel::result::Error> {
         let proofs = diesel::insert_into(proofs::table)
