@@ -4,7 +4,6 @@ use log::{debug, trace, warn};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
-    str::FromStr,
     sync::Arc,
 };
 
@@ -33,10 +32,14 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError, StorageProvidersApi,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
+use shc_common::{
+    blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
+    types::{BlockNumber, ParachainClient, ProviderId},
+};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{Fingerprint, TickNumber, BCSV_KEY_TYPE},
@@ -475,6 +478,30 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send chunks to prove file: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryProviderMultiaddresses {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let multiaddresses = self
+                        .client
+                        .runtime_api()
+                        .query_provider_multiaddresses(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| {
+                            error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
+                            Err(QueryProviderMultiaddressesError::InternalError)
+                        });
+
+                    match callback.send(multiaddresses) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Provider multiaddresses sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send provider multiaddresses: {:?}", e);
                         }
                     }
                 }
@@ -1147,26 +1174,9 @@ impl BlockchainService {
                         {
                             // We try to convert the types coming from the runtime into our expected types.
                             let fingerprint: Fingerprint = fingerprint.as_bytes().into();
-                            // Here the Multiaddresses come as a BoundedVec of BoundedVecs of bytes,
-                            // and we need to convert them. Returns if any of the provided multiaddresses are invalid.
-                            let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
-                            for raw_multiaddr in multiaddresses.into_iter() {
-                                let multiaddress = match std::str::from_utf8(&raw_multiaddr) {
-                                    Ok(s) => match Multiaddr::from_str(s) {
-                                        Ok(multiaddr) => multiaddr,
-                                        Err(e) => {
-                                            error!(target: LOG_TARGET, "Failed to parse Multiaddress from string in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}\n Error: {:?}", bsp_id, owner, fingerprint, e);
-                                            return;
-                                        }
-                                    },
-                                    Err(e) => {
-                                        error!(target: LOG_TARGET, "Failed to parse Multiaddress from bytes in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}\n Error: {:?}", bsp_id, owner, fingerprint, e);
-                                        return;
-                                    }
-                                };
 
-                                multiaddress_vec.push(multiaddress);
-                            }
+                            let multiaddress_vec: Vec<Multiaddr> =
+                                convert_raw_multiaddresses_to_multiaddr(multiaddresses);
 
                             self.emit(AcceptedBspVolunteer {
                                 bsp_id,

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use log::warn;
+use log::{debug, warn};
 use serde_json::Number;
 
 use pallet_file_system_runtime_api::{
@@ -13,11 +13,11 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProviderId,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses, ProviderId,
     RandomnessOutput, StorageProviderId, TickNumber, TrieRemoveMutation,
 };
 use sp_api::ApiError;
@@ -88,6 +88,11 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
         >,
+    },
+    QueryProviderMultiaddresses {
+        provider_id: ProviderId,
+        callback:
+            tokio::sync::oneshot::Sender<Result<Multiaddresses, QueryProviderMultiaddressesError>>,
     },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
@@ -234,6 +239,12 @@ pub trait BlockchainServiceInterface {
         msp_id: ProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
+
+    /// Query the MSP multiaddresses.
+    async fn query_provider_multiaddresses(
+        &self,
+        msp_id: ProviderId,
+    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
 
     /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
@@ -491,6 +502,19 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
+    async fn query_provider_multiaddresses(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryProviderMultiaddresses {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueueSubmitProofRequest { request, callback };
@@ -739,13 +763,24 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
         for retry_count in 0..=retry_strategy.max_retries {
             let tip = retry_strategy.compute_tip(retry_count);
+
+            debug!(target: LOG_TARGET, "Submitting transaction {:?} with tip {}", call, tip);
+
             let mut transaction = self
                 .send_extrinsic(call.clone(), Tip::from(tip as u128))
                 .await?
                 .with_timeout(retry_strategy.timeout);
 
-            if transaction.watch_for_success(&self).await.is_ok() {
-                return Ok(());
+            let result = transaction.watch_for_success(&self).await;
+
+            match result {
+                Ok(_) => {
+                    debug!(target: LOG_TARGET, "Transaction succeeded");
+                    return Ok(());
+                }
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
+                }
             }
 
             if let Some(ref should_retry) = retry_strategy.should_retry {

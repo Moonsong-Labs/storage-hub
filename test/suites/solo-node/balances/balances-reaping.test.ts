@@ -12,7 +12,7 @@ import {
 } from "../../../util";
 
 // TODO: Figure out why only isn't working here
-describe("Balances Pallet: Reaping", { only: true }, async () => {
+describe("Balances Pallet: Reaping", async () => {
   const context = new DevTestContext({
     // printLogs: true,
     // keepOpen: true,
@@ -27,7 +27,7 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     await context.dispose();
   });
 
-  it("Can transfer full balance to another account with reap", { only: true }, async () => {
+  it("Can transfer full balance to another account with reap", async () => {
     const { address: randomId } = await createSr25519Account();
     await api.tx.balances.transferAll(randomId, false).signAndSend(eve);
     await api.createBlock();

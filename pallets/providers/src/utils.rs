@@ -1,4 +1,3 @@
-use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use crate::*;
 use codec::Encode;
 use frame_support::{
@@ -18,7 +17,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
@@ -27,7 +26,10 @@ use shp_traits::{
     ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
 use sp_std::vec::Vec;
-use types::{ProviderId, StorageProviderId};
+use types::{
+    Bucket, MainStorageProvider, MultiAddress, Multiaddresses, ProviderId, StorageProvider,
+    StorageProviderId,
+};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -1551,5 +1553,17 @@ where
         let bucket =
             Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
         Ok(bucket.msp_id)
+    }
+
+    pub fn query_provider_multiaddresses(
+        provider_id: &ProviderId<T>,
+    ) -> Result<Multiaddresses<T>, QueryProviderMultiaddressesError> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
+            Ok(bsp.multiaddresses)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+            Ok(msp.multiaddresses)
+        } else {
+            Err(QueryProviderMultiaddressesError::ProviderNotRegistered)
+        }
     }
 }
