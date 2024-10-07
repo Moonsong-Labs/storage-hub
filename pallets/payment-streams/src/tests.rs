@@ -3453,7 +3453,6 @@ mod dynamic_rate_streams {
                     + 1;
                 run_to_block(System::block_number() + 10);
                 let last_chargeable_tick = System::block_number();
-
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -3463,7 +3462,6 @@ mod dynamic_rate_streams {
                 );
 
                 // Set the last chargeable price index of Charlie to the equivalent of one block ahead
-                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &charlie_bsp_id,
                     ProviderLastChargeableInfo {
@@ -3527,7 +3525,7 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: charlie_bsp_id,
                         amount: 0,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: 0,
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
