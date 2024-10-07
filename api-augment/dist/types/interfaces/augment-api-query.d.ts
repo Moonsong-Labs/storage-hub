@@ -25,6 +25,7 @@ import type {
   CumulusPalletXcmpQueueQueueConfigData,
   CumulusPrimitivesCoreAggregateMessageOrigin,
   FrameSupportDispatchPerDispatchClassWeight,
+  FrameSupportTokensMiscIdAmount,
   FrameSystemAccountInfo,
   FrameSystemCodeUpgradeAuthorization,
   FrameSystemEventRecord,
@@ -32,7 +33,6 @@ import type {
   FrameSystemPhase,
   PalletBalancesAccountData,
   PalletBalancesBalanceLock,
-  PalletBalancesIdAmount,
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
@@ -181,7 +181,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       freezes: AugmentedQuery<
         ApiType,
-        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<PalletBalancesIdAmount>>,
+        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<FrameSupportTokensMiscIdAmount>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
