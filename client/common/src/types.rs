@@ -33,6 +33,8 @@ pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
+pub type MaxBatchMspRespondStorageRequests =
+    pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
 pub type MspStorageRequestResponse = pallet_file_system::types::MspStorageRequestResponse<Runtime>;
 pub type AcceptedStorageRequestParameters =
     pallet_file_system::types::AcceptedStorageRequestParameters<Runtime>;

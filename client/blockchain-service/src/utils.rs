@@ -16,7 +16,9 @@ use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
-    types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE},
+    types::{
+        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProviderId, BCSV_KEY_TYPE,
+    },
 };
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Get, Hasher, H256};
@@ -33,8 +35,9 @@ use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
         ProcessConfirmStoringRequestData, ProcessMspRespondStoringRequest,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::{
@@ -561,7 +564,35 @@ impl BlockchainService {
             }
         }
 
-        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending stop storing for insolvent user requests.
+        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
+        if next_event_data.is_none() {
+            let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
+
+            // Batch multiple respond file storing taking the runtime maximum.
+            let mut respond_storing_requests = Vec::new();
+            for _ in 0..max_batch_respond {
+                if let Some(request) = state_store_context
+                    .pending_msp_respond_storage_request_deque()
+                    .pop_front()
+                {
+                    respond_storing_requests.push(request);
+                } else {
+                    break;
+                }
+            }
+
+            // If we have at least 1 respond storing request, send the process event.
+            if respond_storing_requests.len() > 0 {
+                next_event_data = Some(
+                    ProcessMspRespondStoringRequestData {
+                        respond_storing_requests,
+                    }
+                    .into(),
+                );
+            }
+        }
+
+        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
                 .pending_stop_storing_for_insolvent_user_request_deque()
@@ -591,6 +622,13 @@ impl BlockchainService {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
                     .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
                     .write(data);
                 state_store_context.commit();
             }

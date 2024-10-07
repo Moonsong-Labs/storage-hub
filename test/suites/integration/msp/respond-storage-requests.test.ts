@@ -1,4 +1,4 @@
-import { strictEqual } from "node:assert";
+import { notEqual, strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
@@ -65,31 +65,54 @@ describeMspNet(
       );
 
       // Allow time for the MSP to receive and store the file from the user
-      await sleep(5000);
+      await sleep(6000);
 
       const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
-      const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+      const newStorageRequestDataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
-      if (!dataBlob) {
+      if (!newStorageRequestDataBlob) {
         throw new Error("Event doesn't match Type");
       }
 
-      strictEqual(dataBlob.who.toString(), userApi.shConsts.NODE_INFOS.user.AddressId);
-      strictEqual(dataBlob.location.toHuman(), destination);
+      strictEqual(newStorageRequestDataBlob.who.toString(), userApi.shConsts.NODE_INFOS.user.AddressId);
+      strictEqual(newStorageRequestDataBlob.location.toHuman(), destination);
       strictEqual(
-        dataBlob.fingerprint.toString(),
+        newStorageRequestDataBlob.fingerprint.toString(),
         userApi.shConsts.TEST_ARTEFACTS[source].fingerprint
       );
-      strictEqual(dataBlob.size_.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
-      strictEqual(dataBlob.peerIds.length, 1);
-      strictEqual(dataBlob.peerIds[0].toHuman(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
+      strictEqual(newStorageRequestDataBlob.size_.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
+      strictEqual(newStorageRequestDataBlob.peerIds.length, 1);
+      strictEqual(newStorageRequestDataBlob.peerIds[0].toHuman(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey);
 
       if (!result.isFileFound) {
         throw new Error("File not found in storage");
       }
+
+      const { event: respondEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "MspRespondedToStorageRequests"
+      );
+
+      const respondDataBlob =
+        userApi.events.fileSystem.MspRespondedToStorageRequests.is(respondEvent) && respondEvent.data;
+
+      if (!respondDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      const responses = respondDataBlob.results.responses;
+      if (responses.length !== 1) {
+        throw new Error("Expected 1 response");
+      }
+
+      const response = responses[0].asAccepted;
+
+      strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
+      strictEqual(response.fileKeys[0].toString(), newStorageRequestDataBlob.fileKey.toString());
+      strictEqual(response.newBucketRoot.toString(), await mspApi.rpc.storagehubclient.getForestRoot(response.bucketId));
     });
   }
 );
