@@ -49,6 +49,7 @@ import type {
   GetNextDeadlineTickError,
   GetUsersWithDebtOverThresholdError,
   MainStorageProviderId,
+  Multiaddresses,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
@@ -56,6 +57,7 @@ import type {
   QueryFileEarliestVolunteerBlockError,
   QueryMspConfirmChunksToProveForFileError,
   QueryMspIdOfBucketIdError,
+  QueryProviderMultiaddressesError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   StorageDataUnit,
@@ -562,6 +564,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           bucketId: H256 | string | Uint8Array
         ) => Observable<Result<ProviderId, QueryMspIdOfBucketIdError>>
+      >;
+      /**
+       * Query the provider's multiaddresses.
+       **/
+      queryProviderMultiaddresses: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<Multiaddresses, QueryProviderMultiaddressesError>>
       >;
       /**
        * Query the storage provider capacity.

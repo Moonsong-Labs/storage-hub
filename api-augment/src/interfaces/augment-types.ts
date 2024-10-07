@@ -1276,6 +1276,7 @@ import type {
   IncompleteFileStatus,
   MainStorageProviderId,
   MerklePatriciaRoot,
+  Multiaddresses,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
@@ -1284,6 +1285,7 @@ import type {
   QueryFileEarliestVolunteerBlockError,
   QueryMspConfirmChunksToProveForFileError,
   QueryMspIdOfBucketIdError,
+  QueryProviderMultiaddressesError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   SaveFileToDisk,
@@ -1939,6 +1941,7 @@ declare module "@polkadot/types/types/registry" {
     MoreAttestations: MoreAttestations;
     MortalEra: MortalEra;
     MultiAddress: MultiAddress;
+    Multiaddresses: Multiaddresses;
     MultiAsset: MultiAsset;
     MultiAssetFilter: MultiAssetFilter;
     MultiAssetFilterV1: MultiAssetFilterV1;
@@ -2103,6 +2106,7 @@ declare module "@polkadot/types/types/registry" {
     QueryId: QueryId;
     QueryMspConfirmChunksToProveForFileError: QueryMspConfirmChunksToProveForFileError;
     QueryMspIdOfBucketIdError: QueryMspIdOfBucketIdError;
+    QueryProviderMultiaddressesError: QueryProviderMultiaddressesError;
     QueryStatus: QueryStatus;
     QueryStorageProviderCapacityError: QueryStorageProviderCapacityError;
     QueueConfigData: QueueConfigData;
