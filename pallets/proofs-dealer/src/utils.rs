@@ -1096,6 +1096,10 @@ impl<T: pallet::Config> ProofSubmittersInterface for Pallet<T> {
         ValidProofSubmittersLastTicks::<T>::get(tick_number)
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        ChallengesTicker::<T>::get()
+    }
+
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
         SlashableProviders::<T>::get(provider_id)
     }

@@ -989,25 +989,47 @@ where
         Ok(())
     }
 
-    /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
+    /// This function gets the Providers that submitted a valid proof in the last tick using the `ProofSubmittersInterface`,
     /// and updates the last chargeable tick and last chargeable price index of those Providers.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
         weight: &mut frame_support::weights::WeightMeter,
     ) {
-        // Get last tick's number
-        let n = n.saturating_sub(One::one());
-        // Get the Providers that submitted a valid proof in the last tick, if there are any
-        let proof_submitters =
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&n);
+        // Get the previous tick from the Providers Proof Submitters pallet.
+        let submitters_prev_tick =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
+                .saturating_sub(One::one());
         weight.consume(T::DbWeight::get().reads(1));
 
-        // If there are any proof submitters in the last tick
+        // Check if we already registered this tick from the Providers Proof Submitters pallet.
+        let last_submitters_tick_registered = LastSubmittersTickRegistered::<T>::get();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // If we already registered this tick from the Providers Proof Submitters pallet, we don't need to do anything.
+        if submitters_prev_tick <= last_submitters_tick_registered {
+            return;
+        }
+
+        // Update the last submitters tick registered.
+        LastSubmittersTickRegistered::<T>::set(submitters_prev_tick);
+        weight.consume(T::DbWeight::get().writes(1));
+
+        // Get the Providers that submitted a valid proof in the last tick from the Providers Proof Submitters pallet,
+        // if there's any
+        let proof_submitters =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&submitters_prev_tick);
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // If there are any proof submitters in the last tick...
         if let Some(proof_submitters) = proof_submitters {
             // Update all Providers
             // Iterate through the proof submitters and update their last chargeable tick and last chargeable price index
             for provider_id in proof_submitters {
-                // Update the last chargeable tick and last chargeable price index of the Provider
+                // Update the last chargeable tick and last chargeable price index of the Provider.
+                // The last chargeable tick is set to the current tick of THIS PALLET. That means, if the tick from
+                // the Providers Proof Submitters pallet is stalled for some time, and this pallet continues to increment
+                // its tick, when the Providers Proof Submitters pallet continues to increment its tick, this pallet will
+                // allow Providers to charge for the time that the Providers Proof Submitters pallet has been stalled.
                 let accumulated_price_index = AccumulatedPriceIndex::<T>::get();
                 LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
                     provider_info.last_chargeable_tick = n;

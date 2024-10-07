@@ -1068,6 +1068,15 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * The last tick from the Providers Proof Submitters pallet that was registered.
+       *
+       * This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
+       * registered. For the tick in this storage element, this pallet already knows the Providers that submitted
+       * a valid proof.
+       **/
+      lastSubmittersTickRegistered: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A counter of blocks for which Providers can charge their streams.
        *
        * This counter is not necessarily the same as the block number, as the last chargeable info of Providers

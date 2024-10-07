@@ -160,6 +160,15 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// The last tick from the Providers Proof Submitters pallet that was registered.
+    ///
+    /// This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
+    /// registered. For the tick in this storage element, this pallet already knows the Providers that submitted
+    /// a valid proof.
+    #[pallet::storage]
+    pub type LastSubmittersTickRegistered<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
     /// The mapping from a user to if it has been flagged for not having enough funds to pay for its requested services.
     ///
     /// This is used to flag users that do not have enough funds to pay for their requested services, so other Providers
