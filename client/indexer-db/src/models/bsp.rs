@@ -19,6 +19,7 @@ pub struct Bsp {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub onchain_bsp_id: String,
+    pub total_amount_slashed: BigDecimal,
 }
 
 /// Association table between BSP and MultiAddress
@@ -90,12 +91,4 @@ impl Bsp {
             .await?;
         Ok(())
     }
-}
-
-#[derive(Debug, Queryable, Insertable, Associations)]
-#[diesel(table_name = bsp_slashed)]
-#[diesel(belongs_to(Bsp, foreign_key = bsp_id))]
-pub struct BspSlashed {
-    pub bsp_id: i32,
-    pub total_amount_slashed: BigDecimal,
 }

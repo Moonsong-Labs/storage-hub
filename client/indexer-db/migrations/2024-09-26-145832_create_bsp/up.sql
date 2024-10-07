@@ -4,7 +4,8 @@ CREATE TABLE bsp (
     account VARCHAR NOT NULL,
     capacity NUMERIC(20, 0) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    total_amount_slashed NUMERIC(38) NOT NULL DEFAULT 0
 );
 
 -- Create BSP_MultiAddress table

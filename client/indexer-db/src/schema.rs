@@ -7,6 +7,7 @@ diesel::table! {
         capacity -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        total_amount_slashed -> Numeric,
         onchain_bsp_id -> Varchar,
     }
 }
@@ -72,6 +73,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    proofs (id) {
+        id -> Int4,
+        provider_id -> Varchar,
+        last_tick_proof -> Int8,
+    }
+}
+
+diesel::table! {
     service_state (id) {
         id -> Int4,
         last_processed_block -> Int8,
@@ -93,6 +102,10 @@ diesel::allow_tables_to_appear_in_same_query!(
     msp,
     msp_multiaddress,
     multiaddress,
+<<<<<<< HEAD
     paymentstream,
+=======
+    proofs,
+>>>>>>> wip
     service_state,
 );
