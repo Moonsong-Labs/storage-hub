@@ -2251,6 +2251,7 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly amount: u128;
       readonly lastTickCharged: u32;
+      readonly chargedAtTick: u32;
     } & Struct;
     readonly isLastChargeableInfoUpdated: boolean;
     readonly asLastChargeableInfoUpdated: {

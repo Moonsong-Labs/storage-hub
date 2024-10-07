@@ -1536,16 +1536,23 @@ declare module "@polkadot/api-base/types/events" {
       >;
       /**
        * Event emitted when a payment is charged. Provides information about the user that was charged,
-       * the Provider that received the funds, the tick at which it happened and the amount that was charged.
+       * the Provider that received the funds, the tick up to which it was charged and the amount that was charged.
        **/
       PaymentStreamCharged: AugmentedEvent<
         ApiType,
-        [userAccount: AccountId32, providerId: H256, amount: u128, lastTickCharged: u32],
+        [
+          userAccount: AccountId32,
+          providerId: H256,
+          amount: u128,
+          lastTickCharged: u32,
+          chargedAtTick: u32
+        ],
         {
           userAccount: AccountId32;
           providerId: H256;
           amount: u128;
           lastTickCharged: u32;
+          chargedAtTick: u32;
         }
       >;
       /**
