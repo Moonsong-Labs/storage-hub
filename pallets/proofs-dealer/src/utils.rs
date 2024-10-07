@@ -573,7 +573,7 @@ where
 
         // Get the number of blocks that have been considered _not_ full in the past `BlockFullnessPeriod`.
         let not_full_blocks_count = NotFullBlocksCount::<T>::get();
-        let mut new_not_full_blocks_count = not_full_blocks_count.clone();
+        let mut new_not_full_blocks_count = not_full_blocks_count;
         weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         // This would only be `None` if the block number is 0, so this should be safe.

@@ -596,17 +596,17 @@ where
                     	.expect("Header lookup should succeed")
                     	.expect("Header passed in as parent should be present in backend.");
 
-                    let hash = client
-                        .hash(current_para_block.saturating_sub(1))
-                        .expect("Hash of the desired block must be present")
-                        .expect("Hash of the desired block should exist");
+					let hash = client
+						.hash(current_para_block.saturating_sub(1))
+						.expect("Hash of the desired block must be present")
+						.expect("Hash of the desired block should exist");
 
 					let para_header = client
 						.expect_header(hash)
 						.expect("Expected parachain header should exist")
 						.encode();
 
-                    let raw_para_head_data = HeadData(para_header);
+					let raw_para_head_data = HeadData(para_header);
 					let para_head_data = raw_para_head_data.encode();
 
                     let client_for_xcm = client_for_cidp.clone();
