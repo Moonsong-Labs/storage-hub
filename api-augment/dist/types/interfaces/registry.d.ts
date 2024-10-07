@@ -254,6 +254,7 @@ import type {
   XcmV3MultiassetMultiAssets,
   XcmV3MultiassetWildFungibility,
   XcmV3MultiassetWildMultiAsset,
+  XcmV3OriginKind,
   XcmV3PalletInfo,
   XcmV3QueryResponseInfo,
   XcmV3Response,
@@ -522,6 +523,7 @@ declare module "@polkadot/types/types/registry" {
     XcmV3MultiassetMultiAssets: XcmV3MultiassetMultiAssets;
     XcmV3MultiassetWildFungibility: XcmV3MultiassetWildFungibility;
     XcmV3MultiassetWildMultiAsset: XcmV3MultiassetWildMultiAsset;
+    XcmV3OriginKind: XcmV3OriginKind;
     XcmV3PalletInfo: XcmV3PalletInfo;
     XcmV3QueryResponseInfo: XcmV3QueryResponseInfo;
     XcmV3Response: XcmV3Response;

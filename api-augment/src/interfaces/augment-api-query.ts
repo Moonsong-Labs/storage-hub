@@ -77,6 +77,8 @@ import type {
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
+  StagingXcmV4Instruction,
+  StagingXcmV4Xcm,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntimeHoldReason,
@@ -1159,6 +1161,20 @@ declare module "@polkadot/api-base/types/storage" {
       queryCounter: AugmentedQuery<ApiType, () => Observable<u64>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * If [`ShouldRecordXcm`] is set to true, then the last XCM program executed locally
+       * will be stored here.
+       * Runtime APIs can fetch the XCM that was executed by accessing this value.
+       *
+       * Only relevant if this pallet is being used as the [`xcm_executor::traits::RecordXcm`]
+       * implementation in the XCM executor configuration.
+       **/
+      recordedXcm: AugmentedQuery<
+        ApiType,
+        () => Observable<Option<Vec<StagingXcmV4Instruction>>>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * Fungible assets which we know are locked on a remote chain.
        **/
       remoteLockedFungibles: AugmentedQuery<
@@ -1176,6 +1192,17 @@ declare module "@polkadot/api-base/types/storage" {
        * then the destinations whose XCM version is unknown are considered unreachable.
        **/
       safeXcmVersion: AugmentedQuery<ApiType, () => Observable<Option<u32>>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Whether or not incoming XCMs (both executed locally and received) should be recorded.
+       * Only one XCM program will be recorded at a time.
+       * This is meant to be used in runtime APIs, and it's advised it stays false
+       * for all other use cases, so as to not degrade regular performance.
+       *
+       * Only relevant if this pallet is being used as the [`xcm_executor::traits::RecordXcm`]
+       * implementation in the XCM executor configuration.
+       **/
+      shouldRecordXcm: AugmentedQuery<ApiType, () => Observable<bool>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The Latest versions that we know various locations support.
