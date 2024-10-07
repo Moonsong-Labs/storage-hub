@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::{cmp::max, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
+use pallet_file_system::types::BatchResponses;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
@@ -22,7 +23,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::StorageDataUnit;
+use storage_hub_runtime::{RuntimeEvent, StorageDataUnit};
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -506,21 +507,6 @@ where
                 }
             };
 
-            let file_metadatas: Vec<_> = {
-                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-                accepts
-                    .iter()
-                    .filter_map(|(file_key, _)| {
-                        read_file_storage.get_metadata(file_key).ok().flatten()
-                    })
-                    .collect()
-            };
-
-            if let Err(e) = fs.write().await.insert_files_metadata(&file_metadatas) {
-                error!(target: LOG_TARGET, "Failed to insert file metadata: {:?}", e);
-                continue;
-            }
-
             let response = MspStorageRequestResponse {
                 accept: if !accepts.is_empty() {
                     Some(AcceptedStorageRequestParameters {
@@ -558,13 +544,100 @@ where
             },
         );
 
-        self.storage_hub_handler
+        let events = self
+            .storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
             .await?
             .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .watch_for_success_with_events(&self.storage_hub_handler.blockchain)
             .await?;
+
+        // Apply the necessary deltas to each one of the bucket's forest storage to reflect the result.
+        let results = events
+            .iter()
+            .find_map(|event| match &event.event {
+                RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::MspRespondedToStorageRequests { results },
+                ) => Some(results.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| anyhow!("Failed to find MspRespondedToStorageRequests event"))?;
+
+        if results.msp_id != own_msp_id {
+            let err_msg = format!(
+                "Expected MSP ID {:?} but got {:?}",
+                own_msp_id, results.msp_id
+            );
+            error!(target: LOG_TARGET, "{}", err_msg);
+            return Err(anyhow!(err_msg));
+        }
+
+        for batch_responses in results.responses {
+            // Add the file keys that were accepted to the forest storage of the bucket.
+            if let BatchResponses::Accepted(accepted) = &batch_responses {
+                let fs = self
+                    .storage_hub_handler
+                    .forest_storage_handler
+                    .get(&accepted.bucket_id.as_ref().to_vec())
+                    .await
+                    .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+                let mut write_fs = fs.write().await;
+
+                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
+                let file_metadatas: Vec<FileMetadata> = accepted
+                    .file_keys
+                    .iter()
+                    .filter_map(|file_key| {
+                        match read_file_storage.get_metadata(&file_key) {
+                            Ok(Some(metadata)) => Some(metadata),
+                            Ok(None) => {
+                                // TODO: Should probably save this to state and retry later.
+                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ File does not exist after responding to storage request for file key {:?}", file_key);
+                                None
+                            }
+                            Err(e) => {
+                                // TODO: Should probably save this to state and retry later.
+                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get file metadata after responding to storage request for file key {:?}: {:?}", file_key, e);
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+
+                drop(read_file_storage);
+
+                if let Err(e) = write_fs.insert_files_metadata(&file_metadatas) {
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to insert file metadatas after responding to storage requests: {:?}", e);
+                }
+
+                let local_bucket_root = write_fs.root();
+                if local_bucket_root != accepted.new_bucket_root {
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Local bucket root after applying delta does not match the new bucket root on chain.");
+                    continue;
+                }
+            }
+
+            // Delete all files that were rejected from the file manager.
+            if let BatchResponses::Rejected(rejected) = &batch_responses {
+                let mut fs = self.storage_hub_handler.file_storage.write().await;
+
+                for (file_key, _reason) in &rejected.file_keys {
+                    if let Err(e) = fs.delete_file(&file_key) {
+                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                    }
+                }
+            }
+
+            // Process the failed file keys.
+            if let BatchResponses::Failed(failed) = batch_responses {
+                for (_file_key, _reason) in &failed.file_keys {
+                    // TODO: Handle failed file keys.
+                }
+            }
+        }
 
         let _ = forest_root_write_tx.send(());
 

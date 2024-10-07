@@ -6,12 +6,13 @@ use std::{
 use anyhow::anyhow;
 use log::{debug, error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
+use shc_common::types::StorageHubEventsVec;
 use sp_core::H256;
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
     commands::BlockchainServiceInterface,
-    types::{ExtrinsicHash, ExtrinsicResult},
+    types::{Extrinsic, ExtrinsicHash, ExtrinsicResult},
     BlockchainService,
 };
 
@@ -67,9 +68,68 @@ impl SubmittedTransaction {
         &mut self,
         blockchain: &ActorHandle<BlockchainService>,
     ) -> anyhow::Result<()> {
-        // Wait for the transaction to be included in a block.
-        let block_hash;
+        let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
+        // Check if the extrinsic was successful.
+        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
+            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
+        match extrinsic_successful {
+            ExtrinsicResult::Success { dispatch_info } => {
+                info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
+            }
+            ExtrinsicResult::Failure {
+                dispatch_error,
+                dispatch_info,
+            } => {
+                error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
+                return Err(anyhow::anyhow!("Extrinsic failed"));
+            }
+        }
+
+        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
+
+        Ok(())
+    }
+
+    /// Handles the lifecycle of a submitted transaction.
+    ///
+    /// Waits for the transaction to be included in a block AND the checks the transaction is successful.
+    /// If the transaction is not included in a block within the specified timeout, it will be
+    /// considered failed and an error will be returned.
+    ///
+    /// Returns the events emitted by the transaction.
+    pub async fn watch_for_success_with_events(
+        &mut self,
+        blockchain: &ActorHandle<BlockchainService>,
+    ) -> anyhow::Result<StorageHubEventsVec> {
+        let extrinsic_in_block = self.watch_transaction(blockchain).await?;
+
+        // Check if the extrinsic was successful.
+        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
+            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
+        match extrinsic_successful {
+            ExtrinsicResult::Success { dispatch_info } => {
+                info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
+            }
+            ExtrinsicResult::Failure {
+                dispatch_error,
+                dispatch_info,
+            } => {
+                error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
+                return Err(anyhow::anyhow!("Extrinsic failed"));
+            }
+        }
+
+        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
+
+        Ok(extrinsic_in_block.events)
+    }
+
+    async fn watch_transaction(
+        &mut self,
+        blockchain: &ActorHandle<BlockchainService>,
+    ) -> Result<Extrinsic, anyhow::Error> {
+        let block_hash;
         let start_time = Instant::now();
         loop {
             // Get the elapsed time since submit.
@@ -151,25 +211,6 @@ impl SubmittedTransaction {
         let extrinsic_in_block = blockchain
             .get_extrinsic_from_block(block_hash, self.hash)
             .await?;
-
-        // Check if the extrinsic was successful.
-        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
-            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
-        match extrinsic_successful {
-            ExtrinsicResult::Success { dispatch_info } => {
-                info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
-            }
-            ExtrinsicResult::Failure {
-                dispatch_error,
-                dispatch_info,
-            } => {
-                error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
-                return Err(anyhow::anyhow!("Extrinsic failed"));
-            }
-        }
-
-        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
-
-        Ok(())
+        Ok(extrinsic_in_block)
     }
 }
