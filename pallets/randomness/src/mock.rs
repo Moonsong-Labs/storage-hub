@@ -1,9 +1,6 @@
 //! A minimal runtime including the pallet-randomness pallet
 use super::*;
-use crate as pallet_randomness;
-use frame_support::{
-    construct_runtime, derive_impl, parameter_types, traits::Everything, weights::Weight,
-};
+use frame_support::{derive_impl, parameter_types, traits::Everything, weights::Weight};
 use sp_core::{blake2_256, H160, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
@@ -17,14 +14,29 @@ pub type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 // Configure a mock runtime to test the pallet.
-construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Randomness: pallet_randomness::{Pallet, Call, Storage, Event<T>, Inherent},
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type Randomness = crate;
+}
 
 parameter_types! {
     pub const BlockHashCount: u32 = 250;

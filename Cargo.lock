@@ -12976,6 +12976,7 @@ dependencies = [
  "pallet-file-system-runtime-api",
  "pallet-message-queue 31.0.0",
  "pallet-nfts",
+ "pallet-parameters",
  "pallet-payment-streams",
  "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",

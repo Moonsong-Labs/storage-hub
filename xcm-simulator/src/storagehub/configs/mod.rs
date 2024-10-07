@@ -23,6 +23,7 @@
 //
 // For more information, please refer to <http://unlicense.org>
 
+mod runtime_params;
 pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
@@ -54,6 +55,7 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
+use runtime_params::RuntimeParameters;
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -346,6 +348,13 @@ parameter_types! {
     pub const MetadataDepositPerByte: Balance = 1 * UNIT;
 }
 
+impl pallet_parameters::Config for Runtime {
+    type AdminOrigin = EnsureRoot<AccountId>;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeParameters = RuntimeParameters;
+    type WeightInfo = ();
+}
+
 impl pallet_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type CollectionId = u32;
@@ -457,6 +466,11 @@ impl pallet_randomness::Config for Runtime {
     type WeightInfo = ();
 }
 
+/// Type representing the storage data units in StorageHub.
+pub type StorageDataUnit = u64;
+
+pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
+
 parameter_types! {
     pub const BucketDeposit: Balance = 20 * UNIT;
     pub const MaxMultiAddressSize: u32 = 100;
@@ -511,8 +525,9 @@ impl pallet_storage_providers::Config for Runtime {
     type BucketNameLimit = BucketNameLimit;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
-    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
+    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
+    type SlashAmountPerMaxFileSize =
+        runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
 }
 
@@ -596,12 +611,14 @@ impl pallet_proofs_dealer::Config for Runtime {
     type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
-    type CheckpointChallengePeriod = CheckpointChallengePeriod;
+    type CheckpointChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
-    type StakeToChallengePeriod = StakeToChallengePeriod;
-    type MinChallengePeriod = MinChallengePeriod;
+    type StakeToChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
+    type MinChallengePeriod = runtime_params::dynamic_params::runtime_config::MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
