@@ -13,8 +13,6 @@ use sp_runtime::{
 };
 
 use sp_std::prelude::*;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 use frame_support::{
@@ -198,15 +196,6 @@ const UNINCLUDED_SEGMENT_CAPACITY: u32 = 2;
 const BLOCK_PROCESSING_VELOCITY: u32 = 1;
 /// Relay chain slot duration, in milliseconds.
 const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
-
-/// The version information used to identify this runtime when compiled natively.
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-    NativeVersion {
-        runtime_version: VERSION,
-        can_author_with: Default::default(),
-    }
-}
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
