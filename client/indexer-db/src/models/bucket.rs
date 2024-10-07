@@ -80,4 +80,15 @@ impl Bucket {
             .await?;
         Ok(bucket)
     }
+
+    pub async fn get_by_onchain_bucket_id<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let bucket = bucket::table
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .first(conn)
+            .await?;
+        Ok(bucket)
+    }
 }

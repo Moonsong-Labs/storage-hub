@@ -212,16 +212,84 @@ impl IndexerService {
                 )
                 .await?;
             }
-            pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
-            pallet_file_system::Event::BspConfirmedStoring { .. } => {}
+            pallet_file_system::Event::BspConfirmStoppedStoring {
+                bsp_id,
+                file_key,
+                new_root: _,
+            } => {
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
+                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                BspFile::create(conn, bsp.id, file.id).await?;
+            }
+            pallet_file_system::Event::BspConfirmedStoring {
+                who: _,
+                file_keys,
+                new_root: _,
+                bsp_id,
+            } => {
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
+                for file_key in file_keys {
+                    let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                    BspFile::create(conn, bsp.id, file.id).await?;
+                }
+            }
             pallet_file_system::Event::MspRespondedToStorageRequests { .. } => {}
-            pallet_file_system::Event::NewStorageRequest { .. } => {}
+            pallet_file_system::Event::NewStorageRequest {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+            } => {
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.to_string()).await?;
+
+                let mut sql_peer_ids = Vec::new();
+                for peer_id in peer_ids {
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                }
+
+                File::create(
+                    conn,
+                    who.to_string(),
+                    file_key.as_ref().to_vec(),
+                    bucket.id,
+                    location.to_vec(),
+                    fingerprint.as_ref().to_vec(),
+                    *size as i64,
+                    FileStorageRequestStep::Requested,
+                    sql_peer_ids,
+                )
+                .await?;
+            }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
-            pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
-            pallet_file_system::Event::StorageRequestExpired { .. } => {}
-            pallet_file_system::Event::StorageRequestRevoked { .. } => {}
+            pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Fullfilled,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestExpired { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Expired,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestRevoked { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Revoked,
+                )
+                .await?;
+            }
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}

@@ -4,7 +4,9 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::{
-    models::multiaddress::MultiAddress, schema::bsp, schema::bsp_multiaddress, DbConnection,
+    models::multiaddress::MultiAddress,
+    schema::{bsp, bsp_file, bsp_multiaddress},
+    DbConnection,
 };
 
 /// Table that holds the BSPs.
@@ -86,6 +88,49 @@ impl Bsp {
         diesel::update(bsp::table)
             .filter(bsp::account.eq(account))
             .set(bsp::capacity.eq(capacity))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_by_onchain_bsp_id<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bsp_id: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let bsp = bsp::table
+            .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
+            .first(conn)
+            .await?;
+        Ok(bsp)
+    }
+
+    pub async fn get_by_account<'a>(
+        conn: &mut DbConnection<'a>,
+        account: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let bsp = bsp::table
+            .filter(bsp::account.eq(account))
+            .first(conn)
+            .await?;
+        Ok(bsp)
+    }
+}
+
+#[derive(Debug, Queryable, Insertable, Selectable)]
+#[diesel(table_name = bsp_file)]
+pub struct BspFile {
+    pub bsp_id: i32,
+    pub file_id: i32,
+}
+
+impl BspFile {
+    pub async fn create<'a>(
+        conn: &mut DbConnection<'a>,
+        bsp_id: i32,
+        file_id: i32,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::insert_into(bsp_file::table)
+            .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))
             .execute(conn)
             .await?;
         Ok(())
