@@ -56,7 +56,7 @@ where
         &mut self,
         peer_ids: Vec<PeerId>,
         file_metadata: &FileMetadata,
-    ) -> Option<Result<(), anyhow::Error>> {
+    ) -> Result<(), anyhow::Error> {
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
         let chunk_count = file_metadata.chunks_count();
 
@@ -76,12 +76,12 @@ where
                 {
                     Ok(proof) => proof,
                     Err(e) => {
-                        return Some(Err(anyhow::anyhow!(
+                        return Err(anyhow::anyhow!(
                             "Failed to generate proof for chunk id {:?} of file {:?}\n Error: {:?}",
                             chunk_id,
                             file_key,
                             e
-                        )));
+                        ));
                     }
                 };
 
@@ -104,9 +104,13 @@ where
                 }
             }
             info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
-            return Some(Ok(()));
+            return Ok(());
         }
-        None
+
+        Err(anyhow::anyhow!(
+            "Failed to send file {:?} to any of the peers",
+            file_metadata.fingerprint
+        ))
     }
 
     async fn extract_peer_ids(&mut self, multiaddresses: Vec<Multiaddr>) -> Vec<PeerId> {
@@ -204,13 +208,7 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        match self.send_chunks_to_provider(peer_ids, &file_metadata).await {
-            Some(result) => result,
-            None => Err(anyhow::anyhow!(
-                "Failed to send file {:?} to any of the peers",
-                file_metadata.fingerprint
-            )),
-        }
+        self.send_chunks_to_provider(peer_ids, &file_metadata).await
     }
 }
 
@@ -253,12 +251,6 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        match self.send_chunks_to_provider(peer_ids, &file_metadata).await {
-            Some(result) => result,
-            None => Err(anyhow::anyhow!(
-                "Failed to send file key {:?} to any of the peers",
-                file_key
-            )),
-        }
+        self.send_chunks_to_provider(peer_ids, &file_metadata).await
     }
 }
