@@ -95,9 +95,21 @@ describeBspNet(
       });
       await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 1)));
 
-      await api.file.newStorageRequest("res/smile.jpg", "test/smile.jpg", "bucket-1"); // T0
-      await api.wait.bspVolunteer(2);
+      const { fileKey } = await api.file.newStorageRequest(
+        "res/smile.jpg",
+        "test/smile.jpg",
+        "bucket-1"
+      ); // T0
 
+      const lowReputationVolunteerTick = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_DOWN_ID, fileKey)
+      ).asOk.toNumber();
+
+      if ((await api.rpc.chain.getHeader()).number.toNumber() < lowReputationVolunteerTick) {
+        await api.block.skipTo(lowReputationVolunteerTick);
+      }
+
+      await api.wait.bspVolunteer();
       const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
       assert(matchedEvents.length === 2, "Multiple BSPs should be able to volunteer");
@@ -160,12 +172,31 @@ describeBspNet(
       });
 
       // Set global params to small numbers
-      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(2, 10)));
+      await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 100)));
 
       // Create a new storage request
-      await api.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-4"); // T0
+      const { fileKey } = await api.file.newStorageRequest(
+        "res/adolphus.jpg",
+        "test/adolphus.jpg",
+        "bucket-4"
+      ); // T0
 
-      await api.wait.bspVolunteer();
+      // Query the earliest volunteer tick for the dummy BSP and the new BSP
+      const initialBspVolunteerTick = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.DUMMY_BSP_ID, fileKey)
+      ).asOk.toNumber();
+      const highReputationBspVolunteerTick = (
+        await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_THREE_ID, fileKey)
+      ).asOk.toNumber();
+
+      // Ensure that the new BSP should be able to volunteer first
+      assert(
+        highReputationBspVolunteerTick < initialBspVolunteerTick,
+        "New BSP should be able to volunteer first"
+      );
+
+      // Wait until the new BSP volunteers
+      await api.wait.bspVolunteer(1);
       const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
       const filtered = matchedEvents.filter(

@@ -29,13 +29,8 @@ describeBspNet(
         }
       });
 
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true
-      });
-
-      await userApi.block.seal();
+      // Wait for the BSP to submit the volunteer extrinsic
+      await userApi.wait.bspVolunteer();
 
       // Example of how to assert on a log message
       await userApi.assert.log({

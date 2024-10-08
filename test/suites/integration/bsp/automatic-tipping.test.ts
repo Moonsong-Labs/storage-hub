@@ -15,7 +15,7 @@ describeBspNet(
       await api.file.newStorageRequest("res/whatsup.jpg", "test/whatsup.jpg", "nothingmuch-2");
       await api.wait.bspVolunteer();
 
-      await sleep(1000); // wait for the bsp to download the files
+      await api.wait.bspStoredInTxPool();
 
       await api.assert.extrinsicPresent({
         method: "bspConfirmStoring",
