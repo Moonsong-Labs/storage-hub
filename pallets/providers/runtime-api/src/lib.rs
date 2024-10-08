@@ -72,3 +72,10 @@ pub enum QueryProviderMultiaddressesError {
     ProviderNotRegistered,
     InternalError,
 }
+
+/// Error type for the `get_stake` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum GetStakeError {
+    ProviderStakeNotFound,
+    InternalError,
+}

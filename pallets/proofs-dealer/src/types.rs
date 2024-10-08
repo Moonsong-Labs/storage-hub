@@ -154,3 +154,8 @@ pub type BlockFullnessHeadroomFor<T> = <T as crate::Config>::BlockFullnessHeadro
 
 /// Syntactic sugar for MinNotFullBlocksRatio type used in the ProofsDealer pallet.
 pub type MinNotFullBlocksRatioFor<T> = <T as crate::Config>::MinNotFullBlocksRatio;
+
+/// BalanceOf is the balance type of the runtime.
+pub type BalanceOf<T> = <<T as crate::Config>::NativeBalance as fungible::Inspect<
+    <T as frame_system::Config>::AccountId,
+>>::Balance;

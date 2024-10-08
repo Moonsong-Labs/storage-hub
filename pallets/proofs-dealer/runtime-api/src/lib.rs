@@ -7,13 +7,14 @@ use sp_std::vec::Vec;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, RandomnessOutput, TrieRemoveMutation>
+    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, RandomnessOutput, TrieRemoveMutation, Balance>
     where
         ProviderId: codec::Codec,
         BlockNumber: codec::Codec,
         Key: codec::Codec,
         RandomnessOutput: codec::Codec,
         TrieRemoveMutation: codec::Codec,
+        Balance: codec::Codec,
     {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderId) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
         fn get_last_checkpoint_challenge_tick() -> BlockNumber;
@@ -27,6 +28,7 @@ sp_api::decl_runtime_apis! {
         fn get_forest_challenges_from_seed(seed: &RandomnessOutput, provider_id: &ProviderId) -> Vec<Key>;
         fn get_current_tick() -> BlockNumber;
         fn get_next_deadline_tick(provider_id: &ProviderId) -> Result<BlockNumber, GetNextDeadlineTickError>;
+        fn get_stake(provider_id: ProviderId) -> Option<Balance>;
     }
 }
 
