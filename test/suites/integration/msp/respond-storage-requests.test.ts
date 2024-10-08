@@ -117,7 +117,9 @@ describeMspNet(
 
       const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
-        throw new Error("Expected 1 response");
+        throw new Error(
+          "Expected 1 response since there is only a single bucket and should have been accepted"
+        );
       }
 
       const response = responses[0].asAccepted;
@@ -211,7 +213,7 @@ describeMspNet(
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
-      let file_keys = [];
+      const file_keys = [];
       for (const e of matchedEvents) {
         const newStorageRequestDataBlob =
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
@@ -252,7 +254,7 @@ describeMspNet(
       const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
-          `Expected 1 response since there is only a single bucket and should have been accepted`
+          "Expected 1 response since there is only a single bucket and should have been accepted"
         );
       }
 
@@ -294,7 +296,7 @@ describeMspNet(
       const responses2 = mspRespondDataBlob2.results.responses;
       if (responses2.length !== 1) {
         throw new Error(
-          `Expected 1 response since there is only a single bucket and should have been accepted`
+          "Expected 1 response since there is only a single bucket and should have been accepted"
         );
       }
 
