@@ -96,7 +96,7 @@ describeBspNet(
       await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 1)));
 
       await api.file.newStorageRequest("res/smile.jpg", "test/smile.jpg", "bucket-1"); // T0
-      await api.wait.bspVolunteer();
+      await api.wait.bspVolunteer(2);
 
       const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
@@ -137,13 +137,13 @@ describeBspNet(
         await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
       ).asOk.toNumber();
 
-      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp1VolunteerTick) {
+      if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
         await api.block.skipTo(bsp1VolunteerTick);
       }
       await api.wait.bspVolunteer();
       await api.wait.bspStored();
 
-      if ((await api.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerTick) {
+      if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
         await api.block.skipTo(bsp2VolunteerTick);
       }
       await api.wait.bspVolunteer();
@@ -156,7 +156,7 @@ describeBspNet(
         bspKeySeed: bspThreeSeed,
         bspId: ShConsts.BSP_THREE_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
-        bspStartingWeight: 800_000n
+        bspStartingWeight: 800_000_000n
       });
 
       // Set global params to small numbers
