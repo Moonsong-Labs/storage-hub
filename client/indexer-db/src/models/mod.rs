@@ -11,4 +11,5 @@ pub use bucket::*;
 pub use msp::*;
 pub use multiaddress::*;
 pub use payment_stream::*;
+pub use proofs::*;
 pub use service_state::*;

@@ -2032,10 +2032,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofAccepted: AugmentedEvent<
         ApiType,
-        [provider: H256, proof: PalletProofsDealerProof],
+        [provider: H256, proof: PalletProofsDealerProof, lastTickProof: u32],
         {
           provider: H256;
           proof: PalletProofsDealerProof;
+          lastTickProof: u32;
         }
       >;
       /**
