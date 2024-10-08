@@ -1,13 +1,15 @@
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use log::error;
+use sc_network::Multiaddr;
+use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 
 use codec::Decode;
 use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_core::H256;
 
-use crate::types::{ParachainClient, StorageHubEventsVec};
+use crate::types::{Multiaddresses, ParachainClient, StorageHubEventsVec};
 
 lazy_static! {
     // Would be cool to be able to do this...
@@ -47,4 +49,29 @@ pub fn get_events_at_block(
         .map(|raw_storage| StorageHubEventsVec::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
+}
+
+/// Attempt to convert BoundedVec of BoundedVecs of bytes.
+///
+/// Returns a list of [`Multiaddr`] objects that have successfully been parsed from the raw bytes.
+pub fn convert_raw_multiaddresses_to_multiaddr(multiaddresses: Multiaddresses) -> Vec<Multiaddr> {
+    let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
+    for raw_multiaddr in multiaddresses.into_iter() {
+        let multiaddress = match std::str::from_utf8(&raw_multiaddr) {
+            Ok(s) => match Multiaddr::from_str(s) {
+                Ok(multiaddr) => multiaddr,
+                Err(e) => {
+                    error!("Failed to parse Multiaddress from string: {:?}", e);
+                    continue;
+                }
+            },
+            Err(e) => {
+                error!("Failed to parse Multiaddress from bytes: {:?}", e);
+                continue;
+            }
+        };
+
+        multiaddress_vec.push(multiaddress);
+    }
+    multiaddress_vec
 }

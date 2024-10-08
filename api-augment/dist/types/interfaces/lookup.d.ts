@@ -2450,9 +2450,9 @@ declare const _default: {
     _enum: string[];
   };
   /**
-   * Lookup270: pallet_balances::types::IdAmount<Id, Balance>
+   * Lookup270: frame_support::traits::tokens::misc::IdAmount<Id, Balance>
    **/
-  PalletBalancesIdAmount: {
+  FrameSupportTokensMiscIdAmount: {
     id: string;
     amount: string;
   };

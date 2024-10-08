@@ -2492,9 +2492,9 @@ export default {
     _enum: ["PaymentStreamDeposit"]
   },
   /**
-   * Lookup270: pallet_balances::types::IdAmount<Id, Balance>
+   * Lookup270: frame_support::traits::tokens::misc::IdAmount<Id, Balance>
    **/
-  PalletBalancesIdAmount: {
+  FrameSupportTokensMiscIdAmount: {
     id: "Null",
     amount: "u128"
   },

@@ -216,6 +216,16 @@ const STORAGE_PROVIDERS_V1 = {
       }
     ],
     type: "Result<ProviderId, QueryMspIdOfBucketIdError>"
+  },
+  query_provider_multiaddresses: {
+    description: "Query the provider's multiaddresses.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<Multiaddresses, QueryProviderMultiaddressesError>"
   }
 };
 const PAYMENT_STREAMS_V1 = {
