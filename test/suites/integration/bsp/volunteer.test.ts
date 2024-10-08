@@ -233,26 +233,12 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
 
     await userApi.sealBlock(txs, shUser);
 
-    //There should be pending extrinsics for all files from BSP (volunteer)
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspVolunteer",
-      checkTxPool: true,
-      assertLength: source.length
-    });
+    // Wait for the BSP to volunteer
+    await userApi.wait.bspVolunteer(source.length);
 
-    await userApi.sealBlock();
+    // Wait for the BSP to download the files and send a confirm transaction
+    await userApi.wait.bspStored(1);
 
-    await sleep(5000); // wait for the bsp to download the files
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspConfirmStoring",
-      checkTxPool: true,
-      assertLength: 1,
-      timeout: 10000
-    });
-
-    await userApi.sealBlock();
     const [
       _bspConfirmRes_who,
       _bspConfirmRes_bspId,
@@ -275,16 +261,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
 
     // Even though we didn't sent a new file, the BSP client should process the rest of the files.
     // We wait for the BSP to send the confirm transaction.
-    await sleep(500);
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspConfirmStoring",
-      checkTxPool: true,
-      assertLength: 1,
-      timeout: 10000
-    });
-
-    await userApi.sealBlock();
+    await userApi.wait.bspStored(1);
 
     const [
       _bspConfirm2Res_who,

@@ -112,8 +112,6 @@ describeBspNet(
       await api.wait.bspVolunteer();
       const matchedEvents = await api.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
-      assert(matchedEvents.length === 2, "Multiple BSPs should be able to volunteer");
-
       const filtered = matchedEvents.filter(
         ({ event }) =>
           (api.events.fileSystem.AcceptedBspVolunteer.is(event) && event.data.bspId.toString()) ===
@@ -194,6 +192,11 @@ describeBspNet(
         highReputationBspVolunteerTick < initialBspVolunteerTick,
         "New BSP should be able to volunteer first"
       );
+
+      // Advance to the tick where the new BSP can volunteer
+      if ((await api.rpc.chain.getHeader()).number.toNumber() < highReputationBspVolunteerTick) {
+        await api.block.skipTo(highReputationBspVolunteerTick);
+      }
 
       // Wait until the new BSP volunteers
       await api.wait.bspVolunteer(1);

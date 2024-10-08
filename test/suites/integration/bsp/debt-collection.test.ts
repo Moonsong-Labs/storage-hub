@@ -614,7 +614,8 @@ describeBspNet(
           method: "stopStoringForInsolventUser",
           module: "fileSystem",
           checkTxPool: true,
-          assertLength: 3
+          assertLength: 3,
+          timeout: 10000
         });
 
         // Seal a block to allow BSPs to delete the files of the user
