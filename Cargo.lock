@@ -7046,6 +7046,7 @@ dependencies = [
  "scale-info",
  "serde",
  "shp-constants",
+ "shp-data-price-updater",
  "shp-file-metadata",
  "shp-traits",
  "sp-core 28.0.0",
@@ -7315,6 +7316,7 @@ dependencies = [
  "scale-info",
  "serde",
  "shp-constants",
+ "shp-data-price-updater",
  "shp-file-metadata",
  "shp-traits",
  "sp-core 28.0.0",
@@ -12999,6 +13001,7 @@ dependencies = [
  "polkadot-runtime-parachains 7.0.0",
  "scale-info",
  "shp-constants",
+ "shp-data-price-updater",
  "shp-file-key-verifier",
  "shp-file-metadata",
  "shp-forest-verifier",
@@ -13388,6 +13391,20 @@ name = "shp-constants"
 version = "0.1.0"
 dependencies = [
  "sp-core 28.0.0",
+ "sp-runtime 31.0.1",
+]
+
+[[package]]
+name = "shp-data-price-updater"
+version = "0.1.0"
+dependencies = [
+ "frame-support 28.0.0",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "shp-traits",
+ "sp-core 28.0.0",
+ "sp-io 30.0.0",
  "sp-runtime 31.0.1",
 ]
 
@@ -15549,6 +15566,7 @@ dependencies = [
  "polkadot-runtime-common 7.0.0",
  "scale-info",
  "shp-constants",
+ "shp-data-price-updater",
  "shp-file-key-verifier",
  "shp-file-metadata",
  "shp-forest-verifier",
