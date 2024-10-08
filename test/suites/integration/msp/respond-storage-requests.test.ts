@@ -127,7 +127,7 @@ describeMspNet(
       strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
       strictEqual(response.fileKeys[0].toString(), newStorageRequestDataBlob.fileKey.toString());
 
-      //Allow time for the MSP to update the local forest root
+      // Allow time for the MSP to update the local forest root
       await sleep(3000);
 
       const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(

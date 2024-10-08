@@ -614,11 +614,13 @@ where
                 drop(read_file_storage);
 
                 if let Err(e) = write_fs.insert_files_metadata(&file_metadatas) {
+                    // TODO: Should probably figure out a way to stop storing the file.
                     error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to insert file metadatas after responding to storage requests: {:?}", e);
                 }
 
                 let local_bucket_root = write_fs.root();
                 if local_bucket_root != accepted.new_bucket_root {
+                    // TODO: Should probably figure out a way to stop storing the file.
                     error!(target: LOG_TARGET, "CRITICAL❗️❗️ Local bucket root after applying delta does not match the new bucket root on chain.");
                     continue;
                 }

@@ -568,24 +568,24 @@ impl BlockchainService {
         if next_event_data.is_none() {
             let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
 
-            // Batch multiple respond file storing taking the runtime maximum.
-            let mut respond_storing_requests = Vec::new();
+            // Batch multiple respond storing requests up to the runtime configured maximum.
+            let mut respond_storage_requests = Vec::new();
             for _ in 0..max_batch_respond {
                 if let Some(request) = state_store_context
                     .pending_msp_respond_storage_request_deque()
                     .pop_front()
                 {
-                    respond_storing_requests.push(request);
+                    respond_storage_requests.push(request);
                 } else {
                     break;
                 }
             }
 
             // If we have at least 1 respond storing request, send the process event.
-            if respond_storing_requests.len() > 0 {
+            if respond_storage_requests.len() > 0 {
                 next_event_data = Some(
                     ProcessMspRespondStoringRequestData {
-                        respond_storing_requests,
+                        respond_storing_requests: respond_storage_requests,
                     }
                     .into(),
                 );
