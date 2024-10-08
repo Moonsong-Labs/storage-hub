@@ -1,6 +1,6 @@
 import type { ApiPromise } from "@polkadot/api";
-import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
-import { sleep } from "../timer";
+import { assertEventPresent, assertExtrinsicPresent } from "../../asserts";
+import { sleep } from "../../timer";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
 

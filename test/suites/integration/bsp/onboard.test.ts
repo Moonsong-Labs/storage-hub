@@ -7,7 +7,7 @@ import {
   sleep,
   type EnrichedBspApi
 } from "../../../util";
-import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
+import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/networks/bspNet/consts.ts";
 
 describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it }) => {
   let api: EnrichedBspApi;

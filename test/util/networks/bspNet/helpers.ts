@@ -7,7 +7,7 @@ import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import * as util from "node:util";
-import { DOCKER_IMAGE, MILLIUNIT, UNIT } from "../constants.ts";
+import { DOCKER_IMAGE, MILLIUNIT, UNIT } from "../../constants.ts";
 import {
   alice,
   bspDownKey,
@@ -18,7 +18,7 @@ import {
   bspTwoKey,
   bspTwoSeed,
   shUser
-} from "../pjsKeyring";
+} from "../../pjsKeyring";
 import { addBspContainer, showContainers } from "./docker";
 import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";

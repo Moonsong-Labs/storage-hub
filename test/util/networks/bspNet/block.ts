@@ -9,12 +9,12 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import { alice, bob } from "../pjsKeyring";
-import { isExtSuccess } from "../extrinsics";
-import { sleep } from "../timer";
+import { alice, bob } from "../../pjsKeyring";
+import { isExtSuccess } from "../../extrinsics";
+import { sleep } from "../../timer";
 import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
-import * as Assertions from "../asserts";
+import * as Assertions from "../../asserts";
 import invariant from "tiny-invariant";
 
 export interface SealedBlock {

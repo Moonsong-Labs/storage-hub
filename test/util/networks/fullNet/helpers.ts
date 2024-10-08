@@ -4,15 +4,15 @@ import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import * as util from "node:util";
-import { bspKey, mspKey, shUser } from "../pjsKeyring.ts";
-import { showContainers } from "../networks/bspNet/docker";
-import type { BspNetConfig } from "../networks/bspNet/types";
-import * as ShConsts from "../networks/bspNet/consts.ts";
-import { BspNetTestApi, type EnrichedBspApi } from "../networks/bspNet/test-api.ts";
+import { bspKey, mspKey, shUser } from "../../pjsKeyring.ts";
+import { showContainers } from "../bspNet/docker";
+import type { BspNetConfig } from "../bspNet/types";
+import * as ShConsts from "../bspNet/consts.ts";
+import { BspNetTestApi, type EnrichedBspApi } from "../bspNet/test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
-import { forceSignupBsp } from "../networks/bspNet/helpers.ts";
+import { forceSignupBsp } from "../bspNet/helpers.ts";
 
 const exec = util.promisify(child_process.exec);
 

@@ -3,7 +3,7 @@ import invariant from "tiny-invariant";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
 import { sleep } from "./timer";
-import { waitForLog } from "./bspNet";
+import { waitForLog } from "./networks/bspNet";
 
 export type AssertExtrinsicOptions = {
   /** The block height to check. If not provided, the latest block will be used. */

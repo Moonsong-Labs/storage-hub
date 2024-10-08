@@ -5,7 +5,7 @@ import {
   type EnrichedBspApi,
   type ToxicInfo
 } from "../util";
-import * as ShConsts from "../util/bspNet/consts";
+import * as ShConsts from "../util/networks/bspNet/consts";
 import { runFullNet } from "../util/fullNet/helpers";
 
 let api: EnrichedBspApi | undefined;
