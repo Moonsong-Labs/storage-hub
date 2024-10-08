@@ -28,7 +28,7 @@ use sp_std::{
 use crate::{
     pallet,
     types::{
-        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
+        AccountIdFor, BalanceFor, BalanceOf, BalancePalletFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
         KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
@@ -1217,5 +1217,9 @@ where
             .ok_or(GetNextDeadlineTickError::ArithmeticOverflow)?;
 
         Ok(next_deadline_tick)
+    }
+
+    pub fn get_stake(provider_id: ProviderIdFor<T>) -> Option<BalanceOf<T>> {
+        ProvidersPalletFor::<T>::get_stake(provider_id)
     }
 }
