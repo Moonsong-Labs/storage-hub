@@ -95,6 +95,8 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+            > + shp_traits::SystemMetricsInterface<
+                ProvidedUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             >;
 
         /// The trait for issuing challenges and verifying proofs.
@@ -108,7 +110,13 @@ pub mod pallet {
             AccountId = Self::AccountId,
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
-        >;
+        >
+        + shp_traits::MutatePriceIndexInterface<PriceIndex = BalanceOf<Self>>;
+
+        type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
+            Price = BalanceOf<Self>,
+            StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+            >;
 
         /// The trait for checking user solvency in the system
         type UserSolvency: shp_traits::ReadUserSolvencyInterface<AccountId = Self::AccountId>;
@@ -1223,6 +1231,12 @@ pub mod pallet {
     where
         u32: TryFrom<BlockNumberFor<T>>,
     {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
+
+            Self::do_on_poll(weight);
+        }
+
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut remaining_weight = remaining_weight;
 
