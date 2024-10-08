@@ -184,13 +184,18 @@ where
         );
 
         // Charge the payment stream with the old rate before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before the payment stream could be updated
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
@@ -240,13 +245,18 @@ where
         );
 
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
@@ -416,13 +426,18 @@ where
         );
 
         // Charge the payment stream with the old amount before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before the payment stream could be updated
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
@@ -476,13 +491,18 @@ where
         );
 
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
@@ -520,7 +540,7 @@ where
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
-    ) -> Result<BalanceOf<T>, DispatchError> {
+    ) -> Result<(BalanceOf<T>, BlockNumberFor<T>), DispatchError> {
         // Check that the given ID belongs to an actual Provider
         ensure!(
             <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
@@ -549,6 +569,10 @@ where
         // Initiate the variable that will hold the total amount that has been charged
         let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
+        // Get the last chargeable info for this provider
+        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
+
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
             // Check if the user is flagged as without funds to execute the correct charging logic
@@ -564,8 +588,6 @@ where
                 None => {
                     // If the user hasn't been flagged as without funds, charge the payment stream
                     // Calculate the time passed between the last chargeable tick and the last charged tick
-                    let last_chargeable_tick =
-                        LastChargeableInfo::<T>::get(provider_id).last_chargeable_tick;
                     if let Some(time_passed) = last_chargeable_tick
                         .checked_sub(&fixed_rate_payment_stream.last_charged_tick)
                     {
@@ -707,8 +729,8 @@ where
                     // Calculate the difference between the last charged price index and the price index at the last chargeable tick
                     // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
 
-                    let price_index_at_last_chargeable_tick =
-                        LastChargeableInfo::<T>::get(provider_id).price_index;
+                    let price_index_at_last_chargeable_tick = last_chargeable_info.price_index;
+
                     if let Some(price_index_difference) = price_index_at_last_chargeable_tick
                         .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
                     {
@@ -831,7 +853,7 @@ where
             }
         }
 
-        Ok(total_amount_charged)
+        Ok((total_amount_charged, last_chargeable_tick))
     }
 
     /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider
