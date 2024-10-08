@@ -971,19 +971,19 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
-/// A trait to mutate the accumulated price index.
+/// A trait to mutate the price per unit per tick.
 ///
-/// This is used by the Payment Streams pallet to expose the function to update the accumulated price index,
+/// This is used by the Payment Streams pallet to expose the function to update the price per unit per tick,
 /// which governs the amount to charge for dynamic-rate payment streams.
-pub trait MutatePriceIndexInterface {
-    /// The type which represents a price index.
-    type PriceIndex: NumericalParam;
+pub trait MutatePricePerUnitPerTickInterface {
+    /// The type which represents a price per unit per tick.
+    type PricePerUnitPerTick: NumericalParam;
 
-    /// Get the accumulated price index.
-    fn get_price_index() -> Self::PriceIndex;
+    /// Get the price per unit per tick.
+    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick;
 
-    /// Update the accumulated price index.
-    fn set_price_index(price_index: Self::PriceIndex);
+    /// Update the price per unit per tick..
+    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick);
 }
 
 /// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof

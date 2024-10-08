@@ -111,7 +111,7 @@ pub mod pallet {
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
         >
-        + shp_traits::MutatePriceIndexInterface<PriceIndex = BalanceOf<Self>>;
+        + shp_traits::MutatePricePerUnitPerTickInterface<PricePerUnitPerTick = BalanceOf<Self>>;
 
         type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
             Price = BalanceOf<Self>,

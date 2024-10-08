@@ -2129,7 +2129,7 @@ mod hooks {
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
             let current_data_price_per_unit =
-                <T::PaymentStreams as shp_traits::MutatePriceIndexInterface>::get_price_index();
+                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::get_price_per_unit_per_tick();
             weight.consume(T::DbWeight::get().reads(1));
 
             let new_data_price_per_unit =
@@ -2140,7 +2140,7 @@ mod hooks {
                 );
 
             if new_data_price_per_unit != current_data_price_per_unit {
-                <T::PaymentStreams as shp_traits::MutatePriceIndexInterface>::set_price_index(
+                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::set_price_per_unit_per_tick(
                     new_data_price_per_unit,
                 );
                 weight.consume(T::DbWeight::get().writes(1));

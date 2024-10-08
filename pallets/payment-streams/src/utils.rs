@@ -12,7 +12,7 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_traits::{
-    MutatePriceIndexInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
 };
 use sp_runtime::{
@@ -1379,15 +1379,15 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> MutatePriceIndexInterface for pallet::Pallet<T> {
-    type PriceIndex = BalanceOf<T>;
+impl<T: pallet::Config> MutatePricePerUnitPerTickInterface for pallet::Pallet<T> {
+    type PricePerUnitPerTick = BalanceOf<T>;
 
-    fn get_price_index() -> Self::PriceIndex {
-        AccumulatedPriceIndex::<T>::get()
+    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick {
+        CurrentPricePerUnitPerTick::<T>::get()
     }
 
-    fn set_price_index(price_index: Self::PriceIndex) {
-        AccumulatedPriceIndex::<T>::put(price_index);
+    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick) {
+        CurrentPricePerUnitPerTick::<T>::put(price_index);
     }
 }
 
