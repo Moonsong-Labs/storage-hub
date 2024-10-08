@@ -86,7 +86,7 @@ impl SubmittedTransaction {
             }
         }
 
-        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
+        debug!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
 
         Ok(())
     }
@@ -120,7 +120,7 @@ impl SubmittedTransaction {
             }
         }
 
-        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
+        debug!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
 
         Ok(extrinsic_in_block.events)
     }

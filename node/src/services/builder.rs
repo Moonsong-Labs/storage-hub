@@ -197,7 +197,8 @@ pub trait StorageLayerBuilder {
 impl StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer> {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(ForestStorageSingle::new(InMemoryForestStorage::new()));
+        self.forest_storage_handler =
+            Some(<(BspProvider, InMemoryStorageLayer) as StorageTypes>::FSH::new());
     }
 }
 
@@ -212,42 +213,39 @@ impl StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer>
                 .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
-        let forest_storage = RocksDBForestStorage::<
-            StorageProofsMerkleTrieLayout,
-            kvdb_rocksdb::Database,
-        >::rocksdb_storage(storage_path)
-        .expect("Failed to create RocksDB for BspProvider");
-        let forest_storage =
-            RocksDBForestStorage::new(forest_storage).expect("Failed to create Forest Storage");
-        self.forest_storage_handler = Some(ForestStorageSingle::new(forest_storage));
+        self.forest_storage_handler =
+            Some(<(BspProvider, RocksDbStorageLayer) as StorageTypes>::FSH::new(storage_path));
     }
 }
 
 impl StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemoryStorageLayer> {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(ForestStorageCaching::new());
+        self.forest_storage_handler =
+            Some(<(MspProvider, InMemoryStorageLayer) as StorageTypes>::FSH::new());
     }
 }
 
 impl StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer> {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) {
-        self.storage_path = storage_path.clone();
+        let storage_path = storage_path.expect("Storage path not set");
+        self.storage_path = Some(storage_path.clone());
 
-        let file_storage = RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
-            storage_path.expect("Storage path not set"),
-        )
-        .expect("Failed to create RocksDB");
+        let file_storage =
+            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(storage_path.clone())
+                .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
-        self.forest_storage_handler = Some(ForestStorageCaching::new());
+        self.forest_storage_handler =
+            Some(<(MspProvider, RocksDbStorageLayer) as StorageTypes>::FSH::new(storage_path));
     }
 }
 
 impl StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer> {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(ForestStorageSingle::new(InMemoryForestStorage::new()));
+        self.forest_storage_handler =
+            Some(<(UserRole, NoStorageLayer) as StorageTypes>::FSH::new());
     }
 }
 
@@ -394,7 +392,7 @@ where
                 .expect("File Storage not set.")
                 .clone(),
             // Not used by the user role
-            ForestStorageSingle::new(InMemoryForestStorage::<StorageProofsMerkleTrieLayout>::new()),
+            <(UserRole, NoStorageLayer) as StorageTypes>::FSH::new(),
             // Not used by the user role
             ProviderConfig {
                 max_storage_capacity: 0,

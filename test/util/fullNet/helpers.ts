@@ -119,10 +119,18 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
     const updatedCompose = stringify(composeYaml);
 
     if (bspNetConfig.noisy) {
-      await compose.upOne("toxiproxy", { cwd: cwd, configAsString: updatedCompose, log: true });
+      await compose.upOne("toxiproxy", {
+        cwd: cwd,
+        configAsString: updatedCompose,
+        log: true
+      });
     }
 
-    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: updatedCompose, log: true });
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
 
     const bspIp = await getContainerIp(
       bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName

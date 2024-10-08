@@ -427,9 +427,11 @@ where
             H256,
             (Vec<(H256, _)>, Vec<(H256, RejectedStorageRequestReason)>),
         > = HashMap::new();
+
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
         for respond in &event.data.respond_storing_requests {
+            info!(target: LOG_TARGET, "Processing respond storing request.");
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256(metadata.bucket_id.try_into().unwrap()),
                 Ok(None) => {
@@ -492,8 +494,10 @@ where
             {
                 Some(fs) => fs,
                 None => {
-                    error!(target: LOG_TARGET, "Failed to get forest storage for bucket {:?}", bucket_id);
-                    continue;
+                    self.storage_hub_handler
+                        .forest_storage_handler
+                        .insert(&bucket_id.as_ref().to_vec())
+                        .await
                 }
             };
 

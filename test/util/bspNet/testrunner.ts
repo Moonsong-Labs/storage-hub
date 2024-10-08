@@ -84,7 +84,9 @@ export async function describeBspNet<
         if (options?.keepAlive) {
           if (bspNetConfigCases.length > 1) {
             console.error(
-              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(bspNetConfig)} will be kept alive`
+              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(
+                bspNetConfig
+              )} will be kept alive`
             );
           }
           console.log("🩺 Info:  Test run configured to keep BSPNet alive");
@@ -144,9 +146,10 @@ export async function describeMspNet<
           launchEventEmitter.once("networkLaunched", resolve);
         });
         // Launch the network
-        const launchResponse = await launchFullNetwork(
-          { ...fullNetConfig, toxics: options?.toxics },
-        );
+        const launchResponse = await launchFullNetwork({
+          ...fullNetConfig,
+          toxics: options?.toxics
+        });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
@@ -162,7 +165,9 @@ export async function describeMspNet<
         if (options?.keepAlive) {
           if (fullNetConfigCases.length > 1) {
             console.error(
-              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(fullNetConfig)} will be kept alive`
+              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(
+                fullNetConfig
+              )} will be kept alive`
             );
           }
           console.log("🩺 Info:  Test run configured to keep BSPNet alive");
@@ -201,9 +206,7 @@ export const launchNetwork = async (
       : await runSimpleBspNet(config);
 };
 
-export const launchFullNetwork = async (
-  config: BspNetConfig,
-) => {
+export const launchFullNetwork = async (config: BspNetConfig) => {
   await runFullNet(config);
 };
 
