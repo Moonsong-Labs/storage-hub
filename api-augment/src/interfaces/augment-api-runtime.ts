@@ -6,7 +6,7 @@
 import "@polkadot/api-base/types/calls";
 
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
-import type { Bytes, Null, Option, Result, Vec, bool, u32 } from "@polkadot/types-codec";
+import type { Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
 import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
 import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
 import type { BlockHash } from "@polkadot/types/interfaces/chain";
@@ -29,11 +29,19 @@ import type {
   KeyTypeId,
   Slot,
   SlotDuration,
-  Weight
+  Weight,
+  WeightV2
 } from "@polkadot/types/interfaces/runtime";
 import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
 import type { ApplyExtrinsicResult, Key } from "@polkadot/types/interfaces/system";
 import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
+import type { XcmPaymentApiError } from "@polkadot/types/interfaces/xcmPaymentApi";
+import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
+import type {
+  XcmVersionedAssetId,
+  XcmVersionedLocation,
+  XcmVersionedXcm
+} from "@polkadot/types/lookup";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   BackupStorageProvider,
@@ -47,6 +55,7 @@ import type {
   GetNextDeadlineTickError,
   GetUsersWithDebtOverThresholdError,
   MainStorageProviderId,
+  Multiaddresses,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
@@ -54,6 +63,7 @@ import type {
   QueryFileEarliestVolunteerBlockError,
   QueryMspConfirmChunksToProveForFileError,
   QueryMspIdOfBucketIdError,
+  QueryProviderMultiaddressesError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   StorageDataUnit,
@@ -266,6 +276,28 @@ declare module "@polkadot/api-base/types/calls" {
        * Creates the default `RuntimeGenesisConfig` and returns it as a JSON blob.
        **/
       createDefaultConfig: AugmentedCall<ApiType, () => Observable<Bytes>>;
+      /**
+       * Generic call
+       **/
+      [key: string]: DecoratedCallBase<ApiType>;
+    };
+    /** 0x9ffb505aa738d69c/1 */
+    locationToAccountApi: {
+      /**
+       * Converts `Location` to `AccountId`
+       **/
+      convertLocation: AugmentedCall<
+        ApiType,
+        (
+          location:
+            | XcmVersionedLocation
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array
+        ) => Observable<Result<AccountId, Error>>
+      >;
       /**
        * Generic call
        **/
@@ -510,6 +542,15 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<ProviderId, QueryMspIdOfBucketIdError>>
       >;
       /**
+       * Query the provider's multiaddresses.
+       **/
+      queryProviderMultiaddresses: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<Multiaddresses, QueryProviderMultiaddressesError>>
+      >;
+      /**
        * Query the storage provider capacity.
        **/
       queryStorageProviderCapacity: AugmentedCall<
@@ -621,6 +662,41 @@ declare module "@polkadot/api-base/types/calls" {
         (
           weight: Weight | { refTime?: any; proofSize?: any } | string | Uint8Array
         ) => Observable<Balance>
+      >;
+      /**
+       * Generic call
+       **/
+      [key: string]: DecoratedCallBase<ApiType>;
+    };
+    /** 0x6ff52ee858e6c5bd/1 */
+    xcmPaymentApi: {
+      /**
+       * The API to query acceptable payment assets
+       **/
+      queryAcceptablePaymentAssets: AugmentedCall<
+        ApiType,
+        (
+          version: u32 | AnyNumber | Uint8Array
+        ) => Observable<Result<Vec<XcmVersionedAssetId>, XcmPaymentApiError>>
+      >;
+      /**
+       *
+       **/
+      queryWeightToAssetFee: AugmentedCall<
+        ApiType,
+        (
+          weight: WeightV2 | { refTime?: any; proofSize?: any } | string | Uint8Array,
+          asset: XcmVersionedAssetId | { V3: any } | { V4: any } | string | Uint8Array
+        ) => Observable<Result<u128, XcmPaymentApiError>>
+      >;
+      /**
+       *
+       **/
+      queryXcmWeight: AugmentedCall<
+        ApiType,
+        (
+          message: XcmVersionedXcm | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+        ) => Observable<Result<WeightV2, XcmPaymentApiError>>
       >;
       /**
        * Generic call

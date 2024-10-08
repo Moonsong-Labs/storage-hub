@@ -19,7 +19,6 @@ workspace = true
 prost = { workspace = true }
 async-channel = { workspace = true }
 tokio = { workspace = true }
-libp2p-identity = { workspace = true, features = ["peerid"] }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -31,6 +30,7 @@ codec = { workspace = true }
 sc-client-api = { workspace = true }
 sc-service = { workspace = true }
 sc-network = { workspace = true }
+sc-network-types = { workspace = true }
 sc-utils = { workspace = true }
 sc-tracing = { workspace = true }
 

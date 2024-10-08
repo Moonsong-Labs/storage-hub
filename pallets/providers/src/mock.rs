@@ -2,12 +2,12 @@ use crate as pallet_storage_providers;
 use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    derive_impl, parameter_types,
     traits::{Everything, Randomness},
     weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
-use frame_system as system;
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::SlashableProviders;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
@@ -21,7 +21,6 @@ use sp_runtime::{
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::BTreeSet;
-use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -33,16 +32,33 @@ const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
 
 // Configure a mock runtime to test the pallet.
-construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system,
-        Balances: pallet_balances,
-        StorageProviders: pallet_storage_providers,
-        ProofsDealer: pallet_proofs_dealer,
-        PaymentStreams: pallet_payment_streams,
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type StorageProviders = crate;
+    #[runtime::pallet_index(3)]
+    pub type ProofsDealer = pallet_proofs_dealer;
+    #[runtime::pallet_index(4)]
+    pub type PaymentStreams = pallet_payment_streams;
+}
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -52,7 +68,7 @@ parameter_types! {
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -350,6 +366,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         Some(set)
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
         SlashableProviders::<Test>::get(provider_id)
     }
@@ -361,7 +381,7 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
 
 // Build genesis storage according to the mock runtime.
 pub fn _new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::<Test>::default()
+    frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap()
         .into()

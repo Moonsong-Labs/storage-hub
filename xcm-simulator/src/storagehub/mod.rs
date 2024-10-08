@@ -13,16 +13,11 @@ use sp_runtime::{
 };
 
 use sp_std::prelude::*;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-use frame_support::{
-    construct_runtime,
-    weights::{
-        constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient,
-        WeightToFeeCoefficients, WeightToFeePolynomial,
-    },
+use frame_support::weights::{
+    constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient, WeightToFeeCoefficients,
+    WeightToFeePolynomial,
 };
 pub use parachains_common::BlockNumber;
 pub use sp_runtime::{MultiAddress, Perbill};
@@ -199,57 +194,87 @@ const BLOCK_PROCESSING_VELOCITY: u32 = 1;
 /// Relay chain slot duration, in milliseconds.
 const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
 
-/// The version information used to identify this runtime when compiled natively.
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-    NativeVersion {
-        runtime_version: VERSION,
-        can_author_with: Default::default(),
-    }
-}
-
 // Create the runtime by composing the FRAME pallets that were previously configured.
-construct_runtime!(
-    pub enum Runtime {
-        // System support stuff.
-        System: frame_system = 0,
-        ParachainSystem: cumulus_pallet_parachain_system = 1,
-        Timestamp: pallet_timestamp = 2,
-        ParachainInfo: parachain_info = 3,
+#[frame_support::runtime]
+mod runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Runtime;
 
-        // Monetary stuff.
-        Balances: pallet_balances = 10,
-        TransactionPayment: pallet_transaction_payment = 11,
+    // System support stuff
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type ParachainSystem = cumulus_pallet_parachain_system;
+    #[runtime::pallet_index(2)]
+    pub type Timestamp = pallet_timestamp;
+    #[runtime::pallet_index(3)]
+    pub type ParachainInfo = parachain_info;
 
-        // Governance
-        Sudo: pallet_sudo = 15,
+    // Monetary stuff
+    #[runtime::pallet_index(10)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(11)]
+    pub type TransactionPayment = pallet_transaction_payment;
 
-        // Collator support. The order of these 4 are important and shall not change.
-        Authorship: pallet_authorship = 20,
-        CollatorSelection: pallet_collator_selection = 21,
-        Session: pallet_session = 22,
-        Aura: pallet_aura = 23,
-        AuraExt: cumulus_pallet_aura_ext = 24,
+    // Governance
+    #[runtime::pallet_index(15)]
+    pub type Sudo = pallet_sudo;
 
-        // XCM helpers.
-        XcmpQueue: cumulus_pallet_xcmp_queue = 30,
-        PolkadotXcm: pallet_xcm = 31,
-        CumulusXcm: cumulus_pallet_xcm = 32,
-        MsgQueue: mock_message_queue = 33,
-        MessageQueue: pallet_message_queue = 34,
+    // Collator support. The order of these 4 are important and shall not change.
+    #[runtime::pallet_index(20)]
+    pub type Authorship = pallet_authorship;
+    #[runtime::pallet_index(21)]
+    pub type CollatorSelection = pallet_collator_selection;
+    #[runtime::pallet_index(22)]
+    pub type Session = pallet_session;
+    #[runtime::pallet_index(23)]
+    pub type Aura = pallet_aura;
+    #[runtime::pallet_index(24)]
+    pub type AuraExt = cumulus_pallet_aura_ext;
 
-        // Storage Hub
-        Providers: pallet_storage_providers = 40,
-        FileSystem: pallet_file_system = 41,
-        ProofsDealer: pallet_proofs_dealer = 42,
-        Randomness: pallet_randomness = 43,
-        PaymentStreams: pallet_payment_streams = 44,
-        BucketNfts: pallet_bucket_nfts = 45,
+    // XCM helpers
+    #[runtime::pallet_index(30)]
+    pub type XcmpQueue = cumulus_pallet_xcmp_queue;
+    #[runtime::pallet_index(31)]
+    pub type PolkadotXcm = pallet_xcm;
+    #[runtime::pallet_index(32)]
+    pub type CumulusXcm = cumulus_pallet_xcm;
+    #[runtime::pallet_index(33)]
+    pub type MsgQueue = mock_message_queue;
+    #[runtime::pallet_index(34)]
+    pub type MessageQueue = pallet_message_queue;
 
-        // Miscellaneous
-        Nfts: pallet_nfts = 50,
-    }
-);
+    // Storage Hub
+    #[runtime::pallet_index(40)]
+    pub type Providers = pallet_storage_providers;
+    #[runtime::pallet_index(41)]
+    pub type FileSystem = pallet_file_system;
+    #[runtime::pallet_index(42)]
+    pub type ProofsDealer = pallet_proofs_dealer;
+    #[runtime::pallet_index(43)]
+    pub type Randomness = pallet_randomness;
+    #[runtime::pallet_index(44)]
+    pub type PaymentStreams = pallet_payment_streams;
+    #[runtime::pallet_index(45)]
+    pub type BucketNfts = pallet_bucket_nfts;
+
+    // Miscellaneous
+    #[runtime::pallet_index(50)]
+    pub type Nfts = pallet_nfts;
+    #[runtime::pallet_index(51)]
+    pub type Parameters = pallet_parameters;
+}
 
 #[cfg(feature = "runtime-benchmarks")]
 frame_benchmarking::define_benchmarks!(

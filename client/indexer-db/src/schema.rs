@@ -90,6 +90,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    paymentstream (id) {
+        id -> Int4,
+        account -> Varchar,
+        provider -> Varchar,
+        total_amount_paid -> Numeric,
+        last_tick_charged -> Int8,
+        charged_at_tick -> Int8,
+    }
+}
+
+diesel::table! {
     peer_id (id) {
         id -> Int4,
         peer -> Bytea,
@@ -126,6 +137,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     msp,
     msp_multiaddress,
     multiaddress,
+    paymentstream,
     peer_id,
     service_state,
 );

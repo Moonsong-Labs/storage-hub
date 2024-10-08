@@ -388,7 +388,7 @@ pub mod pallet {
         /// that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.
         MspRequestSignUpSuccess {
             who: T::AccountId,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
             value_prop: ValueProposition<T>,
         },
@@ -398,7 +398,7 @@ pub mod pallet {
         MspSignUpSuccess {
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
             value_prop: ValueProposition<T>,
         },
@@ -407,7 +407,7 @@ pub mod pallet {
         /// that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
         BspRequestSignUpSuccess {
             who: T::AccountId,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
         },
 
@@ -416,7 +416,7 @@ pub mod pallet {
         BspSignUpSuccess {
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
         },
 
@@ -576,7 +576,7 @@ pub mod pallet {
         pub fn request_msp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             value_prop: ValueProposition<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
@@ -638,7 +638,7 @@ pub mod pallet {
         pub fn request_bsp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -907,7 +907,7 @@ pub mod pallet {
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             value_prop: ValueProposition<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
@@ -975,7 +975,7 @@ pub mod pallet {
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             payment_account: T::AccountId,
             weight: Option<ReputationWeightType<T>>,
         ) -> DispatchResultWithPostInfo {

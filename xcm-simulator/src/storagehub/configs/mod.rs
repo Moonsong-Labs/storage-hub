@@ -1,38 +1,12 @@
-// This is free and unencumbered software released into the public domain.
-//
-// Anyone is free to copy, modify, publish, use, compile, sell, or
-// distribute this software, either in source code form or as a compiled
-// binary, for any purpose, commercial or non-commercial, and by any
-// means.
-//
-// In jurisdictions that recognize copyright laws, the author or authors
-// of this software dedicate any and all copyright interest in the
-// software to the public domain. We make this dedication for the benefit
-// of the public at large and to the detriment of our heirs and
-// successors. We intend this dedication to be an overt act of
-// relinquishment in perpetuity of all present and future rights to this
-// software under copyright law.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-// IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-// OTHER DEALINGS IN THE SOFTWARE.
-//
-// For more information, please refer to <http://unlicense.org>
-
+mod runtime_params;
 pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
 use crate::mock_message_queue;
-use crate::storagehub::configs::xcm_config::XcmConfig;
-use crate::storagehub::MessageQueue;
-use crate::storagehub::PolkadotXcm;
+use crate::storagehub::{configs::xcm_config::XcmConfig, MessageQueue, ParachainInfo, PolkadotXcm};
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
-use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
+use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
+use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -56,10 +30,11 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
+use runtime_params::RuntimeParameters;
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{blake2_256, Get, Hasher, H256};
+use sp_core::{Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -254,7 +229,7 @@ impl pallet_message_queue::Config for Runtime {
     // The XCMP queue pallet is only ever able to handle the `Sibling(ParaId)` origin:
     type QueueChangeHandler = NarrowOriginToSibling<XcmpQueue>;
     type QueuePausedQuery = NarrowOriginToSibling<XcmpQueue>;
-    type HeapSize = sp_core::ConstU32<{ 64 * 1024 }>;
+    type HeapSize = sp_core::ConstU32<{ 103 * 1024 }>;
     type MaxStale = sp_core::ConstU32<8>;
     type ServiceWeight = MessageQueueServiceWeight;
     type IdleMaxServiceWeight = ();
@@ -268,7 +243,11 @@ impl cumulus_pallet_xcmp_queue::Config for Runtime {
     type VersionWrapper = PolkadotXcm;
     // Enqueue XCMP messages from siblings for later processing.
     type XcmpQueue = TransformOrigin<MessageQueue, AggregateMessageOrigin, ParaId, ParaIdToSibling>;
-    type MaxInboundSuspended = sp_core::ConstU32<1_000>;
+    type MaxInboundSuspended = ConstU32<1_000>;
+    type MaxActiveOutboundChannels = ConstU32<128>;
+    // Most on-chain HRMP channels are configured to use 102400 bytes of max message size, so we
+    // need to set the page size larger than that until we reduce the channel size on-chain.
+    type MaxPageSize = ConstU32<{ 103 * 1024 }>;
     type ControllerOrigin = EnsureRoot<AccountId>;
     type ControllerOriginConverter = XcmOriginToTransactDispatchOrigin;
     type WeightInfo = ();
@@ -344,6 +323,13 @@ parameter_types! {
     pub const MetadataDepositPerByte: Balance = 1 * UNIT;
 }
 
+impl pallet_parameters::Config for Runtime {
+    type AdminOrigin = EnsureRoot<AccountId>;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeParameters = RuntimeParameters;
+    type WeightInfo = ();
+}
+
 impl pallet_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type CollectionId = u32;
@@ -374,20 +360,15 @@ impl pallet_nfts::Config for Runtime {
 }
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
-/// CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
-/* fn relay_chain_state_proof() -> RelayChainStateProof {
-    // CRITICAL TODO: Change this to the actual relay storage root after upgrading to polkadot-sdk v1.13.0
-    let relay_storage_root = DefaultMerkleRoot::<StorageProofsMerkleTrieLayout>::get();
-    /* let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
-    .expect("set in `set_validation_data`")
-    .relay_parent_storage_root; */
-    let root_vec: vec::Vec<vec::Vec<u8>> = vec![relay_storage_root.as_bytes().to_vec()];
-    let relay_chain_state = StorageProof::new(root_vec);
-    /* let relay_chain_state = cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get()
-    .expect("set in `set_validation_data`"); */
+fn relay_chain_state_proof() -> RelayChainStateProof {
+    let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
+        .expect("set in `set_validation_data`")
+        .relay_parent_storage_root;
+    let relay_chain_state = cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get()
+        .expect("set in `set_validation_data`");
     RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
         .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
-} */
+}
 
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
@@ -395,63 +376,52 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     fn get_epoch_index() -> u64 {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
-            /* let _relay_storage_root =
+            let _relay_storage_root =
                 cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
             let _relay_chain_state =
-                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get();
             const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
             return BENCHMARKING_NEW_EPOCH;
         }
-        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove frame_system::Pallet::<Runtime>::block_number()
-        /* relay_chain_state_proof()
-        .read_optional_entry(well_known_keys::EPOCH_INDEX)
-        .ok()
-        .flatten()
-        .expect("expected to be able to read epoch index from relay chain state proof") */
-        frame_system::Pallet::<Runtime>::block_number().into()
+        relay_chain_state_proof()
+            .read_optional_entry(well_known_keys::EPOCH_INDEX)
+            .ok()
+            .flatten()
+            .expect("expected to be able to read epoch index from relay chain state proof")
     }
     fn get_epoch_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
-            /* let _relay_storage_root =
+            let _relay_storage_root =
                 cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
             let _relay_chain_state =
-                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get();
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }
-        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
-        /* relay_chain_state_proof()
-        .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
-        .ok()
-        .flatten()
-        .expect("expected to be able to read epoch randomness from relay chain state proof") */
-        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
+        relay_chain_state_proof()
+            .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
+            .ok()
+            .flatten()
+            .expect("expected to be able to read epoch randomness from relay chain state proof")
     }
     fn get_parent_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
-            // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0
-            /* let _relay_storage_root =
+            let _relay_storage_root =
                 cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
             let _relay_chain_state =
-                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get(); */
+                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get();
             let benchmarking_babe_output = Hash::default();
             return benchmarking_babe_output;
         }
         // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
         // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
-        /* relay_chain_state_proof()
-        .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
-        .ok()
-        .flatten()
-        .expect("expected to be able to read parent randomness from relay chain state proof") */
-        // CRITICAL TODO: Uncomment this after upgrading to polkadot-sdk v1.13.0 and remove H256::from_slice(&blake2_256(&Self::get_epoch_index().saturating_sub(1).to_le_bytes()))
-        H256::from_slice(&blake2_256(
-            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
-        ))
+        relay_chain_state_proof()
+            .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
+            .ok()
+            .flatten()
+            .expect("expected to be able to read parent randomness from relay chain state proof")
     }
 }
 
@@ -470,6 +440,11 @@ impl pallet_randomness::Config for Runtime {
     type BabeDataGetter = BabeDataGetter;
     type WeightInfo = ();
 }
+
+/// Type representing the storage data units in StorageHub.
+pub type StorageDataUnit = u64;
+
+pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
 
 parameter_types! {
     pub const BucketDeposit: Balance = 20 * UNIT;
@@ -525,8 +500,9 @@ impl pallet_storage_providers::Config for Runtime {
     type BucketNameLimit = BucketNameLimit;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
-    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
+    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
+    type SlashAmountPerMaxFileSize =
+        runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
 }
 
@@ -610,12 +586,14 @@ impl pallet_proofs_dealer::Config for Runtime {
     type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
-    type CheckpointChallengePeriod = CheckpointChallengePeriod;
+    type CheckpointChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
-    type StakeToChallengePeriod = StakeToChallengePeriod;
-    type MinChallengePeriod = MinChallengePeriod;
+    type StakeToChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
+    type MinChallengePeriod = runtime_params::dynamic_params::runtime_config::MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
     type BlockFullnessHeadroom = BlockFullnessHeadroom;

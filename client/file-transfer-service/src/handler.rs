@@ -30,13 +30,13 @@ use std::{
 use codec::{Decode, Encode};
 use futures::prelude::*;
 use futures::stream::select;
-use libp2p_identity::PeerId;
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
     service::traits::NetworkService,
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
+use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{DownloadRequestId, FileKey, FileKeyProof};

@@ -307,17 +307,57 @@ impl IndexerService {
 
     async fn index_payment_streams_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
-            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated { .. } => {}
-            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {}
+            pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
+                provider_id,
+                user_account,
+                amount_provided: _amount_provided,
+            } => {
+                PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
+                    .await?;
+            }
+            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
+                // TODO: Currently we are not treating the info of dynamic rate update
+            }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
-            pallet_payment_streams::Event::FixedRatePaymentStreamCreated { .. } => {}
-            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {}
+            pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
+                provider_id,
+                user_account,
+                rate: _rate,
+            } => {
+                PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
+                    .await?;
+            }
+            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
+                // TODO: Currently we are not treating the info of fixed rate update
+            }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
-            pallet_payment_streams::Event::PaymentStreamCharged { .. } => {}
+            pallet_payment_streams::Event::PaymentStreamCharged {
+                user_account,
+                provider_id,
+                amount,
+                last_tick_charged,
+                charged_at_tick,
+            } => {
+                // We want to handle this and update the payment stream total amount
+                let ps =
+                    PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
+                        .await?;
+                let new_total_amount = ps.total_amount_paid + amount;
+                let last_tick_charged: i64 = (*last_tick_charged).into();
+                let charged_at_tick: i64 = (*charged_at_tick).into();
+                PaymentStream::update_total_amount(
+                    conn,
+                    ps.id,
+                    new_total_amount,
+                    last_tick_charged,
+                    charged_at_tick,
+                )
+                .await?;
+            }
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
             pallet_payment_streams::Event::UserPaidDebts { .. } => {}

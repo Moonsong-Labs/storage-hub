@@ -581,15 +581,6 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
-        // Construct file metadata.
-        let metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size as u64,
-            fingerprint: event.fingerprint,
-            location: event.location.to_vec(),
-        };
-
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -610,6 +601,34 @@ where
                 error!(target: LOG_TARGET, err_msg);
                 return Err(anyhow!(err_msg));
             }
+        };
+
+        let msp_id_of_bucket_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_msp_id_of_bucket_id(event.bucket_id)
+            .await
+            .map_err(|e| {
+                let err_msg = format!(
+                    "Failed to query MSP ID of bucket ID {:?}\n Error: {:?}",
+                    event.bucket_id, e
+                );
+                error!(target: LOG_TARGET, err_msg);
+                anyhow!(err_msg)
+            })?;
+
+        if own_msp_id != msp_id_of_bucket_id {
+            // Skip the file if the MSP ID of the bucket ID does not match the node's MSP ID.
+            return Ok(());
+        }
+
+        // Construct file metadata.
+        let metadata = FileMetadata {
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            bucket_id: event.bucket_id.as_ref().to_vec(),
+            file_size: event.size as u64,
+            fingerprint: event.fingerprint,
+            location: event.location.to_vec(),
         };
 
         let available_capacity = self

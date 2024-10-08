@@ -36,6 +36,7 @@ import type {
   FrameSupportDispatchPerDispatchClassWeightsPerClass,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  FrameSupportTokensMiscIdAmount,
   FrameSystemAccountInfo,
   FrameSystemCall,
   FrameSystemCodeUpgradeAuthorization,
@@ -59,7 +60,6 @@ import type {
   PalletBalancesCall,
   PalletBalancesError,
   PalletBalancesEvent,
-  PalletBalancesIdAmount,
   PalletBalancesReasons,
   PalletBalancesReserveData,
   PalletBucketNftsCall,
@@ -260,6 +260,7 @@ import type {
   XcmV3MultiassetMultiAssets,
   XcmV3MultiassetWildFungibility,
   XcmV3MultiassetWildMultiAsset,
+  XcmV3OriginKind,
   XcmV3PalletInfo,
   XcmV3QueryResponseInfo,
   XcmV3Response,
@@ -305,6 +306,7 @@ declare module "@polkadot/types/types/registry" {
     FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
     FrameSupportMessagesProcessMessageError: FrameSupportMessagesProcessMessageError;
     FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
+    FrameSupportTokensMiscIdAmount: FrameSupportTokensMiscIdAmount;
     FrameSystemAccountInfo: FrameSystemAccountInfo;
     FrameSystemCall: FrameSystemCall;
     FrameSystemCodeUpgradeAuthorization: FrameSystemCodeUpgradeAuthorization;
@@ -328,7 +330,6 @@ declare module "@polkadot/types/types/registry" {
     PalletBalancesCall: PalletBalancesCall;
     PalletBalancesError: PalletBalancesError;
     PalletBalancesEvent: PalletBalancesEvent;
-    PalletBalancesIdAmount: PalletBalancesIdAmount;
     PalletBalancesReasons: PalletBalancesReasons;
     PalletBalancesReserveData: PalletBalancesReserveData;
     PalletBucketNftsCall: PalletBucketNftsCall;
@@ -529,6 +530,7 @@ declare module "@polkadot/types/types/registry" {
     XcmV3MultiassetMultiAssets: XcmV3MultiassetMultiAssets;
     XcmV3MultiassetWildFungibility: XcmV3MultiassetWildFungibility;
     XcmV3MultiassetWildMultiAsset: XcmV3MultiassetWildMultiAsset;
+    XcmV3OriginKind: XcmV3OriginKind;
     XcmV3PalletInfo: XcmV3PalletInfo;
     XcmV3QueryResponseInfo: XcmV3QueryResponseInfo;
     XcmV3Response: XcmV3Response;

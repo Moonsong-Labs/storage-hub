@@ -1,7 +1,6 @@
-use crate::storagehub::MsgQueue;
 use crate::storagehub::{
-    AccountId, AllPalletsWithSystem, Balances, ParachainInfo, PolkadotXcm, Runtime, RuntimeCall,
-    RuntimeEvent, RuntimeOrigin, WeightToFee,
+    AccountId, AllPalletsWithSystem, Balances, MsgQueue, ParachainInfo, PolkadotXcm, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeOrigin, WeightToFee,
 };
 use frame_support::{
     parameter_types,
@@ -188,6 +187,7 @@ impl xcm_executor::Config for XcmConfig {
     type HrmpNewChannelOpenRequestHandler = ();
     type HrmpChannelAcceptedHandler = ();
     type HrmpChannelClosingHandler = ();
+    type XcmRecorder = ();
 }
 
 /// Converts a local signed origin into an XCM location.

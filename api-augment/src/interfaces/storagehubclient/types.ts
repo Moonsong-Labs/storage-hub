@@ -127,6 +127,9 @@ export interface MainStorageProviderId extends H256 {}
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
 
+/** @name Multiaddresses */
+export interface Multiaddresses extends Bytes {}
+
 /** @name ProviderId */
 export interface ProviderId extends H256 {}
 
@@ -188,6 +191,13 @@ export interface QueryMspIdOfBucketIdError extends Enum {
   readonly isBucketNotFound: boolean;
   readonly isInternalApiError: boolean;
   readonly type: "BucketNotFound" | "InternalApiError";
+}
+
+/** @name QueryProviderMultiaddressesError */
+export interface QueryProviderMultiaddressesError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
 }
 
 /** @name QueryStorageProviderCapacityError */

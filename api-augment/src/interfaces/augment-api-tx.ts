@@ -57,6 +57,22 @@ declare module "@polkadot/api-base/types/submittable" {
   interface AugmentedSubmittables<ApiType extends ApiTypes> {
     balances: {
       /**
+       * Burn the specified liquid free balance from the origin account.
+       *
+       * If the origin's account ends up below the existential deposit as a result
+       * of the burn and `keep_alive` is false, the account will be reaped.
+       *
+       * Unlike sending funds to a _burn_ address, which merely makes the funds inaccessible,
+       * this `burn` operation will reduce total issuance by the amount _burned_.
+       **/
+      burn: AugmentedSubmittable<
+        (
+          value: Compact<u128> | AnyNumber | Uint8Array,
+          keepAlive: bool | boolean | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [Compact<u128>, bool]
+      >;
+      /**
        * Adjust the total issuance in a saturating way.
        *
        * Can only be called by root and always needs a positive `delta`.
@@ -2634,7 +2650,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * - `assets`: The assets to be withdrawn. This should include the assets used to pay the
        * fee on the `dest` (and possibly reserve) chains.
        * - `assets_transfer_type`: The XCM `TransferType` used to transfer the `assets`.
-       * - `remote_fees_id`: One of the included `assets` to be be used to pay fees.
+       * - `remote_fees_id`: One of the included `assets` to be used to pay fees.
        * - `fees_transfer_type`: The XCM `TransferType` used to transfer the `fees` assets.
        * - `custom_xcm_on_dest`: The XCM to be executed on `dest` chain as the last step of the
        * transfer, which also determines what happens to the assets on the destination chain.
