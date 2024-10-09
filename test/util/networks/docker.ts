@@ -6,7 +6,7 @@ import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
 import invariant from "tiny-invariant";
 import { PassThrough, type Readable } from "node:stream";
-import { ShTestApi } from "./bspNet";
+import { ShTestApi } from "./test-api";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";

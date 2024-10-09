@@ -3,10 +3,10 @@ import {
   registerToxics,
   type TestNetConfig,
   type EnrichedBspApi,
-  type ToxicInfo
+  type ToxicInfo,
+  runFullNet
 } from "../util";
 import * as ShConsts from "../util/networks/consts";
-import { runFullNet } from "../util/fullNet/helpers";
 
 let api: EnrichedBspApi | undefined;
 const fullNetConfig: TestNetConfig = {
