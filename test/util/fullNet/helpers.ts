@@ -6,7 +6,7 @@ import path from "node:path";
 import * as util from "node:util";
 import { bspKey, mspKey, shUser } from "../pjsKeyring.ts";
 import { showContainers } from "../networks/docker.ts";
-import type { BspNetConfig } from "../networks/bspNet/types";
+import type { BspNetConfig } from "../networks/types.ts";
 import * as ShConsts from "../networks/consts.ts";
 import { ShTestApi, type EnrichedBspApi } from "../networks/test-api.ts";
 import invariant from "tiny-invariant";

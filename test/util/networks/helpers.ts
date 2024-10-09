@@ -20,7 +20,7 @@ import {
   shUser
 } from "../pjsKeyring.ts";
 import { addBspContainer, showContainers } from "./docker.ts";
-import type { BspNetConfig, InitialisedMultiBspNetwork } from "./bspNet/types.ts";
+import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
 import { ShTestApi, type EnrichedBspApi } from "./test-api.ts";

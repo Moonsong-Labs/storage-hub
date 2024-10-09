@@ -7,7 +7,7 @@ import {
   runSimpleBspNet
 } from "../helpers";
 import { ShTestApi, type EnrichedBspApi } from "../test-api";
-import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
+import type { BspNetConfig, BspNetContext, TestOptions } from "../types";
 import * as ShConsts from "../consts";
 
 export const launchEventEmitter = new EventEmitter();

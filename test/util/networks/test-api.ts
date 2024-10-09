@@ -14,7 +14,7 @@ import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
 import * as NodeBspNet from "./node";
-import type { ShApi, SealBlockOptions } from "./bspNet/types";
+import type { ShApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 import { addBsp } from "./helpers";
 

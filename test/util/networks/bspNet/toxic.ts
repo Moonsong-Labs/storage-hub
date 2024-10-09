@@ -1,5 +1,5 @@
 import * as ShConsts from "../consts";
-import type { ToxicInfo } from "./types";
+import type { ToxicInfo } from "../types";
 
 export const registerToxic = async (toxicDef: ToxicInfo) => {
   const url = `http://localhost:${ShConsts.NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
