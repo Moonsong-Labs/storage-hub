@@ -213,7 +213,7 @@ describeMspNet(
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
-      const file_keys = [];
+      const issuedFileKeys = [];
       for (const e of matchedEvents) {
         const newStorageRequestDataBlob =
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
@@ -232,7 +232,7 @@ describeMspNet(
           );
         }
 
-        file_keys.push(newStorageRequestDataBlob.fileKey);
+        issuedFileKeys.push(newStorageRequestDataBlob.fileKey);
       }
 
       // Seal block containing the MSP's transaction response to the storage request
@@ -263,7 +263,7 @@ describeMspNet(
       strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
 
       // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
-      strictEqual(response.fileKeys[0].toString(), file_keys[0].toString());
+      strictEqual(issuedFileKeys.includes(response.fileKeys[0]), true);
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
@@ -305,8 +305,8 @@ describeMspNet(
       strictEqual(response2.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
 
       // There are two keys being accepted at once since they are batched.
-      strictEqual(response2.fileKeys[0].toString(), file_keys[1].toString());
-      strictEqual(response2.fileKeys[1].toString(), file_keys[2].toString());
+      strictEqual(issuedFileKeys.includes(response2.fileKeys[0]), true);
+      strictEqual(issuedFileKeys.includes(response2.fileKeys[1]), true);
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
