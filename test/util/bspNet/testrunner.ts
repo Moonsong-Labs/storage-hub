@@ -225,10 +225,10 @@ export const launchFullNetwork = async (
 
   if (initialised) {
     return await runInitialisedFullNet(config);
-  } else {
-    await runSimpleFullNet(config);
-    return undefined;
   }
+
+  await runSimpleFullNet(config);
+  return undefined;
 };
 
 const pickConfig = (options: TestOptions) => {
