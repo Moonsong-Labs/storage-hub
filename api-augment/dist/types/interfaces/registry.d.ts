@@ -30,6 +30,7 @@ import type {
   FrameSupportDispatchPerDispatchClassWeightsPerClass,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  FrameSupportTokensMiscIdAmount,
   FrameSystemAccountInfo,
   FrameSystemCall,
   FrameSystemCodeUpgradeAuthorization,
@@ -53,7 +54,6 @@ import type {
   PalletBalancesCall,
   PalletBalancesError,
   PalletBalancesEvent,
-  PalletBalancesIdAmount,
   PalletBalancesReasons,
   PalletBalancesReserveData,
   PalletBucketNftsCall,
@@ -299,6 +299,7 @@ declare module "@polkadot/types/types/registry" {
     FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
     FrameSupportMessagesProcessMessageError: FrameSupportMessagesProcessMessageError;
     FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
+    FrameSupportTokensMiscIdAmount: FrameSupportTokensMiscIdAmount;
     FrameSystemAccountInfo: FrameSystemAccountInfo;
     FrameSystemCall: FrameSystemCall;
     FrameSystemCodeUpgradeAuthorization: FrameSystemCodeUpgradeAuthorization;
@@ -322,7 +323,6 @@ declare module "@polkadot/types/types/registry" {
     PalletBalancesCall: PalletBalancesCall;
     PalletBalancesError: PalletBalancesError;
     PalletBalancesEvent: PalletBalancesEvent;
-    PalletBalancesIdAmount: PalletBalancesIdAmount;
     PalletBalancesReasons: PalletBalancesReasons;
     PalletBalancesReserveData: PalletBalancesReserveData;
     PalletBucketNftsCall: PalletBucketNftsCall;

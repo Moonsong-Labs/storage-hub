@@ -20,7 +20,7 @@ mod xcm_config;
 pub use xcm_config::*;
 
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    derive_impl, parameter_types,
     traits::{
         AsEnsureOriginWithArg, ConstU128, Everything, Nothing, ProcessMessage, ProcessMessageError,
     },
@@ -167,14 +167,32 @@ impl pallet_message_queue::Config for Runtime {
     type IdleMaxServiceWeight = ();
 }
 
-construct_runtime!(
-    pub enum Runtime
-    {
-        System: frame_system,
-        Balances: pallet_balances,
-        ParasOrigin: origin,
-        XcmPallet: pallet_xcm,
-        Uniques: pallet_uniques,
-        MessageQueue: pallet_message_queue,
-    }
-);
+#[frame_support::runtime]
+mod runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Runtime;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type ParasOrigin = origin;
+    #[runtime::pallet_index(3)]
+    pub type XcmPallet = pallet_xcm;
+    #[runtime::pallet_index(4)]
+    pub type Uniques = pallet_uniques;
+    #[runtime::pallet_index(5)]
+    pub type MessageQueue = pallet_message_queue;
+}

@@ -54,6 +54,7 @@ pallet-authorship = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-message-queue = { workspace = true }
 pallet-nfts = { workspace = true }
+pallet-parameters = { workspace = true }
 pallet-session = { workspace = true }
 pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
@@ -85,7 +86,7 @@ xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
 xcm-simulator = { workspace = true }
-xcm-fee-payment-runtime-api = { workspace = true }
+xcm-runtime-apis = { workspace = true }
 runtime-constants = { workspace = true }
 
 # Cumulus

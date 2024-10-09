@@ -22,7 +22,7 @@ pub use xcm_config::*;
 use crate::mock_message_queue;
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    derive_impl, parameter_types,
     traits::{ConstU128, ContainsPair, EnsureOrigin, EnsureOriginWithArg, Everything},
     weights::{constants::WEIGHT_REF_TIME_PER_SECOND, Weight},
 };
@@ -171,12 +171,30 @@ impl pallet_xcm::Config for Runtime {
 
 type Block = frame_system::mocking::MockBlock<Runtime>;
 
-construct_runtime!(
-    pub struct Runtime {
-        System: frame_system,
-        Balances: pallet_balances,
-        MsgQueue: mock_message_queue,
-        PolkadotXcm: pallet_xcm,
-        ForeignUniques: pallet_uniques,
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Runtime;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type MsgQueue = mock_message_queue;
+    #[runtime::pallet_index(3)]
+    pub type PolkadotXcm = pallet_xcm;
+    #[runtime::pallet_index(4)]
+    pub type ForeignUniques = pallet_uniques;
+}
