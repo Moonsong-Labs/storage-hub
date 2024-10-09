@@ -1,4 +1,4 @@
-import { ShTestApi, launchEventEmitter, type BspNetConfig, type BspNetContext, type EnrichedBspApi, type TestOptions } from "../bspNet";
+import { ShTestApi, launchEventEmitter, type TestNetConfig, type TestNetContext, type EnrichedBspApi, type TestOptions } from "../bspNet";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import { runFullNet } from "./helpers";
 import { cleardownTest, ShConsts } from "..";
@@ -10,7 +10,7 @@ import { cleardownTest, ShConsts } from "..";
  * @param args Additional arguments (either tests function or options and tests function).
  */
 export async function describeMspNet<
-  T extends [(context: BspNetContext) => void] | [TestOptions, (context: BspNetContext) => void]
+  T extends [(context: TestNetContext) => void] | [TestOptions, (context: TestNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
@@ -78,14 +78,14 @@ export async function describeMspNet<
         afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
-      } satisfies BspNetContext;
+      } satisfies TestNetContext;
 
       tests(context);
     });
   }
 }
 
-export const launchFullNetwork = async (config: BspNetConfig) => {
+export const launchFullNetwork = async (config: TestNetConfig) => {
     await runFullNet(config);
   };
 

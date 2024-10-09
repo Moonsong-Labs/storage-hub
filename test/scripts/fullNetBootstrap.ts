@@ -1,7 +1,7 @@
 import {
   ShTestApi,
   registerToxics,
-  type BspNetConfig,
+  type TestNetConfig,
   type EnrichedBspApi,
   type ToxicInfo
 } from "../util";
@@ -9,7 +9,7 @@ import * as ShConsts from "../util/networks/consts";
 import { runFullNet } from "../util/fullNet/helpers";
 
 let api: EnrichedBspApi | undefined;
-const fullNetConfig: BspNetConfig = {
+const fullNetConfig: TestNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
 };

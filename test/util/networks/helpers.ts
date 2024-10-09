@@ -20,7 +20,7 @@ import {
   shUser
 } from "../pjsKeyring.ts";
 import { addBspContainer, showContainers } from "./docker.ts";
-import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types.ts";
+import type { TestNetConfig, InitialisedMultiBspNetwork } from "./types.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
 import { ShTestApi, type EnrichedBspApi } from "./test-api.ts";
@@ -104,7 +104,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw `Error fetching peerId from ${url}`;
 };
 
-export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = false) => {
+export const runSimpleBspNet = async (bspNetConfig: TestNetConfig, verbose = false) => {
   let userApi: EnrichedBspApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
@@ -321,7 +321,7 @@ export const closeSimpleBspNet = async () => {
   await docker.pruneVolumes();
 };
 
-export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
+export const runInitialisedBspsNet = async (bspNetConfig: TestNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
   let userApi: EnrichedBspApi | undefined;
@@ -369,7 +369,7 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
 };
 
 export const runMultipleInitialisedBspsNet = async (
-  bspNetConfig: BspNetConfig
+  bspNetConfig: TestNetConfig
 ): Promise<undefined | InitialisedMultiBspNetwork> => {
   await runSimpleBspNet(bspNetConfig);
 

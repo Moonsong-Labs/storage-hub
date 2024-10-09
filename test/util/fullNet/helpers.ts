@@ -6,7 +6,7 @@ import path from "node:path";
 import * as util from "node:util";
 import { bspKey, mspKey, shUser } from "../pjsKeyring.ts";
 import { showContainers } from "../networks/docker.ts";
-import type { BspNetConfig } from "../networks/types.ts";
+import type { TestNetConfig } from "../networks/types.ts";
 import * as ShConsts from "../networks/consts.ts";
 import { ShTestApi, type EnrichedBspApi } from "../networks/test-api.ts";
 import invariant from "tiny-invariant";
@@ -88,7 +88,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw `Error fetching peerId from ${url}`;
 };
 
-export const runFullNet = async (bspNetConfig: BspNetConfig) => {
+export const runFullNet = async (bspNetConfig: TestNetConfig) => {
   let userApi: EnrichedBspApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
@@ -242,7 +242,7 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
   }
 };
 
-export const runInitialisedFullNet = async (bspNetConfig: BspNetConfig) => {
+export const runInitialisedFullNet = async (bspNetConfig: TestNetConfig) => {
   await runFullNet(bspNetConfig);
 
   let userApi: EnrichedBspApi | undefined;

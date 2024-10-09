@@ -7,7 +7,7 @@ import {
   runSimpleBspNet
 } from "../helpers";
 import { ShTestApi, type EnrichedBspApi } from "../test-api";
-import type { BspNetConfig, BspNetContext, TestOptions } from "../types";
+import type { TestNetConfig, TestNetContext, TestOptions } from "../types";
 import * as ShConsts from "../consts";
 
 export const launchEventEmitter = new EventEmitter();
@@ -19,7 +19,7 @@ export const launchEventEmitter = new EventEmitter();
  */
 export function describeBspNet(
   title: string,
-  tests: (context: BspNetContext) => void
+  tests: (context: TestNetContext) => void
 ): Promise<void>;
 
 /**
@@ -31,7 +31,7 @@ export function describeBspNet(
 export function describeBspNet(
   title: string,
   options: TestOptions,
-  tests: (context: BspNetContext) => void
+  tests: (context: TestNetContext) => void
 ): Promise<void>;
 
 /**
@@ -40,7 +40,7 @@ export function describeBspNet(
  * @param args Additional arguments (either tests function or options and tests function).
  */
 export async function describeBspNet<
-  T extends [(context: BspNetContext) => void] | [TestOptions, (context: BspNetContext) => void]
+  T extends [(context: TestNetContext) => void] | [TestOptions, (context: TestNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
@@ -106,7 +106,7 @@ export async function describeBspNet<
         afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
-      } satisfies BspNetContext;
+      } satisfies TestNetContext;
 
       tests(context);
     });
@@ -116,7 +116,7 @@ export async function describeBspNet<
 
 
 export const launchNetwork = async (
-  config: BspNetConfig,
+  config: TestNetConfig,
   initialised: boolean | "multi" = false
 ) => {
   return initialised === "multi"

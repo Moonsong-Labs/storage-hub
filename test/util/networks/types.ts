@@ -134,10 +134,10 @@ export interface FileMetadata {
 }
 
 /**
- * Configuration options for the BSP network.
+ * Configuration options for the test network.
  * These settings determine the behavior and characteristics of the network during tests.
  */
-export type BspNetConfig = {
+export type TestNetConfig = {
   /**
    * If true, simulates a noisy network environment with added latency and bandwidth limitations.
    * Useful for testing network resilience and performance under suboptimal conditions.
@@ -177,7 +177,7 @@ export type BspNetConfig = {
  * Context object provided to test suites for interacting with the BSP network.
  * Contains utility functions and configuration for setting up and manipulating the test environment.
  */
-export type BspNetContext = {
+export type TestNetContext = {
   /**
    * Test runner's wrapped 'it' function for defining individual test cases.
    */
@@ -212,7 +212,7 @@ export type BspNetContext = {
   /**
    * The current configuration of the BSP network for this test run.
    */
-  bspNetConfig: BspNetConfig;
+  bspNetConfig: TestNetConfig;
 
   /**
    * Before hook for test setup operations.
@@ -246,7 +246,7 @@ export type NetworkConfig =
   /** Simulates a noisy network environment with added latency and bandwidth limitations */
   | "noisy"
   /** Custom network configuration */
-  | BspNetConfig[];
+  | TestNetConfig[];
 
 /**
  * Options for configuring BspNet test runs.
