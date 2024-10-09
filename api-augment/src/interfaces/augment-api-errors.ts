@@ -1059,6 +1059,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ProviderNotSlashable: AugmentedError<ApiType>;
       /**
+       * The provider stake could not be found.
+       **/
+      ProviderStakeNotFound: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
        **/
       RandomnessNotValidYet: AugmentedError<ApiType>;
