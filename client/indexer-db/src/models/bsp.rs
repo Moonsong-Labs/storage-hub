@@ -18,7 +18,7 @@ pub struct Bsp {
     pub capacity: BigDecimal,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub total_amount_slashed: BigDecimal,
+    pub stake: BigDecimal,
     pub onchain_bsp_id: String,
 }
 
@@ -39,12 +39,14 @@ impl Bsp {
         capacity: BigDecimal,
         multiaddresses: Vec<MultiAddress>,
         onchain_bsp_id: String,
+        stake: BigDecimal,
     ) -> Result<Self, diesel::result::Error> {
         let bsp = diesel::insert_into(bsp::table)
             .values((
                 bsp::account.eq(account),
                 bsp::capacity.eq(capacity),
                 bsp::onchain_bsp_id.eq(onchain_bsp_id),
+                bsp::stake.eq(stake),
             ))
             .returning(Bsp::as_select())
             .get_result(conn)
@@ -103,14 +105,14 @@ impl Bsp {
         Ok(bsp)
     }
 
-    pub async fn update_total_amount_slashed<'a>(
+    pub async fn update_stake<'a>(
         conn: &mut DbConnection<'a>,
-        id: i32,
-        total_amount_slashed: BigDecimal,
+        onchain_bsp_id: String,
+        stake: BigDecimal,
     ) -> Result<(), diesel::result::Error> {
         diesel::update(bsp::table)
-            .filter(bsp::id.eq(id))
-            .set(bsp::total_amount_slashed.eq(total_amount_slashed))
+            .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
+            .set(bsp::stake.eq(stake))
             .execute(conn)
             .await?;
         Ok(())

@@ -7,7 +7,7 @@ diesel::table! {
         capacity -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        total_amount_slashed -> Numeric,
+        stake -> Numeric,
         onchain_bsp_id -> Varchar,
     }
 }
