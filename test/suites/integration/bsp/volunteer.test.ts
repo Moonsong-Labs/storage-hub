@@ -1,5 +1,12 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import {
+  assertEventPresent,
+  describeBspNet,
+  shUser,
+  sleep,
+  type EnrichedBspApi
+} from "../../../util";
+import invariant from "tiny-invariant";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -233,10 +240,34 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
 
     await userApi.sealBlock(txs, shUser);
 
+    // Get the new storage request events, making sure we have 3
+    const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
+    strictEqual(storageRequestEvents.length, 3);
+
+    // Get the file keys from the storage request events
+    const fileKeys = storageRequestEvents.map((event) => {
+      const dataBlob =
+        userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
+      if (!dataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+      return dataBlob.fileKey;
+    });
+
     // Wait for the BSP to volunteer
     await userApi.wait.bspVolunteer(source.length);
 
-    // Wait for the BSP to download the files and send a confirm transaction
+    // Wait for the BSP to receive and store all files
+    for (let i = 0; i < source.length; i++) {
+      const fileKey = fileKeys[i];
+      await bspApi.assert.log({
+        searchString: `File upload complete (${fileKey})`,
+        containerName: "docker-sh-bsp-1",
+        timeout: 1000
+      });
+    }
+
+    // Wait and seal a block confirming the storage of the first file
     await userApi.wait.bspStored(1);
 
     const [
@@ -256,11 +287,9 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
     const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
 
-    // This block should trigger the next file to be confirmed.
-    await userApi.sealBlock();
-
     // Even though we didn't sent a new file, the BSP client should process the rest of the files.
     // We wait for the BSP to send the confirm transaction.
+    await userApi.sealBlock();
     await userApi.wait.bspStored(1);
 
     const [
