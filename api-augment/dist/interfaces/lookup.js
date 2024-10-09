@@ -1605,7 +1605,8 @@ export default {
       },
       ProofAccepted: {
         provider: "H256",
-        proof: "PalletProofsDealerProof"
+        proof: "PalletProofsDealerProof",
+        lastTickProof: "u32"
       },
       NewChallengeSeed: {
         challengesTicker: "u32",
@@ -4125,7 +4126,8 @@ export default {
       "ProviderNotSlashable",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
-      "PaymentStreamNotFound"
+      "PaymentStreamNotFound",
+      "ProviderStakeNotFound"
     ]
   },
   /**

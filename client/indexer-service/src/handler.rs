@@ -9,6 +9,8 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use sp_core::H256;
 use sp_runtime::traits::Header;
 
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
+use sc_client_api::HeaderBackend;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::EventsRetrievalError;
 use shc_common::{
@@ -16,6 +18,7 @@ use shc_common::{
     types::{BlockNumber, ParachainClient},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
+use sp_api::ProvideRuntimeApi;
 use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -301,13 +304,20 @@ impl IndexerService {
 
     async fn index_proofs_dealer_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
-            pallet_proofs_dealer::Event::ProofAccepted { .. } => {}
+            pallet_proofs_dealer::Event::ProofAccepted {
+                provider,
+                proof: _proof,
+                last_tick_proof,
+            } => {
+                let proof = Proofs::get_by_provider_id(conn, provider.to_string()).await?;
+                Proofs::update_last_tick_proof(conn, proof.id, (*last_tick_proof).into()).await?;
+            }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
             pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
@@ -332,6 +342,16 @@ impl IndexerService {
                 multiaddresses,
                 capacity,
             } => {
+                let current_block_hash = self.client.info().best_hash;
+
+                let stake = self
+                    .client
+                    .runtime_api()
+                    .get_bsp_stake(current_block_hash, bsp_id)
+                    .expect("to have a stake")
+                    .unwrap_or(Default::default())
+                    .into();
+
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     let multiaddress_str =
@@ -345,6 +365,7 @@ impl IndexerService {
                     capacity.into(),
                     sql_multiaddresses,
                     bsp_id.to_string(),
+                    stake,
                 )
                 .await?;
             }
@@ -403,7 +424,22 @@ impl IndexerService {
             } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
-            pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::Slashed {
+                provider_id,
+                amount_slashed: _amount_slashed,
+            } => {
+                let current_block_hash = self.client.info().best_hash;
+
+                let stake = self
+                    .client
+                    .runtime_api()
+                    .get_bsp_stake(current_block_hash, provider_id)
+                    .expect("to have a stake")
+                    .unwrap_or(Default::default())
+                    .into();
+
+                Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

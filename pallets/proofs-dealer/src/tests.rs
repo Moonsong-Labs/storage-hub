@@ -916,6 +916,7 @@ fn submit_proof_success() {
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
+                last_tick_proof: current_tick,
             }
             .into(),
         );
@@ -1060,6 +1061,7 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
+                last_tick_proof: current_tick,
             }
             .into(),
         );
@@ -3389,6 +3391,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             Event::ProofAccepted {
                 provider: alice_provider_id,
                 proof,
+                last_tick_proof: System::block_number(),
             }
             .into(),
         );

@@ -2118,6 +2118,7 @@ declare module "@polkadot/types/lookup" {
     readonly asProofAccepted: {
       readonly provider: H256;
       readonly proof: PalletProofsDealerProof;
+      readonly lastTickProof: u32;
     } & Struct;
     readonly isNewChallengeSeed: boolean;
     readonly asNewChallengeSeed: {
@@ -5106,6 +5107,7 @@ declare module "@polkadot/types/lookup" {
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
+    readonly isProviderStakeNotFound: boolean;
     readonly type:
       | "AlreadyRegistered"
       | "SignUpNotRequested"
@@ -5133,7 +5135,8 @@ declare module "@polkadot/types/lookup" {
       | "ProviderNotSlashable"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
-      | "PaymentStreamNotFound";
+      | "PaymentStreamNotFound"
+      | "ProviderStakeNotFound";
   }
 
   /** @name PalletFileSystemStorageRequestMetadata (435) */

@@ -348,7 +348,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation, Balance> for Runtime {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }
@@ -427,6 +427,10 @@ impl_runtime_apis! {
 
         fn query_provider_multiaddresses(who: &ProviderId<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
             Providers::query_provider_multiaddresses(who)
+        }
+
+        fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
+            Providers::get_bsp_stake(bsp_id)
         }
     }
 }
