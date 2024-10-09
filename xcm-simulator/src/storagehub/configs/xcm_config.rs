@@ -1,7 +1,6 @@
-use crate::storagehub::MsgQueue;
 use crate::storagehub::{
-    AccountId, AllPalletsWithSystem, Balances, ParachainInfo, PolkadotXcm, Runtime, RuntimeCall,
-    RuntimeEvent, RuntimeOrigin, WeightToFee,
+    AccountId, AllPalletsWithSystem, Balances, MsgQueue, ParachainInfo, PolkadotXcm, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeOrigin, WeightToFee,
 };
 use frame_support::{
     parameter_types,
