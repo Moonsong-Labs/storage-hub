@@ -3,7 +3,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { DOCKER_IMAGE } from "../../constants";
 import { sendCustomRpc } from "../../rpc";
-import * as NodeBspNet from "./node";
+import * as NodeBspNet from "../node";
 import { BspNetTestApi } from "./test-api";
 import invariant from "tiny-invariant";
 import { PassThrough, type Readable } from "node:stream";

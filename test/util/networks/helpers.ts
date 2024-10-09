@@ -7,7 +7,7 @@ import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import * as util from "node:util";
-import { DOCKER_IMAGE, MILLIUNIT, UNIT } from "../../constants.ts";
+import { DOCKER_IMAGE, MILLIUNIT, UNIT } from "../constants.ts";
 import {
   alice,
   bspDownKey,
@@ -18,12 +18,12 @@ import {
   bspTwoKey,
   bspTwoSeed,
   shUser
-} from "../../pjsKeyring";
-import { addBspContainer, showContainers } from "./docker";
-import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
-import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
+} from "../pjsKeyring.ts";
+import { addBspContainer, showContainers } from "./bspNet/docker.ts";
+import type { BspNetConfig, InitialisedMultiBspNetwork } from "./bspNet/types.ts";
+import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
-import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
+import { BspNetTestApi, type EnrichedBspApi } from "./bspNet/test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";

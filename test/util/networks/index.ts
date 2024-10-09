@@ -1,2 +1,2 @@
-// export * from "./fullNet";
+export * from "./fullNet";
 export * from "./bspNet";

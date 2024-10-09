@@ -8,15 +8,15 @@ import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../../asserts";
 import * as Assertions from "../../asserts";
-import * as BspNetBlock from "./block";
-import { sealBlock } from "./block";
-import * as ShConsts from "./consts";
+import * as BspNetBlock from "../block";
+import { sealBlock } from "../block";
+import * as ShConsts from "../consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
-import * as NodeBspNet from "./node";
+import * as NodeBspNet from "../node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
-import { addBsp } from "./helpers";
+import { addBsp } from "../helpers";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.

@@ -1,92 +1,14 @@
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
-import * as child_process from "node:child_process";
-import { execSync } from "node:child_process";
 import path from "node:path";
-import * as util from "node:util";
 import { bspKey, mspKey, shUser } from "../../pjsKeyring.ts";
-import { showContainers } from "../bspNet/docker";
 import type { BspNetConfig } from "../bspNet/types";
-import * as ShConsts from "../bspNet/consts.ts";
+import * as ShConsts from "../consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "../bspNet/test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
-import { forceSignupBsp } from "../bspNet/helpers.ts";
-
-const exec = util.promisify(child_process.exec);
-
-export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
-  const maxRetries = 60;
-  const sleepTime = 500;
-
-  for (let i = 0; i < maxRetries; i++) {
-    verbose && console.log(`Waiting for ${containerName} to launch...`);
-
-    // TODO: Replace with dockerode command
-    try {
-      const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
-      );
-      return stdout.trim();
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
-    }
-  }
-  // TODO: Replace with dockerode
-  execSync("docker ps -a", { stdio: "inherit" });
-  try {
-    execSync("docker logs docker-sh-bsp-1", { stdio: "inherit" });
-    execSync("docker logs docker-sh-user-1", { stdio: "inherit" });
-  } catch (e) {
-    console.log(e);
-  }
-  console.log(
-    `Error fetching container IP for ${containerName} after ${
-      (maxRetries * sleepTime) / 1000
-    } seconds`
-  );
-  showContainers();
-  throw "Error fetching container IP";
-};
-
-export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
-export const getContainerPeerId = async (url: string, verbose = false) => {
-  const maxRetries = 60;
-  const sleepTime = 500;
-
-  const payload = {
-    id: "1",
-    jsonrpc: "2.0",
-    method: "system_localPeerId",
-    params: []
-  };
-
-  for (let i = 0; i < maxRetries; i++) {
-    verbose && console.log(`Waiting for node at ${url} to launch...`);
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      invariant(response.ok, `HTTP error! status: ${response.status}`);
-
-      const resp = (await response.json()) as any;
-      return resp.result as string;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
-    }
-  }
-
-  console.log(`Error fetching peerId from ${url} after ${(maxRetries * sleepTime) / 1000} seconds`);
-  showContainers();
-  throw `Error fetching peerId from ${url}`;
-};
+import { forceSignupBsp, getContainerIp, getContainerPeerId } from "../helpers.ts";
 
 export const runFullNet = async (bspNetConfig: BspNetConfig) => {
   let userApi: EnrichedBspApi | undefined;

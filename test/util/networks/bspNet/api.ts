@@ -8,7 +8,7 @@ import { types as BundledTypes } from "@storagehub/types-bundle";
 import { assertEventPresent } from "../../asserts";
 import { createBucket, sendNewStorageRequest } from "./fileHelpers";
 import type { BspNetApi } from "./types";
-import { advanceToBlock, sealBlock } from "./block";
+import { advanceToBlock, sealBlock } from "../block";
 
 /**
  * DEPRECATED: Use BspNetTestApi.create() instead

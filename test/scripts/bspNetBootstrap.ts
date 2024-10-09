@@ -6,7 +6,7 @@ import {
   type EnrichedBspApi,
   type ToxicInfo
 } from "../util";
-import * as ShConsts from "../util/networks/bspNet/consts";
+import * as ShConsts from "../util/networks/consts";
 
 let api: EnrichedBspApi | undefined;
 const bspNetConfig: BspNetConfig = {
