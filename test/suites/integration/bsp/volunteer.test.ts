@@ -1,12 +1,5 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-import {
-  assertEventPresent,
-  describeBspNet,
-  shUser,
-  sleep,
-  type EnrichedBspApi
-} from "../../../util";
-import invariant from "tiny-invariant";
+import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
