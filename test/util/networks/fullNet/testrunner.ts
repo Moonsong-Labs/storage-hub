@@ -1,6 +1,7 @@
-import { BspNetTestApi, cleardownTest, launchEventEmitter, ShConsts, type BspNetConfig, type BspNetContext, type EnrichedBspApi, type TestOptions } from "../bspNet";
+import { BspNetTestApi, launchEventEmitter, type BspNetConfig, type BspNetContext, type EnrichedBspApi, type TestOptions } from "../bspNet";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import { runFullNet } from "./helpers";
+import { cleardownTest, ShConsts } from "..";
 
 
 /**
