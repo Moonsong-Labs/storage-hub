@@ -194,7 +194,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
  *
  * @throws Will throw an error if the file is not complete in the file storage after a timeout.
  */
-export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H256) => {
+export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 10;
   const delay = 1000;

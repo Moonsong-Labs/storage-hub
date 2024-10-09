@@ -1,5 +1,5 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi, sleep } from "../../../util";
+import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
   let api: EnrichedBspApi;
@@ -43,8 +43,6 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
     );
 
     // Wait for provider to be slashed.
-    await sleep(500);
-    await api.block.seal();
     await api.assert.providerSlashed(api.shConsts.DUMMY_BSP_ID);
 
     // Check that the provider is no longer slashable.
@@ -57,8 +55,6 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
     await api.block.skipToChallengePeriod(nextChallengeDeadline2, api.shConsts.DUMMY_BSP_ID);
 
     // Wait for provider to be slashed.
-    await sleep(500);
-    await api.block.seal();
     await api.assert.providerSlashed(api.shConsts.DUMMY_BSP_ID);
   });
 });

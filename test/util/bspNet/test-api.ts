@@ -261,7 +261,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param fileKey - Param to specify the file key to wait for.
        * @returns A promise that resolves when a BSP has completed to store a file.
        */
-      bspFileStorageComplete: (fileKey: H256) =>
+      bspFileStorageComplete: (fileKey: H256 | string) =>
         Waits.waitForBspFileStorageComplete(this._api, fileKey)
     };
 
