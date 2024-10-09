@@ -2,7 +2,7 @@ import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import { runFullNet } from "./helpers";
 import { cleardownTest, launchEventEmitter, ShConsts } from "..";
 import type { TestNetConfig, TestNetContext, TestOptions } from "../types";
-import { ShTestApi, type EnrichedBspApi } from "../test-api";
+import { ShTestApi, type EnrichedShApi } from "../test-api";
 
 
 /**
@@ -26,9 +26,9 @@ export async function describeMspNet<
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`FullNet: ${title} (${fullNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-      let userApiPromise: Promise<EnrichedBspApi>;
-      let bspApiPromise: Promise<EnrichedBspApi>;
-      let mspApiPromise: Promise<EnrichedBspApi>;
+      let userApiPromise: Promise<EnrichedShApi>;
+      let bspApiPromise: Promise<EnrichedShApi>;
+      let mspApiPromise: Promise<EnrichedShApi>;
       let responseListenerPromise: ReturnType<typeof launchFullNetwork>;
 
       before(async () => {

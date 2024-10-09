@@ -11,13 +11,13 @@ import {
   bspTwoSeed,
   charlie,
   describeBspNet,
-  type EnrichedBspApi,
+  type EnrichedShApi,
   ShConsts,
   sleep
 } from "../../../../util";
 
 describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUserApi }) => {
-  let api: EnrichedBspApi;
+  let api: EnrichedShApi;
 
   before(async () => {
     api = await createUserApi();

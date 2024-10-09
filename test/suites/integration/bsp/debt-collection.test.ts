@@ -5,17 +5,17 @@ import {
   fetchEventData,
   ShConsts,
   sleep,
-  type EnrichedBspApi
+  type EnrichedShApi
 } from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi, getLaunchResponse, createApi }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
-    let bspTwoApi: EnrichedBspApi;
-    let bspThreeApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let bspApi: EnrichedShApi;
+    let bspTwoApi: EnrichedShApi;
+    let bspThreeApi: EnrichedShApi;
     let userAddress: string;
 
     before(async () => {

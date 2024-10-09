@@ -1,11 +1,11 @@
-import { describeBspNet, registerToxic, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, registerToxic, type EnrichedShApi } from "../../../util";
 
 // TODO: Add asserts to this test case when we impl the missing chunks handling
 describeBspNet(
   "BSP: Missing Chunks",
   { initialised: false, networkConfig: "noisy" },
   ({ before, it, createUserApi }) => {
-    let userApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();

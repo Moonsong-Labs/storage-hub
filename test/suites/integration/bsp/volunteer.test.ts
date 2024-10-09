@@ -1,9 +1,9 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, shUser, sleep, type EnrichedShApi } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
-  let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
+  let userApi: EnrichedShApi;
+  let bspApi: EnrichedShApi;
 
   before(async () => {
     userApi = await createUserApi();
@@ -188,8 +188,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 });
 
 describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserApi, it }) => {
-  let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
+  let userApi: EnrichedShApi;
+  let bspApi: EnrichedShApi;
 
   before(async () => {
     userApi = await createUserApi();

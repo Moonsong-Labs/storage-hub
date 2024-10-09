@@ -466,4 +466,4 @@ export class ShTestApi implements AsyncDisposable {
  * This API is created using the ShTestApi.create() static method and provides
  * a comprehensive toolkit for testing and developing BSP network functionality.
  */
-export type EnrichedBspApi = Awaited<ReturnType<typeof ShTestApi.create>>;
+export type EnrichedShApi = Awaited<ReturnType<typeof ShTestApi.create>>;

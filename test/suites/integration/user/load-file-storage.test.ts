@@ -1,8 +1,8 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, type EnrichedShApi } from "../../../util";
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
-  let userApi: EnrichedBspApi;
+  let userApi: EnrichedShApi;
 
   before(async () => {
     userApi = await createUserApi();

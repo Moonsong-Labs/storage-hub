@@ -6,7 +6,7 @@ import {
   runMultipleInitialisedBspsNet,
   runSimpleBspNet
 } from "../helpers";
-import { ShTestApi, type EnrichedBspApi } from "../test-api";
+import { ShTestApi, type EnrichedShApi } from "../test-api";
 import type { TestNetConfig, TestNetContext, TestOptions } from "../types";
 import * as ShConsts from "../consts";
 
@@ -55,8 +55,8 @@ export async function describeBspNet<
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-      let userApiPromise: Promise<EnrichedBspApi>;
-      let bspApiPromise: Promise<EnrichedBspApi>;
+      let userApiPromise: Promise<EnrichedShApi>;
+      let bspApiPromise: Promise<EnrichedShApi>;
       let responseListenerPromise: ReturnType<typeof launchNetwork>;
 
       before(async () => {

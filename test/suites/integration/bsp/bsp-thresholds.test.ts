@@ -10,13 +10,13 @@ import {
   describeBspNet,
   ShConsts
 } from "../../../util";
-import type { EnrichedBspApi } from "../../../util/networks/test-api";
+import type { EnrichedShApi } from "../../../util/networks/test-api";
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
   { initialised: false, bspStartingWeight: 5n, networkConfig: "standard" },
   ({ before, it, createUserApi, beforeEach }) => {
-    let api: EnrichedBspApi;
+    let api: EnrichedShApi;
 
     before(async () => {
       api = await createUserApi();

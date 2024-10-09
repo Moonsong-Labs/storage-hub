@@ -3,7 +3,7 @@ import {
   describeBspNet,
   shUser,
   sleep,
-  type EnrichedBspApi,
+  type EnrichedShApi,
   type FileMetadata,
   ShConsts
 } from "../../../util";
@@ -13,10 +13,10 @@ describeBspNet(
   "BSP: Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
-    let bspTwoApi: EnrichedBspApi;
-    let bspThreeApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let bspApi: EnrichedShApi;
+    let bspTwoApi: EnrichedShApi;
+    let bspThreeApi: EnrichedShApi;
     let fileData: FileMetadata;
     let oneBspFileData: FileMetadata;
     let rootBeforeDeletion: string;

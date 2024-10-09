@@ -1,11 +1,11 @@
 import { strictEqual } from "node:assert";
-import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, shUser, sleep, type EnrichedShApi } from "../../../util";
 
 describeMspNet(
   "Single MSP responding to storage request",
   ({ before, createMspApi, it, createUserApi }) => {
-    let userApi: EnrichedBspApi;
-    let mspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let mspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -142,8 +142,8 @@ describeMspNet(
 describeMspNet(
   "Single MSP responding to multiple storage requests",
   ({ before, createMspApi, it, createUserApi }) => {
-    let userApi: EnrichedBspApi;
-    let mspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let mspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();

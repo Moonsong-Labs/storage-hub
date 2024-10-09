@@ -4,14 +4,14 @@ import path from "node:path";
 import { bspKey, mspKey, shUser } from "../../pjsKeyring.ts";
 import type { TestNetConfig } from "../types.ts";
 import * as ShConsts from "../consts.ts";
-import { ShTestApi, type EnrichedBspApi } from "../test-api.ts";
+import { ShTestApi, type EnrichedShApi } from "../test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { forceSignupBsp, getContainerIp, getContainerPeerId } from "../helpers.ts";
 
 export const runFullNet = async (bspNetConfig: TestNetConfig) => {
-  let userApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
@@ -167,7 +167,7 @@ export const runFullNet = async (bspNetConfig: TestNetConfig) => {
 export const runInitialisedFullNet = async (bspNetConfig: TestNetConfig) => {
   await runFullNet(bspNetConfig);
 
-  let userApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
   try {
     userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 

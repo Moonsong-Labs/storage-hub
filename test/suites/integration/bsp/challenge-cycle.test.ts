@@ -1,13 +1,13 @@
 import assert, { strictEqual } from "node:assert";
 import { describeBspNet, sleep } from "../../../util";
-import type { EnrichedBspApi } from "../../../util/networks/test-api";
+import type { EnrichedShApi } from "../../../util/networks/test-api";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
   { initialised: true },
   ({ it, before, createBspApi, createUserApi }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let bspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();

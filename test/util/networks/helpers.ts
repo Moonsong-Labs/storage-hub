@@ -23,7 +23,7 @@ import { addBspContainer, showContainers } from "./docker.ts";
 import type { TestNetConfig, InitialisedMultiBspNetwork } from "./types.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
-import { ShTestApi, type EnrichedBspApi } from "./test-api.ts";
+import { ShTestApi, type EnrichedShApi } from "./test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
@@ -105,7 +105,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 };
 
 export const runSimpleBspNet = async (bspNetConfig: TestNetConfig, verbose = false) => {
-  let userApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
@@ -272,7 +272,7 @@ export const runSimpleBspNet = async (bspNetConfig: TestNetConfig, verbose = fal
 };
 
 export const forceSignupBsp = async (options: {
-  api: EnrichedBspApi;
+  api: EnrichedShApi;
   multiaddress: string;
   who: string | Uint8Array;
   bspId?: string;
@@ -324,7 +324,7 @@ export const closeSimpleBspNet = async () => {
 export const runInitialisedBspsNet = async (bspNetConfig: TestNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
   try {
     userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
@@ -373,7 +373,7 @@ export const runMultipleInitialisedBspsNet = async (
 ): Promise<undefined | InitialisedMultiBspNetwork> => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
   try {
     userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
@@ -442,7 +442,7 @@ export const runMultipleInitialisedBspsNet = async (
 };
 
 export const cleardownTest = async (cleardownOptions: {
-  api: EnrichedBspApi | EnrichedBspApi[];
+  api: EnrichedShApi | EnrichedShApi[];
   keepNetworkAlive?: boolean;
 }) => {
   try {
@@ -460,7 +460,7 @@ export const cleardownTest = async (cleardownOptions: {
   cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 
-export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {
+export const createCheckBucket = async (api: EnrichedShApi, bucketName: string) => {
   const newBucketEventEvent = await api.createBucket(bucketName);
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
