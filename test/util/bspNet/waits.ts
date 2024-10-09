@@ -3,6 +3,7 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
+import type { H256 } from "@polkadot/types/interfaces";
 
 /**
  * Waits for a BSP to volunteer for a storage request.
@@ -170,6 +171,38 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
         );
       }
+      break;
+    } catch {
+      invariant(
+        i !== iterations,
+        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+/**
+ * Waits for a BSP to complete storing a file in its file storage.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a longer period to allow for local file transfer.
+ * 2. Checks for the FileFound return from the isFileInFileStorage RPC method.
+ *
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for in the file storage.
+ * @returns A Promise that resolves when a BSP has correctly stored a file in its file storage.
+ *
+ * @throws Will throw an error if the file is not complete in the file storage after a timeout.
+ */
+export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H256) => {
+  // To allow time for local file transfer to complete (10s)
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const fileStorageResult = await api.rpc.storagehubclient.isFileInFileStorage(fileKey);
+      invariant(fileStorageResult.isFileFound, "File not found in file storage");
       break;
     } catch {
       invariant(

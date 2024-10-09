@@ -15,17 +15,14 @@ describeBspNet(
       await api.file.newStorageRequest("res/whatsup.jpg", "test/whatsup.jpg", "nothingmuch-2");
       await api.wait.bspVolunteer();
 
+      // Wait for the bsp to send the first confirm storing extrinsic
       await api.wait.bspStoredInTxPool();
 
-      await api.assert.extrinsicPresent({
-        method: "bspConfirmStoring",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 1
-      });
+      // Wait for the bsp to send all the confirm retries
+      await sleep(6000);
+      await api.wait.bspStoredInTxPool(4);
 
-      await sleep(6000); // wait for the bsp to send all confirm retries
-
+      // We get the confirm storing pending extrinsics to get their extrinsic index
       const confirmStoringPendingMatches = await api.assert.extrinsicPresent({
         method: "bspConfirmStoring",
         module: "fileSystem",

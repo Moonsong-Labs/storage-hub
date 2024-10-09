@@ -2,7 +2,7 @@ import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord } from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -254,7 +254,15 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
        */
       bspStoredInTxPool: (expectedExts?: number) =>
-        Waits.waitForBspStoredWithoutSealing(this._api, expectedExts)
+        Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
+
+      /**
+       * Waits for a BSP to complete storing a file key.
+       * @param fileKey - Param to specify the file key to wait for.
+       * @returns A promise that resolves when a BSP has completed to store a file.
+       */
+      bspFileStorageComplete: (fileKey: H256) =>
+        Waits.waitForBspFileStorageComplete(this._api, fileKey)
     };
 
     /**
