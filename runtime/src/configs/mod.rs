@@ -28,7 +28,7 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
-use shp_data_price_updater::NoUpdatePriceIndexUpdater;
+use shp_data_price_updater::{MostlyStablePriceIndexUpdater, MostlyStablePriceIndexUpdaterConfig};
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
@@ -454,6 +454,7 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
         sp_trie::empty_trie_root::<T>()
     }
 }
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
@@ -621,13 +622,27 @@ parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 10;
 }
 
+impl MostlyStablePriceIndexUpdaterConfig for Runtime {
+    type Price = Balance;
+    type StorageDataUnit = StorageDataUnit;
+    type LowerThreshold =
+        runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage;
+    type UpperThreshold =
+        runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage;
+    type MostlyStablePrice = runtime_params::dynamic_params::runtime_config::MostlyStablePrice;
+    type MaxPrice = runtime_params::dynamic_params::runtime_config::MaxPrice;
+    type MinPrice = runtime_params::dynamic_params::runtime_config::MinPrice;
+    type UpperExponentFactor = runtime_params::dynamic_params::runtime_config::UpperExponentFactor;
+    type LowerExponentFactor = runtime_params::dynamic_params::runtime_config::LowerExponentFactor;
+}
+
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
-    type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, StorageDataUnit>;
+    type UpdateStoragePrice = MostlyStablePriceIndexUpdater<Runtime>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
     type ReplicationTargetType = u32;
