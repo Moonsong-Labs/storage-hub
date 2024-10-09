@@ -112,4 +112,16 @@ impl File {
             .await?;
         Ok(())
     }
+
+    pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<(), diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        diesel::delete(file::table)
+            .filter(file::file_key.eq(file_key))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
 }

@@ -213,13 +213,11 @@ impl IndexerService {
                 .await?;
             }
             pallet_file_system::Event::BspConfirmStoppedStoring {
-                bsp_id,
+                bsp_id: _,
                 file_key,
                 new_root: _,
             } => {
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
-                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
-                BspFile::create(conn, bsp.id, file.id).await?;
+                File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
