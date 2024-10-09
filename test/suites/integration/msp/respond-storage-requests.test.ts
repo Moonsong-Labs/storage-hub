@@ -2,7 +2,7 @@ import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
-  "Single MSP responding to storage request",
+  "Single MSP accepting storage request",
   ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -100,22 +100,8 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      await userApi.wait.mspResponse();
+      const responses = await userApi.wait.mspResponse();
 
-      const mspRespondEvent = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspRespondedToStorageRequests"
-      );
-
-      const mspRespondDataBlob =
-        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-        mspRespondEvent.event.data;
-
-      if (!mspRespondDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
@@ -140,7 +126,7 @@ describeMspNet(
 );
 
 describeMspNet(
-  "Single MSP responding to multiple storage requests",
+  "Single MSP accepting multiple storage requests",
   ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -236,22 +222,8 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      await userApi.wait.mspResponse();
+      const responses = await userApi.wait.mspResponse();
 
-      const mspRespondEvent = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspRespondedToStorageRequests"
-      );
-
-      const mspRespondDataBlob =
-        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-        mspRespondEvent.event.data;
-
-      if (!mspRespondDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
@@ -263,7 +235,10 @@ describeMspNet(
       strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
 
       // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
-      strictEqual(issuedFileKeys.includes(response.fileKeys[0]), true);
+      strictEqual(
+        issuedFileKeys.some((key) => key.toString() === response.fileKeys[0].toString()),
+        true
+      );
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
@@ -305,8 +280,14 @@ describeMspNet(
       strictEqual(response2.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
 
       // There are two keys being accepted at once since they are batched.
-      strictEqual(issuedFileKeys.includes(response2.fileKeys[0]), true);
-      strictEqual(issuedFileKeys.includes(response2.fileKeys[1]), true);
+      strictEqual(
+        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[0].toString()),
+        true
+      );
+      strictEqual(
+        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[1].toString()),
+        true
+      );
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
@@ -316,6 +297,111 @@ describeMspNet(
       );
 
       strictEqual(response2.newBucketRoot.toString(), local_bucket_root2.toString());
+    });
+  }
+);
+
+describeMspNet(
+  "Single MSP rejecting storage request",
+  { initialised: true, only: true },
+  ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
+    let userApi: EnrichedBspApi;
+    let mspApi: EnrichedBspApi;
+
+    before(async () => {
+      userApi = await createUserApi();
+      const maybeMspApi = await createMspApi();
+      if (maybeMspApi) {
+        mspApi = maybeMspApi;
+      } else {
+        throw new Error("MSP API not available");
+      }
+    });
+
+    it("Network launches and can be queried", { only: true }, async () => {
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
+
+      const mspNodePeerId = await mspApi.rpc.system.localPeerId();
+      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp.expectedPeerId);
+    });
+
+    it("MSP rejects storage request since it is already being stored", { only: true }, async () => {
+      const source = "res/whatsup.jpg";
+      const destination = "test/smile.jpg";
+      const initialised = await getLaunchResponse();
+      const bucketId = initialised?.bucketIds[0];
+
+      if (!bucketId) {
+        throw new Error("Bucket ID not found");
+      }
+
+      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
+        bucketId.toString()
+      );
+
+      await userApi.sealBlock(
+        userApi.tx.fileSystem.issueStorageRequest(
+          bucketId,
+          destination,
+          userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS[source].size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+        ),
+        shUser
+      );
+
+      // Allow time for the MSP to receive and store the file from the user
+      await sleep(3000);
+
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+
+      const newStorageRequestDataBlob =
+        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+
+      if (!newStorageRequestDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      strictEqual(
+        newStorageRequestDataBlob.who.toString(),
+        userApi.shConsts.NODE_INFOS.user.AddressId
+      );
+      strictEqual(newStorageRequestDataBlob.location.toHuman(), destination);
+      strictEqual(
+        newStorageRequestDataBlob.fingerprint.toString(),
+        userApi.shConsts.TEST_ARTEFACTS[source].fingerprint
+      );
+      strictEqual(
+        newStorageRequestDataBlob.size_.toBigInt(),
+        userApi.shConsts.TEST_ARTEFACTS[source].size
+      );
+
+      // Seal block containing the MSP's transaction response to the storage request
+      const responses = await userApi.wait.mspResponse();
+
+      if (responses.length !== 1) {
+        throw new Error(
+          "Expected 1 response since there is only a single bucket and should have been accepted"
+        );
+      }
+
+      const response = responses[0].asRejected;
+
+      // Allow time for the MSP to update the local forest root
+      await sleep(3000);
+
+      // Check that the MSP has not updated the local forest root of the bucket
+      strictEqual(
+        local_bucket_root.toString(),
+        (await mspApi.rpc.storagehubclient.getForestRoot(response.bucketId.toString())).toString()
+      );
+
+      strictEqual(response.bucketId.toString(), bucketId.toString());
+
+      strictEqual(response.fileKeys[0][0].toString(), newStorageRequestDataBlob.fileKey.toString());
+      strictEqual(response.fileKeys[0][1].toString(), "FileKeyAlreadyStored");
     });
   }
 );

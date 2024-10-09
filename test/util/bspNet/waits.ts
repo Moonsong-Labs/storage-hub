@@ -18,7 +18,11 @@ import invariant from "tiny-invariant";
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForBspVolunteer = async (
+  api: ApiPromise,
+  checkQuantity?: number,
+  advanceBlock?: boolean
+) => {
   const iterations = 41;
   const delay = 50;
 
@@ -46,8 +50,10 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
     }
   }
 
-  const { events } = await sealBlock(api);
-  assertEventPresent(api, "fileSystem", "AcceptedBspVolunteer", events);
+  if (advanceBlock) {
+    const { events } = await sealBlock(api);
+    assertEventPresent(api, "fileSystem", "AcceptedBspVolunteer", events);
+  }
 };
 
 /**
@@ -137,5 +143,22 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
   }
 
   const { events } = await sealBlock(api);
-  assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
+  const mspRespondEvent = assertEventPresent(
+    api,
+    "fileSystem",
+    "MspRespondedToStorageRequests",
+    events
+  );
+
+  const mspRespondDataBlob =
+    api.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
+    mspRespondEvent.event.data;
+
+  if (!mspRespondDataBlob) {
+    throw new Error("Event doesn't match Type");
+  }
+
+  const responses = mspRespondDataBlob.results.responses;
+
+  return responses;
 };

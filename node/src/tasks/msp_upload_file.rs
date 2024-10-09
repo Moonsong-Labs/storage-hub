@@ -190,7 +190,6 @@ where
                     },
                 );
 
-                // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
                     .send_extrinsic(call, Tip::from(0))
@@ -244,7 +243,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -284,7 +282,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -319,7 +316,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -354,7 +350,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -716,12 +711,20 @@ where
             .as_ref()
             .try_into()?;
 
-        let fs = self
+        let fs = match self
             .storage_hub_handler
             .forest_storage_handler
             .get(&event.bucket_id.as_ref().to_vec())
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+        {
+            Some(fs) => fs,
+            None => {
+                self.storage_hub_handler
+                    .forest_storage_handler
+                    .insert(&event.bucket_id.as_ref().to_vec())
+                    .await
+            }
+        };
 
         let read_fs = fs.read().await;
 
@@ -746,7 +749,6 @@ where
                 },
             );
 
-            // Send extrinsic and wait for it to be included in the block.
             self.storage_hub_handler
                 .blockchain
                 .send_extrinsic(call, Tip::from(0))
@@ -754,6 +756,8 @@ where
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await?;
+
+            return Ok(());
         }
 
         let available_capacity = self
@@ -880,7 +884,6 @@ where
                     },
                 );
 
-                // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
                     .send_extrinsic(call, Tip::from(0))

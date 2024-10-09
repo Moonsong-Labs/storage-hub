@@ -240,6 +240,11 @@ where
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
                             // TODO: Handle MSP not receiving file after multiple retries.
+                            return Err(anyhow::anyhow!(
+                                "Failed to establish connection with peer {:?} after multiple retries for file key{:?}",
+                                peer_id,
+                                file_key
+                            ));
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}\n Error: {:?}", chunk_id, peer_id, e);
