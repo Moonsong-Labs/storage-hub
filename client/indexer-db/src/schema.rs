@@ -102,10 +102,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     msp,
     msp_multiaddress,
     multiaddress,
-<<<<<<< HEAD
     paymentstream,
-=======
     proofs,
->>>>>>> wip
     service_state,
 );
