@@ -5,10 +5,10 @@ import type { KeyringPair } from "@polkadot/keyring/types";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
-import { assertEventPresent } from "../../asserts";
-import { createBucket, sendNewStorageRequest } from "./fileHelpers";
-import type { BspNetApi } from "./types";
-import { advanceToBlock, sealBlock } from "../block";
+import { assertEventPresent } from "../asserts";
+import { createBucket, sendNewStorageRequest } from "./bspNet/fileHelpers";
+import type { BspNetApi } from "./bspNet/types";
+import { advanceToBlock, sealBlock } from "./block";
 
 /**
  * DEPRECATED: Use BspNetTestApi.create() instead
