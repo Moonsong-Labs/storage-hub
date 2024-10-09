@@ -112,7 +112,7 @@ describeBspNet(
         filtered.length === 1,
         "Zero reputation BSP should be able to volunteer and be accepted"
       );
-      await api.docker.stopBspContainer("sh-bsp-down");
+      await api.docker.stopContainer("sh-bsp-down");
     });
 
     it("BSP two eventually volunteers after threshold curve is met", async () => {
@@ -176,7 +176,7 @@ describeBspNet(
 
       // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
       assert(filtered.length === 1, "BSP with reputation should be prioritised");
-      await api.docker.stopBspContainer("sh-bsp-three");
+      await api.docker.stopContainer("sh-bsp-three");
     });
 
     it(
@@ -216,7 +216,7 @@ describeBspNet(
           "BSP two should not be able to spam the chain and reach his threshold to volunteer"
         );
 
-        await api.docker.stopBspContainer("sh-bsp-two");
+        await api.docker.stopContainer("sh-bsp-two");
       }
     );
   }

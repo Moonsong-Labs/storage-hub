@@ -420,7 +420,7 @@ export const runMultipleInitialisedBspsNet = async (
     await userApi.wait.bspStored();
 
     // Stopping BSP that is supposed to be down.
-    await userApi.docker.stopBspContainer(bspDownContainerName);
+    await userApi.docker.stopContainer(bspDownContainerName);
 
     return {
       bspTwoRpcPort,

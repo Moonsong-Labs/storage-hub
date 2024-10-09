@@ -9,7 +9,6 @@ import {
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
 import * as ShConsts from "../consts";
-import { runFullNet } from "../fullNet/helpers";
 
 export const launchEventEmitter = new EventEmitter();
 
