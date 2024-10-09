@@ -5,7 +5,7 @@ import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/type
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { launchNetwork } from "./testrunner";
-import type { BspNetTestApi } from "./test-api";
+import type { ShTestApi } from "./test-api";
 import type { SealedBlock } from "../block";
 
 /**
@@ -187,19 +187,19 @@ export type BspNetContext = {
    * Creates and returns a connected API instance for a user node.
    * @returns A promise that resolves to an enriched api instance for user operations.
    */
-  createUserApi: () => ReturnType<typeof BspNetTestApi.create>;
+  createUserApi: () => ReturnType<typeof ShTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to an enriched api instance for BSP operations.
    */
-  createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
+  createBspApi: () => ReturnType<typeof ShTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a MSP node.
    * @returns A promise that resolves to an enriched api instance for MSP operations.
    */
-  createMspApi: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+  createMspApi: () => ReturnType<typeof ShTestApi.create> | undefined;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -207,7 +207,7 @@ export type BspNetContext = {
    */
   createApi: (
     endpoint: `ws://${string}` | `wss://${string}`
-  ) => ReturnType<typeof BspNetTestApi.create>;
+  ) => ReturnType<typeof ShTestApi.create>;
 
   /**
    * The current configuration of the BSP network for this test run.

@@ -1,4 +1,4 @@
-import { BspNetTestApi, launchEventEmitter, type BspNetConfig, type BspNetContext, type EnrichedBspApi, type TestOptions } from "../bspNet";
+import { ShTestApi, launchEventEmitter, type BspNetConfig, type BspNetContext, type EnrichedBspApi, type TestOptions } from "../bspNet";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import { runFullNet } from "./helpers";
 import { cleardownTest, ShConsts } from "..";
@@ -42,9 +42,9 @@ export async function describeMspNet<
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
-        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
-        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
-        mspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`);
+        userApiPromise = ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+        bspApiPromise = ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+        mspApiPromise = ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`);
       });
 
       after(async () => {
@@ -71,7 +71,7 @@ export async function describeMspNet<
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
         createMspApi: () => mspApiPromise,
-        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createApi: (endpoint) => ShTestApi.create(endpoint),
         bspNetConfig: fullNetConfig,
         before,
         after,

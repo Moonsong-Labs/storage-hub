@@ -23,7 +23,7 @@ import { addBspContainer, showContainers } from "./docker.ts";
 import type { BspNetConfig, InitialisedMultiBspNetwork } from "./bspNet/types.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
-import { BspNetTestApi, type EnrichedBspApi } from "./bspNet/test-api.ts";
+import { ShTestApi, type EnrichedBspApi } from "./bspNet/test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
@@ -171,7 +171,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -326,7 +326,7 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
 
   let userApi: EnrichedBspApi | undefined;
   try {
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
@@ -375,7 +375,7 @@ export const runMultipleInitialisedBspsNet = async (
 
   let userApi: EnrichedBspApi | undefined;
   try {
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 1)));
 

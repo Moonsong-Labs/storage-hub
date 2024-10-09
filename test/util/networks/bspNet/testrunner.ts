@@ -6,7 +6,7 @@ import {
   runMultipleInitialisedBspsNet,
   runSimpleBspNet
 } from "../helpers";
-import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
+import { ShTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
 import * as ShConsts from "../consts";
 
@@ -71,8 +71,8 @@ export async function describeBspNet<
         );
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
-        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
-        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+        userApiPromise = ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+        bspApiPromise = ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
       });
 
       after(async () => {
@@ -99,7 +99,7 @@ export async function describeBspNet<
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
         createMspApi: () => undefined, // not used in this context
-        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createApi: (endpoint) => ShTestApi.create(endpoint),
         bspNetConfig,
         before,
         after,

@@ -11,7 +11,7 @@ import type { BspNetApi } from "./bspNet/types";
 import { advanceToBlock, sealBlock } from "./block";
 
 /**
- * DEPRECATED: Use BspNetTestApi.create() instead
+ * DEPRECATED: Use ShTestApi.create() instead
  *
  */
 export const createApiObject = async (
