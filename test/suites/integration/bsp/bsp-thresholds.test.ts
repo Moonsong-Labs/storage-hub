@@ -302,6 +302,7 @@ describeBspNet(
 
       // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
       assert(filtered.length === 1, "BSP with reputation should be prioritised");
+      await bspThreeApi.disconnect();
       await userApi.docker.stopBspContainer("sh-bsp-three");
     });
 
