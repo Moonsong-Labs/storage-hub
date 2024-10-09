@@ -5,7 +5,7 @@ export * from "../api";
 export * from "../docker";
 export * from "./testrunner";
 export * from "./toxic";
-export * from "./waits";
+export * from "../waits";
 export * from "./test-api";
 export * from "../fileHelpers";
 export * from "../block";

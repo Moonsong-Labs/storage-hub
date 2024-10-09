@@ -15,7 +15,7 @@ import * as DockerBspNet from "../docker";
 import * as Files from "../fileHelpers";
 import * as NodeBspNet from "../node";
 import type { BspNetApi, SealBlockOptions } from "./types";
-import * as Waits from "./waits";
+import * as Waits from "../waits";
 import { addBsp } from "../helpers";
 
 /**
