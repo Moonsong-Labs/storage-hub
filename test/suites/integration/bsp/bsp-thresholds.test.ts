@@ -147,17 +147,39 @@ describeBspNet(
         await api.call.fileSystemApi.queryEarliestFileVolunteerTick(ShConsts.BSP_TWO_ID, fileKey)
       ).asOk.toNumber();
 
-      if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
-        await api.block.skipTo(bsp1VolunteerTick);
-      }
-      await api.wait.bspVolunteer();
-      await api.wait.bspStored();
+      if (bsp1VolunteerTick < bsp2VolunteerTick) {
+        if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
+          await api.block.skipTo(bsp1VolunteerTick);
+        }
+        await api.wait.bspVolunteer(1);
+        await api.wait.bspStored(1);
 
-      if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
-        await api.block.skipTo(bsp2VolunteerTick);
+        if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
+          await api.block.skipTo(bsp2VolunteerTick);
+        }
+        await api.wait.bspVolunteer(1);
+        await api.wait.bspStored(1);
+      } else if (bsp1VolunteerTick > bsp2VolunteerTick) {
+        if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
+          await api.block.skipTo(bsp2VolunteerTick);
+        }
+        await api.wait.bspVolunteer(1);
+        await api.wait.bspStored(1);
+
+        if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
+          await api.block.skipTo(bsp1VolunteerTick);
+        }
+        await api.wait.bspVolunteer(1);
+        await api.wait.bspStored(1);
+      } else {
+        if ((await api.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
+          await api.block.skipTo(bsp1VolunteerTick);
+        }
+        await api.wait.bspVolunteer(2);
+        await api.wait.bspStored(2);
       }
-      await api.wait.bspVolunteer();
-      await api.wait.bspStored();
+
+      await api.docker.stopBspContainer("sh-bsp-two");
     });
 
     it("BSP with reputation is prioritised", async () => {

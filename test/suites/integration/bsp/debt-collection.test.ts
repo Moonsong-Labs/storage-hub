@@ -34,6 +34,9 @@ describeBspNet(
     });
 
     it("BSP correctly charges payment stream", async () => {
+      // Wait for the chain to sync after initiating it
+      await sleep(5000);
+
       // Make sure the payment stream between the user and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
