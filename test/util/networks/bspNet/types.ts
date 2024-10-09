@@ -11,7 +11,7 @@ import type { SealedBlock } from "../block";
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
-export interface BspNetApi extends ApiPromise {
+export interface ShApi extends ApiPromise {
   /**
    * Seals a block optionally with a given extrinsic and signer.
    *

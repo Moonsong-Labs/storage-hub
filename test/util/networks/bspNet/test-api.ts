@@ -14,7 +14,7 @@ import * as ShConsts from "../consts";
 import * as DockerBspNet from "../docker";
 import * as Files from "../fileHelpers";
 import * as NodeBspNet from "../node";
-import type { BspNetApi, SealBlockOptions } from "./types";
+import type { ShApi, SealBlockOptions } from "./types";
 import * as Waits from "../waits";
 import { addBsp } from "../helpers";
 
@@ -34,7 +34,7 @@ export class ShTestApi implements AsyncDisposable {
    * Creates a new instance of ShTestApi.
    *
    * @param endpoint - The WebSocket endpoint to connect to.
-   * @returns A promise that resolves to an enriched BspNetApi.
+   * @returns A promise that resolves to an enriched ShTestApi.
    */
   public static async create(endpoint: `ws://${string}` | `wss://${string}`) {
     const api = await ShTestApi.connect(endpoint);
@@ -441,7 +441,7 @@ export class ShTestApi implements AsyncDisposable {
        */
       docker: remappedDockerNs,
       [Symbol.asyncDispose]: this.disconnect.bind(this)
-    }) satisfies BspNetApi;
+    }) satisfies ShApi;
   }
 
   async [Symbol.asyncDispose]() {

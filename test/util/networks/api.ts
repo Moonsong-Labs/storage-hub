@@ -7,7 +7,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { assertEventPresent } from "../asserts";
 import { createBucket, sendNewStorageRequest } from "./fileHelpers";
-import type { BspNetApi } from "./bspNet/types";
+import type { ShApi } from "./bspNet/types";
 import { advanceToBlock, sealBlock } from "./block";
 
 /**
@@ -16,7 +16,7 @@ import { advanceToBlock, sealBlock } from "./block";
  */
 export const createApiObject = async (
   uri: `ws://${string}` | `wss://${string}`
-): Promise<BspNetApi> => {
+): Promise<ShApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,
