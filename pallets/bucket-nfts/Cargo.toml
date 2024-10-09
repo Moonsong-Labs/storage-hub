@@ -30,6 +30,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # Local
+shp-data-price-updater = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 

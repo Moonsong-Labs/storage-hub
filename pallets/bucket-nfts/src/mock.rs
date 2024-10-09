@@ -8,6 +8,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
+use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
     ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface, TrieMutation,
@@ -228,6 +229,7 @@ impl pallet_file_system::Config for Test {
     type Providers = Providers;
     type ProofDealer = MockProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;

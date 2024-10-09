@@ -35,6 +35,7 @@ pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 
 shp-constants = { workspace = true }
+shp-data-price-updater = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
