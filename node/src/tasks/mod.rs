@@ -22,7 +22,9 @@ use shc_file_manager::in_memory::InMemoryFileStorage;
 use shc_file_manager::rocksdb::RocksDbFileStorage;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::events::RemoteUploadRequest;
-use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_forest_manager::in_memory::InMemoryForestStorage;
+use shc_forest_manager::rocksdb::RocksDBForestStorage;
+use shc_forest_manager::traits::ForestStorageHandler;
 
 pub trait FileStorageT: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync {}
 impl FileStorageT for InMemoryFileStorage<StorageProofsMerkleTrieLayout> {}
@@ -35,8 +37,14 @@ pub trait BspForestStorageHandlerT:
     ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static
 {
 }
-impl<FS> BspForestStorageHandlerT for ForestStorageSingle<FS> where
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static
+impl BspForestStorageHandlerT
+    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+{
+}
+impl BspForestStorageHandlerT
+    for ForestStorageSingle<
+        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+    >
 {
 }
 
@@ -44,8 +52,15 @@ pub trait MspForestStorageHandlerT:
     ForestStorageHandler<Key = Vec<u8>> + Clone + Send + Sync + 'static
 {
 }
-impl<FS> MspForestStorageHandlerT for ForestStorageCaching<Vec<u8>, FS> where
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static
+impl MspForestStorageHandlerT
+    for ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+{
+}
+impl MspForestStorageHandlerT
+    for ForestStorageCaching<
+        Vec<u8>,
+        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+    >
 {
 }
 

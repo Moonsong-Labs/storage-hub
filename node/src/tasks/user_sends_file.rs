@@ -1,6 +1,6 @@
 use crate::tasks::{FileStorageT, StorageHubHandler};
-use log::{debug, error, info};
-use sc_network::{Multiaddr, PeerId};
+use log::{debug, error, info, warn};
+use sc_network::{Multiaddr, PeerId, RequestFailure};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
@@ -10,7 +10,7 @@ use shc_common::{
     blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
     types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout},
 };
-use shc_file_transfer_service::commands::FileTransferServiceInterface;
+use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
@@ -214,21 +214,39 @@ where
                     }
                 };
 
-                let upload_response = self
-                    .storage_hub_handler
-                    .file_transfer
-                    .upload_request(peer_id, file_key.as_ref().into(), proof)
-                    .await;
+                let mut retry_attempts = 0;
+                loop {
+                    let upload_response = self
+                        .storage_hub_handler
+                        .file_transfer
+                        .upload_request(peer_id, file_key.as_ref().into(), proof.clone())
+                        .await;
 
-                match upload_response {
-                    Ok(_) => {
-                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
-                    }
-                    Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}\n Error: {:?}", chunk_id, peer_id, e);
-                        // In case of an error, we break the inner loop
-                        // and try to connect to the next peer id.
-                        break;
+                    match upload_response {
+                        Ok(_) => {
+                            debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
+                            break;
+                        }
+                        // Retry if the request was refused by the peer (MSP). This could happen if the user was too fast
+                        // before the MSP registered the NewStorageRequest event and was ready to receive the file.
+                        Err(RequestError::RequestFailure(RequestFailure::Refused))
+                            if retry_attempts < 3 =>
+                        {
+                            warn!(target: LOG_TARGET, "Chunk id {:?} upload rejected by peer {:?}, retrying... (attempt {})", chunk_id, peer_id, retry_attempts + 1);
+                            retry_attempts += 1;
+
+                            // Wait for a short time before retrying.
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        }
+                        Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
+                            // TODO: Handle MSP not receiving file after multiple retries.
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}\n Error: {:?}", chunk_id, peer_id, e);
+                            // In case of an error, we break the inner loop
+                            // and try to connect to the next peer id.
+                            break;
+                        }
                     }
                 }
             }

@@ -93,3 +93,49 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) 
     }
   }
 };
+
+/**
+ * Waits for a MSP to respond to storage requests.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a short period to allow the node to react.
+ * 2. Checks for the presence of a 'mspRespondStorageRequestsMultipleBuckets' extrinsic in the transaction pool.
+ * 3. Seals a block and verifies the presence of an 'MspRespondedToStorageRequests' event.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @returns A Promise that resolves when a MSP has sent a response to storage requests.
+ *
+ * @throws Will throw an error if the expected extrinsic or event is not found.
+ */
+export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number) => {
+  const iterations = 41;
+  const delay = 50;
+
+  // To allow node time to react on chain events
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      const matches = await assertExtrinsicPresent(api, {
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true
+      });
+      if (checkQuantity) {
+        invariant(
+          matches.length === checkQuantity,
+          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
+        );
+      }
+      break;
+    } catch {
+      invariant(
+        i < iterations - 1,
+        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+
+  const { events } = await sealBlock(api);
+  assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
+};

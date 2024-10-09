@@ -212,7 +212,11 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.timeout - Optional. The maximum time (in milliseconds) to wait for the log message to appear. Default 10s.
        * @returns A promise that resolves to the matching log message if found, or rejects if the timeout is reached.
        */
-      log: async (options: { searchString: string; containerName: string; timeout?: number }) => {
+      log: async (options: {
+        searchString: string;
+        containerName: string;
+        timeout?: number;
+      }) => {
         return Assertions.assertDockerLog(
           options.containerName,
           options.searchString,
@@ -238,7 +242,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts)
+      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
+
+      /**
+       * Waits for a MSP to respond to storage requests.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has responded to storage requests.
+       */
+      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts)
     };
 
     /**

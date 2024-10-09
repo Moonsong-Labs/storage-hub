@@ -45,7 +45,7 @@ services:
         "--max-storage-capacity=4294967295",
         "--jump-capacity=1073741824",
         "--storage-layer=rocks-db",
-        "--storage-path=/tmp/msp/${BSP_IP:-default_bsp_ip}",
+        "--storage-path=/tmp/msp/${MSP_ID:-default_msp_id}",
         "--name=sh-msp",
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
