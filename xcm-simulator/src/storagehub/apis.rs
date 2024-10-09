@@ -391,7 +391,7 @@ impl_runtime_apis! {
             ProofsDealer::get_next_deadline_tick(provider_id)
         }
 
-        fn get_stake(provider_id: ProviderIdFor<Runtime>) -> Option<Balance> {
+        fn get_stake(provider_id: &ProviderIdFor<Runtime>) -> Option<Balance> {
             ProofsDealer::get_stake(provider_id)
         }
     }

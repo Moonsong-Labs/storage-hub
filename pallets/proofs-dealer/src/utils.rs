@@ -1219,7 +1219,7 @@ where
         Ok(next_deadline_tick)
     }
 
-    pub fn get_stake(provider_id: ProviderIdFor<T>) -> Option<BalanceOf<T>> {
-        ProvidersPalletFor::<T>::get_stake(provider_id)
+    pub fn get_stake(provider_id: &ProviderIdFor<T>) -> Option<BalanceOf<T>> {
+        ProvidersPalletFor::<T>::get_stake(*provider_id)
     }
 }

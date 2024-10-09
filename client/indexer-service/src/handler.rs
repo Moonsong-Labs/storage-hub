@@ -9,6 +9,8 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use sp_core::H256;
 use sp_runtime::traits::Header;
 
+use pallet_proofs_dealer_runtime_api::ProofsDealerApi;
+use sc_client_api::HeaderBackend;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::EventsRetrievalError;
 use shc_common::{
@@ -16,6 +18,7 @@ use shc_common::{
     types::{BlockNumber, ParachainClient},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
+use sp_api::ProvideRuntimeApi;
 use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -339,6 +342,16 @@ impl IndexerService {
                 multiaddresses,
                 capacity,
             } => {
+                let current_block_hash = self.client.info().best_hash;
+
+                let stake = self
+                    .client
+                    .runtime_api()
+                    .get_stake(current_block_hash, bsp_id)
+                    .expect("to have a stake")
+                    .unwrap_or(Default::default())
+                    .into();
+
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     let multiaddress_str =
@@ -352,6 +365,7 @@ impl IndexerService {
                     capacity.into(),
                     sql_multiaddresses,
                     bsp_id.to_string(),
+                    stake,
                 )
                 .await?;
             }
@@ -412,11 +426,19 @@ impl IndexerService {
             }
             pallet_storage_providers::Event::Slashed {
                 provider_id,
-                amount_slashed,
+                amount_slashed: _amount_slashed,
             } => {
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, provider_id.to_string()).await?;
-                let new_total_amount_slashed = bsp.total_amount_slashed + amount_slashed;
-                Bsp::update_total_amount_slashed(conn, bsp.id, new_total_amount_slashed).await?;
+                let current_block_hash = self.client.info().best_hash;
+
+                let stake = self
+                    .client
+                    .runtime_api()
+                    .get_stake(current_block_hash, provider_id)
+                    .expect("to have a stake")
+                    .unwrap_or(Default::default())
+                    .into();
+
+                Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
             }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
