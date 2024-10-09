@@ -254,12 +254,6 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
     for (let i = 0; i < source.length; i++) {
       const fileKey = fileKeys[i];
       await bspApi.wait.bspFileStorageComplete(fileKey);
-
-      /* await bspApi.assert.log({
-        searchString: `File upload complete (${fileKey})`,
-        containerName: "docker-sh-bsp-1",
-        timeout: 1000
-      }); */
     }
 
     // Wait and seal a block confirming the storage of the first file

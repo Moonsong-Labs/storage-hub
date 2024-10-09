@@ -20,8 +20,8 @@ import type { H256 } from "@polkadot/types/interfaces";
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
 export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: number) => {
-  const iterations = 41;
-  const delay = 50;
+  const iterations = 100;
+  const delay = 100;
 
   // To allow node time to react on chain events
   for (let i = 0; i < iterations; i++) {
