@@ -392,10 +392,6 @@ impl_runtime_apis! {
         fn get_next_deadline_tick(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
             ProofsDealer::get_next_deadline_tick(provider_id)
         }
-
-        fn get_stake(provider_id: &ProviderId<Runtime>) -> Option<Balance> {
-            ProofsDealer::get_stake(provider_id)
-        }
     }
 
 
@@ -434,6 +430,10 @@ impl_runtime_apis! {
 
         fn get_slash_amount_per_max_file_size() -> Balance {
             Providers::get_slash_amount_per_max_file_size()
+        }
+
+        fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
+            Providers::get_bsp_stake(bsp_id)
         }
     }
 }

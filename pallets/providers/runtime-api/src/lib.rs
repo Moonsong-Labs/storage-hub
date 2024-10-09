@@ -28,6 +28,8 @@ sp_api::decl_runtime_apis! {
         fn query_earliest_change_capacity_block(bsp_id: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
         fn get_slash_amount_per_max_file_size() -> Balance;
+        fn get_bsp_stake(bsp_id: &BspId) -> Result<Balance, GetStakeError>;
+
     }
 }
 
@@ -76,6 +78,6 @@ pub enum QueryProviderMultiaddressesError {
 /// Error type for the `get_stake` runtime API call.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum GetStakeError {
-    ProviderStakeNotFound,
+    ProviderNotRegistered,
     InternalError,
 }

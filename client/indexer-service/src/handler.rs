@@ -9,7 +9,7 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use sp_core::H256;
 use sp_runtime::traits::Header;
 
-use pallet_proofs_dealer_runtime_api::ProofsDealerApi;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::HeaderBackend;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::EventsRetrievalError;
@@ -347,7 +347,7 @@ impl IndexerService {
                 let stake = self
                     .client
                     .runtime_api()
-                    .get_stake(current_block_hash, bsp_id)
+                    .get_bsp_stake(current_block_hash, bsp_id)
                     .expect("to have a stake")
                     .unwrap_or(Default::default())
                     .into();
@@ -433,7 +433,7 @@ impl IndexerService {
                 let stake = self
                     .client
                     .runtime_api()
-                    .get_stake(current_block_hash, provider_id)
+                    .get_bsp_stake(current_block_hash, provider_id)
                     .expect("to have a stake")
                     .unwrap_or(Default::default())
                     .into();
