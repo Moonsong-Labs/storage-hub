@@ -11,7 +11,7 @@ import * as Assertions from "../../asserts";
 import * as BspNetBlock from "../block";
 import { sealBlock } from "../block";
 import * as ShConsts from "../consts";
-import * as DockerBspNet from "./docker";
+import * as DockerBspNet from "../docker";
 import * as Files from "./fileHelpers";
 import * as NodeBspNet from "../node";
 import type { BspNetApi, SealBlockOptions } from "./types";

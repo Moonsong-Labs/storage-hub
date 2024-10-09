@@ -5,7 +5,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import * as util from "node:util";
 import { bspKey, mspKey, shUser } from "../pjsKeyring.ts";
-import { showContainers } from "../networks/bspNet/docker";
+import { showContainers } from "../networks/docker.ts";
 import type { BspNetConfig } from "../networks/bspNet/types";
 import * as ShConsts from "../networks/consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "../networks/bspNet/test-api.ts";

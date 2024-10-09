@@ -1,10 +1,10 @@
 import Docker from "dockerode";
 import { execSync } from "node:child_process";
 import path from "node:path";
-import { DOCKER_IMAGE } from "../../constants";
-import { sendCustomRpc } from "../../rpc";
-import * as NodeBspNet from "../node";
-import { BspNetTestApi } from "./test-api";
+import { DOCKER_IMAGE } from "../constants";
+import { sendCustomRpc } from "../rpc";
+import * as NodeBspNet from "./node";
+import { BspNetTestApi } from "./bspNet/test-api";
 import invariant from "tiny-invariant";
 import { PassThrough, type Readable } from "node:stream";
 
@@ -143,13 +143,13 @@ export const addBspContainer = async (options?: {
 };
 
 // Make this a rusty style OO function with api contexts
-export const pauseBspContainer = async (containerName: string) => {
+export const pauseContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
 };
 
-export const stopBspContainer = async (containerName: string) => {
+export const stopContainer = async (containerName: string) => {
   const docker = new Docker();
   const containersToStop = await docker.listContainers({
     filters: { name: [containerName] }
@@ -159,7 +159,7 @@ export const stopBspContainer = async (containerName: string) => {
   await docker.getContainer(containersToStop[0].Id).remove({ force: true });
 };
 
-export const startBspContainer = async (options: {
+export const startContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -167,7 +167,7 @@ export const startBspContainer = async (options: {
   await container.start();
 };
 
-export const restartBspContainer = async (options: {
+export const restartContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -175,7 +175,7 @@ export const restartBspContainer = async (options: {
   await container.restart();
 };
 
-export const resumeBspContainer = async (options: {
+export const resumeContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
