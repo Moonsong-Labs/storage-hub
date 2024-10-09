@@ -71,8 +71,9 @@ pub mod dynamic_params {
         #[codec(index = 9)]
         #[allow(non_upper_case_globals)]
         /// u = [`UpperExponentFactor`]
+        /// system_utilisation = 1
         ///
-        /// [`MaxPrice`] = [`MostlyStablePrice`] + u * e ^ ( 100 - [`SystemUtilisationUpperThresholdPercentage`] )
+        /// [`MaxPrice`] = [`MostlyStablePrice`] + u * e ^ ( 1 - [`SystemUtilisationUpperThresholdPercentage`] )
         ///
         /// 480 = 48 + u * e ^ (1 - 0.95)
         /// u = (480 - 48) * e ^ (0.95 - 1) ≈ 411
@@ -81,10 +82,11 @@ pub mod dynamic_params {
         #[codec(index = 10)]
         #[allow(non_upper_case_globals)]
         /// l = [`LowerExponentFactor`]
+        /// system_utilisation = 0
         ///
-        /// [`MinPrice`] = [`MostlyStablePrice`] - u * e ^ ( [`SystemUtilisationLowerThresholdPercentage`] )
+        /// [`MinPrice`] = [`MostlyStablePrice`] - u * e ^ ( [`SystemUtilisationLowerThresholdPercentage`] - 0 )
         ///
-        /// 9 = 48 - l * e ^ (0.3)
+        /// 9 = 48 - l * e ^ (0.3 - 0)
         /// l = (48 - 9) * e ^ (-0.3) ≈ 29
         pub static LowerExponentFactor: u32 = 12;
     }
