@@ -5,7 +5,7 @@ import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/type
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { launchNetwork } from "./testrunner";
-import type { ShTestApi } from "./test-api";
+import type { ShTestApi } from "../test-api";
 import type { SealedBlock } from "../block";
 
 /**

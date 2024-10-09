@@ -23,7 +23,7 @@ import { addBspContainer, showContainers } from "./docker.ts";
 import type { BspNetConfig, InitialisedMultiBspNetwork } from "./bspNet/types.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
-import { ShTestApi, type EnrichedBspApi } from "./bspNet/test-api.ts";
+import { ShTestApi, type EnrichedBspApi } from "./test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";

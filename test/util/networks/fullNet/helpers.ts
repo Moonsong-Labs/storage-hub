@@ -4,7 +4,7 @@ import path from "node:path";
 import { bspKey, mspKey, shUser } from "../../pjsKeyring.ts";
 import type { BspNetConfig } from "../bspNet/types";
 import * as ShConsts from "../consts.ts";
-import { ShTestApi, type EnrichedBspApi } from "../bspNet/test-api.ts";
+import { ShTestApi, type EnrichedBspApi } from "../test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";

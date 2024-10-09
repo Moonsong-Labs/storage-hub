@@ -8,7 +8,7 @@ import { bspKey, mspKey, shUser } from "../pjsKeyring.ts";
 import { showContainers } from "../networks/docker.ts";
 import type { BspNetConfig } from "../networks/bspNet/types";
 import * as ShConsts from "../networks/consts.ts";
-import { ShTestApi, type EnrichedBspApi } from "../networks/bspNet/test-api.ts";
+import { ShTestApi, type EnrichedBspApi } from "../networks/test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
