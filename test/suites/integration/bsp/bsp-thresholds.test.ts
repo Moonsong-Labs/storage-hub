@@ -156,6 +156,7 @@ describeBspNet(
         userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 20))
       );
 
+      // Add the second BSP
       const { rpcPort } = await addBsp(userApi, bspTwoKey, {
         name: "sh-bsp-two",
         bspKeySeed: bspTwoSeed,
@@ -164,11 +165,17 @@ describeBspNet(
       });
       const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
+      // Wait for it to catch up to the tip of the chain
+      await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
+
+      // Create a new storage request
       const { fileKey } = await userApi.file.newStorageRequest(
         "res/cloud.jpg",
         "test/cloud.jpg",
         "bucket-2"
-      ); // T0
+      );
+
+      // Check where the BSPs would be allowed to volunteer for it
       const bsp1VolunteerTick = (
         await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
           ShConsts.DUMMY_BSP_ID,
@@ -183,6 +190,7 @@ describeBspNet(
       ).asOk.toNumber();
 
       if (bsp1VolunteerTick < bsp2VolunteerTick) {
+        // If the first BSP can volunteer first, wait for it to volunteer and confirm storing the file
         if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
           await userApi.block.skipTo(bsp1VolunteerTick);
         }
@@ -190,6 +198,7 @@ describeBspNet(
         await bspApi.wait.bspFileStorageComplete(fileKey);
         await userApi.wait.bspStored(1);
 
+        // Then wait for the second BSP to volunteer and confirm storing the file
         if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
           await userApi.block.skipTo(bsp2VolunteerTick);
         }
@@ -197,6 +206,7 @@ describeBspNet(
         await bspTwoApi.wait.bspFileStorageComplete(fileKey);
         await userApi.wait.bspStored(1);
       } else if (bsp1VolunteerTick > bsp2VolunteerTick) {
+        // If the second BSP can volunteer first, wait for it to volunteer and confirm storing the file
         if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
           await userApi.block.skipTo(bsp2VolunteerTick);
         }
@@ -204,6 +214,7 @@ describeBspNet(
         await bspTwoApi.wait.bspFileStorageComplete(fileKey);
         await userApi.wait.bspStored(1);
 
+        // Then wait for the first BSP to volunteer and confirm storing the file
         if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
           await userApi.block.skipTo(bsp1VolunteerTick);
         }
@@ -211,9 +222,11 @@ describeBspNet(
         await bspApi.wait.bspFileStorageComplete(fileKey);
         await userApi.wait.bspStored(1);
       } else {
+        // If both BSPs can volunteer at the same time, advance to the tick where both can volunteer
         if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
           await userApi.block.skipTo(bsp1VolunteerTick);
         }
+        // And wait for them to volunteer and confirm storing the file
         await userApi.wait.bspVolunteer(2);
         await bspApi.wait.bspFileStorageComplete(fileKey);
         await bspTwoApi.wait.bspFileStorageComplete(fileKey);
@@ -225,13 +238,18 @@ describeBspNet(
     });
 
     it("BSP with reputation is prioritised", async () => {
-      await addBsp(userApi, bspThreeKey, {
+      // Add a new, high reputation BSP
+      const { rpcPort } = await addBsp(userApi, bspThreeKey, {
         name: "sh-bsp-three",
         bspKeySeed: bspThreeSeed,
         bspId: ShConsts.BSP_THREE_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
         bspStartingWeight: 800_000_000n
       });
+      const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+
+      // Wait for it to catch up to the top of the chain
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // Set global params to small numbers
       await userApi.sealBlock(

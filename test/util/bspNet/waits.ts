@@ -212,3 +212,39 @@ export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H2
     }
   }
 };
+
+/**
+ * Waits for a BSP to catch up to the top of the chain.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a longer period to allow for the BSP to catch up.
+ * 2. Checks for the best block to make sure it matches the chain tip.
+ *
+ * @param syncedApi - The ApiPromise that is already synced to the top of the chain.
+ * @param bspBehindApi - The ApiPromise instance that is behind the chain tip.
+ * @returns A Promise that resolves when a BSP has correctly catched up to the top of the chain.
+ *
+ * @throws Will throw an error if the BSP doesn't catch up after a timeout.
+ */
+export const waitForBspToCatchUpToChainTip = async (
+  syncedApi: ApiPromise,
+  bspBehindApi: ApiPromise
+) => {
+  // To allow time for BSP to catch up to the tip of the chain (10s)
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const syncedBestBlock = await syncedApi.rpc.chain.getHeader();
+      const bspBehindBestBlock = await bspBehindApi.rpc.chain.getHeader();
+      invariant(
+        syncedBestBlock.hash.toString() === bspBehindBestBlock.hash.toString(),
+        "BSP did not catch up to the chain tip"
+      );
+      break;
+    } catch {
+      invariant(i !== iterations, `Failed to detect BSP catch up after ${(i * delay) / 1000}s`);
+    }
+  }
+};
