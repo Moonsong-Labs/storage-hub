@@ -390,10 +390,6 @@ impl_runtime_apis! {
         fn get_next_deadline_tick(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
             ProofsDealer::get_next_deadline_tick(provider_id)
         }
-
-        fn get_stake(provider_id: &ProviderIdFor<Runtime>) -> Option<Balance> {
-            ProofsDealer::get_stake(provider_id)
-        }
     }
 
     impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>, Multiaddresses<Runtime>> for Runtime {
@@ -431,6 +427,10 @@ impl_runtime_apis! {
 
         fn query_provider_multiaddresses(who: &ProviderId<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
             Providers::query_provider_multiaddresses(who)
+        }
+
+        fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
+            Providers::get_bsp_stake(bsp_id)
         }
     }
 }
