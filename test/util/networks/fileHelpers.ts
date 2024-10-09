@@ -1,9 +1,9 @@
 import type { ApiPromise } from "@polkadot/api";
-import type { FileMetadata } from "./types";
-import { assertEventPresent } from "../../asserts";
-import { shUser } from "../../pjsKeyring";
-import * as ShConsts from "../consts";
-import { sealBlock } from "../block";
+import type { FileMetadata } from "./bspNet/types";
+import { assertEventPresent } from "../asserts";
+import { shUser } from "../pjsKeyring";
+import * as ShConsts from "./consts";
+import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
 import type { HexString } from "@polkadot/util/types";
 import type { KeyringPair } from "@polkadot/keyring/types";

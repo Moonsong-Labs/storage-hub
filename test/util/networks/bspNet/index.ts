@@ -7,6 +7,6 @@ export * from "./testrunner";
 export * from "./toxic";
 export * from "./waits";
 export * from "./test-api";
-export * from "./fileHelpers";
+export * from "../fileHelpers";
 export * from "../block";
 export * from "../node";
