@@ -1,12 +1,10 @@
 import {
-  ShTestApi,
   registerToxics,
-  type TestNetConfig,
-  type EnrichedBspApi,
-  type ToxicInfo,
   runFullNet
 } from "../util";
 import * as ShConsts from "../util/networks/consts";
+import { ShTestApi, type EnrichedBspApi } from "../util/networks/test-api";
+import type { TestNetConfig, ToxicInfo } from "../util/networks/types";
 
 let api: EnrichedBspApi | undefined;
 const fullNetConfig: TestNetConfig = {

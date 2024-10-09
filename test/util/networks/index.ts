@@ -5,6 +5,8 @@ export * from "./docker";
 export * from "./fileHelpers";
 export * from "./helpers";
 export * from "./node";
+export * from "./test-api";
+export * from "./types";
 export * from "./waits";
 
 export * from "./fullNet";

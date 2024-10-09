@@ -8,9 +8,9 @@ import {
   bspTwoKey,
   bspTwoSeed,
   describeBspNet,
-  type EnrichedBspApi,
   ShConsts
 } from "../../../util";
+import type { EnrichedBspApi } from "../../../util/networks/test-api";
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
