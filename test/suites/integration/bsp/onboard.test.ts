@@ -44,7 +44,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it
 
       await it("is synced with current block", async () => {
         // Give some time to the BSP to catch up
-        await sleep(500);
+        await api.wait.bspCatchUpToChainTip(newApi);
 
         const syncHeight = (await newApi.rpc.chain.getHeader()).number.toNumber();
         const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
@@ -63,8 +63,6 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it
     });
 
     await it("is peer of other nodes", async () => {
-      // Give some time to nodes to connect between each other
-      await sleep(500);
       const peers = (await api.rpc.system.peers()).map(({ peerId }) => peerId.toString());
       strictEqual(peers.includes(peerId), true, `PeerId ${peerId} not found in ${peers}`);
     });
