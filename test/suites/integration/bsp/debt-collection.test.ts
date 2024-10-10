@@ -635,6 +635,7 @@ describeBspNet(
             assertLength: 3,
             timeout: 10000
           })
+          // TODO: Remove this. This handling of the assertion is to debug race conditions if they appear.
           .then(
             async (result) => {
               // console.log("Extrinsics present: ", result);
@@ -696,7 +697,7 @@ describeBspNet(
             }
           );
 
-        // Seal a block to allow BSPs to delete the files of the user
+        // Seal a block with the `stopStoringForInsolventUser` extrinsics.
         await userApi.sealBlock();
 
         // Assert that event for the BSP deleting the files of the user was emitted
@@ -745,9 +746,6 @@ describeBspNet(
             );
           }
         }
-
-        // Seal a block to allow BSPs to delete the files of the user
-        await userApi.sealBlock();
       }
 
       // After deleting all the files, the user should have no payment streams with any provider
