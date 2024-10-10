@@ -23,6 +23,8 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
+use std::sync::{Arc, Mutex};
+
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
@@ -53,6 +55,7 @@ where
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
     file_key_cleanup: Option<H256>,
+    capacity_queue: Arc<Mutex<Vec<u64>>>,
 }
 
 impl<FL, FSH> Clone for BspUploadFileTask<FL, FSH>
@@ -64,6 +67,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
+            capacity_queue: self.capacity_queue.clone(),
         }
     }
 }
@@ -77,6 +81,7 @@ where
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
+            capacity_queue: Arc::new(Mutex::new(vec![])),
         }
     }
 }
@@ -500,10 +505,6 @@ where
 
             let new_capacity = self.calculate_capacity(&event, current_capacity)?;
 
-            let call = storage_hub_runtime::RuntimeCall::Providers(
-                pallet_storage_providers::Call::change_capacity { new_capacity },
-            );
-
             let earliest_change_capacity_block = self
                 .storage_hub_handler
                 .blockchain
@@ -517,29 +518,62 @@ where
                     anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
+            // we registered it to the queue
+            let mut capacity_queue = self.capacity_queue.lock().map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to lock capacity queue: {:?}", e
+                );
+                anyhow!("Failed to lock capacity queue: {:?}", e)
+            })?;
+
+            capacity_queue.push(new_capacity);
+
+            drop(capacity_queue);
+
             // Wait for the earliest block where the capacity can be changed.
             self.storage_hub_handler
                 .blockchain
                 .wait_for_block(earliest_change_capacity_block)
                 .await?;
 
-            self.storage_hub_handler
-                .blockchain
-                .send_extrinsic(call, Tip::from(0))
-                .await?
-                .with_timeout(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .extrinsic_retry_timeout,
-                ))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await?;
+            // wwe read from the queue
+            let mut capacity_queue = self.capacity_queue.lock().map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to lock capacity queue: {:?}", e
+                );
+                anyhow!("Failed to lock capacity queue: {:?}", e)
+            })?;
 
-            info!(
-                target: LOG_TARGET,
-                "Increased storage capacity to {:?} bytes",
-                new_capacity
-            );
+            // if the queue is not empty it is that the capacity hasn't been updated yet
+            if !capacity_queue.is_empty() {
+                let new_capacity = capacity_queue.drain(..).sum();
+
+                let call = storage_hub_runtime::RuntimeCall::Providers(
+                    pallet_storage_providers::Call::change_capacity { new_capacity },
+                );
+
+                self.storage_hub_handler
+                    .blockchain
+                    .send_extrinsic(call, Tip::from(0))
+                    .await?
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    ))
+                    .watch_for_success(&self.storage_hub_handler.blockchain)
+                    .await?;
+
+                drop(capacity_queue);
+
+                info!(
+                    target: LOG_TARGET,
+                    "Increased storage capacity to {:?} bytes",
+                    new_capacity
+                );
+            }
 
             let available_capacity = self
                 .storage_hub_handler
