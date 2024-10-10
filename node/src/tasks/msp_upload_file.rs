@@ -566,9 +566,11 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        let _ = forest_root_write_tx.send(());
-
-        Ok(())
+        // Release the forest root write "lock" and finish the task.
+        self.storage_hub_handler
+            .blockchain
+            .release_forest_root_write_lock(forest_root_write_tx)
+            .await
     }
 }
 

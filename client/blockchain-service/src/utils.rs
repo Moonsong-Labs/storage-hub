@@ -544,6 +544,7 @@ impl BlockchainService {
                     .pending_confirm_storing_request_deque()
                     .pop_front()
                 {
+                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
                     confirm_storing_requests.push(request);
                 } else {
                     break;

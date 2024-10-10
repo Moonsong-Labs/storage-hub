@@ -233,26 +233,35 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
 
     await userApi.sealBlock(txs, shUser);
 
-    //There should be pending extrinsics for all files from BSP (volunteer)
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspVolunteer",
-      checkTxPool: true,
-      assertLength: source.length
+    // Get the new storage request events, making sure we have 3
+    const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
+    strictEqual(storageRequestEvents.length, 3);
+
+    // Get the file keys from the storage request events
+    const fileKeys = storageRequestEvents.map((event) => {
+      const dataBlob =
+        userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
+      if (!dataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+      return dataBlob.fileKey;
     });
 
-    await userApi.sealBlock();
+    // Wait for the BSP to volunteer
+    await userApi.wait.bspVolunteer(source.length);
 
-    await sleep(5000); // wait for the bsp to download the files
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspConfirmStoring",
-      checkTxPool: true,
-      assertLength: 1,
-      timeout: 10000
-    });
+    // Wait for the BSP to receive and store all files
+    for (let i = 0; i < source.length; i++) {
+      const fileKey = fileKeys[i];
+      await bspApi.wait.bspFileStorageComplete(fileKey);
+    }
 
-    await userApi.sealBlock();
+    // The first file to be completed will immediately acquire the forest write lock
+    // and send the `bspConfirmStoring` extrinsic. The other two files will be queued.
+    // Here we wait for the first `bspConfirmStoring` extrinsic to be submitted to the tx pool,
+    // we seal the block and check for the `BspConfirmedStoring` event.
+    await userApi.wait.bspStored(1);
+
     const [
       _bspConfirmRes_who,
       _bspConfirmRes_bspId,
@@ -266,25 +275,14 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
     // Here we expect only 1 file to be confirmed since we always prefer smallest possible latency.
     strictEqual(bspConfirmRes_fileKeys.length, 1);
 
-    await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
+    // Wait for the BSP to process the BspConfirmedStoring event.
+    await sleep(500);
     const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
 
-    // This block should trigger the next file to be confirmed.
-    await userApi.sealBlock();
-
-    // Even though we didn't sent a new file, the BSP client should process the rest of the files.
-    // We wait for the BSP to send the confirm transaction.
-    await sleep(500);
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspConfirmStoring",
-      checkTxPool: true,
-      assertLength: 1,
-      timeout: 10000
-    });
-
-    await userApi.sealBlock();
+    // After the previous block is processed by the BSP, the forest write lock is released and
+    // the other pending `bspConfirmStoring` extrinsics are processed and batched into one extrinsic.
+    await userApi.wait.bspStored(1);
 
     const [
       _bspConfirm2Res_who,

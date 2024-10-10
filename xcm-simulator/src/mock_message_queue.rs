@@ -211,4 +211,6 @@ impl<T: Config> InspectMessageQueues for ParachainXcmRouter<Pallet<T>> {
     fn get_messages() -> Vec<(VersionedLocation, Vec<VersionedXcm<()>>)> {
         vec![]
     }
+
+    fn clear_messages() {}
 }
