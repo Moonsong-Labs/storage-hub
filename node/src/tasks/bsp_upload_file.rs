@@ -23,7 +23,8 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
@@ -67,7 +68,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
-            capacity_queue: self.capacity_queue.clone(),
+            capacity_queue: Arc::clone(&self.capacity_queue),
         }
     }
 }
@@ -519,13 +520,7 @@ where
                 })?;
 
             // we registered it to the queue
-            let mut capacity_queue = self.capacity_queue.lock().map_err(|e| {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to lock capacity queue: {:?}", e
-                );
-                anyhow!("Failed to lock capacity queue: {:?}", e)
-            })?;
+            let mut capacity_queue = self.capacity_queue.lock().await;
 
             capacity_queue.push(new_capacity);
 
@@ -538,13 +533,7 @@ where
                 .await?;
 
             // wwe read from the queue
-            let mut capacity_queue = self.capacity_queue.lock().map_err(|e| {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to lock capacity queue: {:?}", e
-                );
-                anyhow!("Failed to lock capacity queue: {:?}", e)
-            })?;
+            let mut capacity_queue = self.capacity_queue.lock().await;
 
             // if the queue is not empty it is that the capacity hasn't been updated yet
             if !capacity_queue.is_empty() {
