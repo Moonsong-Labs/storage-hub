@@ -113,8 +113,8 @@ export const waitForBspVolunteerWithoutSealing = async (
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
 export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) => {
-  // To allow time for local file transfer to complete (5s)
-  const iterations = 50;
+  // To allow time for local file transfer to complete (10s)
+  const iterations = 100;
   const delay = 100;
   for (let i = 0; i < iterations + 1; i++) {
     try {

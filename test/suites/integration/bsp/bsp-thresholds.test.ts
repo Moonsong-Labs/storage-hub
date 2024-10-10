@@ -104,19 +104,23 @@ describeBspNet(
       );
 
       // Create a new BSP and onboard with no reputation
-      await addBsp(userApi, bspDownKey, {
+      const { rpcPort } = await addBsp(userApi, bspDownKey, {
         name: "sh-bsp-down",
         bspKeySeed: bspDownSeed,
         bspId: ShConsts.BSP_DOWN_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-down"],
         bspStartingWeight: 1n
       });
+      const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+
+      // Wait for it to catch up to the tip of the chain
+      await userApi.wait.bspCatchUpToChainTip(bspDownApi);
 
       const { fileKey } = await userApi.file.newStorageRequest(
         "res/smile.jpg",
         "test/smile.jpg",
         "bucket-1"
-      ); // T0
+      );
 
       const lowReputationVolunteerTick = (
         await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
@@ -153,6 +157,7 @@ describeBspNet(
         filtered.length === 1,
         "Zero reputation BSP should be able to volunteer and be accepted"
       );
+      await bspDownApi.disconnect();
       await userApi.docker.stopBspContainer("sh-bsp-down");
     });
 
