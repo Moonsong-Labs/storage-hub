@@ -1,12 +1,6 @@
 import Docker from "dockerode";
 import assert, { strictEqual } from "node:assert";
-import {
-  addBspContainer,
-  describeBspNet,
-  DOCKER_IMAGE,
-  sleep,
-  type EnrichedBspApi
-} from "../../../util";
+import { addBspContainer, describeBspNet, DOCKER_IMAGE, type EnrichedBspApi } from "../../../util";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
 
 describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it }) => {
