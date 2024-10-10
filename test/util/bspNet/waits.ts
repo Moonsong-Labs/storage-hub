@@ -30,7 +30,8 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
       const matches = await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspVolunteer",
-        checkTxPool: true
+        checkTxPool: true,
+        timeout: 100
       });
       if (checkQuantity) {
         invariant(
@@ -68,8 +69,8 @@ export const waitForBspVolunteerWithoutSealing = async (
   api: ApiPromise,
   checkQuantity?: number
 ) => {
-  const iterations = 41;
-  const delay = 50;
+  const iterations = 100;
+  const delay = 100;
 
   // To allow node time to react on chain events
   for (let i = 0; i < iterations; i++) {
@@ -78,7 +79,8 @@ export const waitForBspVolunteerWithoutSealing = async (
       const matches = await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspVolunteer",
-        checkTxPool: true
+        checkTxPool: true,
+        timeout: 100
       });
       if (checkQuantity) {
         invariant(
@@ -120,7 +122,8 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) 
       const matches = await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspConfirmStoring",
-        checkTxPool: true
+        checkTxPool: true,
+        timeout: 100
       });
       if (checkQuantity) {
         invariant(
@@ -163,7 +166,8 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
       const matches = await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspConfirmStoring",
-        checkTxPool: true
+        checkTxPool: true,
+        timeout: 100
       });
       if (checkQuantity) {
         invariant(
