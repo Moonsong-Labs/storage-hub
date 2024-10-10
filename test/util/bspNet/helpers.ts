@@ -29,6 +29,7 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { sealBlock } from "./block.ts";
 import type { ApiPromise } from "@polkadot/api";
+import { sleep } from "@zombienet/utils";
 
 const exec = util.promisify(child_process.exec);
 
@@ -325,8 +326,10 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
   let userApi: EnrichedBspApi | undefined;
+  let bspApi: EnrichedBspApi | undefined;
   try {
     userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    bspApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
@@ -336,12 +339,13 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketName);
 
     await userApi.wait.bspVolunteer(1);
-    await userApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
     await userApi.wait.bspStored(1);
   } catch (e) {
     console.error("Error ", e);
   } finally {
     userApi?.disconnect();
+    bspApi?.disconnect();
   }
 };
 
@@ -393,6 +397,9 @@ export const runMultipleInitialisedBspsNet = async (
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
     const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
+
+    // Wait a few seconds for all BSPs to be synced.
+    await sleep(5000);
 
     // Everything executed below is tested in `volunteer.test.ts` and `onboard.test.ts` files.
     // For the context of this test, this is a preamble, so that a BSP has a challenge cycle initiated.
