@@ -4,13 +4,11 @@ import { assert } from "node:console";
 describeBspNet(
   "BSP Automatic Tipping",
   { extrinsicRetryTimeout: 2 },
-  ({ before, it, createUserApi, createBspApi }) => {
+  ({ before, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-      bspApi = await createBspApi();
     });
 
     it("Confirm storing failure results in increased tip", async () => {
