@@ -29,7 +29,7 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { sealBlock } from "./block.ts";
 import type { ApiPromise } from "@polkadot/api";
-import { sleep } from "@zombienet/utils";
+import { sleep } from "../timer.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -265,6 +265,9 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
         )
       )
     );
+
+    // Give some time for the network to be in sync
+    await sleep(5000);
   } catch (e) {
     console.error("Error ", e);
   } finally {

@@ -11,10 +11,6 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
   });
 
   it("Network launches and can be queried", async () => {
-    // Wait for the network to be initialized
-    await sleep(5000);
-
-    // Check peer IDs
     const userNodePeerId = await userApi.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 

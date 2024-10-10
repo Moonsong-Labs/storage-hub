@@ -12,9 +12,6 @@ describeBspNet(
     });
 
     it("Confirm storing failure results in increased tip", async () => {
-      // Wait for the network to be initialized
-      await sleep(5000);
-
       // Make a storage request and wait for the bsp to volunteer
       await userApi.file.newStorageRequest("res/whatsup.jpg", "test/whatsup.jpg", "nothingmuch-2");
       await userApi.wait.bspVolunteer(1);

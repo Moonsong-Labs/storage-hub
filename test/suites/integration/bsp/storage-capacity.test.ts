@@ -18,10 +18,6 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
   });
 
   it("Unregistered accounts fail when changing capacities", async () => {
-    // Wait for the network to be initialized
-    await sleep(5000);
-
-    // Check Bsps total capacity
     const totalCapacityBefore = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityBefore = await userApi.query.providers.backupStorageProviders(
       bspApi.shConsts.DUMMY_BSP_ID

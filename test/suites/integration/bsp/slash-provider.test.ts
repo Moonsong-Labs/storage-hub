@@ -1,5 +1,5 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -11,10 +11,6 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
   });
 
   it("Network launches and can be queried", async () => {
-    // Wait for the network to be initialized
-    await sleep(5000);
-
-    // Check peer IDs
     const userNodePeerId = await userApi.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
