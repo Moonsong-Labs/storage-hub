@@ -238,12 +238,6 @@ where
             Error::<T>::PaymentStreamNotFound
         );
 
-        // Check that the user is not flagged as without funds
-        ensure!(
-            !UsersWithoutFunds::<T>::contains_key(user_account),
-            Error::<T>::UserWithoutFunds
-        );
-
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
         let (amount_charged, last_tick_charged) =
             Self::do_charge_payment_streams(&provider_id, user_account)?;
@@ -482,12 +476,6 @@ where
         ensure!(
             DynamicRatePaymentStreams::<T>::contains_key(provider_id, user_account),
             Error::<T>::PaymentStreamNotFound
-        );
-
-        // Check that the user is not flagged as without funds
-        ensure!(
-            !UsersWithoutFunds::<T>::contains_key(user_account),
-            Error::<T>::UserWithoutFunds
         );
 
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
