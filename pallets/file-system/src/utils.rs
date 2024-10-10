@@ -2118,7 +2118,7 @@ mod hooks {
         ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
-    use frame_support::weights::Weight;
+    use sp_weight::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
     use shp_traits::TrieRemoveMutation;
     use sp_runtime::traits::{Get, One, Zero};

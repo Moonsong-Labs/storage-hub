@@ -15297,6 +15297,7 @@ dependencies = [
  "polkadot-parachain-primitives 14.0.0",
  "polkadot-runtime-common 16.0.0",
  "scale-info",
+ "serde_json",
  "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",
