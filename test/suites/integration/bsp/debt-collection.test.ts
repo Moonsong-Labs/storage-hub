@@ -711,42 +711,20 @@ describeBspNet(
           "There should be three stop storing for insolvent user events"
         );
 
-        // Wait for BSPs to process the successful `stopStoringForInsolventUser` extrinsics.
-        // i.e. wait for them to update the local forest root.
-        await sleep(500);
         // For each event, fetch its info and check if the BSP correctly deleted the files of the user
         for (const event of spStopStoringForInsolventUserEvents) {
           const stopStoringInsolventUserBlob =
             userApi.events.fileSystem.SpStopStoringInsolventUser.is(event.event) &&
             event.event.data;
           assert(stopStoringInsolventUserBlob, "Event doesn't match Type");
+          // Wait for BSPs to process the successful `stopStoringForInsolventUser` extrinsics.
+          // i.e. wait for them to update the local forest root.
           if (stopStoringInsolventUserBlob.spId.toString() === ShConsts.DUMMY_BSP_ID) {
-            assert(
-              (
-                await bspApi.rpc.storagehubclient.isFileInForest(
-                  null,
-                  stopStoringInsolventUserBlob.fileKey
-                )
-              ).isFalse
-            );
+            await bspApi.wait.bspFileDeletionCompleted(stopStoringInsolventUserBlob.fileKey);
           } else if (stopStoringInsolventUserBlob.spId.toString() === ShConsts.BSP_TWO_ID) {
-            assert(
-              (
-                await bspTwoApi.rpc.storagehubclient.isFileInForest(
-                  null,
-                  stopStoringInsolventUserBlob.fileKey
-                )
-              ).isFalse
-            );
+            await bspTwoApi.wait.bspFileDeletionCompleted(stopStoringInsolventUserBlob.fileKey);
           } else if (stopStoringInsolventUserBlob.spId.toString() === ShConsts.BSP_THREE_ID) {
-            assert(
-              (
-                await bspThreeApi.rpc.storagehubclient.isFileInForest(
-                  null,
-                  stopStoringInsolventUserBlob.fileKey
-                )
-              ).isFalse
-            );
+            await bspThreeApi.wait.bspFileDeletionCompleted(stopStoringInsolventUserBlob.fileKey);
           }
         }
       }

@@ -211,7 +211,39 @@ export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H2
     } catch {
       invariant(
         i !== iterations,
-        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+        `Failed to detect BSP file in file storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+/**
+ * Waits for a BSP to complete deleting a file from its forest storage.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a period of time to allow the BSP to delete the file from its forest storage.
+ * 2. Checks for the `false` return from the isFileInForest RPC method.
+ *
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for deletion the forest storage.
+ * @returns A Promise that resolves when a BSP has correctly deleted a file from its forest storage.
+ *
+ * @throws Will throw an error if the file is still in the forest storage after a timeout.
+ */
+export const waitForBspFileDeletionComplete = async (api: ApiPromise, fileKey: H256 | string) => {
+  // To allow time for file deletion to complete (10s)
+  const iterations = 20;
+  const delay = 500;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const fileDeletionResult = await api.rpc.storagehubclient.isFileInForest(null, fileKey);
+      invariant(fileDeletionResult.isFalse, "File still in forest storage");
+      break;
+    } catch {
+      invariant(
+        i !== iterations,
+        `Failed to detect BSP file deletion after ${(i * delay) / 1000}s`
       );
     }
   }

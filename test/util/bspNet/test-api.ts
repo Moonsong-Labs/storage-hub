@@ -265,6 +265,14 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspFileStorageComplete(this._api, fileKey),
 
       /**
+       * Waits for a BSP to complete deleting a file from its forest.
+       * @param fileKey - Param to specify the file key to wait for deletion.
+       * @returns A promise that resolves when a BSP has correctly deleted the file from its forest storage.
+       */
+      bspFileDeletionCompleted: (fileKey: H256 | string) =>
+        Waits.waitForBspFileDeletionComplete(this._api, fileKey),
+
+      /**
        * Waits for a BSP to catch up to the tip of the chain
        * @param bspBehindApi - The Api object of the BSP that is behind
        * @returns A promise that resolves when a BSP has caught up to the tip of the chain
