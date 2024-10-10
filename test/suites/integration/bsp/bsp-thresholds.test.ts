@@ -10,7 +10,8 @@ import {
   bspTwoSeed,
   describeBspNet,
   type EnrichedBspApi,
-  ShConsts
+  ShConsts,
+  sleep
 } from "../../../util";
 
 describeBspNet(
@@ -32,6 +33,10 @@ describeBspNet(
     });
 
     it("Can set params with setGlobalParams", async () => {
+      // Wait for the network to be initialized
+      await sleep(5000);
+
+      // Set global params
       const { extSuccess } = await userApi.sealBlock(
         userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(87, 200))
       );

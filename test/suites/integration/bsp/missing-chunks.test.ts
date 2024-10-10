@@ -1,17 +1,24 @@
+import { sleep } from "@zombienet/utils";
 import { describeBspNet, registerToxic, type EnrichedBspApi } from "../../../util";
 
 // TODO: Add asserts to this test case when we impl the missing chunks handling
 describeBspNet(
   "BSP: Missing Chunks",
   { initialised: false, networkConfig: "noisy" },
-  ({ before, it, createUserApi }) => {
+  ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
+      bspApi = await createBspApi();
     });
 
     it("bsp volunteers but doesn't receive chunks", async () => {
+      // Wait for the network to be initialized
+      await sleep(5000);
+
+      // Make a storage request
       const source = "res/whatsup.jpg";
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";

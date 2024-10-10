@@ -630,7 +630,7 @@ describeBspNet(
       for (let i = 0; i < 3; i++) {
         console.log("Removing file from insolvent user, loop: ", i + 1);
         // Check that the three Providers are trying to delete the files of the user
-        userApi.assert
+        await userApi.assert
           .extrinsicPresent({
             method: "stopStoringForInsolventUser",
             module: "fileSystem",

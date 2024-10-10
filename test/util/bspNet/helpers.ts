@@ -333,34 +333,11 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const newBucketEventEvent = await userApi.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketName);
 
-    invariant(newBucketEventDataBlob, "Event doesn't match Type");
-
-    const { fingerprint, file_size, location } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        ShConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
-
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        fingerprint,
-        file_size,
-        ShConsts.DUMMY_MSP_ID,
-        [ShConsts.NODE_INFOS.user.expectedPeerId]
-      ),
-      shUser
-    );
-
-    await userApi.wait.bspVolunteer();
-    await userApi.wait.bspStored();
+    await userApi.wait.bspVolunteer(1);
+    await userApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await userApi.wait.bspStored(1);
   } catch (e) {
     console.error("Error ", e);
   } finally {
