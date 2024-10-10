@@ -254,26 +254,30 @@ where
             });
         }
 
-        // Release the deposit of this payment stream to the User
-        let deposit = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?
-            .user_deposit;
-        T::NativeBalance::release(
-            &HoldReason::PaymentStreamDeposit.into(),
-            &user_account,
-            deposit,
-            Precision::Exact,
-        )?;
+        // The payment stream may have been deleted when charged if the user was out of funds.
+        // If that's not the case, we clear it here.
+        if FixedRatePaymentStreams::<T>::get(provider_id, user_account).is_some() {
+            // Release the deposit of this payment stream to the User
+            let deposit = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
+                .ok_or(Error::<T>::PaymentStreamNotFound)?
+                .user_deposit;
+            T::NativeBalance::release(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                deposit,
+                Precision::Exact,
+            )?;
 
-        // Remove the payment stream from the FixedRatePaymentStreams mapping
-        FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
+            // Remove the payment stream from the FixedRatePaymentStreams mapping
+            FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
 
-        // Decrease the user's payment streams count
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        user_payment_streams_count = user_payment_streams_count
-            .checked_sub(1)
-            .ok_or(ArithmeticError::Underflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+            // Decrease the user's payment streams count
+            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+            user_payment_streams_count = user_payment_streams_count
+                .checked_sub(1)
+                .ok_or(ArithmeticError::Underflow)?;
+            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        }
 
         Ok(())
     }
@@ -494,26 +498,30 @@ where
             });
         }
 
-        // Release the deposit of this payment stream to the User
-        let deposit = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?
-            .user_deposit;
-        T::NativeBalance::release(
-            &HoldReason::PaymentStreamDeposit.into(),
-            &user_account,
-            deposit,
-            Precision::Exact,
-        )?;
+        // The payment stream may have been deleted when charged if the user was out of funds.
+        // If that's not the case, we clear it here.
+        if DynamicRatePaymentStreams::<T>::get(provider_id, user_account).is_some() {
+            // Release the deposit of this payment stream to the User
+            let deposit = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
+                .ok_or(Error::<T>::PaymentStreamNotFound)?
+                .user_deposit;
+            T::NativeBalance::release(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                deposit,
+                Precision::Exact,
+            )?;
 
-        // Remove the payment stream from the DynamicRatePaymentStreams mapping
-        DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
+            // Remove the payment stream from the DynamicRatePaymentStreams mapping
+            DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
 
-        // Decrease the user's payment streams count
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        user_payment_streams_count = user_payment_streams_count
-            .checked_sub(1)
-            .ok_or(ArithmeticError::Underflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+            // Decrease the user's payment streams count
+            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+            user_payment_streams_count = user_payment_streams_count
+                .checked_sub(1)
+                .ok_or(ArithmeticError::Underflow)?;
+            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        }
 
         Ok(())
     }
