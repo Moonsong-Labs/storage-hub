@@ -2087,8 +2087,13 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
     readonly isReachedMaximumCapacity: boolean;
     readonly isReceivedInvalidProof: boolean;
+    readonly isFileKeyAlreadyStored: boolean;
     readonly isInternalError: boolean;
-    readonly type: "ReachedMaximumCapacity" | "ReceivedInvalidProof" | "InternalError";
+    readonly type:
+      | "ReachedMaximumCapacity"
+      | "ReceivedInvalidProof"
+      | "FileKeyAlreadyStored"
+      | "InternalError";
   }
 
   /** @name PalletFileSystemMspFailedBatchStorageRequests (145) */

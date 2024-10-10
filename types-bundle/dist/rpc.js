@@ -42,7 +42,7 @@ export const rpcDefinitions = {
       params: [
         {
           name: "forest_key",
-          type: "Option<String>"
+          type: "Option<H256>"
         }
       ],
       type: "H256"

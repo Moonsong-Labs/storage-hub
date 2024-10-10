@@ -434,7 +434,7 @@ impl FileTransferService {
                     // Send the response back.
                     pending_response.send(response).unwrap();
                 } else {
-                    error!(
+                    debug!(
                         target: LOG_TARGET,
                         "Received unexpected upload request from {} for file key {:?}",
                         peer,

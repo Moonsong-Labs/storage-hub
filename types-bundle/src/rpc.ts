@@ -44,7 +44,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       params: [
         {
           name: "forest_key",
-          type: "Option<String>"
+          type: "Option<H256>"
         }
       ],
       type: "H256"

@@ -6,7 +6,7 @@ import {
   type ToxicInfo
 } from "../util";
 import * as ShConsts from "../util/bspNet/consts";
-import { runFullNet } from "../util/fullNet/helpers";
+import { runSimpleFullNet } from "../util/fullNet/helpers";
 
 let api: EnrichedBspApi | undefined;
 const fullNetConfig: BspNetConfig = {
@@ -21,7 +21,7 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runFullNet(fullNetConfig);
+  await runSimpleFullNet(fullNetConfig);
 
   if (fullNetConfig.noisy) {
     // For more info on the kind of toxics you can register,

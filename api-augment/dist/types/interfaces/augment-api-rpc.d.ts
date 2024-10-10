@@ -1090,7 +1090,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Get the root of the forest trie.
        **/
       getForestRoot: AugmentedRpc<
-        (forest_key: Option<Text> | null | Uint8Array | Text | string) => Observable<H256>
+        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<H256>
       >;
       /**
        * Generate and insert new keys of type BCSV into the keystore.
