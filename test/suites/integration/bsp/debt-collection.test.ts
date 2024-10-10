@@ -711,6 +711,9 @@ describeBspNet(
           "There should be three stop storing for insolvent user events"
         );
 
+        // Wait for BSPs to process the successful `stopStoringForInsolventUser` extrinsics.
+        // i.e. wait for them to update the local forest root.
+        await sleep(500);
         // For each event, fetch its info and check if the BSP correctly deleted the files of the user
         for (const event of spStopStoringForInsolventUserEvents) {
           const stopStoringInsolventUserBlob =
