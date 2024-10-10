@@ -243,6 +243,9 @@ export class BspNetTestApi implements AsyncDisposable {
 
       /**
        * Waits for a BSP to confirm storing a file.
+       *
+       * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
+       * Then seals a block and checks for the `BspConfirmedStoring` events.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
