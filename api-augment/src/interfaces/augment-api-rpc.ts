@@ -1031,7 +1031,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       generateForestProof: AugmentedRpc<
         (
-          forest_key: Option<Text> | null | Uint8Array | Text | string,
+          forest_key: Option<H256> | null | Uint8Array | H256 | string,
           challenged_file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
         ) => Observable<Bytes>
       >;
@@ -1040,7 +1040,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       getFileMetadata: AugmentedRpc<
         (
-          forest_key: Option<Text> | null | Uint8Array | Text | string,
+          forest_key: Option<H256> | null | Uint8Array | H256 | string,
           file_key: H256 | string | Uint8Array
         ) => Observable<Option<FileMetadata>>
       >;
@@ -1067,7 +1067,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       isFileInForest: AugmentedRpc<
         (
-          forest_key: Option<Text> | null | Uint8Array | Text | string,
+          forest_key: Option<H256> | null | Uint8Array | H256 | string,
           file_key: H256 | string | Uint8Array
         ) => Observable<bool>
       >;

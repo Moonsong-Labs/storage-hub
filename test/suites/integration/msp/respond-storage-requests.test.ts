@@ -1,5 +1,7 @@
 import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import type { H256 } from "@polkadot/types/interfaces";
+import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP accepting storage request",
@@ -121,6 +123,13 @@ describeMspNet(
       );
 
       strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
+
+      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
+        response.bucketId.toString(),
+        response.fileKeys[0]
+      );
+
+      invariant(isFileInForest.isTrue, "File is not in forest");
     });
   }
 );
@@ -249,6 +258,13 @@ describeMspNet(
 
       strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
 
+      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
+        response.bucketId.toString(),
+        response.fileKeys[0]
+      );
+
+      invariant(isFileInForest.isTrue, "File is not in forest");
+
       // Seal block containing the MSP's transaction response to the storage request
       const responses2 = await userApi.wait.mspResponse();
 
@@ -280,6 +296,14 @@ describeMspNet(
       );
 
       strictEqual(response2.newBucketRoot.toString(), local_bucket_root2.toString());
+
+      for (const fileKey of response2.fileKeys) {
+        const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
+          response2.bucketId.toString(),
+          fileKey
+        );
+        invariant(isFileInForest.isTrue, "File is not in forest");
+      }
     });
   }
 );
