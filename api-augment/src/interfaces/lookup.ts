@@ -4128,8 +4128,7 @@ export default {
       "ProviderNotSlashable",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
-      "PaymentStreamNotFound",
-      "ProviderStakeNotFound"
+      "PaymentStreamNotFound"
     ]
   },
   /**
