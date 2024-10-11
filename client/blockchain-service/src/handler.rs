@@ -888,6 +888,31 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::ReleaseForestRootWriteLock {
+                    forest_root_write_tx,
+                    callback,
+                } => {
+                    // Release the forest root write "lock".
+                    let forest_root_write_result = forest_root_write_tx.send(()).map_err(|e| {
+                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team. \nError while sending the release message: {:?}", e);
+                        anyhow!(
+                            "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team."
+                        )
+                    });
+
+                    // Check if there are any pending requests to use the forest root write lock.
+                    // If so, we give them the lock right away.
+                    if forest_root_write_result.is_ok() {
+                        self.check_pending_forest_root_writes();
+                    }
+
+                    match callback.send(forest_root_write_result) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }

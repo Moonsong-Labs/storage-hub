@@ -346,16 +346,11 @@ where
             }
         }
 
-        // Release the forest root write "lock".
-        let forest_root_write_result = forest_root_write_tx.send(());
-        if forest_root_write_result.is_err() {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
-            ));
-        }
-
-        Ok(())
+        // Release the forest root write "lock" and finish the task.
+        self.storage_hub_handler
+            .blockchain
+            .release_forest_root_write_lock(forest_root_write_tx)
+            .await
     }
 }
 
