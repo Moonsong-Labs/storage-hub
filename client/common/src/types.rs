@@ -59,6 +59,18 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
+/// Type alias for the events vector.
+///
+/// The events vector is a storage element in the FRAME system pallet, which stores all the events
+/// that have occurred in a block. This is syntactic sugar to make the code more readable.
+pub type StorageHubEventsVec = Vec<
+    Box<
+        EventRecord<
+            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
+            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        >,
+    >,
+>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;
@@ -145,16 +157,3 @@ impl DownloadRequestId {
         DownloadRequestId(next)
     }
 }
-
-/// Type alias for the events vector.
-///
-/// The events vector is a storage element in the FRAME system pallet, which stores all the events
-/// that have occurred in a block. This is syntactic sugar to make the code more readable.
-pub type StorageHubEventsVec = Vec<
-    Box<
-        EventRecord<
-            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
-            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
-        >,
-    >,
->;

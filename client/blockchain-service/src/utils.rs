@@ -501,6 +501,7 @@ impl BlockchainService {
         let mut next_event_data = None;
 
         // If we have a submit proof request, prioritise it.
+        // This is a BSP only operation, since MSPs don't have to submit proofs.
         while let Some(request) = self.pending_submit_proof_requests.pop_first() {
             // Check if the proof is still the next one to be submitted.
             let provider_id = request.provider_id;
@@ -534,6 +535,7 @@ impl BlockchainService {
         }
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+        // This is a BSP only operation, since MSPs don't have to confirm storing.
         if next_event_data.is_none() {
             let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
@@ -566,6 +568,7 @@ impl BlockchainService {
         }
 
         // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
+        // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
         if next_event_data.is_none() {
             let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
 
@@ -617,7 +620,7 @@ impl BlockchainService {
 
         let data = data.into();
 
-        // If this is a confirm storing request or a stop storing for insolvent user request, we need to store it in the state store.
+        // If this is a confirm storing request, respond storage request, or a stop storing for insolvent user request, we need to store it in the state store.
         match &data {
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
