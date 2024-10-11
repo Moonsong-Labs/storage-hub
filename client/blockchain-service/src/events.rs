@@ -149,7 +149,7 @@ pub struct ProcessMspRespondStoringRequestData {
 
 #[derive(Debug, Clone)]
 pub struct ProcessMspRespondStoringRequest {
-    pub data: crate::events::ProcessMspRespondStoringRequestData,
+    pub data: ProcessMspRespondStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
