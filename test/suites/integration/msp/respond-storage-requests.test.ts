@@ -1,6 +1,5 @@
 import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import type { H256 } from "@polkadot/types/interfaces";
 import invariant from "tiny-invariant";
 
 describeMspNet(
@@ -310,7 +309,7 @@ describeMspNet(
 
 describeMspNet(
   "Single MSP rejecting storage request",
-  { initialised: true, only: true },
+  { initialised: true },
   ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
