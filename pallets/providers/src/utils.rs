@@ -449,6 +449,13 @@ where
             Error::<T>::StorageStillInUse
         );
 
+        // Check that the sign off period since the BSP signed up has passed
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                >= bsp.sign_up_block + T::BspSignUpLockPeriod::get(),
+            Error::<T>::SignOffPeriodNotPassed
+        );
+
         // Update the BSPs storage, removing the signer as an BSP
         AccountIdToBackupStorageProviderId::<T>::remove(who);
         BackupStorageProviders::<T>::remove(&bsp_id);

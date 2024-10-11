@@ -489,6 +489,8 @@ pub mod pallet {
         // Sign off errors:
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
         StorageStillInUse,
+        /// Error thrown when a user tries to sign off as a BSP but the sign off period has not passed yet.
+        SignOffPeriodNotPassed,
 
         // Randomness errors:
         /// Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
