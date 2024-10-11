@@ -525,10 +525,6 @@ pub mod pallet {
         InvalidEncodedAccountId,
         /// Error thrown when trying to update a payment stream that does not exist.
         PaymentStreamNotFound,
-
-        // Provider interface errors
-        /// The provider stake could not be found.
-        ProviderStakeNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

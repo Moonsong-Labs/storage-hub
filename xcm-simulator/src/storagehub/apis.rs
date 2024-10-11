@@ -348,7 +348,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation, Balance> for Runtime {
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }

@@ -7,14 +7,13 @@ use sp_std::vec::Vec;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, RandomnessOutput, TrieRemoveMutation, Balance>
+    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, RandomnessOutput, TrieRemoveMutation>
     where
         ProviderId: codec::Codec,
         BlockNumber: codec::Codec,
         Key: codec::Codec,
         RandomnessOutput: codec::Codec,
         TrieRemoveMutation: codec::Codec,
-        Balance: codec::Codec,
     {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderId) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
         fn get_last_checkpoint_challenge_tick() -> BlockNumber;
