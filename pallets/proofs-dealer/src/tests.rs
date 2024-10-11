@@ -916,7 +916,7 @@ fn submit_proof_success() {
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
-                last_tick_proof: current_tick,
+                last_tick_proof: System::block_number(),
             }
             .into(),
         );
