@@ -196,12 +196,6 @@ export type BspNetContext = {
   createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
-   * Creates and returns a connected API instance for a MSP node.
-   * @returns A promise that resolves to an enriched api instance for MSP operations.
-   */
-  createMspApi: () => ReturnType<typeof BspNetTestApi.create> | undefined;
-
-  /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to  an enriched api instance for BSP operations.
    */
@@ -298,7 +292,7 @@ export type FullNetContext = {
 };
 
 /**
- * Represents the initial state of the network after intialisation.
+ * Represents the initial state of the network after initialisation.
  */
 export type Initialised = {
   /** A list of bucket IDs created during network initialisation */

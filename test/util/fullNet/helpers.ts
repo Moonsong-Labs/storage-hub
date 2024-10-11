@@ -95,8 +95,6 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
     console.log(`SH BSP id: ${bspKey.address}`);
     console.log(`SH MSP id: ${mspKey.address}`);
 
-    console.log(`SH MSP id: ${mspKey.address}`);
-
     let file = "local-dev-full-compose.yml";
     if (bspNetConfig.rocksdb) {
       file = "local-dev-full-rocksdb-compose.yml";

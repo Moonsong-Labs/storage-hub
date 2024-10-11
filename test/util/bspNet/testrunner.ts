@@ -105,7 +105,6 @@ export async function describeBspNet<
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
-        createMspApi: () => undefined, // not used in this context
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
         bspNetConfig,
         before,
