@@ -5,6 +5,11 @@ use shc_forest_manager::{
     rocksdb::RocksDBForestStorage,
     traits::{ForestStorage, ForestStorageHandler},
 };
+use shc_forest_manager::{
+    in_memory::InMemoryForestStorage,
+    rocksdb::RocksDBForestStorage,
+    traits::{ForestStorage, ForestStorageHandler},
+};
 use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -13,6 +18,7 @@ pub struct ForestStorageSingle<FS>
 where
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
+    storage_path: Option<String>,
     storage_path: Option<String>,
     fs_instance: Arc<RwLock<FS>>,
 }
@@ -24,11 +30,23 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_path: self.storage_path.clone(),
+            storage_path: self.storage_path.clone(),
             fs_instance: self.fs_instance.clone(),
         }
     }
 }
 
+impl ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>> {
+    pub fn new() -> Self {
+        Self {
+            storage_path: None,
+            fs_instance: Arc::new(RwLock::new(InMemoryForestStorage::new())),
+        }
+    }
+}
+
+impl
+    ForestStorageSingle<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>
 impl ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>> {
     pub fn new() -> Self {
         Self {
@@ -52,6 +70,7 @@ impl
 
         Self {
             storage_path: Some(storage_path),
+            storage_path: Some(storage_path),
             fs_instance: Arc::new(RwLock::new(fs)),
         }
     }
@@ -60,6 +79,8 @@ impl
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NoKey;
 
+impl From<Vec<u8>> for NoKey {
+    fn from(_: Vec<u8>) -> Self {
 impl From<Vec<u8>> for NoKey {
     fn from(_: Vec<u8>) -> Self {
         NoKey
@@ -94,8 +115,36 @@ impl ForestStorageHandler
     for ForestStorageSingle<
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
     >
+impl ForestStorageHandler
+    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
 {
     type Key = NoKey;
+    type FS = InMemoryForestStorage<StorageProofsMerkleTrieLayout>;
+
+    async fn get(&self, _key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>> {
+        Some(self.fs_instance.clone())
+    }
+
+    async fn insert(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+        let fs: InMemoryForestStorage<sp_trie::LayoutV1<polkadot_primitives::BlakeTwo256>> =
+            InMemoryForestStorage::new();
+
+        let fs = Arc::new(RwLock::new(fs));
+        self.fs_instance = fs.clone();
+        fs
+    }
+
+    async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
+}
+
+#[async_trait]
+impl ForestStorageHandler
+    for ForestStorageSingle<
+        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+    >
+{
+    type Key = NoKey;
+    type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
     type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
 
     async fn get(&self, _key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>> {
@@ -126,6 +175,7 @@ where
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
     storage_path: Option<String>,
+    storage_path: Option<String>,
     fs_instances: Arc<RwLock<HashMap<K, Arc<RwLock<FS>>>>>,
 }
 
@@ -137,17 +187,36 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_path: self.storage_path.clone(),
+            storage_path: self.storage_path.clone(),
             fs_instances: self.fs_instances.clone(),
         }
     }
 }
 
 impl<K> ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+impl<K> ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
 where
     K: Eq + Hash + Send + Sync,
 {
     pub fn new() -> Self {
         Self {
+            storage_path: None,
+            fs_instances: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+impl<K>
+    ForestStorageCaching<
+        K,
+        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+    >
+where
+    K: Eq + Hash + Send + Sync,
+{
+    pub fn new(storage_path: String) -> Self {
+        Self {
+            storage_path: Some(storage_path),
             storage_path: None,
             fs_instances: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -213,8 +282,10 @@ impl<K> ForestStorageHandler
     >
 where
     K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
+    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
 {
     type Key = K;
+    type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
     type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
 
     async fn get(&self, key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>> {

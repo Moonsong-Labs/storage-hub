@@ -1,6 +1,8 @@
 use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info, warn};
 use sc_network::{Multiaddr, PeerId, RequestFailure};
+use log::{debug, error, info, warn};
+use sc_network::{Multiaddr, PeerId, RequestFailure};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
@@ -10,6 +12,7 @@ use shc_common::{
     blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
     types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout},
 };
+use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
@@ -214,6 +217,13 @@ where
                     }
                 };
 
+                let mut retry_attempts = 0;
+                loop {
+                    let upload_response = self
+                        .storage_hub_handler
+                        .file_transfer
+                        .upload_request(peer_id, file_key.as_ref().into(), proof.clone())
+                        .await;
                 let mut retry_attempts = 0;
                 loop {
                     let upload_response = self

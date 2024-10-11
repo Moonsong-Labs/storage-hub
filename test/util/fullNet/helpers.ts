@@ -95,6 +95,8 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
     console.log(`SH BSP id: ${bspKey.address}`);
     console.log(`SH MSP id: ${mspKey.address}`);
 
+    console.log(`SH MSP id: ${mspKey.address}`);
+
     let file = "local-dev-full-compose.yml";
     if (bspNetConfig.rocksdb) {
       file = "local-dev-full-rocksdb-compose.yml";
@@ -124,8 +126,18 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
         configAsString: updatedCompose,
         log: true
       });
+      await compose.upOne("toxiproxy", {
+        cwd: cwd,
+        configAsString: updatedCompose,
+        log: true
+      });
     }
 
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
     await compose.upOne("sh-bsp", {
       cwd: cwd,
       configAsString: updatedCompose,
@@ -159,6 +171,8 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
         ...process.env,
         NODE_KEY: ShConsts.NODE_INFOS.msp.nodeKey,
         BSP_IP: bspIp,
+        BSP_PEER_ID: bspPeerId,
+        MSP_ID: ShConsts.DUMMY_MSP_ID
         BSP_PEER_ID: bspPeerId,
         MSP_ID: ShConsts.DUMMY_MSP_ID
       }
