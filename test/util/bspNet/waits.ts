@@ -164,30 +164,6 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
 
   // To allow node time to react on chain events
   for (let i = 0; i < iterations; i++) {
-        try {
-          await sleep(delay);
-          const matches = await assertExtrinsicPresent(api, {
-            module: "fileSystem",
-            method: "mspRespondStorageRequestsMultipleBuckets",
-            checkTxPool: true
-          });
-          if (checkQuantity) {
-            invariant(
-              matches.length === checkQuantity,
-              `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
-            );
-          }
-          break;
-        } catch {
-          invariant(
-            i < iterations - 1,
-            `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
-          );
-        }
-      }
-    
-      const { events } = await sealBlock(api);
-      assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
     try {
       await sleep(delay);
       const matches = await assertExtrinsicPresent(api, {
@@ -208,10 +184,53 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
         `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
       );
     }
-  }
 
-  const { events } = await sealBlock(api);
-  assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
+    const { events } = await sealBlock(api);
+    assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
+  }
+};
+
+/**
+ * Waits for a BSP to send to the tx pool the extrinsic to confirm storing a file.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a longer period to allow for local file transfer.
+ * 2. Checks for the presence of a 'bspConfirmStoring' extrinsic in the transaction pool.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @returns A Promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
+ *
+ * @throws Will throw an error if the expected extrinsic is not found.
+ */
+export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
+  // To allow time for local file transfer to complete (5s)
+  const iterations = 50;
+  const delay = 100;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const matches = await assertExtrinsicPresent(api, {
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkTxPool: true,
+        timeout: 100
+      });
+      if (checkQuantity) {
+        invariant(
+          matches.length === checkQuantity,
+          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
+        );
+      }
+      break;
+    } catch {
+      invariant(
+        i !== iterations,
+        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
 
 /**
  * Waits for a BSP to complete storing a file in its file storage.
