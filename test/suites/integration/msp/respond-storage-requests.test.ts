@@ -100,8 +100,21 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
+      const mspRespondEvent = await userApi.wait.mspResponse();
 
+      if (!mspRespondEvent) {
+        throw new Error("No MSP response event found");
+      }
+
+      const mspRespondDataBlob =
+        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
+        mspRespondEvent.event.data;
+
+      if (!mspRespondDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
@@ -149,7 +162,7 @@ describeMspNet(
       }
     });
 
-    it("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", { only: true }, async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -157,7 +170,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp.expectedPeerId);
     });
 
-    it("MSP receives files from user after issued storage requests", async () => {
+    it("MSP receives files from user after issued storage requests", { only: true }, async () => {
       const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
       const bucketName = "nothingmuch-3";
@@ -230,8 +243,21 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
+      const mspRespondEvent = await userApi.wait.mspResponse();
 
+      if (!mspRespondEvent) {
+        throw new Error("No MSP response event found");
+      }
+
+      const mspRespondDataBlob =
+        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
+        mspRespondEvent.event.data;
+
+      if (!mspRespondDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
@@ -265,16 +291,12 @@ describeMspNet(
         true
       );
 
-      // Advance the block to free up the queue for the next set of storage requests to be processed.
-      await userApi.sealBlock();
-
       // Seal block containing the MSP's transaction response to the storage request
-      await userApi.wait.mspResponse();
+      const mspRespondEvent2 = await userApi.wait.mspResponse();
 
-      const mspRespondEvent2 = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspRespondedToStorageRequests"
-      );
+      if (!mspRespondEvent2) {
+        throw new Error("No MSP response event found");
+      }
 
       const mspRespondDataBlob2 =
         userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent2.event) &&
