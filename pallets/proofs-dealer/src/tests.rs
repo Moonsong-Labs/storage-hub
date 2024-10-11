@@ -1061,7 +1061,7 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
-                last_tick_proof: current_tick,
+                last_tick_proof: System::block_number(),
             }
             .into(),
         );
