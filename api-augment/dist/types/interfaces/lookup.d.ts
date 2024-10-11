@@ -3931,6 +3931,7 @@ declare const _default: {
     ownerAccount: string;
     paymentAccount: string;
     reputationWeight: string;
+    signUpBlock: string;
   };
   /**
    * Lookup429: pallet_storage_providers::types::MainStorageProvider<T>
@@ -3944,6 +3945,7 @@ declare const _default: {
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
+    signUpBlock: string;
   };
   /**
    * Lookup431: pallet_storage_providers::types::Bucket<T>

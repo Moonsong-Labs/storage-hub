@@ -4067,7 +4067,8 @@ export default {
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
     paymentAccount: "AccountId32",
-    reputationWeight: "u32"
+    reputationWeight: "u32",
+    signUpBlock: "u32"
   },
   /**
    * Lookup429: pallet_storage_providers::types::MainStorageProvider<T>
@@ -4080,7 +4081,8 @@ export default {
     valueProp: "PalletStorageProvidersValueProposition",
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
-    paymentAccount: "AccountId32"
+    paymentAccount: "AccountId32",
+    signUpBlock: "u32"
   },
   /**
    * Lookup431: pallet_storage_providers::types::Bucket<T>
