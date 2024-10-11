@@ -460,7 +460,7 @@ parameter_types! {
     pub const DepositPerData: Balance = 2;
     pub const MinBlocksBetweenCapacityChanges: u32 = 10;
     pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
-    pub const BspSignUpLockPeriod: BlockNumber = 90 * DAYS; // ~3 months
+    pub const BspSignUpLockPeriod: BlockNumber = 50;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
