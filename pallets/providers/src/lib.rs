@@ -238,6 +238,14 @@ pub mod pallet {
         /// Starting reputation weight for a newly registered BSP.
         #[pallet::constant]
         type StartingReputationWeight: Get<Self::ReputationWeightType>;
+
+        /// The amount of blocks that a BSP must wait before being able to sign off, after being signed up.
+        ///
+        /// This is to prevent BSPs from signing up and off too quickly, thus making it harder for an attacker
+        /// to suddenly have a large portion of the total number of BSPs. The reason for this, is that the
+        /// attacker would have to lock up a large amount of funds for this period of time.
+        #[pallet::constant]
+        type BspSignUpLockPeriod: Get<BlockNumberFor<Self>>;
     }
 
     #[pallet::pallet]
@@ -593,6 +601,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new MSP (if possible), updating storage
@@ -654,6 +663,7 @@ pub mod pallet {
                 owner_account: who.clone(),
                 payment_account,
                 reputation_weight: T::StartingReputationWeight::get(),
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new BSP (if possible), updating storage
@@ -924,6 +934,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new MSP (if possible), updating storage
@@ -992,6 +1003,7 @@ pub mod pallet {
                 owner_account: who.clone(),
                 payment_account,
                 reputation_weight: weight.unwrap_or(T::StartingReputationWeight::get()),
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new BSP (if possible), updating storage

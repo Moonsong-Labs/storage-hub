@@ -141,7 +141,8 @@ mod sign_up {
                                 value_prop,
                                 last_capacity_change: current_block,
                                 owner_account: alice,
-                                payment_account: alice
+                                payment_account: alice,
+                                sign_up_block: current_block
                             }),
                             current_block
                         )
@@ -512,7 +513,8 @@ mod sign_up {
                             value_prop: value_prop.clone(),
                             last_capacity_change: current_block,
                             owner_account: alice,
-                            payment_account: alice
+                            payment_account: alice,
+                            sign_up_block: current_block
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -629,6 +631,7 @@ mod sign_up {
                                 payment_account: alice,
                                 reputation_weight:
                                     <Test as crate::Config>::StartingReputationWeight::get(),
+                                sign_up_block: current_block
                             }),
                             current_block
                         )
@@ -1000,6 +1003,7 @@ mod sign_up {
                             payment_account: alice,
                             reputation_weight:
                                 <Test as crate::Config>::StartingReputationWeight::get(),
+                            sign_up_block: current_block
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -4391,6 +4395,7 @@ fn register_account_as_msp(
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
             owner_account: account,
             payment_account: account,
+            sign_up_block: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
@@ -4476,6 +4481,7 @@ fn register_account_as_bsp(
             owner_account: account,
             payment_account: account,
             reputation_weight: <Test as crate::Config>::StartingReputationWeight::get(),
+            sign_up_block: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
