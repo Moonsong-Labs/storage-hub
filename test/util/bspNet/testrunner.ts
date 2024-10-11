@@ -170,8 +170,8 @@ export async function describeMspNet<
               )} will be kept alive`
             );
           }
-          console.log("🩺 Info:  Test run configured to keep BSPNet alive");
-          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ");
+          console.log("🩺 Info:  Test run configured to keep FullNet alive");
+          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  ");
           process.exit(0);
         }
       });
