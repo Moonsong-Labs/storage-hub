@@ -173,8 +173,6 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
         BSP_IP: bspIp,
         BSP_PEER_ID: bspPeerId,
         MSP_ID: ShConsts.DUMMY_MSP_ID
-        BSP_PEER_ID: bspPeerId,
-        MSP_ID: ShConsts.DUMMY_MSP_ID
       }
     });
 

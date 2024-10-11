@@ -4,7 +4,7 @@ import {
   cleardownTest,
   runInitialisedBspsNet,
   runMultipleInitialisedBspsNet,
-  runSimpleBspNet,
+  runSimpleBspNet
 } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type {
@@ -12,7 +12,7 @@ import type {
   BspNetContext,
   FullNetContext,
   Initialised,
-  TestOptions,
+  TestOptions
 } from "./types";
 import * as ShConsts from "./consts";
 import { runInitialisedFullNet, runSimpleFullNet } from "../fullNet/helpers";
@@ -47,9 +47,7 @@ export function describeBspNet(
  * @param args Additional arguments (either tests function or options and tests function).
  */
 export async function describeBspNet<
-  T extends
-    | [(context: BspNetContext) => void]
-    | [TestOptions, (context: BspNetContext) => void]
+  T extends [(context: BspNetContext) => void] | [TestOptions, (context: BspNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
@@ -61,80 +59,64 @@ export async function describeBspNet<
     bspNetConfig.bspStartingWeight = options.bspStartingWeight;
     bspNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
 
-    const describeFunc = options?.only
-      ? describe.only
-      : options?.skip
-      ? describe.skip
-      : describe;
+    const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
-    describeFunc(
-      `BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`,
-      () => {
-        let userApiPromise: Promise<EnrichedBspApi>;
-        let bspApiPromise: Promise<EnrichedBspApi>;
-        let responseListenerPromise: ReturnType<typeof launchNetwork>;
+    describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+      let userApiPromise: Promise<EnrichedBspApi>;
+      let bspApiPromise: Promise<EnrichedBspApi>;
+      let responseListenerPromise: ReturnType<typeof launchNetwork>;
 
-        before(async () => {
-          // Create a promise which captures a response from the launchNetwork function
-          responseListenerPromise = new Promise((resolve) => {
-            launchEventEmitter.once("networkLaunched", resolve);
-          });
-          // Launch the network
-          const launchResponse = await launchNetwork(
-            { ...bspNetConfig, toxics: options?.toxics },
-            options?.initialised
-          );
-          launchEventEmitter.emit("networkLaunched", launchResponse);
-
-          userApiPromise = BspNetTestApi.create(
-            `ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`
-          );
-          bspApiPromise = BspNetTestApi.create(
-            `ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`
-          );
+      before(async () => {
+        // Create a promise which captures a response from the launchNetwork function
+        responseListenerPromise = new Promise((resolve) => {
+          launchEventEmitter.once("networkLaunched", resolve);
         });
+        // Launch the network
+        const launchResponse = await launchNetwork(
+          { ...bspNetConfig, toxics: options?.toxics },
+          options?.initialised
+        );
+        launchEventEmitter.emit("networkLaunched", launchResponse);
 
-        after(async () => {
-          await cleardownTest({
-            api: [await userApiPromise, await bspApiPromise],
-            keepNetworkAlive: options?.keepAlive,
-          });
-          if (options?.keepAlive) {
-            if (bspNetConfigCases.length > 1) {
-              console.error(
-                `test run configured for multiple bspNetConfigs, only ${JSON.stringify(
-                  bspNetConfig
-                )} will be kept alive``test run configured for multiple bspNetConfigs, only ${JSON.stringify(
-                  bspNetConfig
-                )} will be kept alive`
-              );
-            }
-            console.log("🩺 Info:  Test run configured to keep BSPNet alive");
-            console.log(
-              "ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  "
+        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+      });
+
+      after(async () => {
+        await cleardownTest({
+          api: [await userApiPromise, await bspApiPromise],
+          keepNetworkAlive: options?.keepAlive
+        });
+        if (options?.keepAlive) {
+          if (bspNetConfigCases.length > 1) {
+            console.error(
+              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(
+                bspNetConfig
+              )} will be kept alive`
             );
-            process.exit(0);
           }
-        });
+          console.log("🩺 Info:  Test run configured to keep BSPNet alive");
+          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ");
+          process.exit(0);
+        }
+      });
 
-        const context = {
-          it,
-          createUserApi: () => userApiPromise,
-          createBspApi: () => bspApiPromise,
-          createMspApi: () => undefined, // not used in this context
-          createMspApi: () => undefined, // not used in this context
-          createApi: (endpoint) => BspNetTestApi.create(endpoint),
-          bspNetConfig,
-          before,
-          after,
-          afterEach,
-          beforeEach,
-          getLaunchResponse: () => responseListenerPromise,
-        } satisfies BspNetContext;
+      const context = {
+        it,
+        createUserApi: () => userApiPromise,
+        createBspApi: () => bspApiPromise,
+        createMspApi: () => undefined, // not used in this context
+        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        bspNetConfig,
+        before,
+        after,
+        afterEach,
+        beforeEach,
+        getLaunchResponse: () => responseListenerPromise
+      } satisfies BspNetContext;
 
-        tests(context);
-      }
-    );
+      tests(context);
+    });
   }
 }
 
@@ -144,9 +126,7 @@ export async function describeBspNet<
  * @param args Additional arguments (either tests function or options and tests function).
  */
 export async function describeMspNet<
-  T extends
-    | [(context: FullNetContext) => void]
-    | [TestOptions, (context: FullNetContext) => void]
+  T extends [(context: FullNetContext) => void] | [TestOptions, (context: FullNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
@@ -158,88 +138,69 @@ export async function describeMspNet<
     fullNetConfig.bspStartingWeight = options.bspStartingWeight;
     fullNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
 
-    const describeFunc = options?.only
-      ? describe.only
-      : options?.skip
-      ? describe.skip
-      : describe;
+    const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
-    describeFunc(
-      `FullNet: ${title} (${fullNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`,
-      () => {
-        let userApiPromise: Promise<EnrichedBspApi>;
-        let bspApiPromise: Promise<EnrichedBspApi>;
-        let mspApiPromise: Promise<EnrichedBspApi>;
-        let responseListenerPromise: ReturnType<typeof launchFullNetwork>;
+    describeFunc(`FullNet: ${title} (${fullNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+      let userApiPromise: Promise<EnrichedBspApi>;
+      let bspApiPromise: Promise<EnrichedBspApi>;
+      let mspApiPromise: Promise<EnrichedBspApi>;
+      let responseListenerPromise: ReturnType<typeof launchFullNetwork>;
 
-        before(async () => {
-          // Create a promise which captures a response from the launchNetwork function
-          responseListenerPromise = new Promise((resolve) => {
-            launchEventEmitter.once("networkLaunched", resolve);
-          });
-          // Launch the network
-          const launchResponse = await launchFullNetwork(
-            {
-              ...fullNetConfig,
-              toxics: options?.toxics,
-            },
-            options?.initialised
-          );
-          launchEventEmitter.emit("networkLaunched", launchResponse);
-
-          userApiPromise = BspNetTestApi.create(
-            `ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`
-          );
-          bspApiPromise = BspNetTestApi.create(
-            `ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`
-          );
-          mspApiPromise = BspNetTestApi.create(
-            `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`
-          );
+      before(async () => {
+        // Create a promise which captures a response from the launchNetwork function
+        responseListenerPromise = new Promise((resolve) => {
+          launchEventEmitter.once("networkLaunched", resolve);
         });
+        // Launch the network
+        const launchResponse = await launchFullNetwork(
+          {
+            ...fullNetConfig,
+            toxics: options?.toxics
+          },
+          options?.initialised
+        );
+        launchEventEmitter.emit("networkLaunched", launchResponse);
 
-        after(async () => {
-          await cleardownTest({
-            api: [
-              await userApiPromise,
-              await bspApiPromise,
-              await mspApiPromise,
-            ],
-            keepNetworkAlive: options?.keepAlive,
-          });
-          if (options?.keepAlive) {
-            if (fullNetConfigCases.length > 1) {
-              console.error(
-                `test run configured for multiple bspNetConfigs, only ${JSON.stringify(
-                  fullNetConfig
-                )} will be kept alive`
-              );
-            }
-            console.log("🩺 Info:  Test run configured to keep FullNet alive");
-            console.log(
-              "ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  "
+        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+        mspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`);
+      });
+
+      after(async () => {
+        await cleardownTest({
+          api: [await userApiPromise, await bspApiPromise, await mspApiPromise],
+          keepNetworkAlive: options?.keepAlive
+        });
+        if (options?.keepAlive) {
+          if (fullNetConfigCases.length > 1) {
+            console.error(
+              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(
+                fullNetConfig
+              )} will be kept alive`
             );
-            process.exit(0);
           }
-        });
+          console.log("🩺 Info:  Test run configured to keep FullNet alive");
+          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  ");
+          process.exit(0);
+        }
+      });
 
-        const context = {
-          it,
-          createUserApi: () => userApiPromise,
-          createBspApi: () => bspApiPromise,
-          createMspApi: () => mspApiPromise,
-          createApi: (endpoint) => BspNetTestApi.create(endpoint),
-          bspNetConfig: fullNetConfig,
-          before,
-          after,
-          afterEach,
-          beforeEach,
-          getLaunchResponse: () => responseListenerPromise,
-        } satisfies FullNetContext;
+      const context = {
+        it,
+        createUserApi: () => userApiPromise,
+        createBspApi: () => bspApiPromise,
+        createMspApi: () => mspApiPromise,
+        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        bspNetConfig: fullNetConfig,
+        before,
+        after,
+        afterEach,
+        beforeEach,
+        getLaunchResponse: () => responseListenerPromise
+      } satisfies FullNetContext;
 
-        tests(context);
-      }
-    );
+      tests(context);
+    });
   }
 }
 
@@ -250,8 +211,8 @@ export const launchNetwork = async (
   return initialised === "multi"
     ? await runMultipleInitialisedBspsNet(config)
     : initialised === true
-    ? await runInitialisedBspsNet(config)
-    : await runSimpleBspNet(config);
+      ? await runInitialisedBspsNet(config)
+      : await runSimpleBspNet(config);
 };
 
 export const launchFullNetwork = async (
@@ -275,20 +236,20 @@ const pickConfig = (options: TestOptions) => {
     ? [
         // "ALL" network config
         { noisy: false, rocksdb: false },
-        { noisy: false, rocksdb: true },
+        { noisy: false, rocksdb: true }
       ]
     : options.networkConfig === "standard"
-    ? [
-        // "STANDARD" network config
-        { noisy: false, rocksdb: false },
-      ]
-    : options.networkConfig === "noisy"
-    ? [{ noisy: true, rocksdb: false }]
-    : typeof options.networkConfig === "object"
-    ? options.networkConfig
-    : // default config is same as "ALL"
-      [
-        { noisy: false, rocksdb: false },
-        { noisy: false, rocksdb: true },
-      ];
+      ? [
+          // "STANDARD" network config
+          { noisy: false, rocksdb: false }
+        ]
+      : options.networkConfig === "noisy"
+        ? [{ noisy: true, rocksdb: false }]
+        : typeof options.networkConfig === "object"
+          ? options.networkConfig
+          : // default config is same as "ALL"
+            [
+              { noisy: false, rocksdb: false },
+              { noisy: false, rocksdb: true }
+            ];
 };
