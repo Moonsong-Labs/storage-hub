@@ -100,21 +100,8 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      const mspRespondEvent = await userApi.wait.mspResponse();
+      const responses = await userApi.wait.mspResponse();
 
-      if (!mspRespondEvent) {
-        throw new Error("No MSP response event found");
-      }
-
-      const mspRespondDataBlob =
-        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-        mspRespondEvent.event.data;
-
-      if (!mspRespondDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
@@ -243,21 +230,8 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      const mspRespondEvent = await userApi.wait.mspResponse();
+      const responses = await userApi.wait.mspResponse();
 
-      if (!mspRespondEvent) {
-        throw new Error("No MSP response event found");
-      }
-
-      const mspRespondDataBlob =
-        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-        mspRespondEvent.event.data;
-
-      if (!mspRespondDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const responses = mspRespondDataBlob.results.responses;
       if (responses.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
@@ -292,21 +266,8 @@ describeMspNet(
       );
 
       // Seal block containing the MSP's transaction response to the storage request
-      const mspRespondEvent2 = await userApi.wait.mspResponse();
+      const responses2 = await userApi.wait.mspResponse();
 
-      if (!mspRespondEvent2) {
-        throw new Error("No MSP response event found");
-      }
-
-      const mspRespondDataBlob2 =
-        userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent2.event) &&
-        mspRespondEvent2.event.data;
-
-      if (!mspRespondDataBlob2) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const responses2 = mspRespondDataBlob2.results.responses;
       if (responses2.length !== 1) {
         throw new Error(
           "Expected 1 response since there is only a single bucket and should have been accepted"
