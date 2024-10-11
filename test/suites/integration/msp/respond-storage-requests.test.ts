@@ -123,10 +123,7 @@ describeMspNet(
       strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
 
       strictEqual(
-        await mspApi.rpc.storagehubclient.isFileInForest(
-          response.bucketId,
-          response.fileKeys[0].toString()
-        ),
+        await mspApi.rpc.storagehubclient.isFileInForest(response.bucketId, response.fileKeys[0]),
         true
       );
     });
@@ -258,10 +255,7 @@ describeMspNet(
       strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
 
       strictEqual(
-        await mspApi.rpc.storagehubclient.isFileInForest(
-          response.bucketId,
-          response.fileKeys[0].toString()
-        ),
+        await mspApi.rpc.storagehubclient.isFileInForest(response.bucketId, response.fileKeys[0]),
         true
       );
 
@@ -298,18 +292,12 @@ describeMspNet(
       strictEqual(response2.newBucketRoot.toString(), local_bucket_root2.toString());
 
       strictEqual(
-        await mspApi.rpc.storagehubclient.isFileInForest(
-          response2.bucketId,
-          response2.fileKeys[0].toString()
-        ),
+        await mspApi.rpc.storagehubclient.isFileInForest(response2.bucketId, response2.fileKeys[0]),
         true
       );
 
       strictEqual(
-        await mspApi.rpc.storagehubclient.isFileInForest(
-          response2.bucketId,
-          response2.fileKeys[1].toString()
-        ),
+        await mspApi.rpc.storagehubclient.isFileInForest(response2.bucketId, response2.fileKeys[1]),
         true
       );
     });
