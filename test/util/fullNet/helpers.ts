@@ -280,7 +280,7 @@ export const runInitialisedFullNet = async (bspNetConfig: BspNetConfig) => {
       shUser
     );
 
-    await userApi.wait.bspVolunteer();
+    await userApi.wait.mspResponse();
     await userApi.wait.bspStored();
   } catch (e) {
     console.error("Error ", e);

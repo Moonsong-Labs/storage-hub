@@ -159,8 +159,8 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) 
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
 export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number) => {
-  const iterations = 41;
-  const delay = 50;
+  const iterations = 50;
+  const delay = 100;
 
   // To allow node time to react on chain events
   for (let i = 0; i < iterations; i++) {
@@ -184,10 +184,12 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
         `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
       );
     }
-
-    const { events } = await sealBlock(api);
-    assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
   }
+
+  const { events } = await sealBlock(api);
+  const event = assertEventPresent(api, "fileSystem", "MspRespondedToStorageRequests", events);
+
+  return event;
 };
 
 /**

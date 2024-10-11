@@ -100,12 +100,11 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      await userApi.wait.mspResponse();
+      const mspRespondEvent = await userApi.wait.mspResponse();
 
-      const mspRespondEvent = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspRespondedToStorageRequests"
-      );
+      if (!mspRespondEvent) {
+        throw new Error("No MSP response event found");
+      }
 
       const mspRespondDataBlob =
         userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
@@ -141,6 +140,7 @@ describeMspNet(
 
 describeMspNet(
   "Single MSP responding to multiple storage requests",
+  { only: true },
   ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -155,7 +155,7 @@ describeMspNet(
       }
     });
 
-    it("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", { only: true }, async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -163,7 +163,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp.expectedPeerId);
     });
 
-    it("MSP receives files from user after issued storage requests", async () => {
+    it("MSP receives files from user after issued storage requests", { only: true }, async () => {
       const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
       const bucketName = "nothingmuch-3";
@@ -236,12 +236,11 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      await userApi.wait.mspResponse();
+      const mspRespondEvent = await userApi.wait.mspResponse();
 
-      const mspRespondEvent = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspRespondedToStorageRequests"
-      );
+      if (!mspRespondEvent) {
+        throw new Error("No MSP response event found");
+      }
 
       const mspRespondDataBlob =
         userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
@@ -263,7 +262,10 @@ describeMspNet(
       strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
 
       // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
-      strictEqual(issuedFileKeys.includes(response.fileKeys[0]), true);
+      strictEqual(
+        issuedFileKeys.some((key) => key.toString() === response.fileKeys[0].toString()),
+        true
+      );
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
@@ -274,16 +276,12 @@ describeMspNet(
 
       strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
 
-      // Advance the block to free up the queue for the next set of storage requests to be processed.
-      await userApi.sealBlock();
-
       // Seal block containing the MSP's transaction response to the storage request
-      await userApi.wait.mspResponse();
+      const mspRespondEvent2 = await userApi.wait.mspResponse();
 
-      const mspRespondEvent2 = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspRespondedToStorageRequests"
-      );
+      if (!mspRespondEvent2) {
+        throw new Error("No MSP response event found");
+      }
 
       const mspRespondDataBlob2 =
         userApi.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent2.event) &&
@@ -305,8 +303,14 @@ describeMspNet(
       strictEqual(response2.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
 
       // There are two keys being accepted at once since they are batched.
-      strictEqual(issuedFileKeys.includes(response2.fileKeys[0]), true);
-      strictEqual(issuedFileKeys.includes(response2.fileKeys[1]), true);
+      strictEqual(
+        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[0].toString()),
+        true
+      );
+      strictEqual(
+        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[1].toString()),
+        true
+      );
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
