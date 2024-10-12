@@ -190,7 +190,6 @@ where
                     },
                 );
 
-                // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
                     .send_extrinsic(call, Tip::from(0))
@@ -244,7 +243,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -284,7 +282,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -319,7 +316,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -354,7 +350,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -712,6 +707,61 @@ where
             location: event.location.to_vec(),
         };
 
+        // Get the file key.
+        let file_key: FileKey = metadata
+            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
+            .as_ref()
+            .try_into()?;
+
+        let fs = match self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&event.bucket_id.as_ref().to_vec())
+            .await
+        {
+            Some(fs) => fs,
+            None => {
+                self.storage_hub_handler
+                    .forest_storage_handler
+                    .insert(&event.bucket_id.as_ref().to_vec())
+                    .await
+            }
+        };
+
+        let read_fs = fs.read().await;
+
+        // Reject the storage request if file key already exists in the forest storage.
+        if read_fs.contains_file_key(&file_key.into())? {
+            let err_msg = format!("File key {:?} already exists in forest storage.", file_key);
+            debug!(target: LOG_TARGET, "{}", err_msg);
+
+            // Reject the storage request.
+            let call = storage_hub_runtime::RuntimeCall::FileSystem(
+                pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
+                    file_key_responses_input: bounded_vec![(
+                        event.bucket_id,
+                        MspStorageRequestResponse {
+                            accept: None,
+                            reject: Some(bounded_vec![(
+                                H256(file_key.into()),
+                                RejectedStorageRequestReason::FileKeyAlreadyStored,
+                            )])
+                        }
+                    )],
+                },
+            );
+
+            self.storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, Tip::from(0))
+                .await?
+                .with_timeout(Duration::from_secs(60))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await?;
+
+            return Ok(());
+        }
+
         let available_capacity = self
             .storage_hub_handler
             .blockchain
@@ -824,15 +874,7 @@ where
                 let call = storage_hub_runtime::RuntimeCall::FileSystem(
                     pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                         file_key_responses_input: bounded_vec![(
-                            H256(metadata.bucket_id.try_into().map_err(|e| {
-                                let err_msg =
-                                    format!("Failed to convert bucket ID to [u8; 32]: {:?}", e);
-                                error!(
-                                    target: LOG_TARGET,
-                                    err_msg
-                                );
-                                anyhow::anyhow!(err_msg)
-                            })?),
+                            event.bucket_id,
                             MspStorageRequestResponse {
                                 accept: None,
                                 reject: Some(bounded_vec![(
@@ -844,7 +886,6 @@ where
                     },
                 );
 
-                // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
                     .send_extrinsic(call, Tip::from(0))
@@ -856,12 +897,6 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
         }
-
-        // Get the file key.
-        let file_key: FileKey = metadata
-            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
-            .as_ref()
-            .try_into()?;
 
         self.file_key_cleanup = Some(file_key.into());
 

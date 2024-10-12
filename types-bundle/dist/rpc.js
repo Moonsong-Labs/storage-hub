@@ -52,7 +52,7 @@ export const rpcDefinitions = {
       params: [
         {
           name: "forest_key",
-          type: "Option<String>"
+          type: "Option<H256>"
         },
         {
           name: "file_key",
@@ -76,7 +76,7 @@ export const rpcDefinitions = {
       params: [
         {
           name: "forest_key",
-          type: "Option<String>"
+          type: "Option<H256>"
         },
         {
           name: "file_key",
@@ -91,7 +91,7 @@ export const rpcDefinitions = {
       params: [
         {
           name: "forest_key",
-          type: "Option<String>"
+          type: "Option<H256>"
         },
         {
           name: "challenged_file_keys",
