@@ -848,7 +848,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             owner_account: msp.owner_account,
             payment_account: msp.payment_account,
             reputation_weight: T::StartingReputationWeight::get(),
-            sign_up_block: frame_system::Pallet::<T>::block_number(),
+            sign_up_block: msp.sign_up_block,
         }
     }
 }
