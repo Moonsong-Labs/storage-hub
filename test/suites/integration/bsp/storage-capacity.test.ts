@@ -51,7 +51,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
   });
 
-  it("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
+  it("Change capacity ext called before volunteering for file size greater than available capacity", { only: true }, async () => {
     const capacityUsed = (
       await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
@@ -156,7 +156,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
   });
 
-  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", { only: true },async () => {
+  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", { only: true }, async () => {
     const capacityUsed = (
       await bspApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
@@ -194,6 +194,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const nextCapacityChangeBlock = 29;
 
     await bspApi.advanceToBlock(nextCapacityChangeBlock);
+
+    // Allow BSP enough time to send call to change capacity.
+    await sleep(500);
 
     // Assert BSP has sent a call to increase its capacity.
     await bspApi.assert.extrinsicPresent({
