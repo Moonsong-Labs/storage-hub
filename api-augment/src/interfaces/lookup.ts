@@ -1577,7 +1577,12 @@ export default {
    * Lookup143: pallet_file_system::types::RejectedStorageRequestReason
    **/
   PalletFileSystemRejectedStorageRequestReason: {
-    _enum: ["ReachedMaximumCapacity", "ReceivedInvalidProof", "InternalError"]
+    _enum: [
+      "ReachedMaximumCapacity",
+      "ReceivedInvalidProof",
+      "FileKeyAlreadyStored",
+      "InternalError"
+    ]
   },
   /**
    * Lookup145: pallet_file_system::types::MspFailedBatchStorageRequests<T>
