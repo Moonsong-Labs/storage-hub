@@ -1592,7 +1592,7 @@ declare const _default: {
       ProofAccepted: {
         provider: string;
         proof: string;
-        lastTickProof: string;
+        lastTickProven: string;
       };
       NewChallengeSeed: {
         challengesTicker: string;

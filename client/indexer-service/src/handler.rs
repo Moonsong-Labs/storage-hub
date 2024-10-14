@@ -382,8 +382,20 @@ impl IndexerService {
                 old_capacity: _old_capacity,
                 next_block_when_change_allowed: _next_block_when_change_allowed,
             } => match provider_id {
-                StorageProviderId::BackupStorageProvider(_) => {
+                StorageProviderId::BackupStorageProvider(bsp_id) => {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+
+                    // update also the stake
+                    let current_block_hash = self.client.info().best_hash;
+                    let stake = self
+                        .client
+                        .runtime_api()
+                        .get_bsp_stake(current_block_hash, bsp_id)
+                        .expect("to have a stake")
+                        .unwrap_or(Default::default())
+                        .into();
+
+                    Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
                 }
                 StorageProviderId::MainStorageProvider(_) => {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
