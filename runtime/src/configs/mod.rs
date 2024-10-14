@@ -444,6 +444,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 100 * UNIT;
     pub const BucketDeposit: Balance = 100 * UNIT;
+    pub const BspSignUpLockPeriod: BlockNumber = 90 * DAYS; // ~3 months
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -488,6 +489,7 @@ impl pallet_storage_providers::Config for Runtime {
     type SlashAmountPerMaxFileSize =
         runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = BspSignUpLockPeriod;
 }
 
 parameter_types! {

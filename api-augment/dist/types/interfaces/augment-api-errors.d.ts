@@ -1055,6 +1055,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       RandomnessNotValidYet: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to sign off as a BSP but the sign off period has not passed yet.
+       **/
+      SignOffPeriodNotPassed: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to confirm a sign up that was not requested previously.
        **/
       SignUpNotRequested: AugmentedError<ApiType>;

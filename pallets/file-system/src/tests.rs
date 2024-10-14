@@ -8171,6 +8171,7 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         owner_account: msp.clone(),
         payment_account: msp.clone(),
+        sign_up_block: frame_system::Pallet::<Test>::block_number(),
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);
