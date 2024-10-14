@@ -44,14 +44,14 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
 #[async_trait]
 pub trait ForestStorageHandler {
     /// The key type used to identify forest storage instances.
-    type Key: From<String> + Debug + Send + Sync;
+    type Key: From<Vec<u8>> + Debug + Send + Sync;
     /// Type representing the forest storage instance.
     type FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync;
 
     /// Get forest storage instance.
     async fn get(&self, key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>>;
     /// Create a new forest storage instance.
-    async fn insert(&mut self, key: &Self::Key, fs: Self::FS) -> Arc<RwLock<Self::FS>>;
+    async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>>;
     /// Remove forest storage instance.
     async fn remove_forest_storage(&mut self, key: &Self::Key);
 }

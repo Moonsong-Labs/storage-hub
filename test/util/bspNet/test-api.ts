@@ -212,7 +212,11 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.timeout - Optional. The maximum time (in milliseconds) to wait for the log message to appear. Default 10s.
        * @returns A promise that resolves to the matching log message if found, or rejects if the timeout is reached.
        */
-      log: async (options: { searchString: string; containerName: string; timeout?: number }) => {
+      log: async (options: {
+        searchString: string;
+        containerName: string;
+        timeout?: number;
+      }) => {
         return Assertions.assertDockerLog(
           options.containerName,
           options.searchString,
@@ -243,10 +247,20 @@ export class BspNetTestApi implements AsyncDisposable {
 
       /**
        * Waits for a BSP to confirm storing a file.
+       *
+       * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
+       * Then seals a block and checks for the `BspConfirmedStoring` events.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
       bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
+
+      /**
+       * Waits for a MSP to respond to storage requests.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has responded to storage requests.
+       */
+      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -263,6 +277,14 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       bspFileStorageComplete: (fileKey: H256 | string) =>
         Waits.waitForBspFileStorageComplete(this._api, fileKey),
+
+      /**
+       * Waits for a BSP to complete deleting a file from its forest.
+       * @param fileKey - Param to specify the file key to wait for deletion.
+       * @returns A promise that resolves when a BSP has correctly deleted the file from its forest storage.
+       */
+      bspFileDeletionCompleted: (fileKey: H256 | string) =>
+        Waits.waitForBspFileDeletionComplete(this._api, fileKey),
 
       /**
        * Waits for a BSP to catch up to the tip of the chain

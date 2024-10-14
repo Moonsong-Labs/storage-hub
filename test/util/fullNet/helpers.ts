@@ -6,7 +6,7 @@ import path from "node:path";
 import * as util from "node:util";
 import { bspKey, mspKey, shUser } from "../pjsKeyring";
 import { showContainers } from "../bspNet/docker";
-import type { BspNetConfig } from "../bspNet/types";
+import type { BspNetConfig, Initialised } from "../bspNet/types";
 import * as ShConsts from "../bspNet/consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "../bspNet/test-api.ts";
 import invariant from "tiny-invariant";
@@ -88,11 +88,13 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw `Error fetching peerId from ${url}`;
 };
 
-export const runFullNet = async (bspNetConfig: BspNetConfig) => {
+export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
   let userApi: EnrichedBspApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
+    console.log(`SH MSP id: ${mspKey.address}`);
+
     let file = "local-dev-full-compose.yml";
     if (bspNetConfig.rocksdb) {
       file = "local-dev-full-rocksdb-compose.yml";
@@ -117,10 +119,28 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
     const updatedCompose = stringify(composeYaml);
 
     if (bspNetConfig.noisy) {
-      await compose.upOne("toxiproxy", { cwd: cwd, configAsString: updatedCompose, log: true });
+      await compose.upOne("toxiproxy", {
+        cwd: cwd,
+        configAsString: updatedCompose,
+        log: true
+      });
+      await compose.upOne("toxiproxy", {
+        cwd: cwd,
+        configAsString: updatedCompose,
+        log: true
+      });
     }
 
-    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: updatedCompose, log: true });
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
 
     const bspIp = await getContainerIp(
       bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
@@ -149,7 +169,8 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
         ...process.env,
         NODE_KEY: ShConsts.NODE_INFOS.msp.nodeKey,
         BSP_IP: bspIp,
-        BSP_PEER_ID: bspPeerId
+        BSP_PEER_ID: bspPeerId,
+        MSP_ID: ShConsts.DUMMY_MSP_ID
       }
     });
 
@@ -231,8 +252,10 @@ export const runFullNet = async (bspNetConfig: BspNetConfig) => {
   }
 };
 
-export const runInitialisedFullNet = async (bspNetConfig: BspNetConfig) => {
-  await runFullNet(bspNetConfig);
+export const runInitialisedFullNet = async (
+  bspNetConfig: BspNetConfig
+): Promise<Initialised | undefined> => {
+  await runSimpleFullNet(bspNetConfig);
 
   let userApi: EnrichedBspApi | undefined;
   try {
@@ -269,8 +292,14 @@ export const runInitialisedFullNet = async (bspNetConfig: BspNetConfig) => {
       shUser
     );
 
-    await userApi.wait.bspVolunteer();
+    // This will advance the block which also contains the BSP volunteer tx.
+    // Hence why we can wait for the BSP to confirm storing.
+    await userApi.wait.mspResponse();
     await userApi.wait.bspStored();
+
+    return {
+      bucketIds: [newBucketEventDataBlob.bucketId]
+    };
   } catch (e) {
     console.error("Error ", e);
   } finally {
