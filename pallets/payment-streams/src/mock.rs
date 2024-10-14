@@ -206,6 +206,7 @@ impl pallet_storage_providers::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = ConstU64<10>;
 }
 
 parameter_types! {

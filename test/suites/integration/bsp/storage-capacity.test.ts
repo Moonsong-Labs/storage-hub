@@ -35,8 +35,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       userApi.events.system.ExtrinsicFailed,
       events
     );
-    assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
-    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x10000000"); // NotRegistered
+
+    const providersPallet = userApi.runtimeMetadata.asLatest.pallets.find(
+      (pallet) => pallet.name.toString() === "Providers"
+    );
+    const notRegisteredErrorIndex = userApi.errors.providers.NotRegistered.meta.index.toNumber();
+    assert.strictEqual(eventInfo.asModule.index.toNumber(), providersPallet?.index.toNumber());
+    assert.strictEqual(eventInfo.asModule.error[0], notRegisteredErrorIndex);
 
     const totalCapacityAfter = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
@@ -141,7 +146,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       userApi.events.system.ExtrinsicFailed,
       events
     );
-    assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
-    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0b000000"); // NewCapacityLessThanUsedStorage
+
+    const providersPallet = userApi.runtimeMetadata.asLatest.pallets.find(
+      (pallet) => pallet.name.toString() === "Providers"
+    );
+    const newCapacityLessThanUsedStorageErrorIndex =
+      userApi.errors.providers.NewCapacityLessThanUsedStorage.meta.index.toNumber();
+    assert.strictEqual(eventInfo.asModule.index.toNumber(), providersPallet?.index.toNumber());
+    assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
   });
 });
