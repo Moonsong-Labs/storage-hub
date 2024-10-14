@@ -4855,6 +4855,7 @@ declare module "@polkadot/types/lookup" {
     readonly isNotEnoughBalance: boolean;
     readonly isCannotHoldDeposit: boolean;
     readonly isStorageStillInUse: boolean;
+    readonly isSignOffPeriodNotPassed: boolean;
     readonly isRandomnessNotValidYet: boolean;
     readonly isSignUpRequestExpired: boolean;
     readonly isNewCapacityLessThanUsedStorage: boolean;
@@ -4883,6 +4884,7 @@ declare module "@polkadot/types/lookup" {
       | "NotEnoughBalance"
       | "CannotHoldDeposit"
       | "StorageStillInUse"
+      | "SignOffPeriodNotPassed"
       | "RandomnessNotValidYet"
       | "SignUpRequestExpired"
       | "NewCapacityLessThanUsedStorage"

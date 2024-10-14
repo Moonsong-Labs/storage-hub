@@ -4115,6 +4115,7 @@ export default {
       "NotEnoughBalance",
       "CannotHoldDeposit",
       "StorageStillInUse",
+      "SignOffPeriodNotPassed",
       "RandomnessNotValidYet",
       "SignUpRequestExpired",
       "NewCapacityLessThanUsedStorage",
