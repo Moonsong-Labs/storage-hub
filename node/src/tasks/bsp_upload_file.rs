@@ -504,8 +504,6 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
 
-            let new_capacity = self.calculate_capacity(&event, current_capacity)?;
-
             let earliest_change_capacity_block = self
                 .storage_hub_handler
                 .blockchain
@@ -522,7 +520,7 @@ where
             // we registered it to the queue
             let mut capacity_queue = self.capacity_queue.lock().await;
 
-            capacity_queue.push(new_capacity);
+            capacity_queue.push(event.size);
 
             drop(capacity_queue);
 
@@ -537,7 +535,13 @@ where
 
             // if the queue is not empty it is that the capacity hasn't been updated yet
             if !capacity_queue.is_empty() {
-                let new_capacity = capacity_queue.drain(..).sum();
+                let size: u64 = capacity_queue.drain(..).sum();
+
+                dbg!(&size);
+
+                let new_capacity = self.calculate_capacity(size, current_capacity)?;
+
+                dbg!(&new_capacity);
 
                 let call = storage_hub_runtime::RuntimeCall::Providers(
                     pallet_storage_providers::Call::change_capacity { new_capacity },
@@ -675,12 +679,12 @@ where
     ///
     /// The `max_storage_capacity` is returned if the new capacity exceeds it.
     fn calculate_capacity(
-        &mut self,
-        event: &NewStorageRequest,
+        &self,
+        size: StorageDataUnit,
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (event.size + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = (size + jump_capacity - 1) / jump_capacity;
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
