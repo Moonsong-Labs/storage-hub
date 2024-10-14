@@ -5,35 +5,33 @@ describeBspNet(
   "BSP Automatic Tipping",
   { extrinsicRetryTimeout: 2 },
   ({ before, it, createUserApi }) => {
-    let api: EnrichedShApi;
+    let userApi: EnrichedShApi;
 
     before(async () => {
-      api = await createUserApi();
+      userApi = await createUserApi();
     });
 
     it("Confirm storing failure results in increased tip", async () => {
-      await api.file.newStorageRequest("res/whatsup.jpg", "test/whatsup.jpg", "nothingmuch-2");
-      await api.wait.bspVolunteer();
+      // Make a storage request and wait for the bsp to volunteer
+      await userApi.file.newStorageRequest("res/whatsup.jpg", "test/whatsup.jpg", "nothingmuch-2");
+      await userApi.wait.bspVolunteer(1);
 
-      await sleep(1000); // wait for the bsp to download the files
+      // Wait for the bsp to send the first confirm storing extrinsic (after it has stored the file)
+      await userApi.wait.bspStoredInTxPool();
 
-      await api.assert.extrinsicPresent({
-        method: "bspConfirmStoring",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 1
-      });
+      // Wait for the bsp to send all the confirm retries
+      await sleep(6000);
+      await userApi.wait.bspStoredInTxPool(4);
 
-      await sleep(6000); // wait for the bsp to send all confirm retries
-
-      const confirmStoringPendingMatches = await api.assert.extrinsicPresent({
+      // We get the confirm storing pending extrinsics to get their extrinsic index
+      const confirmStoringPendingMatches = await userApi.assert.extrinsicPresent({
         method: "bspConfirmStoring",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 4
       });
 
-      const txPool = await api.rpc.author.pendingExtrinsics();
+      const txPool = await userApi.rpc.author.pendingExtrinsics();
 
       const confirmStoringPendingExts = confirmStoringPendingMatches.map(
         (match) => txPool[match.extIndex]

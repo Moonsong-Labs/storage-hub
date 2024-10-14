@@ -71,9 +71,9 @@ impl SubmittedTransaction {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
         // Check if the extrinsic was successful.
-        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
+        let extrinsic_result = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
-        match extrinsic_successful {
+        match extrinsic_result {
             ExtrinsicResult::Success { dispatch_info } => {
                 info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
             }
@@ -105,9 +105,9 @@ impl SubmittedTransaction {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
         // Check if the extrinsic was successful.
-        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
+        let extrinsic_result = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
-        match extrinsic_successful {
+        match extrinsic_result {
             ExtrinsicResult::Success { dispatch_info } => {
                 info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
             }

@@ -3,7 +3,7 @@ import invariant from "tiny-invariant";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
 import { sleep } from "./timer";
-import { waitForLog } from "./networks";
+import { sealBlock, waitForLog } from "./networks";
 
 export type AssertExtrinsicOptions = {
   /** The block height to check. If not provided, the latest block will be used. */
@@ -199,15 +199,34 @@ export const fetchEventData = <T extends AugmentedEvent<"promise">>(
  */
 export async function checkProviderWasSlashed(api: ApiPromise, providerId: string) {
   // Wait for provider to be slashed.
-  // TODO Replace with poll
-  await sleep(500);
-  // await sealBlock(api);
+  const iterations = 100;
+  const delay = 100;
 
+  // To allow node time to react on chain events
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      await assertExtrinsicPresent(api, {
+        module: "providers",
+        method: "slash",
+        checkTxPool: true
+      });
+
+      break;
+    } catch {
+      invariant(
+        i < iterations - 1,
+        `Failed to detect slash extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+
+  const { events } = await sealBlock(api);
+  assertEventPresent(api, "providers", "Slashed", events);
   const [provider, _amountSlashed] = fetchEventData(
     api.events.providers.Slashed,
     await api.query.system.events()
   );
-
   invariant(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
 }
 

@@ -1577,7 +1577,12 @@ export default {
    * Lookup143: pallet_file_system::types::RejectedStorageRequestReason
    **/
   PalletFileSystemRejectedStorageRequestReason: {
-    _enum: ["ReachedMaximumCapacity", "ReceivedInvalidProof", "InternalError"]
+    _enum: [
+      "ReachedMaximumCapacity",
+      "ReceivedInvalidProof",
+      "FileKeyAlreadyStored",
+      "InternalError"
+    ]
   },
   /**
    * Lookup145: pallet_file_system::types::MspFailedBatchStorageRequests<T>
@@ -1733,7 +1738,9 @@ export default {
       PaymentStreamCharged: {
         userAccount: "AccountId32",
         providerId: "H256",
-        amount: "u128"
+        amount: "u128",
+        lastTickCharged: "u32",
+        chargedAtTick: "u32"
       },
       LastChargeableInfoUpdated: {
         providerId: "H256",
@@ -2490,9 +2497,9 @@ export default {
     _enum: ["PaymentStreamDeposit"]
   },
   /**
-   * Lookup270: pallet_balances::types::IdAmount<Id, Balance>
+   * Lookup270: frame_support::traits::tokens::misc::IdAmount<Id, Balance>
    **/
-  PalletBalancesIdAmount: {
+  FrameSupportTokensMiscIdAmount: {
     id: "Null",
     amount: "u128"
   },

@@ -284,11 +284,13 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
         },
         /// Event emitted when a payment is charged. Provides information about the user that was charged,
-        /// the Provider that received the funds, and the amount that was charged.
+        /// the Provider that received the funds, the tick up to which it was charged and the amount that was charged.
         PaymentStreamCharged {
             user_account: T::AccountId,
             provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
+            last_tick_charged: BlockNumberFor<T>,
+            charged_at_tick: BlockNumberFor<T>,
         },
         /// Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
         /// the tick number of the last chargeable tick and the price index at that tick.
@@ -656,7 +658,7 @@ pub mod pallet {
         ///    4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
         ///    5. Update the last charged tick number of the payment stream
         /// 4. If there is a dynamic-rate payment stream:
-        ///    1. Get the amount provided by the Provider
+        ///    1. Get the amount provided by the Provider   
         ///    2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
         ///    3. Calculate the amount to charge doing `amount_provided * difference`
         ///    4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
@@ -681,13 +683,19 @@ pub mod pallet {
                     .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
-            let amount_charged = Self::do_charge_payment_streams(&provider_id, &user_account)?;
+            let (amount_charged, last_tick_charged) =
+                Self::do_charge_payment_streams(&provider_id, &user_account)?;
+
+            // Get the last tick to add it to the event
+            let charged_at_tick = Self::get_current_tick();
 
             // Emit the corresponding event (we always emit it even if the charged amount was 0)
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account,
                 provider_id: provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
 
             // Return a successful DispatchResultWithPostInfo

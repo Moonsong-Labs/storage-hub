@@ -1,13 +1,7 @@
 import Docker from "dockerode";
 import assert, { strictEqual } from "node:assert";
-import {
-  addBspContainer,
-  describeBspNet,
-  DOCKER_IMAGE,
-  sleep,
-  type EnrichedShApi
-} from "../../../util";
-import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/networks/consts.ts";
+import { addBspContainer, describeBspNet, DOCKER_IMAGE } from "../../../util";
+import { CAPACITY, MAX_STORAGE_CAPACITY, type EnrichedShApi } from "../../../util/networks";
 
 describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it }) => {
   let api: EnrichedShApi;
@@ -44,7 +38,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it
 
       await it("is synced with current block", async () => {
         // Give some time to the BSP to catch up
-        await sleep(500);
+        await api.wait.bspCatchUpToChainTip(newApi);
 
         const syncHeight = (await newApi.rpc.chain.getHeader()).number.toNumber();
         const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();

@@ -637,10 +637,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -667,6 +668,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -797,81 +800,6 @@ mod fixed_rate_streams {
         }
 
         #[test]
-        fn delete_payment_stream_fails_if_user_is_flagged_as_without_funds() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-                let charlie: AccountId = 2;
-                let bob_initial_balance = NativeBalance::free_balance(&bob);
-
-                // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice, 100);
-                let alice_msp_id =
-                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Register Charlie as a MSP with 1000 units of data and get his MSP ID
-                register_account_as_msp(charlie, 1000);
-                let charlie_msp_id =
-                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
-
-                // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
-                let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
-                        &bob,
-                        rate
-                    )
-                );
-
-                // Create a payment stream from Bob to Charlie of 10 units per block
-                let rate: BalanceOf<Test> = 10;
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &charlie_msp_id,
-                        &bob,
-                        rate
-                    )
-                );
-
-                // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
-                run_to_block(System::block_number() + 10);
-                LastChargeableInfo::<Test>::insert(
-                    &alice_msp_id,
-                    ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
-                        price_index: 100,
-                    },
-                );
-
-                // Try to charge the payment stream (Bob will not have enough balance to pay for it and the payment stream will get flagged as without funds)
-                assert_ok!(PaymentStreams::charge_payment_streams(
-                    RuntimeOrigin::signed(alice),
-                    bob
-                ));
-
-                // Advance enough blocks for Bob to be flagged as a user without funds
-                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
-                assert_ok!(PaymentStreams::charge_payment_streams(
-                    RuntimeOrigin::signed(alice),
-                    bob
-                ));
-
-                // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
-
-                // Try to delete the payment stream from Bob to Charlie
-                assert_noop!(
-                    <PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
-                        &charlie_msp_id,
-                        &bob
-                    ),
-                    Error::<Test>::UserWithoutFunds
-                );
-            });
-        }
-
-        #[test]
         fn delete_payment_stream_charges_pending_blocks() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
@@ -902,10 +830,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -928,6 +857,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -985,10 +916,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1009,6 +941,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -1057,10 +991,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead, with a 10 units/block price index rate
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1084,6 +1019,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -1157,10 +1094,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1181,6 +1119,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * new_rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -1242,10 +1182,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1266,6 +1207,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -1283,10 +1226,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
                 run_to_block(System::block_number() + 20);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 300,
                     },
                 );
@@ -1307,6 +1251,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 20 * rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -1461,10 +1407,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1492,6 +1439,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -1555,10 +1504,11 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1586,15 +1536,18 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
 
                 // Set the last valid proof of Charlie to the current block
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &charlie_msp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: 100,
                     },
                 );
@@ -1612,6 +1565,8 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: charlie_msp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -2440,10 +2395,11 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -2473,6 +2429,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: paid_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -2611,99 +2569,6 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn delete_payment_stream_fails_if_user_is_flagged_as_without_funds() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-                let charlie: AccountId = 2;
-                let bob_initial_balance = NativeBalance::free_balance(&bob);
-                let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
-                // Register Alice as a BSP with 100 units of data and get her BSP ID
-                register_account_as_bsp(alice, 100);
-                let alice_bsp_id =
-                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Register Charlie as a BSP with 1000 units of data and get his BSP ID
-                register_account_as_bsp(charlie, 1000);
-                let charlie_bsp_id =
-                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
-
-                // Create a payment stream from Bob to Alice of 100 units provided
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-                        &alice_bsp_id,
-                        &bob,
-                        &amount_provided,
-                    )
-                );
-
-                // Create a payment stream from Bob to Charlie of 100 units provided
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-                        &charlie_bsp_id,
-                        &bob,
-                        &amount_provided,
-                    )
-                );
-
-                // The new balance of Bob should be his original balance minus `2 * current_price * amount_provided * NewStreamDeposit` (in this case 2 * 10 * 100 * 10 = 20000)
-                let new_stream_deposit_blocks_balance_typed =
-                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
-                let bob_new_balance = bob_initial_balance - deposit_amount;
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
-
-                // Set the last chargeable price index of the payment stream from Bob to Alice to something that will make Bob run out of funds
-                let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
-                    + 1;
-                run_to_block(System::block_number() + 10);
-                LastChargeableInfo::<Test>::insert(
-                    &alice_bsp_id,
-                    ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
-                        price_index: current_price_index,
-                    },
-                );
-
-                // Try to charge the payment stream (Bob will not have enough balance to pay for it and the payment stream will get flagged as without funds)
-                assert_ok!(PaymentStreams::charge_payment_streams(
-                    RuntimeOrigin::signed(alice),
-                    bob
-                ));
-
-                // Advance enough blocks for Bob to be flagged as a user without funds
-                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
-                assert_ok!(PaymentStreams::charge_payment_streams(
-                    RuntimeOrigin::signed(alice),
-                    bob
-                ));
-
-                // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
-
-                // Try to delete the payment stream from Bob to Charlie
-                assert_noop!(
-                    <PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
-                        &charlie_bsp_id,
-                        &bob
-                    ),
-                    Error::<Test>::UserWithoutFunds
-                );
-            });
-        }
-
-        #[test]
         fn delete_payment_stream_charges_pending_blocks() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
@@ -2744,10 +2609,11 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -2770,6 +2636,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -2837,10 +2705,11 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -2861,6 +2730,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -2920,10 +2791,11 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -2944,6 +2816,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3023,10 +2897,11 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage = 10 * current_price * (new_amount_provided as u128);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -3047,6 +2922,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3115,10 +2992,11 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -3137,6 +3015,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3156,10 +3036,11 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 20);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage = 20 * current_price * (amount_provided as u128);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -3180,6 +3061,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3347,10 +3230,11 @@ mod dynamic_rate_streams {
                     + bob_new_balance / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -3378,6 +3262,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3453,10 +3339,11 @@ mod dynamic_rate_streams {
                     + bob_new_balance / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -3465,7 +3352,7 @@ mod dynamic_rate_streams {
                 LastChargeableInfo::<Test>::insert(
                     &charlie_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
                             .unwrap()
                             .price_index_when_last_charged
@@ -3496,6 +3383,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3523,6 +3412,8 @@ mod dynamic_rate_streams {
                         user_account: bob,
                         provider_id: charlie_bsp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -3682,10 +3573,11 @@ mod user_without_funds {
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
                     + bob_new_balance / (amount_provided as u128)
                     + 1;
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -3713,6 +3605,8 @@ mod user_without_funds {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -4131,10 +4025,11 @@ mod user_without_funds {
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
                     + bob_new_balance / (amount_provided as u128)
                     + 1;
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -4162,6 +4057,8 @@ mod user_without_funds {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );
@@ -4330,10 +4227,11 @@ mod user_without_funds {
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
                     + bob_new_balance / (amount_provided as u128)
                     + 1;
+                let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
-                        last_chargeable_tick: System::block_number(),
+                        last_chargeable_tick,
                         price_index: current_price_index,
                     },
                 );
@@ -4361,6 +4259,8 @@ mod user_without_funds {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
                     }
                     .into(),
                 );

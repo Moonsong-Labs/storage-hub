@@ -246,7 +246,7 @@ export const waitForLog = async (options: {
 
         docker.modem.demuxStream(stream, stdout, stderr);
 
-        let timeoutHandle: NodeJS.Timeout | undefined;
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
         const cleanup = () => {
           (stream as Readable).destroy();

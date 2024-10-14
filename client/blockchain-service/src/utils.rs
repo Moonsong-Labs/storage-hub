@@ -17,7 +17,7 @@ use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{
-        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProviderId, BCSV_KEY_TYPE,
+        BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE,
     },
 };
 use sp_api::ProvideRuntimeApi;
@@ -35,7 +35,7 @@ use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
         ProcessConfirmStoringRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequest,
         ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
         ProcessSubmitProofRequestData,
     },
@@ -501,6 +501,7 @@ impl BlockchainService {
         let mut next_event_data = None;
 
         // If we have a submit proof request, prioritise it.
+        // This is a BSP only operation, since MSPs don't have to submit proofs.
         while let Some(request) = self.pending_submit_proof_requests.pop_first() {
             // Check if the proof is still the next one to be submitted.
             let provider_id = request.provider_id;
@@ -534,6 +535,7 @@ impl BlockchainService {
         }
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+        // This is a BSP only operation, since MSPs don't have to confirm storing.
         if next_event_data.is_none() {
             let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
@@ -547,6 +549,7 @@ impl BlockchainService {
                     .pending_confirm_storing_request_deque()
                     .pop_front()
                 {
+                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
                     confirm_storing_requests.push(request);
                 } else {
                     break;
@@ -564,35 +567,7 @@ impl BlockchainService {
             }
         }
 
-        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
-        if next_event_data.is_none() {
-            let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
-
-            // Batch multiple respond file storing taking the runtime maximum.
-            let mut respond_storing_requests = Vec::new();
-            for _ in 0..max_batch_respond {
-                if let Some(request) = state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .pop_front()
-                {
-                    respond_storing_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 respond storing request, send the process event.
-            if respond_storing_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessMspRespondStoringRequestData {
-                        respond_storing_requests,
-                    }
-                    .into(),
-                );
-            }
-        }
-
-        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
+        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
                 .pending_stop_storing_for_insolvent_user_request_deque()
@@ -616,7 +591,7 @@ impl BlockchainService {
 
         let data = data.into();
 
-        // If this is a confirm storing request or a stop storing for insolvent user request, we need to store it in the state store.
+        // If this is a confirm storing request, respond storage request, or a stop storing for insolvent user request, we need to store it in the state store.
         match &data {
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();

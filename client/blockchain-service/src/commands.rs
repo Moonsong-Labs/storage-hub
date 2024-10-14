@@ -183,6 +183,10 @@ pub enum BlockchainServiceCommand {
         callback:
             tokio::sync::oneshot::Sender<Result<MainStorageProviderId, QueryMspIdOfBucketIdError>>,
     },
+    ReleaseForestRootWriteLock {
+        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -361,6 +365,12 @@ pub trait BlockchainServiceInterface {
         &self,
         bucket_id: BucketId,
     ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError>;
+
+    /// Helper function to release the forest root write lock.
+    async fn release_forest_root_write_lock(
+        &self,
+        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> Result<()>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -802,6 +812,19 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryMspIdOfBucketId {
             bucket_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn release_forest_root_write_lock(
+        &self,
+        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::ReleaseForestRootWriteLock {
+            forest_root_write_tx,
             callback,
         };
         self.send(message).await;

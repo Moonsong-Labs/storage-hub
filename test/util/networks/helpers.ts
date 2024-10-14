@@ -29,6 +29,7 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { sealBlock } from "./block.ts";
 import type { ApiPromise } from "@polkadot/api";
+import { sleep } from "../timer.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -264,6 +265,9 @@ export const runSimpleBspNet = async (bspNetConfig: TestNetConfig, verbose = fal
         )
       )
     );
+
+    // Give some time for the network to be in sync
+    await sleep(5000);
   } catch (e) {
     console.error("Error ", e);
   } finally {
@@ -325,46 +329,26 @@ export const runInitialisedBspsNet = async (bspNetConfig: TestNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
   let userApi: EnrichedShApi | undefined;
+  let bspApi: EnrichedShApi | undefined;
   try {
     userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    bspApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const newBucketEventEvent = await userApi.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketName);
 
-    invariant(newBucketEventDataBlob, "Event doesn't match Type");
-
-    const { fingerprint, file_size, location } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        ShConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
-
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        fingerprint,
-        file_size,
-        ShConsts.DUMMY_MSP_ID,
-        [ShConsts.NODE_INFOS.user.expectedPeerId]
-      ),
-      shUser
-    );
-
-    await userApi.wait.bspVolunteer();
-    await userApi.wait.bspStored();
+    await userApi.wait.bspVolunteer(1);
+    await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await userApi.wait.bspStored(1);
   } catch (e) {
     console.error("Error ", e);
   } finally {
     userApi?.disconnect();
+    bspApi?.disconnect();
   }
 };
 
@@ -374,37 +358,51 @@ export const runMultipleInitialisedBspsNet = async (
   await runSimpleBspNet(bspNetConfig);
 
   let userApi: EnrichedShApi | undefined;
+  let bspApi: EnrichedShApi | undefined;
   try {
     userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    bspApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
 
     await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 1)));
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.
-    const { containerName: bspDownContainerName } = await addBsp(userApi, bspDownKey, {
-      name: "sh-bsp-down",
-      rocksdb: bspNetConfig.rocksdb,
-      bspKeySeed: bspDownSeed,
-      bspId: ShConsts.BSP_DOWN_ID,
-      bspStartingWeight: bspNetConfig.capacity,
-      additionalArgs: ["--keystore-path=/keystore/bsp-down"]
-    });
+    const { containerName: bspDownContainerName, rpcPort: bspDownRpcPort } = await addBsp(
+      userApi,
+      bspDownKey,
+      {
+        name: "sh-bsp-down",
+        rocksdb: bspNetConfig.rocksdb,
+        bspKeySeed: bspDownSeed,
+        bspId: ShConsts.BSP_DOWN_ID,
+        bspStartingWeight: bspNetConfig.bspStartingWeight,
+        additionalArgs: ["--keystore-path=/keystore/bsp-down"]
+      }
+    );
+    const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspDownRpcPort}`);
+
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
-      bspStartingWeight: bspNetConfig.capacity,
+      bspStartingWeight: bspNetConfig.bspStartingWeight,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
+    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspTwoRpcPort}`);
+
     const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
       name: "sh-bsp-three",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
-      bspStartingWeight: bspNetConfig.capacity,
+      bspStartingWeight: bspNetConfig.bspStartingWeight,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
+    const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
+
+    // Wait a few seconds for all BSPs to be synced.
+    await sleep(5000);
 
     // Everything executed below is tested in `volunteer.test.ts` and `onboard.test.ts` files.
     // For the context of this test, this is a preamble, so that a BSP has a challenge cycle initiated.
@@ -416,8 +414,17 @@ export const runMultipleInitialisedBspsNet = async (
 
     const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName);
 
-    await userApi.wait.bspVolunteer();
-    await userApi.wait.bspStored();
+    await userApi.wait.bspVolunteer(4);
+    await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await bspTwoApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await bspThreeApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await bspDownApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await userApi.wait.bspStored(4);
+
+    // Disconnecting temporary api connections
+    await bspTwoApi.disconnect();
+    await bspThreeApi.disconnect();
+    await bspDownApi.disconnect();
 
     // Stopping BSP that is supposed to be down.
     await userApi.docker.stopContainer(bspDownContainerName);
@@ -438,6 +445,7 @@ export const runMultipleInitialisedBspsNet = async (
     console.error("Error ", e);
   } finally {
     userApi?.disconnect();
+    bspApi?.disconnect();
   }
 };
 

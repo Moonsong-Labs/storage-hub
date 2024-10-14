@@ -46,8 +46,18 @@ export const runFullNet = async (bspNetConfig: TestNetConfig) => {
         configAsString: updatedCompose,
         log: true
       });
+      await compose.upOne("toxiproxy", {
+        cwd: cwd,
+        configAsString: updatedCompose,
+        log: true
+      });
     }
 
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
     await compose.upOne("sh-bsp", {
       cwd: cwd,
       configAsString: updatedCompose,
@@ -164,8 +174,8 @@ export const runFullNet = async (bspNetConfig: TestNetConfig) => {
   }
 };
 
-export const runInitialisedFullNet = async (bspNetConfig: TestNetConfig) => {
-  await runFullNet(bspNetConfig);
+export const runInitialisedFullNet = async (netConfig: TestNetConfig) => {
+  await runFullNet(netConfig);
 
   let userApi: EnrichedShApi | undefined;
   try {
@@ -202,8 +212,14 @@ export const runInitialisedFullNet = async (bspNetConfig: TestNetConfig) => {
       shUser
     );
 
-    await userApi.wait.bspVolunteer();
+    // This will advance the block which also contains the BSP volunteer tx.
+    // Hence why we can wait for the BSP to confirm storing.
+    await userApi.wait.mspResponse();
     await userApi.wait.bspStored();
+
+    return {
+      bucketIds: [newBucketEventDataBlob.bucketId]
+    };
   } catch (e) {
     console.error("Error ", e);
   } finally {

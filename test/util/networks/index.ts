@@ -1,6 +1,7 @@
 export * from "./api";
 export * from "./block";
 export * as ShConsts from "./consts";
+export * from "./consts";
 export * from "./docker";
 export * from "./fileHelpers";
 export * from "./helpers";

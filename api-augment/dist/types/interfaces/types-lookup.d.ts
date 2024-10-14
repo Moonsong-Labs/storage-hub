@@ -1996,8 +1996,13 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
     readonly isReachedMaximumCapacity: boolean;
     readonly isReceivedInvalidProof: boolean;
+    readonly isFileKeyAlreadyStored: boolean;
     readonly isInternalError: boolean;
-    readonly type: "ReachedMaximumCapacity" | "ReceivedInvalidProof" | "InternalError";
+    readonly type:
+      | "ReachedMaximumCapacity"
+      | "ReceivedInvalidProof"
+      | "FileKeyAlreadyStored"
+      | "InternalError";
   }
   /** @name PalletFileSystemMspFailedBatchStorageRequests (145) */
   interface PalletFileSystemMspFailedBatchStorageRequests extends Struct {
@@ -2154,6 +2159,8 @@ declare module "@polkadot/types/lookup" {
       readonly userAccount: AccountId32;
       readonly providerId: H256;
       readonly amount: u128;
+      readonly lastTickCharged: u32;
+      readonly chargedAtTick: u32;
     } & Struct;
     readonly isLastChargeableInfoUpdated: boolean;
     readonly asLastChargeableInfoUpdated: {
@@ -2917,8 +2924,8 @@ declare module "@polkadot/types/lookup" {
     readonly isPaymentStreamDeposit: boolean;
     readonly type: "PaymentStreamDeposit";
   }
-  /** @name PalletBalancesIdAmount (270) */
-  interface PalletBalancesIdAmount extends Struct {
+  /** @name FrameSupportTokensMiscIdAmount (270) */
+  interface FrameSupportTokensMiscIdAmount extends Struct {
     readonly id: Null;
     readonly amount: u128;
   }

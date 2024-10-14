@@ -1734,6 +1734,18 @@ where
             // Update root of the BSP.
             <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
 
+            // Delete payment stream between this BSP and this user (also charge it for all the owed funds
+            // of all files that were stored by this BSP).
+            if <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
+                &sp_id, &owner,
+            )
+            .is_some()
+            {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                    &sp_id, &owner,
+                )?;
+            }
+
             new_root
         } else {
             // If the Provider is a MSP, the proof is verified against the Bucket's root.
@@ -1779,6 +1791,18 @@ where
             <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
                 bucket_id, new_root,
             )?;
+
+            // Delete payment stream between this MSP and this user (also charge it for all the owed funds
+            // of all files that were stored by this MSP).
+            if <T::PaymentStreams as PaymentStreamsInterface>::get_fixed_rate_payment_stream_info(
+                &sp_id, &owner,
+            )
+            .is_some()
+            {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                    &sp_id, &owner,
+                )?;
+            }
 
             new_root
         };

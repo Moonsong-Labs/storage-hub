@@ -10,7 +10,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
-use frame_system as system;
+use frame_system::pallet_prelude::BlockNumberFor;
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
@@ -22,7 +22,6 @@ use sp_runtime::{
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
-use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -57,16 +56,33 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
 }
 
 // Configure a mock runtime to test the pallet.
-frame_support::construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
-        ProofsDealer: crate::{Pallet, Call, Storage, Event<T>},
-        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type Providers = pallet_storage_providers;
+    #[runtime::pallet_index(3)]
+    pub type ProofsDealer = crate;
+    #[runtime::pallet_index(4)]
+    pub type PaymentStreams = pallet_payment_streams;
+}
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -74,7 +90,7 @@ parameter_types! {
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -369,7 +385,7 @@ where
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::<Test>::default()
+    frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap()
         .into()

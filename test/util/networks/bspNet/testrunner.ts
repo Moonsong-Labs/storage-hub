@@ -113,8 +113,6 @@ export async function describeBspNet<
   }
 }
 
-
-
 export const launchNetwork = async (
   config: TestNetConfig,
   initialised: boolean | "multi" = false
