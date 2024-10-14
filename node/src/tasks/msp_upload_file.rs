@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::{cmp::max, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
+use pallet_file_system::types::BatchResponses;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
@@ -22,7 +23,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::StorageDataUnit;
+use storage_hub_runtime::{RuntimeEvent, StorageDataUnit};
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -189,7 +190,6 @@ where
                     },
                 );
 
-                // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
                     .send_extrinsic(call, Tip::from(0))
@@ -243,7 +243,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -283,7 +282,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -318,7 +316,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -353,7 +350,6 @@ where
                         },
                     );
 
-                    // Send extrinsic and wait for it to be included in the block.
                     self.storage_hub_handler
                         .blockchain
                         .send_extrinsic(call, Tip::from(0))
@@ -426,9 +422,11 @@ where
             H256,
             (Vec<(H256, _)>, Vec<(H256, RejectedStorageRequestReason)>),
         > = HashMap::new();
+
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
         for respond in &event.data.respond_storing_requests {
+            info!(target: LOG_TARGET, "Processing respond storing request.");
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256(metadata.bucket_id.try_into().unwrap()),
                 Ok(None) => {
@@ -491,8 +489,10 @@ where
             {
                 Some(fs) => fs,
                 None => {
-                    error!(target: LOG_TARGET, "Failed to get forest storage for bucket {:?}", bucket_id);
-                    continue;
+                    self.storage_hub_handler
+                        .forest_storage_handler
+                        .insert(&bucket_id.as_ref().to_vec())
+                        .await
                 }
             };
 
@@ -505,21 +505,6 @@ where
                     continue;
                 }
             };
-
-            let file_metadatas: Vec<_> = {
-                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-                accepts
-                    .iter()
-                    .filter_map(|(file_key, _)| {
-                        read_file_storage.get_metadata(file_key).ok().flatten()
-                    })
-                    .collect()
-            };
-
-            if let Err(e) = fs.write().await.insert_files_metadata(&file_metadatas) {
-                error!(target: LOG_TARGET, "Failed to insert file metadata: {:?}", e);
-                continue;
-            }
 
             let response = MspStorageRequestResponse {
                 accept: if !accepts.is_empty() {
@@ -558,13 +543,102 @@ where
             },
         );
 
-        self.storage_hub_handler
+        let events = self
+            .storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
             .await?
             .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .watch_for_success_with_events(&self.storage_hub_handler.blockchain)
             .await?;
+
+        // Apply the necessary deltas to each one of the bucket's forest storage to reflect the result.
+        let results = events
+            .iter()
+            .find_map(|event| match &event.event {
+                RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::MspRespondedToStorageRequests { results },
+                ) => Some(results.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| anyhow!("Failed to find MspRespondedToStorageRequests event"))?;
+
+        if results.msp_id != own_msp_id {
+            let err_msg = format!(
+                "Expected MSP ID {:?} but got {:?}",
+                own_msp_id, results.msp_id
+            );
+            error!(target: LOG_TARGET, "{}", err_msg);
+            return Err(anyhow!(err_msg));
+        }
+
+        for batch_responses in results.responses {
+            // Add the file keys that were accepted to the forest storage of the bucket.
+            if let BatchResponses::Accepted(accepted) = &batch_responses {
+                let fs = self
+                    .storage_hub_handler
+                    .forest_storage_handler
+                    .get(&accepted.bucket_id.as_ref().to_vec())
+                    .await
+                    .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+                let mut write_fs = fs.write().await;
+
+                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
+                let file_metadatas: Vec<FileMetadata> = accepted
+                    .file_keys
+                    .iter()
+                    .filter_map(|file_key| {
+                        match read_file_storage.get_metadata(&file_key) {
+                            Ok(Some(metadata)) => Some(metadata),
+                            Ok(None) => {
+                                // TODO: Should probably save this to state and retry later.
+                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ File does not exist after responding to storage request for file key {:?}", file_key);
+                                None
+                            }
+                            Err(e) => {
+                                // TODO: Should probably save this to state and retry later.
+                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get file metadata after responding to storage request for file key {:?}: {:?}", file_key, e);
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+
+                drop(read_file_storage);
+
+                if let Err(e) = write_fs.insert_files_metadata(&file_metadatas) {
+                    // TODO: Should probably figure out a way to stop storing the file.
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to insert file metadatas after responding to storage requests: {:?}", e);
+                }
+
+                let local_bucket_root = write_fs.root();
+                if local_bucket_root != accepted.new_bucket_root {
+                    // TODO: Should probably figure out a way to stop storing the file.
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Local bucket root after applying delta does not match the new bucket root on chain.");
+                    continue;
+                }
+            }
+
+            // Delete all files that were rejected from the file manager.
+            if let BatchResponses::Rejected(rejected) = &batch_responses {
+                let mut fs = self.storage_hub_handler.file_storage.write().await;
+
+                for (file_key, _reason) in &rejected.file_keys {
+                    if let Err(e) = fs.delete_file(&file_key) {
+                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                    }
+                }
+            }
+
+            // Process the failed file keys.
+            if let BatchResponses::Failed(failed) = batch_responses {
+                for (_file_key, _reason) in &failed.file_keys {
+                    // TODO: Handle failed file keys.
+                }
+            }
+        }
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -632,6 +706,61 @@ where
             fingerprint: event.fingerprint,
             location: event.location.to_vec(),
         };
+
+        // Get the file key.
+        let file_key: FileKey = metadata
+            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
+            .as_ref()
+            .try_into()?;
+
+        let fs = match self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&event.bucket_id.as_ref().to_vec())
+            .await
+        {
+            Some(fs) => fs,
+            None => {
+                self.storage_hub_handler
+                    .forest_storage_handler
+                    .insert(&event.bucket_id.as_ref().to_vec())
+                    .await
+            }
+        };
+
+        let read_fs = fs.read().await;
+
+        // Reject the storage request if file key already exists in the forest storage.
+        if read_fs.contains_file_key(&file_key.into())? {
+            let err_msg = format!("File key {:?} already exists in forest storage.", file_key);
+            debug!(target: LOG_TARGET, "{}", err_msg);
+
+            // Reject the storage request.
+            let call = storage_hub_runtime::RuntimeCall::FileSystem(
+                pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
+                    file_key_responses_input: bounded_vec![(
+                        event.bucket_id,
+                        MspStorageRequestResponse {
+                            accept: None,
+                            reject: Some(bounded_vec![(
+                                H256(file_key.into()),
+                                RejectedStorageRequestReason::FileKeyAlreadyStored,
+                            )])
+                        }
+                    )],
+                },
+            );
+
+            self.storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, Tip::from(0))
+                .await?
+                .with_timeout(Duration::from_secs(60))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await?;
+
+            return Ok(());
+        }
 
         let available_capacity = self
             .storage_hub_handler
@@ -745,15 +874,7 @@ where
                 let call = storage_hub_runtime::RuntimeCall::FileSystem(
                     pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                         file_key_responses_input: bounded_vec![(
-                            H256(metadata.bucket_id.try_into().map_err(|e| {
-                                let err_msg =
-                                    format!("Failed to convert bucket ID to [u8; 32]: {:?}", e);
-                                error!(
-                                    target: LOG_TARGET,
-                                    err_msg
-                                );
-                                anyhow::anyhow!(err_msg)
-                            })?),
+                            event.bucket_id,
                             MspStorageRequestResponse {
                                 accept: None,
                                 reject: Some(bounded_vec![(
@@ -765,7 +886,6 @@ where
                     },
                 );
 
-                // Send extrinsic and wait for it to be included in the block.
                 self.storage_hub_handler
                     .blockchain
                     .send_extrinsic(call, Tip::from(0))
@@ -777,12 +897,6 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
         }
-
-        // Get the file key.
-        let file_key: FileKey = metadata
-            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
-            .as_ref()
-            .try_into()?;
 
         self.file_key_cleanup = Some(file_key.into());
 
