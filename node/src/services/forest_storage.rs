@@ -46,7 +46,7 @@ impl
             StorageProofsMerkleTrieLayout,
             kvdb_rocksdb::Database,
         >::rocksdb_storage(storage_path.clone())
-        .expect("Failed to create RocksDB for BspProvider");
+        .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
 
@@ -107,7 +107,7 @@ impl ForestStorageHandler
             StorageProofsMerkleTrieLayout,
             kvdb_rocksdb::Database,
         >::rocksdb_storage(self.storage_path.clone().expect("Storage path should be set for RocksDB implementation"))
-        .expect("Failed to create RocksDB for BspProvider");
+        .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
 
@@ -184,14 +184,19 @@ where
     }
 
     async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+        let mut fs_instances = self.fs_instances.write().await;
+
+        // Return potentially existing instance since we waited for the lock
+        if let Some(fs) = fs_instances.get(key) {
+            return fs.clone();
+        }
+
         let fs = InMemoryForestStorage::new();
 
         let fs = Arc::new(RwLock::new(fs));
 
-        self.fs_instances
-            .write()
-            .await
-            .insert(key.clone(), fs.clone());
+        fs_instances.insert(key.clone(), fs.clone());
+
         fs
     }
 
@@ -217,20 +222,25 @@ where
     }
 
     async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+        let mut fs_instances = self.fs_instances.write().await;
+
+        // Return potentially existing instance since we waited for the lock
+        if let Some(fs) = fs_instances.get(key) {
+            return fs.clone();
+        }
+
         let fs = RocksDBForestStorage::<
             StorageProofsMerkleTrieLayout,
             kvdb_rocksdb::Database,
         >::rocksdb_storage(self.storage_path.clone().expect("Storage path should be set for RocksDB implementation"))
-        .expect("Failed to create RocksDB for BspProvider");
+        .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
 
         let fs = Arc::new(RwLock::new(fs));
 
-        self.fs_instances
-            .write()
-            .await
-            .insert(key.clone(), fs.clone());
+        fs_instances.insert(key.clone(), fs.clone());
+
         fs
     }
 

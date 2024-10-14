@@ -152,6 +152,7 @@ pub struct AcceptedStorageRequestParameters<T: Config> {
 pub enum RejectedStorageRequestReason {
     ReachedMaximumCapacity,
     ReceivedInvalidProof,
+    FileKeyAlreadyStored,
     InternalError,
 }
 
