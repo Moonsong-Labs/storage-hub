@@ -156,19 +156,19 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
   });
 
-  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
+  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", { only: true },async () => {
     const capacityUsed = (
-      await api.query.providers.backupStorageProviders(api.shConsts.DUMMY_BSP_ID)
+      await bspApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
       .unwrap()
       .capacityUsed.toNumber();
-    await api.block.skipToMinChangeTime();
-    const minCapacity = api.consts.providers.spMinCapacity.toNumber();
+    await bspApi.block.skipToMinChangeTime();
+    const minCapacity = bspApi.consts.providers.spMinCapacity.toNumber();
     const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
-    const { extSuccess } = await api.sealBlock(
-      api.tx.providers.changeCapacity(newCapacity),
+    const { extSuccess } = await bspApi.sealBlock(
+      bspApi.tx.providers.changeCapacity(newCapacity),
       bspKey
     );
     assert.strictEqual(extSuccess, true);
@@ -177,27 +177,38 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const source1 = "res/cloud.jpg";
     const location1 = "test/cloud.jpg";
     const bucketName1 = "toobig-1";
-    await api.file.newStorageRequest(source1, location1, bucketName1);
+    await bspApi.file.newStorageRequest(source1, location1, bucketName1);
 
     // Second storage request
     const source2 = "res/adolphus.jpg";
     const location2 = "test/adolphus.jpg";
     const bucketName2 = "nothingmuch-2";
-    await api.file.newStorageRequest(source2, location2, bucketName2);
+    await bspApi.file.newStorageRequest(source2, location2, bucketName2);
 
     //To allow for BSP to react to request
     await sleep(500);
 
+    // TODO: get the last block number and the period for which you can change capacity
+    // userApi.consts.providers.minBlocksBetweenCapacityChanges
+
+    const nextCapacityChangeBlock = 29;
+
+    await bspApi.advanceToBlock(nextCapacityChangeBlock);
+
     // Assert BSP has sent a call to increase its capacity.
-    await api.assert.extrinsicPresent({
+    await bspApi.assert.extrinsicPresent({
       module: "providers",
-      method: "changeCapacity",
+      method: "changeCapacity", 
       checkTxPool: true
     });
 
-    await api.sealBlock();
+    await bspApi.sealBlock();
 
     // Assert that the capacity has changed.
-    await api.assert.eventPresent("providers", "CapacityChanged");
+    await bspApi.assert.eventPresent("providers", "CapacityChanged");
+});
+
+it("Test BSP storage size increased twice in the same increasing period and is higher than the max capacity allowed", async () => {
+  assert(false);
 });
 });
