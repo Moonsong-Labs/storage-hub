@@ -25,7 +25,9 @@ hex-literal = { workspace = true, optional = true }
 log = { workspace = true }
 smallvec = { workspace = true }
 scale-info = { workspace = true }
-serde_json = { workspace = true, default-features = false }
+serde_json = { features = [
+	"alloc",
+], workspace = true, default-features = false }
 
 # Local
 pallet-bucket-nfts = { workspace = true }

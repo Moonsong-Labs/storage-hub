@@ -351,8 +351,13 @@ where
         .sr25519_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
         .expect("Invalid dev signing key provided.");
 
-    let mut net_config =
-        sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(&config.network);
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
+        &config.network,
+        config
+            .prometheus_config
+            .as_ref()
+            .map(|cfg| cfg.registry.clone()),
+    );
     let collator = config.role.is_authority();
     let prometheus_registry = config.prometheus_registry().cloned();
     let select_chain = maybe_select_chain
@@ -469,13 +474,12 @@ where
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
 
-        Box::new(move |deny_unsafe, _| {
+        Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: command_sink.clone(),
-                deny_unsafe,
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
@@ -516,7 +520,7 @@ where
         // Here you can check whether the hardware meets your chains' requirements. Putting a link
         // in there and swapping out the requirements for your own are probably a good idea. The
         // requirements for a para-chain are dictated by its relay-chain.
-        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench) {
+        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if collator => {
                 log::warn!(
 				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
@@ -701,6 +705,10 @@ where
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
     let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
         &parachain_config.network,
+        parachain_config
+            .prometheus_config
+            .as_ref()
+            .map(|cfg| cfg.registry.clone()),
     );
 
     let client = params.client.clone();
@@ -809,13 +817,12 @@ where
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
 
-        Box::new(move |deny_unsafe, _| {
+        Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
-                deny_unsafe,
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
@@ -856,7 +863,7 @@ where
         // Here you can check whether the hardware meets your chains' requirements. Putting a link
         // in there and swapping out the requirements for your own are probably a good idea. The
         // requirements for a para-chain are dictated by its relay-chain.
-        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench) {
+        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if validator => {
                 log::warn!(
 				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",

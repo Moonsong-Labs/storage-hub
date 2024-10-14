@@ -2228,7 +2228,7 @@ export default {
   CumulusPalletParachainSystemUnincludedSegmentAncestor: {
     usedBandwidth: "CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth",
     paraHeadHash: "Option<H256>",
-    consumedGoAheadSignal: "Option<PolkadotPrimitivesV7UpgradeGoAhead>"
+    consumedGoAheadSignal: "Option<PolkadotPrimitivesV8UpgradeGoAhead>"
   },
   /**
    * Lookup215: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
@@ -2246,9 +2246,9 @@ export default {
     totalBytes: "u32"
   },
   /**
-   * Lookup222: polkadot_primitives::v7::UpgradeGoAhead
+   * Lookup222: polkadot_primitives::v8::UpgradeGoAhead
    **/
-  PolkadotPrimitivesV7UpgradeGoAhead: {
+  PolkadotPrimitivesV8UpgradeGoAhead: {
     _enum: ["Abort", "GoAhead"]
   },
   /**
@@ -2257,21 +2257,21 @@ export default {
   CumulusPalletParachainSystemUnincludedSegmentSegmentTracker: {
     usedBandwidth: "CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth",
     hrmpWatermark: "Option<u32>",
-    consumedGoAheadSignal: "Option<PolkadotPrimitivesV7UpgradeGoAhead>"
+    consumedGoAheadSignal: "Option<PolkadotPrimitivesV8UpgradeGoAhead>"
   },
   /**
-   * Lookup224: polkadot_primitives::v7::PersistedValidationData<primitive_types::H256, N>
+   * Lookup224: polkadot_primitives::v8::PersistedValidationData<primitive_types::H256, N>
    **/
-  PolkadotPrimitivesV7PersistedValidationData: {
+  PolkadotPrimitivesV8PersistedValidationData: {
     parentHead: "Bytes",
     relayParentNumber: "u32",
     relayParentStorageRoot: "H256",
     maxPovSize: "u32"
   },
   /**
-   * Lookup227: polkadot_primitives::v7::UpgradeRestriction
+   * Lookup227: polkadot_primitives::v8::UpgradeRestriction
    **/
-  PolkadotPrimitivesV7UpgradeRestriction: {
+  PolkadotPrimitivesV8UpgradeRestriction: {
     _enum: ["Present"]
   },
   /**
@@ -2287,8 +2287,8 @@ export default {
     dmqMqcHead: "H256",
     relayDispatchQueueRemainingCapacity:
       "CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity",
-    ingressChannels: "Vec<(u32,PolkadotPrimitivesV7AbridgedHrmpChannel)>",
-    egressChannels: "Vec<(u32,PolkadotPrimitivesV7AbridgedHrmpChannel)>"
+    ingressChannels: "Vec<(u32,PolkadotPrimitivesV8AbridgedHrmpChannel)>",
+    egressChannels: "Vec<(u32,PolkadotPrimitivesV8AbridgedHrmpChannel)>"
   },
   /**
    * Lookup231: cumulus_pallet_parachain_system::relay_state_snapshot::RelayDispatchQueueRemainingCapacity
@@ -2298,9 +2298,9 @@ export default {
     remainingSize: "u32"
   },
   /**
-   * Lookup234: polkadot_primitives::v7::AbridgedHrmpChannel
+   * Lookup234: polkadot_primitives::v8::AbridgedHrmpChannel
    **/
-  PolkadotPrimitivesV7AbridgedHrmpChannel: {
+  PolkadotPrimitivesV8AbridgedHrmpChannel: {
     maxCapacity: "u32",
     maxTotalSize: "u32",
     maxMessageSize: "u32",
@@ -2309,9 +2309,9 @@ export default {
     mqcHead: "Option<H256>"
   },
   /**
-   * Lookup235: polkadot_primitives::v7::AbridgedHostConfiguration
+   * Lookup235: polkadot_primitives::v8::AbridgedHostConfiguration
    **/
-  PolkadotPrimitivesV7AbridgedHostConfiguration: {
+  PolkadotPrimitivesV8AbridgedHostConfiguration: {
     maxCodeSize: "u32",
     maxHeadDataSize: "u32",
     maxUpwardQueueCount: "u32",
@@ -2321,12 +2321,12 @@ export default {
     hrmpMaxMessageNumPerCandidate: "u32",
     validationUpgradeCooldown: "u32",
     validationUpgradeDelay: "u32",
-    asyncBackingParams: "PolkadotPrimitivesV7AsyncBackingAsyncBackingParams"
+    asyncBackingParams: "PolkadotPrimitivesV8AsyncBackingAsyncBackingParams"
   },
   /**
-   * Lookup236: polkadot_primitives::v7::async_backing::AsyncBackingParams
+   * Lookup236: polkadot_primitives::v8::async_backing::AsyncBackingParams
    **/
-  PolkadotPrimitivesV7AsyncBackingAsyncBackingParams: {
+  PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: "u32",
     allowedAncestryLen: "u32"
   },
@@ -2347,13 +2347,6 @@ export default {
       },
       sudo_send_upward_message: {
         message: "Bytes"
-      },
-      authorize_upgrade: {
-        codeHash: "H256",
-        checkVersion: "bool"
-      },
-      enact_authorized_upgrade: {
-        code: "Bytes"
       }
     }
   },
@@ -2361,7 +2354,7 @@ export default {
    * Lookup245: cumulus_primitives_parachain_inherent::ParachainInherentData
    **/
   CumulusPrimitivesParachainInherentParachainInherentData: {
-    validationData: "PolkadotPrimitivesV7PersistedValidationData",
+    validationData: "PolkadotPrimitivesV8PersistedValidationData",
     relayChainState: "SpTrieStorageProof",
     downwardMessages: "Vec<PolkadotCorePrimitivesInboundDownwardMessage>",
     horizontalMessages: "BTreeMap<u32, Vec<PolkadotCorePrimitivesInboundHrmpMessage>>"

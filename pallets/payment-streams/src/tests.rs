@@ -1314,7 +1314,8 @@ mod fixed_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Mint Bob enough tokens to pay for the deposit
-                let maximum_amount_to_mint = u128::MAX - NativeBalance::total_issuance();
+                let maximum_amount_to_mint =
+                    u128::MAX - pallet_balances::TotalIssuance::<Test>::get();
                 assert_ok!(NativeBalance::mint_into(&bob, maximum_amount_to_mint));
                 let bob_new_balance = NativeBalance::free_balance(&bob);
                 assert_eq!(

@@ -1,18 +1,18 @@
-use cumulus_primitives_core::ParaId;
+//! # StorageHub Runtime genesis config presets
 
-pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-
-use crate::{AccountId, SessionKeys, Signature, EXISTENTIAL_DEPOSIT};
+use crate::*;
 use alloc::{format, vec, vec::Vec};
+use configs::ExistentialDeposit;
+use cumulus_primitives_core::ParaId;
 use serde_json::Value;
+pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
 use sp_genesis_builder::PresetId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
-/// Preset configuration name for a local testnet environment.
-pub const PRESET_LOCAL_TESTNET: &str = "local_testnet";
-
 type AccountPublic = <Signature as Verify>::Signer;
+
+const STORAGEHUB_ED: Balance = ExistentialDeposit::get();
 
 /// The default XCM version to set in genesis config.
 const SAFE_XCM_VERSION: u32 = xcm::prelude::XCM_VERSION;
@@ -46,25 +46,32 @@ pub fn template_session_keys(keys: AuraId) -> SessionKeys {
     SessionKeys { aura: keys }
 }
 
-fn testnet_genesis(
+fn storagehub_genesis(
     invulnerables: Vec<(AccountId, AuraId)>,
     endowed_accounts: Vec<AccountId>,
-    root: AccountId,
+    endowment: Balance,
+    root: Option<AccountId>,
     id: ParaId,
 ) -> Value {
-    serde_json::json!({
-        "balances": {
-            "balances": endowed_accounts.iter().cloned().map(|k| (k, 1u64 << 60)).collect::<Vec<_>>(),
+    let config = RuntimeGenesisConfig {
+        balances: BalancesConfig {
+            balances: endowed_accounts
+                .iter()
+                .cloned()
+                .map(|k| (k, endowment))
+                .collect(),
         },
-        "parachainInfo": {
-            "parachainId": id,
+        parachain_info: ParachainInfoConfig {
+            parachain_id: id,
+            ..Default::default()
         },
-        "collatorSelection": {
-            "invulnerables": invulnerables.iter().cloned().map(|(acc, _)| acc).collect::<Vec<_>>(),
-            "candidacyBond": EXISTENTIAL_DEPOSIT * 16,
+        collator_selection: CollatorSelectionConfig {
+            invulnerables: invulnerables.iter().cloned().map(|(acc, _)| acc).collect(),
+            candidacy_bond: STORAGEHUB_ED * 16,
+            ..Default::default()
         },
-        "session": {
-            "keys": invulnerables
+        session: SessionConfig {
+            keys: invulnerables
                 .into_iter()
                 .map(|(acc, aura)| {
                     (
@@ -73,17 +80,27 @@ fn testnet_genesis(
                         template_session_keys(aura), // session keys
                     )
                 })
-            .collect::<Vec<_>>(),
+                .collect(),
+            ..Default::default()
         },
-        "polkadotXcm": {
-            "safeXcmVersion": Some(SAFE_XCM_VERSION),
+        polkadot_xcm: PolkadotXcmConfig {
+            safe_xcm_version: Some(SAFE_XCM_VERSION),
+            ..Default::default()
         },
-        "sudo": { "key": Some(root) }
-    })
+        sudo: SudoConfig { key: root },
+        ..Default::default()
+    };
+
+    serde_json::to_value(config).expect("Could not build genesis config.")
+}
+
+/// Encapsulates names of predefined genesis config presets.
+mod preset_names {
+    pub const PRESET_GENESIS: &str = "genesis";
 }
 
 fn local_testnet_genesis() -> Value {
-    testnet_genesis(
+    storagehub_genesis(
         // initial collators.
         vec![
             (
@@ -109,13 +126,14 @@ fn local_testnet_genesis() -> Value {
             get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
             get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
         ],
-        get_account_id_from_seed::<sr25519::Public>("Alice"),
+        1u128 << 60,
+        Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
         1000.into(),
     )
 }
 
 fn development_config_genesis() -> Value {
-    testnet_genesis(
+    storagehub_genesis(
         // initial collators.
         vec![
             (
@@ -141,15 +159,52 @@ fn development_config_genesis() -> Value {
             get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
             get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
         ],
-        get_account_id_from_seed::<sr25519::Public>("Alice"),
+        1u128 << 60,
+        Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
+        1000.into(),
+    )
+}
+
+// TODO: Replace this genesis config with the actual production config
+fn genesis_config() -> Value {
+    storagehub_genesis(
+        // initial collators.
+        vec![
+            (
+                get_account_id_from_seed::<sr25519::Public>("Alice"),
+                get_collator_keys_from_seed("Alice"),
+            ),
+            (
+                get_account_id_from_seed::<sr25519::Public>("Bob"),
+                get_collator_keys_from_seed("Bob"),
+            ),
+        ],
+        vec![
+            get_account_id_from_seed::<sr25519::Public>("Alice"),
+            get_account_id_from_seed::<sr25519::Public>("Bob"),
+            get_account_id_from_seed::<sr25519::Public>("Charlie"),
+            get_account_id_from_seed::<sr25519::Public>("Dave"),
+            get_account_id_from_seed::<sr25519::Public>("Eve"),
+            get_account_id_from_seed::<sr25519::Public>("Ferdie"),
+            get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
+            get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+            get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
+            get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
+            get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
+            get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
+        ],
+        1u128 << 60,
+        Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
         1000.into(),
     )
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.
 pub fn get_preset(id: &PresetId) -> Option<vec::Vec<u8>> {
+    use preset_names::*;
     let patch = match id.try_into() {
-        Ok(PRESET_LOCAL_TESTNET) => local_testnet_genesis(),
+        Ok(PRESET_GENESIS) => genesis_config(),
+        Ok(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET) => local_testnet_genesis(),
         Ok(sp_genesis_builder::DEV_RUNTIME_PRESET) => development_config_genesis(),
         _ => return None,
     };
@@ -162,8 +217,10 @@ pub fn get_preset(id: &PresetId) -> Option<vec::Vec<u8>> {
 
 /// List of supported presets.
 pub fn preset_names() -> Vec<PresetId> {
+    use preset_names::*;
     vec![
         PresetId::from(sp_genesis_builder::DEV_RUNTIME_PRESET),
-        PresetId::from(PRESET_LOCAL_TESTNET),
+        PresetId::from(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET),
+        PresetId::from(PRESET_GENESIS),
     ]
 }

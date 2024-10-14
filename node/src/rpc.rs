@@ -19,7 +19,6 @@ use sp_core::H256;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 use crate::tasks::FileStorageT;
-pub use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
@@ -38,8 +37,6 @@ pub struct FullDeps<C, P, FL, FS> {
     pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
-    /// Whether to deny unsafe calls
-    pub deny_unsafe: DenyUnsafe,
 }
 
 /// Instantiate all RPC extensions.
@@ -69,10 +66,9 @@ where
         pool,
         maybe_storage_hub_client_config,
         command_sink,
-        deny_unsafe,
     } = deps;
 
-    io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
+    io.merge(System::new(client.clone(), pool).into_rpc())?;
     io.merge(TransactionPayment::new(client).into_rpc())?;
 
     if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {

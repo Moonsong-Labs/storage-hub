@@ -10,8 +10,7 @@ import {
   bspTwoSeed,
   describeBspNet,
   type EnrichedBspApi,
-  ShConsts,
-  sleep
+  ShConsts
 } from "../../../util";
 
 describeBspNet(

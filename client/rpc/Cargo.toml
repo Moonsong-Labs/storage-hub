@@ -12,7 +12,11 @@ edition = { workspace = true }
 array-bytes = { workspace = true }
 serde = { workspace = true }
 log = { workspace = true }
-jsonrpsee = { workspace = true }
+jsonrpsee = { features = [
+	"client-core",
+	"macros",
+	"server-core",
+], workspace = true }
 tokio = { workspace = true }
 
 # Substrate

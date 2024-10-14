@@ -11,6 +11,8 @@ pub mod configs;
 mod genesis_config_presets;
 mod weights;
 
+extern crate alloc;
+
 use smallvec::smallvec;
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
