@@ -76,7 +76,7 @@ diesel::table! {
     proofs (id) {
         id -> Int4,
         provider_id -> Varchar,
-        last_tick_proof -> Int8,
+        last_tick_proven -> Int8,
     }
 }
 

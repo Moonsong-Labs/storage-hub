@@ -9,19 +9,19 @@ use crate::{schema::proofs, DbConnection};
 pub struct Proofs {
     pub id: i32,
     pub provider_id: String,
-    pub last_tick_proof: i64,
+    pub last_tick_proven: i64,
 }
 
 impl Proofs {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
         provider_id: String,
-        last_tick_proof: i64,
+        last_tick_proven: i64,
     ) -> Result<Self, diesel::result::Error> {
         let proofs = diesel::insert_into(proofs::table)
             .values((
                 proofs::provider_id.eq(provider_id),
-                proofs::last_tick_proof.eq(last_tick_proof),
+                proofs::last_tick_proven.eq(last_tick_proven),
             ))
             .returning(Proofs::as_select())
             .get_result(conn)
@@ -40,14 +40,14 @@ impl Proofs {
         Ok(proof)
     }
 
-    pub async fn update_last_tick_proof<'a>(
+    pub async fn update_last_tick_proven<'a>(
         conn: &mut DbConnection<'a>,
         id: i32,
-        last_tick_proof: i64,
+        last_tick_proven: i64,
     ) -> Result<(), diesel::result::Error> {
         diesel::update(proofs::table)
             .filter(proofs::id.eq(id))
-            .set(proofs::last_tick_proof.eq(last_tick_proof))
+            .set(proofs::last_tick_proven.eq(last_tick_proven))
             .execute(conn)
             .await?;
         Ok(())

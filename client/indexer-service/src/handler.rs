@@ -313,10 +313,10 @@ impl IndexerService {
             pallet_proofs_dealer::Event::ProofAccepted {
                 provider,
                 proof: _proof,
-                last_tick_proof,
+                last_tick_proven,
             } => {
                 let proof = Proofs::get_by_provider_id(conn, provider.to_string()).await?;
-                Proofs::update_last_tick_proof(conn, proof.id, (*last_tick_proof).into()).await?;
+                Proofs::update_last_tick_proven(conn, proof.id, (*last_tick_proven).into()).await?;
             }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}

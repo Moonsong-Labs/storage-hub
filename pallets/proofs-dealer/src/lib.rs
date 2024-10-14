@@ -386,7 +386,7 @@ pub mod pallet {
         ProofAccepted {
             provider: ProviderIdFor<T>,
             proof: Proof<T>,
-            last_tick_proof: BlockNumberFor<T>,
+            last_tick_proven: BlockNumberFor<T>,
         },
 
         /// A new challenge seed was generated.
@@ -597,13 +597,17 @@ pub mod pallet {
 
             Self::do_submit_proof(&provider, &proof)?;
 
-            let last_tick_proof = Self::get_current_tick();
+            // Get last tick for which the submitter submitted a proof.
+            let last_tick_proven = match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
+                Some(tick) => tick,
+                None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
+            };
 
             // Emit event.
             Self::deposit_event(Event::ProofAccepted {
                 provider,
                 proof,
-                last_tick_proof,
+                last_tick_proven,
             });
 
             // Return a successful DispatchResultWithPostInfo.
