@@ -27,7 +27,7 @@ pub struct File {
     pub location: Vec<u8>,
     pub fingerprint: Vec<u8>,
     pub size: i64,
-    /// The step this file is at. 0 = requested, 1 = fullfilled.
+    /// The step this file is at. 0 = requested, 1 = fulfilled.
     pub step: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
