@@ -379,7 +379,7 @@ export const runMultipleInitialisedBspsNet = async (
         additionalArgs: ["--keystore-path=/keystore/bsp-down"]
       }
     );
-    const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspDownRpcPort}`);
+    const bspDownApi = await ShTestApi.create(`ws://127.0.0.1:${bspDownRpcPort}`);
 
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
@@ -389,7 +389,7 @@ export const runMultipleInitialisedBspsNet = async (
       bspStartingWeight: bspNetConfig.bspStartingWeight,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
-    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspTwoRpcPort}`);
+    const bspTwoApi = await ShTestApi.create(`ws://127.0.0.1:${bspTwoRpcPort}`);
 
     const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
       name: "sh-bsp-three",
@@ -399,7 +399,7 @@ export const runMultipleInitialisedBspsNet = async (
       bspStartingWeight: bspNetConfig.bspStartingWeight,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
-    const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
+    const bspThreeApi = await ShTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
 
     // Wait a few seconds for all BSPs to be synced.
     await sleep(5000);

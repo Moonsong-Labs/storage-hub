@@ -1,7 +1,7 @@
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
-import { runFullNet } from "./helpers";
+import { runInitialisedFullNet, runSimpleFullNet } from "./helpers";
 import { cleardownTest, launchEventEmitter, ShConsts } from "..";
-import type { TestNetConfig, TestNetContext, TestOptions } from "../types";
+import type { FullNetContext, Initialised, TestNetConfig, TestNetContext, TestOptions } from "../types";
 import { ShTestApi, type EnrichedShApi } from "../test-api";
 
 
@@ -11,7 +11,7 @@ import { ShTestApi, type EnrichedShApi } from "../test-api";
  * @param args Additional arguments (either tests function or options and tests function).
  */
 export async function describeMspNet<
-  T extends [(context: TestNetContext) => void] | [TestOptions, (context: TestNetContext) => void]
+  T extends [(context: FullNetContext) => void] | [TestOptions, (context: FullNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
@@ -37,10 +37,13 @@ export async function describeMspNet<
           launchEventEmitter.once("networkLaunched", resolve);
         });
         // Launch the network
-        const launchResponse = await launchFullNetwork({
-          ...fullNetConfig,
-          toxics: options?.toxics
-        });
+        const launchResponse = await launchFullNetwork(
+          {
+            ...fullNetConfig,
+            toxics: options?.toxics
+          },
+          options?.initialised
+        );
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
         userApiPromise = ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
@@ -61,8 +64,8 @@ export async function describeMspNet<
               )} will be kept alive`
             );
           }
-          console.log("🩺 Info:  Test run configured to keep BSPNet alive");
-          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ");
+          console.log("🩺 Info:  Test run configured to keep FullNet alive");
+          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  ");
           process.exit(0);
         }
       });
@@ -79,16 +82,28 @@ export async function describeMspNet<
         afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
-      } satisfies TestNetContext;
+      } satisfies FullNetContext;
 
       tests(context);
     });
   }
 }
 
-export const launchFullNetwork = async (config: TestNetConfig) => {
-    await runFullNet(config);
-  };
+export const launchFullNetwork = async (
+  config: TestNetConfig,
+  initialised: boolean | "multi" = false
+): Promise<Initialised | undefined> => {
+  if (initialised === "multi") {
+    throw new Error("multi initialisation not supported for fullNet");
+  }
+
+  if (initialised) {
+    return await runInitialisedFullNet(config);
+  }
+
+  await runSimpleFullNet(config);
+  return undefined;
+};
 
   const pickConfig = (options: TestOptions) => {
     return options.networkConfig === "all"

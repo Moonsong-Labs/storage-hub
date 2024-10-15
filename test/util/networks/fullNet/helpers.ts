@@ -2,7 +2,7 @@ import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import path from "node:path";
 import { bspKey, mspKey, shUser } from "../../pjsKeyring.ts";
-import type { TestNetConfig } from "../types.ts";
+import type { Initialised, TestNetConfig } from "../types.ts";
 import * as ShConsts from "../consts.ts";
 import { ShTestApi, type EnrichedShApi } from "../test-api.ts";
 import invariant from "tiny-invariant";
@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { forceSignupBsp, getContainerIp, getContainerPeerId } from "../helpers.ts";
 
-export const runFullNet = async (bspNetConfig: TestNetConfig) => {
+export const runSimpleFullNet = async (bspNetConfig: TestNetConfig) => {
   let userApi: EnrichedShApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
@@ -174,8 +174,10 @@ export const runFullNet = async (bspNetConfig: TestNetConfig) => {
   }
 };
 
-export const runInitialisedFullNet = async (netConfig: TestNetConfig) => {
-  await runFullNet(netConfig);
+export const runInitialisedFullNet = async (
+  bspNetConfig: TestNetConfig
+): Promise<Initialised | undefined> => {
+  await runSimpleFullNet(bspNetConfig);
 
   let userApi: EnrichedShApi | undefined;
   try {
