@@ -207,7 +207,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     // Assert BSP has sent a call to increase its capacity.
     await bspApi.assert.extrinsicPresent({
       module: "providers",
-      method: "changeCapacity", 
+      method: "changeCapacity",
       checkTxPool: true
     });
 
