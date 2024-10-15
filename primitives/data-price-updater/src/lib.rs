@@ -47,10 +47,10 @@ impl<P: NumericalParam, S: NumericalParam> UpdateStoragePrice for NoUpdatePriceI
 ///
 /// ```ignore
 /// if system_utilisation < LowerThreshold:
-///     price = stable_price - e ^ (system_utilisation) * LowerExponentFactor
+///     price = stable_price - e ^ (LowerThreshold - system_utilisation) * LowerExponentFactor
 ///     price = max(price, MinPrice)
 /// else if system_utilisation > UpperThreshold:
-///     price = stable_price + e ^ (1 - system_utilisation) * UpperExponentFactor
+///     price = stable_price + e ^ (system_utilisation - UpperThreshold) * UpperExponentFactor
 ///     price = min(price, MaxPrice)
 /// else:
 ///     price = stable_price
@@ -93,10 +93,10 @@ pub trait MostlyStablePriceIndexUpdaterConfig {
     ///
     /// Even with system utilisation below `LowerThreshold`, the price saturates to this value.
     type MinPrice: Get<Self::Price>;
-    /// The factor that multiplies `e ^ (1 - sys_util)` for calculating the price when the
+    /// The factor that multiplies `e ^ (sys_util - UpperThreshold)` for calculating the price when the
     /// system utilisation is above `UpperThreshold`.
     type UpperExponentFactor: Get<u32>;
-    /// The factor that multiplies `e ^ (sys_util - 1)` for calculating the price when the
+    /// The factor that multiplies `e ^ (LowerThreshold - sys_util)` for calculating the price when the
     /// system utilisation is below `LowerThreshold`.
     type LowerExponentFactor: Get<u32>;
 }

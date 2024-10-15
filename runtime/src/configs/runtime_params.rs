@@ -88,7 +88,7 @@ pub mod dynamic_params {
         ///
         /// 9 = 48 - l * e ^ (0.3 - 0)
         /// l = (48 - 9) * e ^ (-0.3) ≈ 29
-        pub static LowerExponentFactor: u32 = 12;
+        pub static LowerExponentFactor: u32 = 29;
     }
 }
 
