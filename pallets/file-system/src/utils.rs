@@ -2148,6 +2148,7 @@ mod hooks {
         traits::{Get, One, Zero},
         Saturating,
     };
+    use sp_weights::Weight;
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
