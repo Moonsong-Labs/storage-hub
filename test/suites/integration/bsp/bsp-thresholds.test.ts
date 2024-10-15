@@ -3,22 +3,22 @@ import {
   addBsp,
   bspDownKey,
   bspDownSeed,
-  BspNetTestApi,
   bspThreeKey,
   bspThreeSeed,
   bspTwoKey,
   bspTwoSeed,
   describeBspNet,
-  type EnrichedBspApi,
-  ShConsts
+  type EnrichedShApi,
+  ShConsts,
+  ShTestApi
 } from "../../../util";
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
   { initialised: false, bspStartingWeight: 5n, networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi, beforeEach }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let bspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -107,7 +107,7 @@ describeBspNet(
         additionalArgs: ["--keystore-path=/keystore/bsp-down"],
         bspStartingWeight: 1n
       });
-      const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+      const bspDownApi = await ShTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
       // Wait for it to catch up to the tip of the chain
       await userApi.wait.bspCatchUpToChainTip(bspDownApi);
@@ -154,7 +154,7 @@ describeBspNet(
         "Zero reputation BSP should be able to volunteer and be accepted"
       );
       await bspDownApi.disconnect();
-      await userApi.docker.stopBspContainer("sh-bsp-down");
+      await userApi.docker.stopContainer("sh-bsp-down");
     });
 
     it("BSP two eventually volunteers after threshold curve is met", async () => {
@@ -169,7 +169,7 @@ describeBspNet(
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-two"]
       });
-      const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+      const bspTwoApi = await ShTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
       // Wait for it to catch up to the tip of the chain
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
@@ -240,7 +240,7 @@ describeBspNet(
       }
 
       await bspTwoApi.disconnect();
-      await userApi.docker.stopBspContainer("sh-bsp-two");
+      await userApi.docker.stopContainer("sh-bsp-two");
     });
 
     it("BSP with reputation is prioritised", async () => {
@@ -252,7 +252,7 @@ describeBspNet(
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
         bspStartingWeight: 800_000_000n
       });
-      const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+      const bspThreeApi = await ShTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
       // Wait for it to catch up to the top of the chain
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
@@ -309,7 +309,7 @@ describeBspNet(
       // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
       assert(filtered.length === 1, "BSP with reputation should be prioritised");
       await bspThreeApi.disconnect();
-      await userApi.docker.stopBspContainer("sh-bsp-three");
+      await userApi.docker.stopContainer("sh-bsp-three");
     });
 
     it(
@@ -356,7 +356,7 @@ describeBspNet(
           "BSP two should not be able to spam the chain and reach his threshold to volunteer"
         );
 
-        await userApi.docker.stopBspContainer("sh-bsp-two");
+        await userApi.docker.stopContainer("sh-bsp-two");
       }
     );
   }

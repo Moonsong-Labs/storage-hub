@@ -14,14 +14,14 @@ import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
 import * as NodeBspNet from "./node";
-import type { BspNetApi, SealBlockOptions } from "./types";
+import type { ShApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 import { addBsp } from "./helpers";
 
 /**
- * Represents an enhanced API for interacting with StorageHub BSPNet.
+ * Represents an enhanced API for interacting with StorageHub test network.
  */
-export class BspNetTestApi implements AsyncDisposable {
+export class ShTestApi implements AsyncDisposable {
   private _api: ApiPromise;
   private _endpoint: `ws://${string}` | `wss://${string}`;
 
@@ -31,16 +31,16 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   /**
-   * Creates a new instance of BspNetTestApi.
+   * Creates a new instance of ShTestApi.
    *
    * @param endpoint - The WebSocket endpoint to connect to.
-   * @returns A promise that resolves to an enriched BspNetApi.
+   * @returns A promise that resolves to an enriched ShTestApi.
    */
   public static async create(endpoint: `ws://${string}` | `wss://${string}`) {
-    const api = await BspNetTestApi.connect(endpoint);
+    const api = await ShTestApi.connect(endpoint);
     await api.isReady;
 
-    const ctx = new BspNetTestApi(api, endpoint);
+    const ctx = new ShTestApi(api, endpoint);
 
     return ctx.enrichApi();
   }
@@ -484,7 +484,7 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       docker: remappedDockerNs,
       [Symbol.asyncDispose]: this.disconnect.bind(this)
-    }) satisfies BspNetApi;
+    }) satisfies ShApi;
   }
 
   async [Symbol.asyncDispose]() {
@@ -506,7 +506,7 @@ export class BspNetTestApi implements AsyncDisposable {
  * - Docker container management for BSP testing (@see {@link DockerBspNet})
  * - StorageHub constants (@see {@link ShConsts})
  *
- * This API is created using the BspNetTestApi.create() static method and provides
+ * This API is created using the ShTestApi.create() static method and provides
  * a comprehensive toolkit for testing and developing BSP network functionality.
  */
-export type EnrichedBspApi = Awaited<ReturnType<typeof BspNetTestApi.create>>;
+export type EnrichedShApi = Awaited<ReturnType<typeof ShTestApi.create>>;

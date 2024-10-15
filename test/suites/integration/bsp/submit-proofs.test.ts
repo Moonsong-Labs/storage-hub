@@ -3,20 +3,20 @@ import {
   describeBspNet,
   shUser,
   sleep,
-  type EnrichedBspApi,
+  type EnrichedShApi,
   type FileMetadata,
   ShConsts
 } from "../../../util";
-import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
+import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/networks/consts";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
-    let bspTwoApi: EnrichedBspApi;
-    let bspThreeApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let bspApi: EnrichedShApi;
+    let bspTwoApi: EnrichedShApi;
+    let bspThreeApi: EnrichedShApi;
     let fileData: FileMetadata;
     let oneBspFileData: FileMetadata;
     let rootBeforeDeletion: string;
@@ -242,8 +242,8 @@ describeBspNet(
 
     it("New storage request sent by user, to only one BSP", async () => {
       // Pause BSP-Two and BSP-Three.
-      await userApi.docker.pauseBspContainer("sh-bsp-two");
-      await userApi.docker.pauseBspContainer("sh-bsp-three");
+      await userApi.docker.pauseContainer("sh-bsp-two");
+      await userApi.docker.pauseContainer("sh-bsp-three");
 
       // Send transaction to create new storage request.
       const source = "res/adolphus.jpg";
@@ -315,8 +315,8 @@ describeBspNet(
       });
 
       // Resume BSP-Two and BSP-Three.
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
+      await userApi.docker.resumeContainer({ containerName: "sh-bsp-two" });
+      await userApi.docker.resumeContainer({ containerName: "sh-bsp-three" });
 
       // Wait for BSPs to resync.
       await sleep(1000);

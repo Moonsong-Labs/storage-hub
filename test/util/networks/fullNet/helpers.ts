@@ -1,95 +1,17 @@
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
-import * as child_process from "node:child_process";
-import { execSync } from "node:child_process";
 import path from "node:path";
-import * as util from "node:util";
-import { bspKey, mspKey, shUser } from "../pjsKeyring";
-import { showContainers } from "../bspNet/docker";
-import type { BspNetConfig, Initialised } from "../bspNet/types";
-import * as ShConsts from "../bspNet/consts.ts";
-import { BspNetTestApi, type EnrichedBspApi } from "../bspNet/test-api.ts";
+import { bspKey, mspKey, shUser } from "../../pjsKeyring.ts";
+import type { Initialised, TestNetConfig } from "../types.ts";
+import * as ShConsts from "../consts.ts";
+import { ShTestApi, type EnrichedShApi } from "../test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
-import { forceSignupBsp } from "../bspNet/helpers.ts";
+import { forceSignupBsp, getContainerIp, getContainerPeerId } from "../helpers.ts";
 
-const exec = util.promisify(child_process.exec);
-
-export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
-  const maxRetries = 60;
-  const sleepTime = 500;
-
-  for (let i = 0; i < maxRetries; i++) {
-    verbose && console.log(`Waiting for ${containerName} to launch...`);
-
-    // TODO: Replace with dockerode command
-    try {
-      const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
-      );
-      return stdout.trim();
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
-    }
-  }
-  // TODO: Replace with dockerode
-  execSync("docker ps -a", { stdio: "inherit" });
-  try {
-    execSync("docker logs docker-sh-bsp-1", { stdio: "inherit" });
-    execSync("docker logs docker-sh-user-1", { stdio: "inherit" });
-  } catch (e) {
-    console.log(e);
-  }
-  console.log(
-    `Error fetching container IP for ${containerName} after ${
-      (maxRetries * sleepTime) / 1000
-    } seconds`
-  );
-  showContainers();
-  throw "Error fetching container IP";
-};
-
-export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
-export const getContainerPeerId = async (url: string, verbose = false) => {
-  const maxRetries = 60;
-  const sleepTime = 500;
-
-  const payload = {
-    id: "1",
-    jsonrpc: "2.0",
-    method: "system_localPeerId",
-    params: []
-  };
-
-  for (let i = 0; i < maxRetries; i++) {
-    verbose && console.log(`Waiting for node at ${url} to launch...`);
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      invariant(response.ok, `HTTP error! status: ${response.status}`);
-
-      const resp = (await response.json()) as any;
-      return resp.result as string;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
-    }
-  }
-
-  console.log(`Error fetching peerId from ${url} after ${(maxRetries * sleepTime) / 1000} seconds`);
-  showContainers();
-  throw `Error fetching peerId from ${url}`;
-};
-
-export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
-  let userApi: EnrichedBspApi | undefined;
+export const runSimpleFullNet = async (bspNetConfig: TestNetConfig) => {
+  let userApi: EnrichedShApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
@@ -202,7 +124,7 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -253,13 +175,13 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
 };
 
 export const runInitialisedFullNet = async (
-  bspNetConfig: BspNetConfig
+  bspNetConfig: TestNetConfig
 ): Promise<Initialised | undefined> => {
   await runSimpleFullNet(bspNetConfig);
 
-  let userApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
   try {
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";

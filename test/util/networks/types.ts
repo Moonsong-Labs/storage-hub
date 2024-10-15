@@ -4,14 +4,15 @@ import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { EventRecord, Event, H256 } from "@polkadot/types/interfaces";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
-import type { launchFullNetwork, launchNetwork } from "./testrunner";
-import type { BspNetTestApi } from "./test-api";
+import type { launchNetwork } from "./bspNet/testrunner";
+import type { ShTestApi } from "./test-api";
 import type { SealedBlock } from "./block";
+import type { launchFullNetwork } from "./fullNet";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
-export interface BspNetApi extends ApiPromise {
+export interface ShApi extends ApiPromise {
   /**
    * Seals a block optionally with a given extrinsic and signer.
    *
@@ -134,10 +135,10 @@ export interface FileMetadata {
 }
 
 /**
- * Configuration options for the BSP network.
+ * Configuration options for the test network.
  * These settings determine the behavior and characteristics of the network during tests.
  */
-export type BspNetConfig = {
+export type TestNetConfig = {
   /**
    * If true, simulates a noisy network environment with added latency and bandwidth limitations.
    * Useful for testing network resilience and performance under suboptimal conditions.
@@ -177,7 +178,7 @@ export type BspNetConfig = {
  * Context object provided to test suites for interacting with the BSP network.
  * Contains utility functions and configuration for setting up and manipulating the test environment.
  */
-export type BspNetContext = {
+export type TestNetContext = {
   /**
    * Test runner's wrapped 'it' function for defining individual test cases.
    */
@@ -187,13 +188,19 @@ export type BspNetContext = {
    * Creates and returns a connected API instance for a user node.
    * @returns A promise that resolves to an enriched api instance for user operations.
    */
-  createUserApi: () => ReturnType<typeof BspNetTestApi.create>;
+  createUserApi: () => ReturnType<typeof ShTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to an enriched api instance for BSP operations.
    */
-  createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
+  createBspApi: () => ReturnType<typeof ShTestApi.create>;
+
+  /**
+   * Creates and returns a connected API instance for a MSP node.
+   * @returns A promise that resolves to an enriched api instance for MSP operations.
+   */
+  createMspApi: () => ReturnType<typeof ShTestApi.create> | undefined;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -201,12 +208,12 @@ export type BspNetContext = {
    */
   createApi: (
     endpoint: `ws://${string}` | `wss://${string}`
-  ) => ReturnType<typeof BspNetTestApi.create>;
+  ) => ReturnType<typeof ShTestApi.create>;
 
   /**
    * The current configuration of the BSP network for this test run.
    */
-  bspNetConfig: BspNetConfig;
+  bspNetConfig: TestNetConfig;
 
   /**
    * Before hook for test setup operations.
@@ -243,19 +250,19 @@ export type FullNetContext = {
    * Creates and returns a connected API instance for a user node.
    * @returns A promise that resolves to an enriched api instance for user operations.
    */
-  createUserApi: () => ReturnType<typeof BspNetTestApi.create>;
+  createUserApi: () => ReturnType<typeof ShTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to an enriched api instance for BSP operations.
    */
-  createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
+  createBspApi: () => ReturnType<typeof ShTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a MSP node.
    * @returns A promise that resolves to an enriched api instance for MSP operations.
    */
-  createMspApi: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+  createMspApi: () => ReturnType<typeof ShTestApi.create> | undefined;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -263,12 +270,12 @@ export type FullNetContext = {
    */
   createApi: (
     endpoint: `ws://${string}` | `wss://${string}`
-  ) => ReturnType<typeof BspNetTestApi.create>;
+  ) => ReturnType<typeof ShTestApi.create>;
 
   /**
    * The current configuration of the BSP network for this test run.
    */
-  bspNetConfig: BspNetConfig;
+  bspNetConfig: TestNetConfig;
 
   /**
    * Before hook for test setup operations.
@@ -310,7 +317,7 @@ export type NetworkConfig =
   /** Simulates a noisy network environment with added latency and bandwidth limitations */
   | "noisy"
   /** Custom network configuration */
-  | BspNetConfig[];
+  | TestNetConfig[];
 
 /**
  * Options for configuring BspNet test runs.

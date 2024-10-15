@@ -4,9 +4,9 @@ import path from "node:path";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
-import { BspNetTestApi } from "./test-api";
 import invariant from "tiny-invariant";
 import { PassThrough, type Readable } from "node:stream";
+import { ShTestApi } from "./test-api";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -124,7 +124,7 @@ export const addBspContainer = async (options?: {
 
   invariant(peerId, "Failed to connect after 10s. Exiting...");
 
-  const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+  const api = await ShTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
   const chainName = api.consts.system.version.specName.toString();
 
@@ -143,13 +143,13 @@ export const addBspContainer = async (options?: {
 };
 
 // Make this a rusty style OO function with api contexts
-export const pauseBspContainer = async (containerName: string) => {
+export const pauseContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
 };
 
-export const stopBspContainer = async (containerName: string) => {
+export const stopContainer = async (containerName: string) => {
   const docker = new Docker();
   const containersToStop = await docker.listContainers({
     filters: { name: [containerName] }
@@ -159,7 +159,7 @@ export const stopBspContainer = async (containerName: string) => {
   await docker.getContainer(containersToStop[0].Id).remove({ force: true });
 };
 
-export const startBspContainer = async (options: {
+export const startContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -167,7 +167,7 @@ export const startBspContainer = async (options: {
   await container.start();
 };
 
-export const restartBspContainer = async (options: {
+export const restartContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -175,7 +175,7 @@ export const restartBspContainer = async (options: {
   await container.restart();
 };
 
-export const resumeBspContainer = async (options: {
+export const resumeContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -195,7 +195,7 @@ export const dropAllTransactionsGlobally = async () => {
       ({ IP, PrivatePort }) => IP === "0.0.0.0" && PrivatePort === 9944
     )[0].PublicPort;
     const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
-    await using api = await BspNetTestApi.connect(endpoint);
+    await using api = await ShTestApi.connect(endpoint);
     try {
       await NodeBspNet.dropTransaction(api);
     } catch {
@@ -216,7 +216,7 @@ export const dropTransactionGlobally = async (options: { module: string; method:
       ({ IP, PrivatePort }) => IP === "0.0.0.0" && PrivatePort === 9944
     )[0].PublicPort;
     const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
-    await using api = await BspNetTestApi.connect(endpoint);
+    await using api = await ShTestApi.connect(endpoint);
     await NodeBspNet.dropTransaction(api, { module: options.module, method: options.method });
   }
 };

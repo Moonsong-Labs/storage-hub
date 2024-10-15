@@ -1,15 +1,13 @@
 import {
-  BspNetTestApi,
   registerToxics,
-  type BspNetConfig,
-  type EnrichedBspApi,
-  type ToxicInfo
+  runFullNet
 } from "../util";
-import * as ShConsts from "../util/bspNet/consts";
-import { runSimpleFullNet } from "../util/fullNet/helpers";
+import * as ShConsts from "../util/networks/consts";
+import { ShTestApi, type EnrichedShApi } from "../util/networks/test-api";
+import type { TestNetConfig, ToxicInfo } from "../util/networks/types";
 
-let api: EnrichedBspApi | undefined;
-const fullNetConfig: BspNetConfig = {
+let api: EnrichedShApi | undefined;
+const fullNetConfig: TestNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
 };
@@ -21,7 +19,7 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runSimpleFullNet(fullNetConfig);
+  await runFullNet(fullNetConfig);
 
   if (fullNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
@@ -54,7 +52,7 @@ async function bootStrapNetwork() {
     await registerToxics(reqToxics);
   }
 
-  api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+  api = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
   await api.file.newStorageRequest(
     CONFIG.localPath,

@@ -2,15 +2,15 @@ import assert from "node:assert";
 import {
   bspKey,
   describeBspNet,
-  type EnrichedBspApi,
+  type EnrichedShApi,
   ferdie,
   skipBlocksToMinChangeTime,
   sleep
 } from "../../../util";
 
 describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
-  let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
+  let userApi: EnrichedShApi;
+  let bspApi: EnrichedShApi;
 
   before(async () => {
     userApi = await createUserApi();

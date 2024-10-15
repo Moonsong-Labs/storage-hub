@@ -1,12 +1,13 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, sleep } from "../../../util";
+import type { EnrichedShApi } from "../../../util/networks/test-api";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
   { initialised: true },
   ({ it, before, createBspApi, createUserApi }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let bspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -59,7 +60,7 @@ describeBspNet(
 
     it("BSP fails to submit proof and is marked as slashable", async () => {
       // Stop BSP.
-      await userApi.docker.pauseBspContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
 
       // Calculate the next deadline tick for the BSP. That is `ChallengeTicksTolerance`
       // after the next challenge tick for this BSP.
@@ -109,7 +110,7 @@ describeBspNet(
       },
       async () => {
         // Resume BSP.
-        await userApi.docker.resumeBspContainer({
+        await userApi.docker.resumeContainer({
           containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
         });
 

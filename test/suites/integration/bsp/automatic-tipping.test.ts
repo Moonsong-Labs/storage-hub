@@ -1,11 +1,11 @@
-import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, sleep, type EnrichedShApi } from "../../../util";
 import { assert } from "node:console";
 
 describeBspNet(
   "BSP Automatic Tipping",
   { extrinsicRetryTimeout: 2 },
   ({ before, it, createUserApi }) => {
-    let userApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();

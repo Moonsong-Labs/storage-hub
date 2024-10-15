@@ -1,9 +1,9 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, type EnrichedShApi } from "../../../util";
 
 describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
-  let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
+  let userApi: EnrichedShApi;
+  let bspApi: EnrichedShApi;
 
   before(async () => {
     userApi = await createUserApi();

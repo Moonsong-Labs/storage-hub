@@ -1,12 +1,12 @@
 import { strictEqual } from "node:assert";
-import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, shUser, sleep, type EnrichedShApi } from "../../../util";
 import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP accepting storage request",
   ({ before, createMspApi, it, createUserApi }) => {
-    let userApi: EnrichedBspApi;
-    let mspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let mspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -136,8 +136,8 @@ describeMspNet(
 describeMspNet(
   "Single MSP accepting multiple storage requests",
   ({ before, createMspApi, it, createUserApi }) => {
-    let userApi: EnrichedBspApi;
-    let mspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let mspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -311,8 +311,8 @@ describeMspNet(
   "Single MSP rejecting storage request",
   { initialised: true },
   ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
-    let userApi: EnrichedBspApi;
-    let mspApi: EnrichedBspApi;
+    let userApi: EnrichedShApi;
+    let mspApi: EnrichedShApi;
 
     before(async () => {
       userApi = await createUserApi();

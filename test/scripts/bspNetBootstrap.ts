@@ -1,15 +1,13 @@
 import {
-  BspNetTestApi,
   registerToxics,
   runSimpleBspNet,
-  type BspNetConfig,
-  type EnrichedBspApi,
-  type ToxicInfo
 } from "../util";
-import * as ShConsts from "../util/bspNet/consts";
+import * as ShConsts from "../util/networks/consts";
+import { ShTestApi, type EnrichedShApi } from "../util/networks/test-api";
+import type { TestNetConfig, ToxicInfo } from "../util/networks/types";
 
-let api: EnrichedBspApi | undefined;
-const bspNetConfig: BspNetConfig = {
+let api: EnrichedShApi | undefined;
+const bspNetConfig: TestNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
 };
@@ -56,7 +54,7 @@ async function bootStrapNetwork() {
     await registerToxics(reqToxics);
   }
 
-  api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+  api = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
   await api.file.newStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
 

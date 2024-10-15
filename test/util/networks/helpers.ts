@@ -18,12 +18,12 @@ import {
   bspTwoKey,
   bspTwoSeed,
   shUser
-} from "../pjsKeyring";
-import { addBspContainer, showContainers } from "./docker";
-import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
-import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
+} from "../pjsKeyring.ts";
+import { addBspContainer, showContainers } from "./docker.ts";
+import type { TestNetConfig, InitialisedMultiBspNetwork } from "./types.ts";
+import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts.ts";
 import * as ShConsts from "./consts.ts";
-import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
+import { ShTestApi, type EnrichedShApi } from "./test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
@@ -105,8 +105,8 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw `Error fetching peerId from ${url}`;
 };
 
-export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = false) => {
-  let userApi: EnrichedBspApi | undefined;
+export const runSimpleBspNet = async (bspNetConfig: TestNetConfig, verbose = false) => {
+  let userApi: EnrichedShApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
@@ -172,7 +172,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -276,7 +276,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
 };
 
 export const forceSignupBsp = async (options: {
-  api: EnrichedBspApi;
+  api: EnrichedShApi;
   multiaddress: string;
   who: string | Uint8Array;
   bspId?: string;
@@ -325,14 +325,14 @@ export const closeSimpleBspNet = async () => {
   await docker.pruneVolumes();
 };
 
-export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
+export const runInitialisedBspsNet = async (bspNetConfig: TestNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: EnrichedBspApi | undefined;
-  let bspApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
+  let bspApi: EnrichedShApi | undefined;
   try {
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
-    bspApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    bspApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
@@ -353,15 +353,15 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
 };
 
 export const runMultipleInitialisedBspsNet = async (
-  bspNetConfig: BspNetConfig
+  bspNetConfig: TestNetConfig
 ): Promise<undefined | InitialisedMultiBspNetwork> => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: EnrichedBspApi | undefined;
-  let bspApi: EnrichedBspApi | undefined;
+  let userApi: EnrichedShApi | undefined;
+  let bspApi: EnrichedShApi | undefined;
   try {
-    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
-    bspApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+    userApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+    bspApi = await ShTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
 
     await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 1)));
 
@@ -379,7 +379,7 @@ export const runMultipleInitialisedBspsNet = async (
         additionalArgs: ["--keystore-path=/keystore/bsp-down"]
       }
     );
-    const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspDownRpcPort}`);
+    const bspDownApi = await ShTestApi.create(`ws://127.0.0.1:${bspDownRpcPort}`);
 
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
@@ -389,7 +389,7 @@ export const runMultipleInitialisedBspsNet = async (
       bspStartingWeight: bspNetConfig.bspStartingWeight,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
-    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspTwoRpcPort}`);
+    const bspTwoApi = await ShTestApi.create(`ws://127.0.0.1:${bspTwoRpcPort}`);
 
     const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
       name: "sh-bsp-three",
@@ -399,7 +399,7 @@ export const runMultipleInitialisedBspsNet = async (
       bspStartingWeight: bspNetConfig.bspStartingWeight,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
-    const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
+    const bspThreeApi = await ShTestApi.create(`ws://127.0.0.1:${bspThreeRpcPort}`);
 
     // Wait a few seconds for all BSPs to be synced.
     await sleep(5000);
@@ -427,7 +427,7 @@ export const runMultipleInitialisedBspsNet = async (
     await bspDownApi.disconnect();
 
     // Stopping BSP that is supposed to be down.
-    await userApi.docker.stopBspContainer(bspDownContainerName);
+    await userApi.docker.stopContainer(bspDownContainerName);
 
     return {
       bspTwoRpcPort,
@@ -450,7 +450,7 @@ export const runMultipleInitialisedBspsNet = async (
 };
 
 export const cleardownTest = async (cleardownOptions: {
-  api: EnrichedBspApi | EnrichedBspApi[];
+  api: EnrichedShApi | EnrichedShApi[];
   keepNetworkAlive?: boolean;
 }) => {
   try {
@@ -468,7 +468,7 @@ export const cleardownTest = async (cleardownOptions: {
   cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 
-export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {
+export const createCheckBucket = async (api: EnrichedShApi, bucketName: string) => {
   const newBucketEventEvent = await api.createBucket(bucketName);
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
