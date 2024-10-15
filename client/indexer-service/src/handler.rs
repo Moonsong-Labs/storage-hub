@@ -309,7 +309,6 @@ impl IndexerService {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
-        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
@@ -341,6 +340,7 @@ impl IndexerService {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {}
