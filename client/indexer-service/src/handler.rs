@@ -108,7 +108,7 @@ impl IndexerService {
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.index_event(conn, &ev.event).await?;
+                    self.index_event(conn, &ev.event, block_hash).await?;
                 }
 
                 Ok(())
@@ -123,6 +123,7 @@ impl IndexerService {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
+        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             RuntimeEvent::BucketNfts(event) => self.index_bucket_nfts_event(conn, event).await?,
@@ -133,7 +134,9 @@ impl IndexerService {
             RuntimeEvent::ProofsDealer(event) => {
                 self.index_proofs_dealer_event(conn, event).await?
             }
-            RuntimeEvent::Providers(event) => self.index_providers_event(conn, event).await?,
+            RuntimeEvent::Providers(event) => {
+                self.index_providers_event(conn, event, block_hash).await?
+            }
             RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
@@ -306,6 +309,7 @@ impl IndexerService {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
@@ -315,8 +319,12 @@ impl IndexerService {
                 proof: _proof,
                 last_tick_proven,
             } => {
-                let proof = Proofs::get_by_provider_id(conn, provider.to_string()).await?;
-                Proofs::update_last_tick_proven(conn, proof.id, (*last_tick_proven).into()).await?;
+                Bsp::update_last_tick_proven(
+                    conn,
+                    provider.to_string(),
+                    (*last_tick_proven).into(),
+                )
+                .await?;
             }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
@@ -342,12 +350,10 @@ impl IndexerService {
                 multiaddresses,
                 capacity,
             } => {
-                let current_block_hash = self.client.info().best_hash;
-
                 let stake = self
                     .client
                     .runtime_api()
-                    .get_bsp_stake(current_block_hash, bsp_id)
+                    .get_bsp_stake(block_hash, bsp_id)
                     .expect("to have a stake")
                     .unwrap_or(Default::default())
                     .into();
@@ -386,11 +392,10 @@ impl IndexerService {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
 
                     // update also the stake
-                    let current_block_hash = self.client.info().best_hash;
                     let stake = self
                         .client
                         .runtime_api()
-                        .get_bsp_stake(current_block_hash, bsp_id)
+                        .get_bsp_stake(block_hash, bsp_id)
                         .expect("to have a stake")
                         .unwrap_or(Default::default())
                         .into();
