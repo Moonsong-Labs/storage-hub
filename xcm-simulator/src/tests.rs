@@ -446,7 +446,7 @@ mod providers {
     use pallet_randomness::LatestOneEpochAgoRandomness;
     use sp_core::H256;
     use sp_runtime::BoundedVec;
-    use storagehub::configs::SpMinDeposit;
+    use storagehub::configs::{BspSignUpLockPeriod, SpMinDeposit};
 
     use crate::{
         sh_sibling_account_id, storagehub::configs::MinBlocksBetweenCapacityChanges,
@@ -931,6 +931,9 @@ mod providers {
             // And we check its current balance in StorageHub (after deposit)
             parachain_balance_after_deposit =
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID));
+
+            // Advance enough blocks to allow the parachain to sign off as BSP
+            sh_run_to_block(storagehub::System::block_number() + BspSignUpLockPeriod::get());
         });
 
         // The parachain signs off as a provider in StorageHub.

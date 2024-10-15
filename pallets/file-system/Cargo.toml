@@ -30,6 +30,7 @@ sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sp-trie = { workspace = true }
+sp-weights = { workspace = true }
 
 # Local
 pallet-file-system-runtime-api = { workspace = true }
@@ -73,6 +74,7 @@ std = [
 	"sp-io/std",
 	"sp-runtime/std",
 	"sp-trie/std",
+	"sp-weights/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",

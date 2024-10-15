@@ -2142,11 +2142,11 @@ mod hooks {
         ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
-    use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
     use shp_traits::TrieRemoveMutation;
     use sp_runtime::traits::{Get, One, Zero};
     use sp_runtime::Saturating;
+    use sp_weights::Weight;
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_idle(

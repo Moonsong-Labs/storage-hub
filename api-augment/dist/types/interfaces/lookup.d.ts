@@ -2212,9 +2212,9 @@ declare const _default: {
     totalBytes: string;
   };
   /**
-   * Lookup222: polkadot_primitives::v7::UpgradeGoAhead
+   * Lookup222: polkadot_primitives::v8::UpgradeGoAhead
    **/
-  PolkadotPrimitivesV7UpgradeGoAhead: {
+  PolkadotPrimitivesV8UpgradeGoAhead: {
     _enum: string[];
   };
   /**
@@ -2226,18 +2226,18 @@ declare const _default: {
     consumedGoAheadSignal: string;
   };
   /**
-   * Lookup224: polkadot_primitives::v7::PersistedValidationData<primitive_types::H256, N>
+   * Lookup224: polkadot_primitives::v8::PersistedValidationData<primitive_types::H256, N>
    **/
-  PolkadotPrimitivesV7PersistedValidationData: {
+  PolkadotPrimitivesV8PersistedValidationData: {
     parentHead: string;
     relayParentNumber: string;
     relayParentStorageRoot: string;
     maxPovSize: string;
   };
   /**
-   * Lookup227: polkadot_primitives::v7::UpgradeRestriction
+   * Lookup227: polkadot_primitives::v8::UpgradeRestriction
    **/
-  PolkadotPrimitivesV7UpgradeRestriction: {
+  PolkadotPrimitivesV8UpgradeRestriction: {
     _enum: string[];
   };
   /**
@@ -2263,9 +2263,9 @@ declare const _default: {
     remainingSize: string;
   };
   /**
-   * Lookup234: polkadot_primitives::v7::AbridgedHrmpChannel
+   * Lookup234: polkadot_primitives::v8::AbridgedHrmpChannel
    **/
-  PolkadotPrimitivesV7AbridgedHrmpChannel: {
+  PolkadotPrimitivesV8AbridgedHrmpChannel: {
     maxCapacity: string;
     maxTotalSize: string;
     maxMessageSize: string;
@@ -2274,9 +2274,9 @@ declare const _default: {
     mqcHead: string;
   };
   /**
-   * Lookup235: polkadot_primitives::v7::AbridgedHostConfiguration
+   * Lookup235: polkadot_primitives::v8::AbridgedHostConfiguration
    **/
-  PolkadotPrimitivesV7AbridgedHostConfiguration: {
+  PolkadotPrimitivesV8AbridgedHostConfiguration: {
     maxCodeSize: string;
     maxHeadDataSize: string;
     maxUpwardQueueCount: string;
@@ -2289,9 +2289,9 @@ declare const _default: {
     asyncBackingParams: string;
   };
   /**
-   * Lookup236: polkadot_primitives::v7::async_backing::AsyncBackingParams
+   * Lookup236: polkadot_primitives::v8::async_backing::AsyncBackingParams
    **/
-  PolkadotPrimitivesV7AsyncBackingAsyncBackingParams: {
+  PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: string;
     allowedAncestryLen: string;
   };
@@ -2312,13 +2312,6 @@ declare const _default: {
       };
       sudo_send_upward_message: {
         message: string;
-      };
-      authorize_upgrade: {
-        codeHash: string;
-        checkVersion: string;
-      };
-      enact_authorized_upgrade: {
-        code: string;
       };
     };
   };
@@ -3932,6 +3925,7 @@ declare const _default: {
     ownerAccount: string;
     paymentAccount: string;
     reputationWeight: string;
+    signUpBlock: string;
   };
   /**
    * Lookup429: pallet_storage_providers::types::MainStorageProvider<T>
@@ -3945,6 +3939,7 @@ declare const _default: {
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
+    signUpBlock: string;
   };
   /**
    * Lookup431: pallet_storage_providers::types::Bucket<T>
