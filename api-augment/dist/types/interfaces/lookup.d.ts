@@ -2246,7 +2246,7 @@ declare const _default: {
     totalBytes: string;
   };
   /**
-   * Lookup230: polkadot_primitives::v7::UpgradeGoAhead
+   * Lookup230: polkadot_primitives::v8::UpgradeGoAhead
    **/
   PolkadotPrimitivesV8UpgradeGoAhead: {
     _enum: string[];
@@ -2260,7 +2260,7 @@ declare const _default: {
     consumedGoAheadSignal: string;
   };
   /**
-   * Lookup232: polkadot_primitives::v7::PersistedValidationData<primitive_types::H256, N>
+   * Lookup232: polkadot_primitives::v8::PersistedValidationData<primitive_types::H256, N>
    **/
   PolkadotPrimitivesV8PersistedValidationData: {
     parentHead: string;
@@ -2269,7 +2269,7 @@ declare const _default: {
     maxPovSize: string;
   };
   /**
-   * Lookup235: polkadot_primitives::v7::UpgradeRestriction
+   * Lookup235: polkadot_primitives::v8::UpgradeRestriction
    **/
   PolkadotPrimitivesV8UpgradeRestriction: {
     _enum: string[];
@@ -2297,7 +2297,7 @@ declare const _default: {
     remainingSize: string;
   };
   /**
-   * Lookup242: polkadot_primitives::v7::AbridgedHrmpChannel
+   * Lookup242: polkadot_primitives::v8::AbridgedHrmpChannel
    **/
   PolkadotPrimitivesV8AbridgedHrmpChannel: {
     maxCapacity: string;
@@ -2308,7 +2308,7 @@ declare const _default: {
     mqcHead: string;
   };
   /**
-   * Lookup243: polkadot_primitives::v7::AbridgedHostConfiguration
+   * Lookup243: polkadot_primitives::v8::AbridgedHostConfiguration
    **/
   PolkadotPrimitivesV8AbridgedHostConfiguration: {
     maxCodeSize: string;
@@ -2323,7 +2323,7 @@ declare const _default: {
     asyncBackingParams: string;
   };
   /**
-   * Lookup244: polkadot_primitives::v7::async_backing::AsyncBackingParams
+   * Lookup244: polkadot_primitives::v8::async_backing::AsyncBackingParams
    **/
   PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: string;

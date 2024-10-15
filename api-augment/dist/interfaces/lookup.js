@@ -2290,7 +2290,7 @@ export default {
     totalBytes: "u32"
   },
   /**
-   * Lookup230: polkadot_primitives::v7::UpgradeGoAhead
+   * Lookup230: polkadot_primitives::v8::UpgradeGoAhead
    **/
   PolkadotPrimitivesV8UpgradeGoAhead: {
     _enum: ["Abort", "GoAhead"]
@@ -2304,7 +2304,7 @@ export default {
     consumedGoAheadSignal: "Option<PolkadotPrimitivesV8UpgradeGoAhead>"
   },
   /**
-   * Lookup232: polkadot_primitives::v7::PersistedValidationData<primitive_types::H256, N>
+   * Lookup232: polkadot_primitives::v8::PersistedValidationData<primitive_types::H256, N>
    **/
   PolkadotPrimitivesV8PersistedValidationData: {
     parentHead: "Bytes",
@@ -2313,7 +2313,7 @@ export default {
     maxPovSize: "u32"
   },
   /**
-   * Lookup235: polkadot_primitives::v7::UpgradeRestriction
+   * Lookup235: polkadot_primitives::v8::UpgradeRestriction
    **/
   PolkadotPrimitivesV8UpgradeRestriction: {
     _enum: ["Present"]
@@ -2342,7 +2342,7 @@ export default {
     remainingSize: "u32"
   },
   /**
-   * Lookup242: polkadot_primitives::v7::AbridgedHrmpChannel
+   * Lookup242: polkadot_primitives::v8::AbridgedHrmpChannel
    **/
   PolkadotPrimitivesV8AbridgedHrmpChannel: {
     maxCapacity: "u32",
@@ -2353,7 +2353,7 @@ export default {
     mqcHead: "Option<H256>"
   },
   /**
-   * Lookup243: polkadot_primitives::v7::AbridgedHostConfiguration
+   * Lookup243: polkadot_primitives::v8::AbridgedHostConfiguration
    **/
   PolkadotPrimitivesV8AbridgedHostConfiguration: {
     maxCodeSize: "u32",
@@ -2368,7 +2368,7 @@ export default {
     asyncBackingParams: "PolkadotPrimitivesV8AsyncBackingAsyncBackingParams"
   },
   /**
-   * Lookup244: polkadot_primitives::v7::async_backing::AsyncBackingParams
+   * Lookup244: polkadot_primitives::v8::async_backing::AsyncBackingParams
    **/
   PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: "u32",
