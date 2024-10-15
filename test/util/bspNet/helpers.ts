@@ -69,7 +69,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 
 export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
 export const getContainerPeerId = async (url: string, verbose = false) => {
-  const maxRetries = 120;
+  const maxRetries = 60;
   const sleepTime = 500;
 
   const payload = {

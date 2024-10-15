@@ -537,11 +537,7 @@ where
             if !capacity_queue.is_empty() {
                 let size: u64 = capacity_queue.drain(..).sum();
 
-                dbg!(&size);
-
                 let new_capacity = self.calculate_capacity(size, current_capacity)?;
-
-                dbg!(&new_capacity);
 
                 let call = storage_hub_runtime::RuntimeCall::Providers(
                     pallet_storage_providers::Call::change_capacity { new_capacity },
