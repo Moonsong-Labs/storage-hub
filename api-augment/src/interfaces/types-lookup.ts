@@ -5058,6 +5058,7 @@ declare module "@polkadot/types/lookup" {
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
     readonly reputationWeight: u32;
+    readonly signUpBlock: u32;
   }
 
   /** @name PalletStorageProvidersMainStorageProvider (429) */
@@ -5070,6 +5071,7 @@ declare module "@polkadot/types/lookup" {
     readonly lastCapacityChange: u32;
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
+    readonly signUpBlock: u32;
   }
 
   /** @name PalletStorageProvidersBucket (431) */
@@ -5093,6 +5095,7 @@ declare module "@polkadot/types/lookup" {
     readonly isNotEnoughBalance: boolean;
     readonly isCannotHoldDeposit: boolean;
     readonly isStorageStillInUse: boolean;
+    readonly isSignOffPeriodNotPassed: boolean;
     readonly isRandomnessNotValidYet: boolean;
     readonly isSignUpRequestExpired: boolean;
     readonly isNewCapacityLessThanUsedStorage: boolean;
@@ -5121,6 +5124,7 @@ declare module "@polkadot/types/lookup" {
       | "NotEnoughBalance"
       | "CannotHoldDeposit"
       | "StorageStillInUse"
+      | "SignOffPeriodNotPassed"
       | "RandomnessNotValidYet"
       | "SignUpRequestExpired"
       | "NewCapacityLessThanUsedStorage"

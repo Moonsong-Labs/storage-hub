@@ -141,7 +141,8 @@ mod sign_up {
                                 value_prop,
                                 last_capacity_change: current_block,
                                 owner_account: alice,
-                                payment_account: alice
+                                payment_account: alice,
+                                sign_up_block: current_block
                             }),
                             current_block
                         )
@@ -512,7 +513,8 @@ mod sign_up {
                             value_prop: value_prop.clone(),
                             last_capacity_change: current_block,
                             owner_account: alice,
-                            payment_account: alice
+                            payment_account: alice,
+                            sign_up_block: current_block
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -629,6 +631,7 @@ mod sign_up {
                                 payment_account: alice,
                                 reputation_weight:
                                     <Test as crate::Config>::StartingReputationWeight::get(),
+                                sign_up_block: current_block
                             }),
                             current_block
                         )
@@ -1000,6 +1003,7 @@ mod sign_up {
                             payment_account: alice,
                             reputation_weight:
                                 <Test as crate::Config>::StartingReputationWeight::get(),
+                            sign_up_block: current_block
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -2521,6 +2525,13 @@ mod sign_off {
                     // Get the BSP ID of Alice
                     let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
 
+                    // Advance enough blocks for the BSP to sign off
+                    let bsp_sign_up_lock_period: u64 =
+                        <Test as crate::Config>::BspSignUpLockPeriod::get();
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number() + bsp_sign_up_lock_period,
+                    );
+
                     // Sign off Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)));
 
@@ -2704,6 +2715,44 @@ mod sign_off {
 
                     // Make sure the total capacity of the Backup Storage Providers has not changed
                     assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+                    // Check that the counter of registered BSPs has not changed
+                    assert_eq!(StorageProviders::get_bsp_count(), 1);
+                });
+            }
+
+            #[test]
+            fn bsp_sign_up_fails_when_lock_period_not_passed() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = accounts::ALICE.0;
+                    let storage_amount: StorageDataUnit<Test> = 100;
+                    let (deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        accounts::ALICE.1 - deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_amount
+                    );
+
+                    // Check the counter of registered BSPs
+                    assert_eq!(StorageProviders::get_bsp_count(), 1);
+
+                    // Try to sign off Alice as a Backup Storage Provider
+                    assert_noop!(
+                        StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)),
+                        Error::<Test>::SignOffPeriodNotPassed
+                    );
+
+                    // Make sure that Alice is still registered as a Backup Storage Provider
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
+                    assert!(alice_sp_id.is_some());
+                    assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
                     // Check that the counter of registered BSPs has not changed
                     assert_eq!(StorageProviders::get_bsp_count(), 1);
@@ -4391,6 +4440,7 @@ fn register_account_as_msp(
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
             owner_account: account,
             payment_account: account,
+            sign_up_block: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
@@ -4476,6 +4526,7 @@ fn register_account_as_bsp(
             owner_account: account,
             payment_account: account,
             reputation_weight: <Test as crate::Config>::StartingReputationWeight::get(),
+            sign_up_block: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
