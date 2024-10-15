@@ -461,6 +461,7 @@ parameter_types! {
     pub const DepositPerData: Balance = 2;
     pub const MinBlocksBetweenCapacityChanges: u32 = 10;
     pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
+    pub const BspSignUpLockPeriod: BlockNumber = 50;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -505,6 +506,7 @@ impl pallet_storage_providers::Config for Runtime {
     type SlashAmountPerMaxFileSize =
         runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = BspSignUpLockPeriod;
 }
 
 parameter_types! {

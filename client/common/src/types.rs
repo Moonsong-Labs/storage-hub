@@ -33,10 +33,13 @@ pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
+pub type MaxBatchMspRespondStorageRequests =
+    pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
 pub type MspStorageRequestResponse = pallet_file_system::types::MspStorageRequestResponse<Runtime>;
 pub type AcceptedStorageRequestParameters =
     pallet_file_system::types::AcceptedStorageRequestParameters<Runtime>;
 pub type RejectedStorageRequestReason = pallet_file_system::types::RejectedStorageRequestReason;
+pub type BatchResponses = pallet_file_system::types::BatchResponses<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
@@ -56,6 +59,18 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
+/// Type alias for the events vector.
+///
+/// The events vector is a storage element in the FRAME system pallet, which stores all the events
+/// that have occurred in a block. This is syntactic sugar to make the code more readable.
+pub type StorageHubEventsVec = Vec<
+    Box<
+        EventRecord<
+            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
+            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        >,
+    >,
+>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;
@@ -142,16 +157,3 @@ impl DownloadRequestId {
         DownloadRequestId(next)
     }
 }
-
-/// Type alias for the events vector.
-///
-/// The events vector is a storage element in the FRAME system pallet, which stores all the events
-/// that have occurred in a block. This is syntactic sugar to make the code more readable.
-pub type StorageHubEventsVec = Vec<
-    Box<
-        EventRecord<
-            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
-            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
-        >,
-    >,
->;

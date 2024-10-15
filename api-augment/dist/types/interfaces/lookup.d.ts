@@ -2248,7 +2248,7 @@ declare const _default: {
   /**
    * Lookup230: polkadot_primitives::v7::UpgradeGoAhead
    **/
-  PolkadotPrimitivesV7UpgradeGoAhead: {
+  PolkadotPrimitivesV8UpgradeGoAhead: {
     _enum: string[];
   };
   /**
@@ -2262,7 +2262,7 @@ declare const _default: {
   /**
    * Lookup232: polkadot_primitives::v7::PersistedValidationData<primitive_types::H256, N>
    **/
-  PolkadotPrimitivesV7PersistedValidationData: {
+  PolkadotPrimitivesV8PersistedValidationData: {
     parentHead: string;
     relayParentNumber: string;
     relayParentStorageRoot: string;
@@ -2271,7 +2271,7 @@ declare const _default: {
   /**
    * Lookup235: polkadot_primitives::v7::UpgradeRestriction
    **/
-  PolkadotPrimitivesV7UpgradeRestriction: {
+  PolkadotPrimitivesV8UpgradeRestriction: {
     _enum: string[];
   };
   /**
@@ -2299,7 +2299,7 @@ declare const _default: {
   /**
    * Lookup242: polkadot_primitives::v7::AbridgedHrmpChannel
    **/
-  PolkadotPrimitivesV7AbridgedHrmpChannel: {
+  PolkadotPrimitivesV8AbridgedHrmpChannel: {
     maxCapacity: string;
     maxTotalSize: string;
     maxMessageSize: string;
@@ -2310,7 +2310,7 @@ declare const _default: {
   /**
    * Lookup243: polkadot_primitives::v7::AbridgedHostConfiguration
    **/
-  PolkadotPrimitivesV7AbridgedHostConfiguration: {
+  PolkadotPrimitivesV8AbridgedHostConfiguration: {
     maxCodeSize: string;
     maxHeadDataSize: string;
     maxUpwardQueueCount: string;
@@ -2325,7 +2325,7 @@ declare const _default: {
   /**
    * Lookup244: polkadot_primitives::v7::async_backing::AsyncBackingParams
    **/
-  PolkadotPrimitivesV7AsyncBackingAsyncBackingParams: {
+  PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: string;
     allowedAncestryLen: string;
   };
@@ -2346,13 +2346,6 @@ declare const _default: {
       };
       sudo_send_upward_message: {
         message: string;
-      };
-      authorize_upgrade: {
-        codeHash: string;
-        checkVersion: string;
-      };
-      enact_authorized_upgrade: {
-        code: string;
       };
     };
   };
@@ -3973,6 +3966,7 @@ declare const _default: {
     ownerAccount: string;
     paymentAccount: string;
     reputationWeight: string;
+    signUpBlock: string;
   };
   /**
    * Lookup438: pallet_storage_providers::types::MainStorageProvider<T>
@@ -3986,6 +3980,7 @@ declare const _default: {
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
+    signUpBlock: string;
   };
   /**
    * Lookup440: pallet_storage_providers::types::Bucket<T>

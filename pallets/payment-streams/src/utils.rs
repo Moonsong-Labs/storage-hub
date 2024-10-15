@@ -989,7 +989,7 @@ where
     /// and updates the last chargeable tick and last chargeable price index of those Providers.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
-        weight: &mut frame_support::weights::WeightMeter,
+        weight: &mut sp_weights::WeightMeter,
     ) {
         // Get the previous tick from the Providers Proof Submitters pallet.
         let submitters_prev_tick =
@@ -1046,9 +1046,7 @@ where
     }
 
     /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
-    pub fn do_update_current_price_per_unit_per_tick(
-        weight: &mut frame_support::weights::WeightMeter,
-    ) {
+    pub fn do_update_current_price_per_unit_per_tick(weight: &mut sp_weights::WeightMeter) {
         // Get the total used capacity of the network
         let _total_used_capacity =
             <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
@@ -1067,7 +1065,7 @@ where
         weight.consume(T::DbWeight::get().writes(1));
     }
 
-    pub fn do_update_price_index(weight: &mut frame_support::weights::WeightMeter) {
+    pub fn do_update_price_index(weight: &mut sp_weights::WeightMeter) {
         // Get the current price
         let current_price = CurrentPricePerUnitPerTick::<T>::get();
         weight.consume(T::DbWeight::get().reads(1));

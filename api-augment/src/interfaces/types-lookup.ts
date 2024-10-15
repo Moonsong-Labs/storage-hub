@@ -2093,8 +2093,13 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
     readonly isReachedMaximumCapacity: boolean;
     readonly isReceivedInvalidProof: boolean;
+    readonly isFileKeyAlreadyStored: boolean;
     readonly isInternalError: boolean;
-    readonly type: "ReachedMaximumCapacity" | "ReceivedInvalidProof" | "InternalError";
+    readonly type:
+      | "ReachedMaximumCapacity"
+      | "ReceivedInvalidProof"
+      | "FileKeyAlreadyStored"
+      | "InternalError";
   }
 
   /** @name PalletFileSystemMspFailedBatchStorageRequests (145) */
@@ -2916,7 +2921,7 @@ declare module "@polkadot/types/lookup" {
   interface CumulusPalletParachainSystemUnincludedSegmentAncestor extends Struct {
     readonly usedBandwidth: CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth;
     readonly paraHeadHash: Option<H256>;
-    readonly consumedGoAheadSignal: Option<PolkadotPrimitivesV7UpgradeGoAhead>;
+    readonly consumedGoAheadSignal: Option<PolkadotPrimitivesV8UpgradeGoAhead>;
   }
 
   /** @name CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth (223) */
@@ -2946,7 +2951,7 @@ declare module "@polkadot/types/lookup" {
   interface CumulusPalletParachainSystemUnincludedSegmentSegmentTracker extends Struct {
     readonly usedBandwidth: CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth;
     readonly hrmpWatermark: Option<u32>;
-    readonly consumedGoAheadSignal: Option<PolkadotPrimitivesV7UpgradeGoAhead>;
+    readonly consumedGoAheadSignal: Option<PolkadotPrimitivesV8UpgradeGoAhead>;
   }
 
   /** @name PolkadotPrimitivesV7PersistedValidationData (232) */
@@ -2972,8 +2977,8 @@ declare module "@polkadot/types/lookup" {
   interface CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot extends Struct {
     readonly dmqMqcHead: H256;
     readonly relayDispatchQueueRemainingCapacity: CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity;
-    readonly ingressChannels: Vec<ITuple<[u32, PolkadotPrimitivesV7AbridgedHrmpChannel]>>;
-    readonly egressChannels: Vec<ITuple<[u32, PolkadotPrimitivesV7AbridgedHrmpChannel]>>;
+    readonly ingressChannels: Vec<ITuple<[u32, PolkadotPrimitivesV8AbridgedHrmpChannel]>>;
+    readonly egressChannels: Vec<ITuple<[u32, PolkadotPrimitivesV8AbridgedHrmpChannel]>>;
   }
 
   /** @name CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity (239) */
@@ -3004,7 +3009,7 @@ declare module "@polkadot/types/lookup" {
     readonly hrmpMaxMessageNumPerCandidate: u32;
     readonly validationUpgradeCooldown: u32;
     readonly validationUpgradeDelay: u32;
-    readonly asyncBackingParams: PolkadotPrimitivesV7AsyncBackingAsyncBackingParams;
+    readonly asyncBackingParams: PolkadotPrimitivesV8AsyncBackingAsyncBackingParams;
   }
 
   /** @name PolkadotPrimitivesV7AsyncBackingAsyncBackingParams (244) */
@@ -3029,25 +3034,12 @@ declare module "@polkadot/types/lookup" {
     readonly asSudoSendUpwardMessage: {
       readonly message: Bytes;
     } & Struct;
-    readonly isAuthorizeUpgrade: boolean;
-    readonly asAuthorizeUpgrade: {
-      readonly codeHash: H256;
-      readonly checkVersion: bool;
-    } & Struct;
-    readonly isEnactAuthorizedUpgrade: boolean;
-    readonly asEnactAuthorizedUpgrade: {
-      readonly code: Bytes;
-    } & Struct;
-    readonly type:
-      | "SetValidationData"
-      | "SudoSendUpwardMessage"
-      | "AuthorizeUpgrade"
-      | "EnactAuthorizedUpgrade";
+    readonly type: "SetValidationData" | "SudoSendUpwardMessage";
   }
 
   /** @name CumulusPrimitivesParachainInherentParachainInherentData (253) */
   interface CumulusPrimitivesParachainInherentParachainInherentData extends Struct {
-    readonly validationData: PolkadotPrimitivesV7PersistedValidationData;
+    readonly validationData: PolkadotPrimitivesV8PersistedValidationData;
     readonly relayChainState: SpTrieStorageProof;
     readonly downwardMessages: Vec<PolkadotCorePrimitivesInboundDownwardMessage>;
     readonly horizontalMessages: BTreeMap<u32, Vec<PolkadotCorePrimitivesInboundHrmpMessage>>;
@@ -5167,6 +5159,7 @@ declare module "@polkadot/types/lookup" {
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
     readonly reputationWeight: u32;
+    readonly signUpBlock: u32;
   }
 
   /** @name PalletStorageProvidersMainStorageProvider (438) */
@@ -5179,6 +5172,7 @@ declare module "@polkadot/types/lookup" {
     readonly lastCapacityChange: u32;
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
+    readonly signUpBlock: u32;
   }
 
   /** @name PalletStorageProvidersBucket (440) */
@@ -5202,6 +5196,7 @@ declare module "@polkadot/types/lookup" {
     readonly isNotEnoughBalance: boolean;
     readonly isCannotHoldDeposit: boolean;
     readonly isStorageStillInUse: boolean;
+    readonly isSignOffPeriodNotPassed: boolean;
     readonly isRandomnessNotValidYet: boolean;
     readonly isSignUpRequestExpired: boolean;
     readonly isNewCapacityLessThanUsedStorage: boolean;
@@ -5230,6 +5225,7 @@ declare module "@polkadot/types/lookup" {
       | "NotEnoughBalance"
       | "CannotHoldDeposit"
       | "StorageStillInUse"
+      | "SignOffPeriodNotPassed"
       | "RandomnessNotValidYet"
       | "SignUpRequestExpired"
       | "NewCapacityLessThanUsedStorage"

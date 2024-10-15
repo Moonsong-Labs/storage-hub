@@ -1575,7 +1575,12 @@ export default {
    * Lookup143: pallet_file_system::types::RejectedStorageRequestReason
    **/
   PalletFileSystemRejectedStorageRequestReason: {
-    _enum: ["ReachedMaximumCapacity", "ReceivedInvalidProof", "InternalError"]
+    _enum: [
+      "ReachedMaximumCapacity",
+      "ReceivedInvalidProof",
+      "FileKeyAlreadyStored",
+      "InternalError"
+    ]
   },
   /**
    * Lookup145: pallet_file_system::types::MspFailedBatchStorageRequests<T>
@@ -2267,7 +2272,7 @@ export default {
   CumulusPalletParachainSystemUnincludedSegmentAncestor: {
     usedBandwidth: "CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth",
     paraHeadHash: "Option<H256>",
-    consumedGoAheadSignal: "Option<PolkadotPrimitivesV7UpgradeGoAhead>"
+    consumedGoAheadSignal: "Option<PolkadotPrimitivesV8UpgradeGoAhead>"
   },
   /**
    * Lookup223: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
@@ -2287,7 +2292,7 @@ export default {
   /**
    * Lookup230: polkadot_primitives::v7::UpgradeGoAhead
    **/
-  PolkadotPrimitivesV7UpgradeGoAhead: {
+  PolkadotPrimitivesV8UpgradeGoAhead: {
     _enum: ["Abort", "GoAhead"]
   },
   /**
@@ -2296,12 +2301,12 @@ export default {
   CumulusPalletParachainSystemUnincludedSegmentSegmentTracker: {
     usedBandwidth: "CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth",
     hrmpWatermark: "Option<u32>",
-    consumedGoAheadSignal: "Option<PolkadotPrimitivesV7UpgradeGoAhead>"
+    consumedGoAheadSignal: "Option<PolkadotPrimitivesV8UpgradeGoAhead>"
   },
   /**
    * Lookup232: polkadot_primitives::v7::PersistedValidationData<primitive_types::H256, N>
    **/
-  PolkadotPrimitivesV7PersistedValidationData: {
+  PolkadotPrimitivesV8PersistedValidationData: {
     parentHead: "Bytes",
     relayParentNumber: "u32",
     relayParentStorageRoot: "H256",
@@ -2310,7 +2315,7 @@ export default {
   /**
    * Lookup235: polkadot_primitives::v7::UpgradeRestriction
    **/
-  PolkadotPrimitivesV7UpgradeRestriction: {
+  PolkadotPrimitivesV8UpgradeRestriction: {
     _enum: ["Present"]
   },
   /**
@@ -2326,8 +2331,8 @@ export default {
     dmqMqcHead: "H256",
     relayDispatchQueueRemainingCapacity:
       "CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity",
-    ingressChannels: "Vec<(u32,PolkadotPrimitivesV7AbridgedHrmpChannel)>",
-    egressChannels: "Vec<(u32,PolkadotPrimitivesV7AbridgedHrmpChannel)>"
+    ingressChannels: "Vec<(u32,PolkadotPrimitivesV8AbridgedHrmpChannel)>",
+    egressChannels: "Vec<(u32,PolkadotPrimitivesV8AbridgedHrmpChannel)>"
   },
   /**
    * Lookup239: cumulus_pallet_parachain_system::relay_state_snapshot::RelayDispatchQueueRemainingCapacity
@@ -2339,7 +2344,7 @@ export default {
   /**
    * Lookup242: polkadot_primitives::v7::AbridgedHrmpChannel
    **/
-  PolkadotPrimitivesV7AbridgedHrmpChannel: {
+  PolkadotPrimitivesV8AbridgedHrmpChannel: {
     maxCapacity: "u32",
     maxTotalSize: "u32",
     maxMessageSize: "u32",
@@ -2350,7 +2355,7 @@ export default {
   /**
    * Lookup243: polkadot_primitives::v7::AbridgedHostConfiguration
    **/
-  PolkadotPrimitivesV7AbridgedHostConfiguration: {
+  PolkadotPrimitivesV8AbridgedHostConfiguration: {
     maxCodeSize: "u32",
     maxHeadDataSize: "u32",
     maxUpwardQueueCount: "u32",
@@ -2360,12 +2365,12 @@ export default {
     hrmpMaxMessageNumPerCandidate: "u32",
     validationUpgradeCooldown: "u32",
     validationUpgradeDelay: "u32",
-    asyncBackingParams: "PolkadotPrimitivesV7AsyncBackingAsyncBackingParams"
+    asyncBackingParams: "PolkadotPrimitivesV8AsyncBackingAsyncBackingParams"
   },
   /**
    * Lookup244: polkadot_primitives::v7::async_backing::AsyncBackingParams
    **/
-  PolkadotPrimitivesV7AsyncBackingAsyncBackingParams: {
+  PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: "u32",
     allowedAncestryLen: "u32"
   },
@@ -2386,13 +2391,6 @@ export default {
       },
       sudo_send_upward_message: {
         message: "Bytes"
-      },
-      authorize_upgrade: {
-        codeHash: "H256",
-        checkVersion: "bool"
-      },
-      enact_authorized_upgrade: {
-        code: "Bytes"
       }
     }
   },
@@ -2400,7 +2398,7 @@ export default {
    * Lookup253: cumulus_primitives_parachain_inherent::ParachainInherentData
    **/
   CumulusPrimitivesParachainInherentParachainInherentData: {
-    validationData: "PolkadotPrimitivesV7PersistedValidationData",
+    validationData: "PolkadotPrimitivesV8PersistedValidationData",
     relayChainState: "SpTrieStorageProof",
     downwardMessages: "Vec<PolkadotCorePrimitivesInboundDownwardMessage>",
     horizontalMessages: "BTreeMap<u32, Vec<PolkadotCorePrimitivesInboundHrmpMessage>>"
@@ -4123,7 +4121,8 @@ export default {
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
     paymentAccount: "AccountId32",
-    reputationWeight: "u32"
+    reputationWeight: "u32",
+    signUpBlock: "u32"
   },
   /**
    * Lookup438: pallet_storage_providers::types::MainStorageProvider<T>
@@ -4136,7 +4135,8 @@ export default {
     valueProp: "PalletStorageProvidersValueProposition",
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
-    paymentAccount: "AccountId32"
+    paymentAccount: "AccountId32",
+    signUpBlock: "u32"
   },
   /**
    * Lookup440: pallet_storage_providers::types::Bucket<T>
@@ -4166,6 +4166,7 @@ export default {
       "NotEnoughBalance",
       "CannotHoldDeposit",
       "StorageStillInUse",
+      "SignOffPeriodNotPassed",
       "RandomnessNotValidYet",
       "SignUpRequestExpired",
       "NewCapacityLessThanUsedStorage",

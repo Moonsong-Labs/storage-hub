@@ -28,6 +28,7 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 
 sp-runtime = { workspace = true }
+sp-weights = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -68,6 +69,7 @@ std = [
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
+	"sp-weights/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",

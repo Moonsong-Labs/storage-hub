@@ -33,6 +33,7 @@ pub struct MainStorageProvider<T: Config> {
     pub last_capacity_change: BlockNumberFor<T>,
     pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
+    pub sign_up_block: BlockNumberFor<T>,
 }
 
 /// Structure that represents a Backup Storage Provider. It holds the total data that the BSP is able to store, the amount of data that it is storing,
@@ -48,6 +49,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
     pub reputation_weight: ReputationWeightType<T>,
+    pub sign_up_block: BlockNumberFor<T>,
 }
 
 /// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the User ID that owns the bucket,

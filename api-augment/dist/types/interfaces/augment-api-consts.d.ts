@@ -373,6 +373,14 @@ declare module "@polkadot/api-base/types/consts" {
     };
     providers: {
       /**
+       * The amount of blocks that a BSP must wait before being able to sign off, after being signed up.
+       *
+       * This is to prevent BSPs from signing up and off too quickly, thus making it harder for an attacker
+       * to suddenly have a large portion of the total number of BSPs. The reason for this, is that the
+       * attacker would have to lock up a large amount of funds for this period of time.
+       **/
+      bspSignUpLockPeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The amount that an account has to deposit to create a bucket.
        **/
       bucketDeposit: u128 & AugmentedConst<ApiType>;

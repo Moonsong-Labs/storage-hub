@@ -61,10 +61,10 @@ import type {
   PalletXcmRemoteLockedFungibleRecord,
   PalletXcmVersionMigrationStage,
   PolkadotCorePrimitivesOutboundHrmpMessage,
-  PolkadotPrimitivesV7AbridgedHostConfiguration,
-  PolkadotPrimitivesV7PersistedValidationData,
-  PolkadotPrimitivesV7UpgradeGoAhead,
-  PolkadotPrimitivesV7UpgradeRestriction,
+  PolkadotPrimitivesV8AbridgedHostConfiguration,
+  PolkadotPrimitivesV8PersistedValidationData,
+  PolkadotPrimitivesV8UpgradeGoAhead,
+  PolkadotPrimitivesV8UpgradeRestriction,
   ShpTraitsTrieRemoveMutation,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
@@ -773,7 +773,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       hostConfiguration: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7AbridgedHostConfiguration>>,
+        () => Observable<Option<PolkadotPrimitivesV8AbridgedHostConfiguration>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -919,7 +919,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeGoAhead: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7UpgradeGoAhead>>,
+        () => Observable<Option<PolkadotPrimitivesV8UpgradeGoAhead>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -934,7 +934,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeRestrictionSignal: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7UpgradeRestriction>>,
+        () => Observable<Option<PolkadotPrimitivesV8UpgradeRestriction>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -957,7 +957,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       validationData: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7PersistedValidationData>>,
+        () => Observable<Option<PolkadotPrimitivesV8PersistedValidationData>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
