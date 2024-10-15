@@ -668,7 +668,7 @@ pub mod pallet {
         /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
-        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut sp_weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
             // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.

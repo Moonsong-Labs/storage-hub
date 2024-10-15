@@ -13,6 +13,7 @@ import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { forceSignupBsp } from "../bspNet/helpers.ts";
+import { sleep } from "../timer.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -245,6 +246,9 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
         )
       )
     );
+
+    // Give some time for the network to be in sync
+    await sleep(5000);
   } catch (e) {
     console.error("Error ", e);
   } finally {

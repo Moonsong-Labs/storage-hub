@@ -8,7 +8,10 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod apis;
 pub mod configs;
+mod genesis_config_presets;
 mod weights;
+
+extern crate alloc;
 
 use smallvec::smallvec;
 use sp_runtime::{
