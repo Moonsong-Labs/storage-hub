@@ -47,10 +47,10 @@ impl<P: NumericalParam, S: NumericalParam> UpdateStoragePrice for NoUpdatePriceI
 ///
 /// ```ignore
 /// if system_utilisation < LowerThreshold:
-///     price = stable_price - e ^ (LowerThreshold - system_utilisation) * LowerExponentFactor
+///     price = stable_price - (e ^ (LowerThreshold - system_utilisation) - 1) * LowerExponentFactor
 ///     price = max(price, MinPrice)
 /// else if system_utilisation > UpperThreshold:
-///     price = stable_price + e ^ (system_utilisation - UpperThreshold) * UpperExponentFactor
+///     price = stable_price + (e ^ (system_utilisation - UpperThreshold) - 1) * UpperExponentFactor
 ///     price = min(price, MaxPrice)
 /// else:
 ///     price = stable_price
@@ -93,10 +93,10 @@ pub trait MostlyStablePriceIndexUpdaterConfig {
     ///
     /// Even with system utilisation below `LowerThreshold`, the price saturates to this value.
     type MinPrice: Get<Self::Price>;
-    /// The factor that multiplies `e ^ (sys_util - UpperThreshold)` for calculating the price when the
+    /// The factor that multiplies `(e ^ (sys_util - UpperThreshold) - 1)` for calculating the price when the
     /// system utilisation is above `UpperThreshold`.
     type UpperExponentFactor: Get<u32>;
-    /// The factor that multiplies `e ^ (LowerThreshold - sys_util)` for calculating the price when the
+    /// The factor that multiplies `(e ^ (LowerThreshold - sys_util) - 1)` for calculating the price when the
     /// system utilisation is below `LowerThreshold`.
     type LowerExponentFactor: Get<u32>;
 }
@@ -125,10 +125,11 @@ where
             let exp_taylor_2 = Self::exp_approx_taylor_2(x);
 
             // Calculate the price based on the formula:
-            // `price = stable_price - e ^ (LowerThreshold - system_utilisation) * LowerExponentFactor`
+            // `price = stable_price - (e ^ (LowerThreshold - system_utilisation) - 1) * LowerExponentFactor`
+            let exp_minus_one = exp_taylor_2.saturating_sub(One::one());
             let lower_exponent_factor = T::LowerExponentFactor::get();
             let addition_term =
-                exp_taylor_2.saturating_mul(FixedU128::from_u32(lower_exponent_factor));
+                exp_minus_one.saturating_mul(FixedU128::from_u32(lower_exponent_factor));
             // Round the addition term and downcast it to a uint type like `u128`.
             let addition_term = addition_term
                 .round()
@@ -147,10 +148,11 @@ where
             let exp_taylor_2 = Self::exp_approx_taylor_2(x);
 
             // Calculate the price based on the formula:
-            // `price = stable_price + e ^ (system_utilisation - UpperThreshold) * UpperExponentFactor`
+            // `price = stable_price + (e ^ (system_utilisation - UpperThreshold) - 1) * UpperExponentFactor`
+            let exp_minus_one = exp_taylor_2.saturating_sub(One::one());
             let upper_exponent_factor = T::UpperExponentFactor::get();
             let addition_term =
-                exp_taylor_2.saturating_mul(FixedU128::from_u32(upper_exponent_factor));
+                exp_minus_one.saturating_mul(FixedU128::from_u32(upper_exponent_factor));
             // Round the addition term and downcast it to a uint type like `u128`.
             let addition_term = addition_term
                 .round()
@@ -218,10 +220,10 @@ mod tests {
         type MostlyStablePrice = ConstU128<50>;
         type LowerThreshold = LowerThreshold; // 30%
         type UpperThreshold = UpperThreshold; // 95%
-        type MaxPrice = ConstU128<469>; // 50 + 400 * e ^ ( 1 - 0.95 ) ≈ 470, we set this to be slightly lower, to saturate.
-        type MinPrice = ConstU128<10>; // 50 - 30 * e ^ ( 0.3 - 0 ) ≈ 9.5, we set this to be slightly higher, to saturate.
-        type UpperExponentFactor = ConstU32<400>;
-        type LowerExponentFactor = ConstU32<30>;
+        type MaxPrice = ConstU128<485>; // 50 + 8500 * (e ^ ( 1 - 0.95 ) - 1 ) ≈ 485.8, we set this to be slightly lower, to saturate.
+        type MinPrice = ConstU128<16>; // 50 - 100 * (e ^ ( 0.3 - 0 ) - 1 ) ≈ 15, we set this to be slightly higher, to saturate.
+        type UpperExponentFactor = ConstU32<8500>;
+        type LowerExponentFactor = ConstU32<100>;
     }
 
     type TestPriceUpdater = MostlyStablePriceIndexUpdater<MockConfig>;
@@ -456,6 +458,37 @@ mod tests {
         assert!(
             new_price_2 <= new_price_1,
             "Price should decrease more as utilization decreases"
+        );
+    }
+
+    #[test]
+    fn test_function_continuity() {
+        let current_price = 50u128;
+
+        // System utilisation is barely below the threshold, so the price change should be negligible
+        let used_capacity = 29999u64;
+        let total_capacity = 100000u64;
+
+        let new_price =
+            TestPriceUpdater::update_storage_price(current_price, used_capacity, total_capacity);
+
+        assert_eq!(
+            new_price,
+            <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get(),
+            "Price should remain stable"
+        );
+
+        // System utilisation is barely above the threshold, so the price change should be negligible
+        let used_capacity = 95001u64;
+        let total_capacity = 100000u64;
+
+        let new_price =
+            TestPriceUpdater::update_storage_price(current_price, used_capacity, total_capacity);
+
+        assert_eq!(
+            new_price,
+            <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MostlyStablePrice::get(),
+            "Price should remain stable"
         );
     }
 }

@@ -75,9 +75,9 @@ pub mod dynamic_params {
         ///
         /// [`MaxPrice`] = [`MostlyStablePrice`] + u * e ^ ( 1 - [`SystemUtilisationUpperThresholdPercentage`] )
         ///
-        /// 480 = 48 + u * e ^ (1 - 0.95)
-        /// u = (480 - 48) * e ^ (0.95 - 1) ≈ 411
-        pub static UpperExponentFactor: u32 = 411;
+        /// 480 = 48 + u * (e ^ (1 - 0.95) - 1)
+        /// u = (480 - 48) / (e ^ (1 - 0.95) - 1) ≈ 8426
+        pub static UpperExponentFactor: u32 = 8426;
 
         #[codec(index = 10)]
         #[allow(non_upper_case_globals)]
@@ -86,9 +86,9 @@ pub mod dynamic_params {
         ///
         /// [`MinPrice`] = [`MostlyStablePrice`] - u * e ^ ( [`SystemUtilisationLowerThresholdPercentage`] - 0 )
         ///
-        /// 9 = 48 - l * e ^ (0.3 - 0)
-        /// l = (48 - 9) * e ^ (-0.3) ≈ 29
-        pub static LowerExponentFactor: u32 = 29;
+        /// 9 = 48 - l * (e ^ (0.3 - 0) - 1)
+        /// l = (48 - 9) / (e ^ (0.3 - 0) - 1) ≈ 111
+        pub static LowerExponentFactor: u32 = 111;
     }
 }
 
