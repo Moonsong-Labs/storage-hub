@@ -215,12 +215,11 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
     // Assert that the capacity has changed.
     await bspApi.assert.eventPresent("providers", "CapacityChanged");
-});
 
     const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
     const bspCapacityAfter = await bspApi.query.providers.backupStorageProviders(
       bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
-});
+  });
 });
