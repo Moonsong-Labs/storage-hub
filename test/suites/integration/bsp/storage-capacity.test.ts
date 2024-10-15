@@ -104,9 +104,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
     await userApi.sealBlock();
 
-    const updatedCapacity = BigInt(api.shConsts.JUMP_CAPACITY_BSP + newCapacity);
-    const bspCapacityAfter = await api.query.providers.backupStorageProviders(
-      api.shConsts.DUMMY_BSP_ID
+    const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+    const bspCapacityAfter = await bspApi.query.providers.backupStorageProviders(
+      bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
 
@@ -119,11 +119,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + bspApi.shConsts.CAPACITY_512;
 
     // Skip block height past threshold
-<<<<<<< HEAD
     await skipBlocksToMinChangeTime(userApi);
-=======
-    await api.block.skipToMinChangeTime();
->>>>>>> added tests for the global queue and check capacity change
 
     await userApi.sealBlock(userApi.tx.providers.changeCapacity(newCapacity), bspKey);
 
@@ -166,7 +162,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
   });
 
-  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", { only: true }, async () => {
+  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
     const capacityUsed = (
       await bspApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
@@ -218,16 +214,12 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     await bspApi.sealBlock();
 
     // Assert that the capacity has changed.
-<<<<<<< HEAD
     await bspApi.assert.eventPresent("providers", "CapacityChanged");
 });
-=======
-    await api.assert.eventPresent("providers", "CapacityChanged");
->>>>>>> added tests for the global queue and check capacity change
 
-    const updatedCapacity = BigInt(api.shConsts.JUMP_CAPACITY_BSP + newCapacity);
-    const bspCapacityAfter = await api.query.providers.backupStorageProviders(
-      api.shConsts.DUMMY_BSP_ID
+    const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+    const bspCapacityAfter = await bspApi.query.providers.backupStorageProviders(
+      bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
 });
