@@ -105,7 +105,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     await userApi.sealBlock();
 
     const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
-    const bspCapacityAfter = await userApi  .query.providers.backupStorageProviders(
+    const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
       bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
