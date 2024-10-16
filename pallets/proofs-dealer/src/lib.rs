@@ -595,13 +595,7 @@ pub mod pallet {
                 }
             };
 
-            Self::do_submit_proof(&provider, &proof)?;
-
-            // Get last tick for which the submitter submitted a proof.
-            let last_tick_proven = match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
-                Some(tick) => tick,
-                None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
-            };
+            let last_tick_proven = Self::do_submit_proof(&provider, &proof)?;
 
             // Emit event.
             Self::deposit_event(Event::ProofAccepted {
