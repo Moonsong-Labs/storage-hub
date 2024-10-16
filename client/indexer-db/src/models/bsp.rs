@@ -5,7 +5,7 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     models::multiaddress::MultiAddress,
-    schema::{bsp, bsp_file, bsp_multiaddress},
+    schema::{bsp, bsp_file, bsp_multiaddress, file},
     DbConnection,
 };
 
@@ -131,6 +131,29 @@ impl BspFile {
     ) -> Result<(), diesel::result::Error> {
         diesel::insert_into(bsp_file::table)
             .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+        onchain_bsp_id: String,
+    ) -> Result<(), diesel::result::Error> {
+        use diesel::dsl::exists;
+
+        diesel::delete(bsp_file::table)
+            .filter(exists(
+                file::table
+                    .filter(file::id.eq(bsp_file::file_id))
+                    .filter(file::file_key.eq(file_key.as_ref())),
+            ))
+            .filter(exists(
+                bsp::table
+                    .filter(bsp::id.eq(bsp_file::bsp_id))
+                    .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id)),
+            ))
             .execute(conn)
             .await?;
         Ok(())
