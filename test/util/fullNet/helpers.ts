@@ -14,6 +14,7 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { forceSignupBsp } from "../bspNet/helpers.ts";
 import { sleep } from "../timer.ts";
+import type { H256 } from "@polkadot/types/interfaces";
 
 const exec = util.promisify(child_process.exec);
 
@@ -238,9 +239,8 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
           [multiAddressMsp],
           {
-            identifier: ShConsts.VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
+            pricePerUnitOfDataPerBlock: 1,
+            bucketDataLimit: 500
           },
           mspKey.address
         )

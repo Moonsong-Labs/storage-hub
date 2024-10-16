@@ -663,7 +663,8 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
-          private: bool
+          private: bool,
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -672,6 +673,7 @@ declare module "@polkadot/api-base/types/events" {
           name: Bytes;
           collectionId: Option<u32>;
           private: bool;
+          valuePropId: H256;
         }
       >;
       /**
@@ -2121,17 +2123,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MspRequestSignUpSuccess: AugmentedEvent<
         ApiType,
-        [
-          who: AccountId32,
-          multiaddresses: Vec<Bytes>,
-          capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
-        ],
+        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
         }
       >;
       /**
@@ -2157,14 +2153,14 @@ declare module "@polkadot/api-base/types/events" {
           mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
+          valueProp: ITuple<[H256, PalletStorageProvidersValueProposition]>
         ],
         {
           who: AccountId32;
           mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
+          valueProp: ITuple<[H256, PalletStorageProvidersValueProposition]>;
         }
       >;
       /**

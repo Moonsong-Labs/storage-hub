@@ -28,7 +28,7 @@ use shp_traits::{
 use sp_std::vec::Vec;
 use types::{
     Bucket, MainStorageProvider, MultiAddress, Multiaddresses, ProviderId, StorageProvider,
-    StorageProviderId,
+    StorageProviderId, ValueProposition,
 };
 
 macro_rules! expect_or_err {
@@ -67,7 +67,10 @@ where
 {
     /// This function holds the logic that checks if a user can request to sign up as a Main Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
-    pub fn do_request_msp_sign_up(msp_info: &MainStorageProvider<T>) -> DispatchResult {
+    pub fn do_request_msp_sign_up(
+        msp_info: &MainStorageProvider<T>,
+        value_proposition: ValueProposition<T>,
+    ) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
 
         let who = &msp_info.owner_account;
@@ -137,7 +140,7 @@ where
         SignUpRequests::<T>::insert(
             who,
             (
-                StorageProvider::MainStorageProvider(msp_info.clone()),
+                StorageProvider::MainStorageProvider((msp_info.clone(), value_proposition)),
                 frame_system::Pallet::<T>::block_number(),
             ),
         );
@@ -267,7 +270,7 @@ where
         // Check what type of Storage Provider the signer is trying to sign up as and dispatch the corresponding logic
         match sp {
             StorageProvider::MainStorageProvider(msp_info) => {
-                Self::do_msp_sign_up(who, sp_id, &msp_info, request_block)?;
+                Self::do_msp_sign_up(who, sp_id, &msp_info.0, msp_info.1, request_block)?;
             }
             StorageProvider::BackupStorageProvider(bsp_info) => {
                 Self::do_bsp_sign_up(who, sp_id, &bsp_info, request_block)?;
@@ -284,6 +287,7 @@ where
         who: &T::AccountId,
         msp_id: MainStorageProviderId<T>,
         msp_info: &MainStorageProvider<T>,
+        value_proposition: ValueProposition<T>,
         request_block: BlockNumberFor<T>,
     ) -> DispatchResult {
         // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
@@ -301,6 +305,13 @@ where
         // Save the MainStorageProvider information in storage
         MainStorageProviders::<T>::insert(&msp_id, msp_info);
 
+        // Save the ValueProposition information in storage
+        MainStorageProviderIdsToValuePropositions::<T>::insert(
+            &msp_id,
+            value_proposition.derive_id(),
+            &value_proposition,
+        );
+
         // Increment the counter of Main Storage Providers registered
         let new_amount_of_msps = MspCount::<T>::get()
             .checked_add(&T::SpCount::one())
@@ -316,7 +327,7 @@ where
             msp_id,
             multiaddresses: msp_info.multiaddresses.clone(),
             capacity: msp_info.capacity,
-            value_prop: msp_info.value_prop.clone(),
+            value_prop: (value_proposition.derive_id(), value_proposition),
         });
 
         Ok(())
@@ -946,6 +957,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
+    type ValuePropId = HashId<T>;
 
     fn add_bucket(
         provider_id: Self::ProviderId,
@@ -953,6 +965,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
@@ -972,6 +985,14 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
+        ensure!(
+            MainStorageProviderIdsToValuePropositions::<T>::contains_key(
+                &provider_id,
+                &value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotFound
+        );
+
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
         ensure!(
@@ -989,6 +1010,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             read_access_group_id: maybe_read_access_group_id,
             user_id,
             size: T::StorageDataUnit::zero(),
+            value_prop_id,
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
@@ -1573,5 +1595,12 @@ where
         } else {
             Err(QueryProviderMultiaddressesError::ProviderNotRegistered)
         }
+    }
+
+    pub fn query_value_propositions_for_msp(
+        msp_id: &MainStorageProviderId<T>,
+    ) -> Vec<(HashId<T>, ValueProposition<T>)> {
+        MainStorageProviderIdsToValuePropositions::<T>::iter_prefix(msp_id)
+            .collect::<Vec<(HashId<T>, ValueProposition<T>)>>()
     }
 }

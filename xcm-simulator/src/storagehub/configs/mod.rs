@@ -484,7 +484,6 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;

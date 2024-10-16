@@ -2,7 +2,7 @@ import "@storagehub/types-bundle";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord } from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { assertEventPresent } from "../asserts";
@@ -42,10 +42,15 @@ export const createApiObject = async (
     ) =>
       advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
 
-    sendNewStorageRequest: async (source: string, location: string, bucketName: string) =>
-      sendNewStorageRequest(baseApi, source, location, bucketName),
+    sendNewStorageRequest: async (
+      source: string,
+      location: string,
+      bucketName: string,
+      valuePropId: H256
+    ) => sendNewStorageRequest(baseApi, source, location, bucketName, valuePropId),
 
-    createBucket: async (bucketName: string) => createBucket(baseApi, bucketName),
+    createBucket: async (bucketName: string, valuePropId: H256) =>
+      createBucket(baseApi, bucketName, valuePropId),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>
       assertEventPresent(baseApi, module, method, events)

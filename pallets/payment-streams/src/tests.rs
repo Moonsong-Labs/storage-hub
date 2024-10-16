@@ -34,7 +34,6 @@ pub type SpMinCapacity = <Test as pallet_storage_providers::Config>::SpMinCapaci
 pub type MaxMultiAddressAmount<Test> =
     <Test as pallet_storage_providers::Config>::MaxMultiAddressAmount;
 use pallet_storage_providers::types::MultiAddress;
-pub type ValuePropId = <Test as pallet_storage_providers::Config>::ValuePropId;
 use pallet_storage_providers::types::ValueProposition;
 
 /// This module holds all tests for fixed-rate payment streams
@@ -4654,11 +4653,6 @@ fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>
             .try_into()
             .unwrap(),
     );
-    let value_prop: ValueProposition<Test> = ValueProposition {
-        identifier: ValuePropId::default(),
-        data_limit: 10,
-        protocols: BoundedVec::new(),
-    };
 
     // Get the deposit amount for the storage amount
     // The deposit for any amount of storage is be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
@@ -4676,7 +4670,7 @@ fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        value_prop,
+        ValueProposition::<Test>::new(1, 10),
         account
     ));
 

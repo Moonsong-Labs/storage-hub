@@ -519,9 +519,10 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
-          private: bool | boolean | Uint8Array
+          private: bool | boolean | Uint8Array,
+          valuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool]
+        [H256, Bytes, bool, H256]
       >;
       deleteFile: AugmentedSubmittable<
         (
@@ -2782,7 +2783,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           newValueProp:
             | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
+            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any }
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
@@ -2944,9 +2945,9 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
+          valueProposition:
             | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
+            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any }
             | string
             | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
@@ -3035,9 +3036,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
+          valueProposition:
             | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
+            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any }
             | string
             | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array

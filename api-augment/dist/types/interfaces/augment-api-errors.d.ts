@@ -1083,6 +1083,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageTooLow: AugmentedError<ApiType>;
       /**
+       * Error thrown when the value proposition id is not found.
+       **/
+      ValuePropositionNotFound: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;

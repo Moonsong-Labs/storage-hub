@@ -52,7 +52,8 @@ export interface BspNetApi extends ApiPromise {
   sendNewStorageRequest(
     source: string,
     location: string,
-    bucketName: string
+    bucketName: string,
+    valuePropId: H256
   ): Promise<FileMetadata>;
 
   /**
@@ -61,7 +62,7 @@ export interface BspNetApi extends ApiPromise {
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to a new bucket event.
    */
-  createBucket(bucketName: string): Promise<Event>;
+  createBucket(bucketName: string, valuePropId: H256): Promise<Event>;
 
   /**
    * Asserts that a specific event occurred in a list of events.

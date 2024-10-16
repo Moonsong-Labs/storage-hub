@@ -180,6 +180,7 @@ impl IndexerService {
                 name,
                 collection_id,
                 private,
+                value_prop_id: _value_prop_id,
             } => {
                 let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
                 Bucket::create(

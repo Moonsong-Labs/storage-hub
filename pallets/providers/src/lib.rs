@@ -129,22 +129,6 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
-        /// The type of the identifier of the value proposition of a MSP (probably a hash of that value proposition)
-        type ValuePropId: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
-
         /// The type of the Bucket NFT Collection ID.
         type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
@@ -386,6 +370,21 @@ pub mod pallet {
     #[pallet::storage]
     pub type GlobalBspsReputationWeight<T> = StorageValue<_, ReputationWeightType<T>, ValueQuery>;
 
+    /// Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+    ///
+    /// These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+    /// limit of data that can be stored in the bucket.
+    #[pallet::storage]
+    pub type MainStorageProviderIdsToValuePropositions<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        MainStorageProviderId<T>,
+        Blake2_128Concat,
+        HashId<T>,
+        ValueProposition<T>,
+        OptionQuery,
+    >;
+
     // Events & Errors:
 
     /// The events that can be emitted by this pallet
@@ -398,7 +397,6 @@ pub mod pallet {
             who: T::AccountId,
             multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
-            value_prop: ValueProposition<T>,
         },
 
         /// Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
@@ -408,7 +406,7 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
-            value_prop: ValueProposition<T>,
+            value_prop: (HashId<T>, ValueProposition<T>),
         },
 
         /// Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
@@ -527,6 +525,8 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when the value proposition id is not found.
+        ValuePropositionNotFound,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -587,7 +587,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_prop: ValueProposition<T>,
+            value_proposition: ValueProposition<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -599,7 +599,6 @@ pub mod pallet {
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
@@ -607,14 +606,13 @@ pub mod pallet {
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&msp_info)?;
+            Self::do_request_msp_sign_up(&msp_info, value_proposition)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
-                value_prop,
             });
 
             // Return a successful DispatchResultWithPostInfo
@@ -920,7 +918,7 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_prop: ValueProposition<T>,
+            value_proposition: ValueProposition<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
@@ -932,7 +930,6 @@ pub mod pallet {
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
@@ -940,14 +937,13 @@ pub mod pallet {
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&msp_info)?;
+            Self::do_request_msp_sign_up(&msp_info, value_proposition.clone())?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
                 who: who.clone(),
                 multiaddresses,
                 capacity,
-                value_prop,
             });
 
             // Confirm the sign up of the account as a Main Storage Provider with the given ID
@@ -955,6 +951,7 @@ pub mod pallet {
                 &who,
                 msp_id,
                 &msp_info,
+                value_proposition,
                 frame_system::Pallet::<T>::block_number(),
             )?;
 

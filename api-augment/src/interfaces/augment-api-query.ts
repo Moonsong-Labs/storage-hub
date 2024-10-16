@@ -62,6 +62,7 @@ import type {
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
   PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
   PalletXcmRemoteLockedFungibleRecord,
@@ -1537,6 +1538,21 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+       *
+       * These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+       * limit of data that can be stored in the bucket.
+       **/
+      mainStorageProviderIdsToValuePropositions: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersValueProposition>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
        * The mapping from a MainStorageProviderId to a MainStorageProvider.
        *

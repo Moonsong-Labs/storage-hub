@@ -1171,7 +1171,6 @@ mod users {
     use pallet_file_system::types::MaxFilePathSize;
     use pallet_file_system::types::MaxNumberOfPeerIds;
     use pallet_file_system::types::MaxPeerIdSize;
-    use pallet_storage_providers::types::ValuePropId;
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
@@ -1195,12 +1194,9 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, 10);
+        let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
-            let value_prop: ValueProposition<storagehub::Runtime> = ValueProposition {
-                identifier: ValuePropId::<storagehub::Runtime>::default(),
-                data_limit: 10,
-                protocols: BoundedVec::new(),
-            };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
                 MaxMultiAddressAmount<storagehub::Runtime>,
@@ -1220,7 +1216,7 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                value_prop,
+                ValueProposition::<storagehub::Runtime>::new(1, 10),
                 ALICE
             ));
 
@@ -1246,6 +1242,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1454,12 +1451,9 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, 10);
+        let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
-            let value_prop: ValueProposition<storagehub::Runtime> = ValueProposition {
-                identifier: ValuePropId::<storagehub::Runtime>::default(),
-                data_limit: 10,
-                protocols: BoundedVec::new(),
-            };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
                 MaxMultiAddressAmount<storagehub::Runtime>,
@@ -1600,6 +1594,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub

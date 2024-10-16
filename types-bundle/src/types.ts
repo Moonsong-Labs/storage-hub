@@ -39,6 +39,11 @@ export const ALL_TYPES: RegistryTypes = {
   ChunkId: "u64",
   StorageDataUnit: "u32",
   Multiaddresses: "BoundedVec<u8, 5>",
+  ValuePropId: "H256",
+  ValueProposition: {
+    price_per_unit_of_data_per_block: "u64",
+    bucket_data_limit: "StorageDataUnit"
+  },
   BackupStorageProvider: {
     capacity: "StorageData",
     data_used: "StorageData",
