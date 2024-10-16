@@ -10,7 +10,6 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
-use sc_client_api::HeaderBackend;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::EventsRetrievalError;
 use shc_common::{
