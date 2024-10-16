@@ -391,7 +391,7 @@ where
             }
         }
 
-        Ok(last_tick_proven)
+        Ok(challenges_tick)
     }
 
     /// Generate a new round of challenges, be it random or checkpoint.
