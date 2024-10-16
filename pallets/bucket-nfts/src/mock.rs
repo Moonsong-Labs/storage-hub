@@ -14,11 +14,12 @@ use shp_traits::{
     ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface, TrieMutation,
     TrieRemoveMutation,
 };
+use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, MultiSignature, SaturatedConversion,
+    BuildStorage, MultiSignature, Perquintill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
@@ -311,6 +312,8 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Perquintill, Self::Units>;
+    type TreasuryAccount = TreasuryAccount;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;

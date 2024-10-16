@@ -33,11 +33,14 @@ use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
+use shp_treasury_funding::{
+    LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
+};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
-    AccountId32, DispatchError, Perbill, SaturatedConversion,
+    AccountId32, DispatchError, Perbill, Perquintill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
@@ -508,6 +511,14 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
     }
 }
 
+impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig for Runtime {
+    type PercentageType = Perquintill;
+    type ProvidedUnit = StorageDataUnit;
+    type IdealUtilizationRate =
+        runtime_params::dynamic_params::runtime_config::IdealUtilizationRate;
+    type DecayRate = runtime_params::dynamic_params::runtime_config::DecayRate;
+}
+
 impl pallet_payment_streams::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -518,6 +529,8 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
+    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime>;
+    type TreasuryAccount = TreasuryAccount;
 }
 
 // TODO: remove this and replace with pallet treasury

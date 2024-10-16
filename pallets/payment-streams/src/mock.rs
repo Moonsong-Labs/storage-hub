@@ -11,11 +11,12 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
 use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface};
+use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, Perquintill,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
@@ -141,7 +142,7 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
-        0
+        1000
     }
 }
 
@@ -293,6 +294,8 @@ impl crate::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Perquintill, Self::Units>;
+    type TreasuryAccount = TreasuryAccount;
 }
 
 // Build genesis storage according to the mock runtime.

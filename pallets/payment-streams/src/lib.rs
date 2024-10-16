@@ -36,7 +36,10 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface, SystemMetricsInterface};
-    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, One, Saturating};
+    use sp_runtime::{
+        traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, One, Saturating},
+        Perquintill,
+    };
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -58,6 +61,12 @@ pub mod pallet {
         type ProvidersProofSubmitters: ProofSubmittersInterface<
             ProviderId = <Self::ProvidersPallet as ReadProvidersInterface>::ProviderId,
             TickNumber = BlockNumberFor<Self>,
+        >;
+
+        /// The trait exposing the logic to calculate how much of the charged funds must go to the treasury.
+        type TreasuryCutCalculator: shp_traits::TreasuryCutCalculator<
+            PercentageType = Perquintill,
+            ProvidedUnit = Self::Units,
         >;
 
         /// The overarching hold reason
@@ -91,6 +100,10 @@ pub mod pallet {
         /// and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.
         #[pallet::constant]
         type UserWithoutFundsCooldown: Get<BlockNumberFor<Self>>;
+
+        /// The treasury account of the runtime
+        #[pallet::constant]
+        type TreasuryAccount: Get<Self::AccountId>;
     }
 
     #[pallet::pallet]

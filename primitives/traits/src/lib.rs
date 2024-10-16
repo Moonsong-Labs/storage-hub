@@ -15,7 +15,7 @@ use sp_runtime::{
         AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One,
         Saturating, Zero,
     },
-    BoundedVec, DispatchError,
+    BoundedVec, DispatchError, PerThing,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -1051,4 +1051,23 @@ pub trait UpdateStoragePrice {
         used_capacity: Self::StorageDataUnit,
         total_capacity: Self::StorageDataUnit,
     ) -> Self::Price;
+}
+
+/// A trait to calculate the percentage of charge funds by a Provider that should go to the treasury.
+///
+/// This is used by the Payment Streams pallet, which requires some type to implement this trait,
+/// and uses such implementation to calculate the percentage of charged funds by a Provider that should go to the treasury.
+pub trait TreasuryCutCalculator {
+    /// The PerThing type which represents the percentage a percentage of a thing.
+    type PercentageType: PerThing;
+    /// Type of the unit provided by Providers
+    type ProvidedUnit: NumericalParam + Into<u64>;
+
+    /// Calculate the percentage of charged funds by a Provider that should go to the treasury.
+    ///
+    /// Returns the percentage of charged funds by a Provider that should go to the treasury.
+    fn calculate_treasury_cut(
+        provided_amount: Self::ProvidedUnit,
+        used_amount: Self::ProvidedUnit,
+    ) -> Self::PercentageType;
 }

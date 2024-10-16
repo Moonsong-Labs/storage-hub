@@ -1,5 +1,6 @@
 use crate::storagehub::{configs::SpMinDeposit, Balance, BlockNumber, Runtime, UNIT};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
+use sp_runtime::Perquintill;
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
 pub mod dynamic_params {
@@ -33,6 +34,17 @@ pub mod dynamic_params {
         #[codec(index = 3)]
         #[allow(non_upper_case_globals)]
         pub static MinChallengePeriod: BlockNumber = 30;
+
+        #[codec(index = 11)]
+        #[allow(non_upper_case_globals)]
+        /// Ideal utilization rate of the system
+        pub static IdealUtilizationRate: Perquintill = Perquintill::from_percent(60);
+
+        #[codec(index = 12)]
+        #[allow(non_upper_case_globals)]
+        /// Decay rate of the power of two function that determines the percentage of funds that go to
+        /// the treasury for utilization rates greater than the ideal.
+        pub static DecayRate: Perquintill = Perquintill::from_percent(5);
     }
 }
 

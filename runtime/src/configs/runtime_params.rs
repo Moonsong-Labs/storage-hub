@@ -1,4 +1,6 @@
-use crate::{configs::SpMinDeposit, Balance, BlockNumber, Perbill, Runtime, PICOUNIT, UNIT};
+use crate::{
+    configs::SpMinDeposit, Balance, BlockNumber, Perbill, Perquintill, Runtime, PICOUNIT, UNIT,
+};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
@@ -89,6 +91,17 @@ pub mod dynamic_params {
         /// 9 = 48 - l * (e ^ (0.3 - 0) - 1)
         /// l = (48 - 9) / (e ^ (0.3 - 0) - 1) ≈ 111
         pub static LowerExponentFactor: u32 = 111;
+
+        #[codec(index = 11)]
+        #[allow(non_upper_case_globals)]
+        /// Ideal utilization rate of the system
+        pub static IdealUtilizationRate: Perquintill = Perquintill::from_percent(60);
+
+        #[codec(index = 12)]
+        #[allow(non_upper_case_globals)]
+        /// Decay rate of the power of two function that determines the percentage of funds that go to
+        /// the treasury for utilization rates greater than the ideal.
+        pub static DecayRate: Perquintill = Perquintill::from_percent(5);
     }
 }
 
