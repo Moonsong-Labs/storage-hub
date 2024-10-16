@@ -31,6 +31,7 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use runtime_params::RuntimeParameters;
+use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -673,6 +674,7 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
     type ReplicationTargetType = u32;

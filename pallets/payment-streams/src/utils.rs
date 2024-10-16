@@ -12,8 +12,8 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_traits::{
-    PaymentStreamsInterface, ProofSubmittersInterface, ReadProvidersInterface,
-    ReadUserSolvencyInterface, SystemMetricsInterface,
+    MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
 };
 use sp_runtime::{
     traits::{Convert, One},
@@ -1420,6 +1420,18 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
 
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
         UsersWithoutFunds::<T>::contains_key(user_account)
+    }
+}
+
+impl<T: pallet::Config> MutatePricePerUnitPerTickInterface for pallet::Pallet<T> {
+    type PricePerUnitPerTick = BalanceOf<T>;
+
+    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick {
+        CurrentPricePerUnitPerTick::<T>::get()
+    }
+
+    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick) {
+        CurrentPricePerUnitPerTick::<T>::put(price_index);
     }
 }
 
