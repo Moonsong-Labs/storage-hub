@@ -1087,6 +1087,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ValuePropositionAlreadyExists: AugmentedError<ApiType>;
       /**
+       * Error thrown when a value proposition is not available.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
        * Error thrown when the value proposition id is not found.
        **/
       ValuePropositionNotFound: AugmentedError<ApiType>;

@@ -1362,14 +1362,11 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance>
     {
-        if let Some(bucket) = Buckets::<T>::get(&who) {
-            match MainStorageProviders::<T>::get(bucket.msp_id) {
-                Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
-                    &HoldReason::BucketDeposit.into(),
-                    &related_msp.owner_account,
-                )),
-                None => None,
-            }
+        if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &msp.owner_account,
+            ))
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
             Some(T::NativeBalance::balance_on_hold(
                 &HoldReason::StorageProviderDeposit.into(),

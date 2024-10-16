@@ -25,10 +25,7 @@ export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
   private _endpoint: `ws://${string}` | `wss://${string}`;
 
-  private constructor(
-    api: ApiPromise,
-    endpoint: `ws://${string}` | `wss://${string}`
-  ) {
+  private constructor(api: ApiPromise, endpoint: `ws://${string}` | `wss://${string}`) {
     this._api = api;
     this._endpoint = endpoint;
   }
@@ -56,7 +53,7 @@ export class BspNetTestApi implements AsyncDisposable {
         noInitWarn: true,
         throwOnConnect: false,
         throwOnUnknown: false,
-        typesBundle: BundledTypes,
+        typesBundle: BundledTypes
       });
       await newApi.isReady;
       this._api = newApi;
@@ -77,12 +74,12 @@ export class BspNetTestApi implements AsyncDisposable {
       noInitWarn: true,
       throwOnConnect: false,
       throwOnUnknown: false,
-      typesBundle: BundledTypes,
+      typesBundle: BundledTypes
     });
     return Object.assign(api, {
       [Symbol.asyncDispose]: async () => {
         await api.disconnect();
-      },
+      }
     });
   }
 
@@ -114,13 +111,7 @@ export class BspNetTestApi implements AsyncDisposable {
     bucketName: string,
     valuePropId: H256
   ) {
-    return Files.sendNewStorageRequest(
-      this._api,
-      source,
-      location,
-      bucketName,
-      valuePropId
-    );
+    return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
   }
 
   private async createBucket(bucketName: string, valuePropId?: H256) {
@@ -188,13 +179,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param events - Optional. The events to search through. If not provided, it will fetch the latest block's events.
        * @returns The matching event and its data.
        */
-      eventPresent: async (
-        module: string,
-        method: string,
-        events?: EventRecord[]
-      ) => {
-        const evts =
-          events ?? ((await this._api.query.system.events()) as EventRecord[]);
+      eventPresent: async (module: string, method: string, events?: EventRecord[]) => {
+        const evts = events ?? ((await this._api.query.system.events()) as EventRecord[]);
         return Assertions.assertEventPresent(this._api, module, method, evts);
       },
       /**
@@ -204,13 +190,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param events - Optional. The events to search through. If not provided, it will fetch the latest block's events.
        * @returns An array of matching events and their data.
        */
-      eventMany: async (
-        module: string,
-        method: string,
-        events?: EventRecord[]
-      ) => {
-        const evts =
-          events ?? ((await this._api.query.system.events()) as EventRecord[]);
+      eventMany: async (module: string, method: string, events?: EventRecord[]) => {
+        const evts = events ?? ((await this._api.query.system.events()) as EventRecord[]);
         return Assertions.assertEventMany(this._api, module, method, evts);
       },
       /**
@@ -246,7 +227,7 @@ export class BspNetTestApi implements AsyncDisposable {
           options.searchString,
           options.timeout
         );
-      },
+      }
     };
 
     /**
@@ -259,8 +240,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: (expectedExts?: number) =>
-        Waits.waitForBspVolunteer(this._api, expectedExts),
+      bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to volunteer for a storage request.
@@ -278,16 +258,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number) =>
-        Waits.waitForBspStored(this._api, expectedExts),
+      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
 
       /**
        * Waits for a MSP to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a MSP has responded to storage requests.
        */
-      mspResponse: (expectedExts?: number) =>
-        Waits.waitForMspResponse(this._api, expectedExts),
+      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -319,7 +297,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when a BSP has caught up to the tip of the chain
        */
       bspCatchUpToChainTip: (bspBehindApi: ApiPromise) =>
-        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi),
+        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi)
     };
 
     /**
@@ -336,13 +314,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to a new bucket event.
        */
       newBucket: (bucketName: string, valuePropId: H256, owner?: KeyringPair) =>
-        Files.createBucket(
-          this._api,
-          bucketName,
-          valuePropId,
-          undefined,
-          owner
-        ),
+        Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
 
       /**
        * Creates a new bucket and submits a new storage request.
@@ -370,7 +342,7 @@ export class BspNetTestApi implements AsyncDisposable {
           valuePropId,
           msp_id,
           owner
-        ),
+        )
     };
 
     /**
@@ -384,12 +356,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to a SealedBlock object.
        */
       seal: (options?: SealBlockOptions) =>
-        BspNetBlock.sealBlock(
-          this._api,
-          options?.calls,
-          options?.signer,
-          options?.finaliseBlock
-        ),
+        BspNetBlock.sealBlock(this._api, options?.calls, options?.signer, options?.finaliseBlock),
       /**
        * Seal blocks until the next challenge period block.
        * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
@@ -398,19 +365,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the challenge period block is reached.
        */
       skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
-        BspNetBlock.runToNextChallengePeriodBlock(
-          this._api,
-          nextChallengeTick,
-          provider
-        ),
+        BspNetBlock.runToNextChallengePeriodBlock(this._api, nextChallengeTick, provider),
       /**
        * Skips a specified number of blocks.
        * Note: This skips too quickly for nodes to BSPs to react. Use skipTo where reaction extrinsics are required.
        * @param blocksToAdvance - The number of blocks to skip.
        * @returns A promise that resolves when the specified number of blocks have been skipped.
        */
-      skip: (blocksToAdvance: number) =>
-        BspNetBlock.skipBlocks(this._api, blocksToAdvance),
+      skip: (blocksToAdvance: number) => BspNetBlock.skipBlocks(this._api, blocksToAdvance),
       /**
        * Advances the chain to a specific block number.
        * @param blockNumber - The target block number to advance to.
@@ -438,14 +400,13 @@ export class BspNetTestApi implements AsyncDisposable {
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.
        */
-      skipToMinChangeTime: () =>
-        BspNetBlock.skipBlocksToMinChangeTime(this._api),
+      skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
        * Causes a chain re-org by creating a finalized block on top of the parent block.
        * Note: This requires the head block to be unfinalized, otherwise it will throw!
        * @returns A promise that resolves when the chain re-org is complete.
        */
-      reOrg: () => BspNetBlock.reOrgBlocks(this._api),
+      reOrg: () => BspNetBlock.reOrgBlocks(this._api)
     };
 
     const remappedNodeNs = {
@@ -458,10 +419,8 @@ export class BspNetTestApi implements AsyncDisposable {
        *                    - If a hex string, it will drop the transaction with the matching hash.
        * @param sealAfter - Whether to seal a block after dropping the transaction(s). Defaults to false.
        */
-      dropTxn: (
-        extrinsic?: { module: string; method: string } | HexString,
-        sealAfter = false
-      ) => NodeBspNet.dropTransaction(this._api, extrinsic, sealAfter),
+      dropTxn: (extrinsic?: { module: string; method: string } | HexString, sealAfter = false) =>
+        NodeBspNet.dropTransaction(this._api, extrinsic, sealAfter)
     };
 
     const remappedDockerNs = {
@@ -475,7 +434,7 @@ export class BspNetTestApi implements AsyncDisposable {
         bspStartingWeight?: bigint;
         maxStorageCapacity?: number;
         additionalArgs?: string[];
-      }) => addBsp(this._api, options.bspSigner, options),
+      }) => addBsp(this._api, options.bspSigner, options)
     };
 
     return Object.assign(this._api, {
@@ -539,7 +498,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * Offers methods for interacting with Docker containers in the BSP network test environment.
        */
       docker: remappedDockerNs,
-      [Symbol.asyncDispose]: this.disconnect.bind(this),
+      [Symbol.asyncDispose]: this.disconnect.bind(this)
     }) satisfies BspNetApi;
   }
 

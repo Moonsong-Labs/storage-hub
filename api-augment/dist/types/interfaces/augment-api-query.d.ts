@@ -994,7 +994,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
+       * This is equivalent to what it would have cost to provide one unit of the provided service since the beginning of the network.
        * We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
        * when the payment stream was last charged, and the index at the last chargeable tick.
        *

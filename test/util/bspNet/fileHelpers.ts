@@ -19,10 +19,9 @@ export const sendNewStorageRequest = async (
   owner?: KeyringPair
 ): Promise<FileMetadata> => {
   if (valuePropId === undefined) {
-    const valueProps =
-      await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-        mspId ?? ShConsts.DUMMY_MSP_ID
-      );
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+      mspId ?? ShConsts.DUMMY_MSP_ID
+    );
 
     valuePropId = valueProps[0][0];
   }
@@ -31,16 +30,9 @@ export const sendNewStorageRequest = async (
     throw new Error("No value proposition found");
   }
 
-  const newBucketEventEvent = await createBucket(
-    api,
-    bucketName,
-    valuePropId,
-    mspId,
-    owner
-  );
+  const newBucketEventEvent = await createBucket(api, bucketName, valuePropId, mspId, owner);
   const newBucketEventDataBlob =
-    api.events.fileSystem.NewBucket.is(newBucketEventEvent) &&
-    newBucketEventEvent.data;
+    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
   invariant(newBucketEventDataBlob, "Event doesn't match Type");
 
@@ -82,7 +74,7 @@ export const sendNewStorageRequest = async (
     location: newStorageRequestEventDataBlob.location.toString(),
     owner: newBucketEventDataBlob.who.toString(),
     fingerprint: fileMetadata.fingerprint,
-    fileSize: fileMetadata.file_size,
+    fileSize: fileMetadata.file_size
   };
 };
 
@@ -93,10 +85,9 @@ export const createBucket = async (
   mspId: HexString = ShConsts.DUMMY_MSP_ID,
   owner: KeyringPair = shUser
 ) => {
-  const valueProps =
-    await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId ?? ShConsts.DUMMY_MSP_ID
-    );
+  const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+    mspId ?? ShConsts.DUMMY_MSP_ID
+  );
 
   valuePropId = valueProps[0][0];
 
@@ -109,12 +100,7 @@ export const createBucket = async (
     api.tx.fileSystem.createBucket(mspId, bucketName, false, valuePropId),
     owner
   );
-  const { event } = assertEventPresent(
-    api,
-    "fileSystem",
-    "NewBucket",
-    createBucketResult.events
-  );
+  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 
   return event;
 };
