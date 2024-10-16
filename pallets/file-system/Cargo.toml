@@ -45,6 +45,7 @@ pallet-bucket-nfts = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-payment-streams = { workspace = true }
+shp-data-price-updater = { workspace = true}
 
 # Substrate
 sp-io = { workspace = true }
