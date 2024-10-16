@@ -445,12 +445,10 @@ impl IndexerService {
                 provider_id,
                 amount_slashed: _amount_slashed,
             } => {
-                let current_block_hash = self.client.info().best_hash;
-
                 let stake = self
                     .client
                     .runtime_api()
-                    .get_bsp_stake(current_block_hash, provider_id)
+                    .get_bsp_stake(block_hash, provider_id)
                     .expect("to have a stake")
                     .unwrap_or(Default::default())
                     .into();
