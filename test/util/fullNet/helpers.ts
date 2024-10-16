@@ -14,7 +14,6 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { forceSignupBsp } from "../bspNet/helpers.ts";
 import { sleep } from "../timer.ts";
-import type { H256 } from "@polkadot/types/interfaces";
 
 const exec = util.promisify(child_process.exec);
 
