@@ -290,6 +290,7 @@ impl IndexerService {
                 )
                 .await?;
             }
+            pallet_payment_streams::Event::UsersCharged { .. } => {}
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
             pallet_payment_streams::Event::UserPaidDebts { .. } => {}
