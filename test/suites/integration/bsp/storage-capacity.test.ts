@@ -105,7 +105,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     await userApi.sealBlock();
 
     const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
-    const bspCapacityAfter = await bspApi.query.providers.backupStorageProviders(
+    const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
       bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
@@ -164,17 +164,17 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
   it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
     const capacityUsed = (
-      await bspApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
+      await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
       .unwrap()
       .capacityUsed.toNumber();
-    await bspApi.block.skipToMinChangeTime();
-    const minCapacity = bspApi.consts.providers.spMinCapacity.toNumber();
+    await userApi.block.skipToMinChangeTime();
+    const minCapacity = userApi.consts.providers.spMinCapacity.toNumber();
     const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
-    const { extSuccess } = await bspApi.sealBlock(
-      bspApi.tx.providers.changeCapacity(newCapacity),
+    const { extSuccess } = await userApi.sealBlock(
+      userApi.tx.providers.changeCapacity(newCapacity),
       bspKey
     );
     assert.strictEqual(extSuccess, true);
@@ -194,12 +194,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     //To allow for BSP to react to request
     await sleep(500);
 
-    // TODO: get the last block number and the period for which you can change capacity
-    // userApi.consts.providers.minBlocksBetweenCapacityChanges
-
-    const nextCapacityChangeBlock = 29;
-
-    await bspApi.advanceToBlock(nextCapacityChangeBlock);
+    await userApi.consts.providers.minBlocksBetweenCapacityChanges;
 
     // Allow BSP enough time to send call to change capacity.
     await sleep(500);
@@ -214,10 +209,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     await bspApi.sealBlock();
 
     // Assert that the capacity has changed.
-    await bspApi.assert.eventPresent("providers", "CapacityChanged");
+    await userApi.assert.eventPresent("providers", "CapacityChanged");
 
-    const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
-    const bspCapacityAfter = await bspApi.query.providers.backupStorageProviders(
+    const updatedCapacity = BigInt(userApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+    const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
       bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
