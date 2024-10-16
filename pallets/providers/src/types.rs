@@ -6,7 +6,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
-use sp_runtime::{traits::Hash, BoundedVec};
+use sp_runtime::BoundedVec;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
 
@@ -15,6 +15,7 @@ pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T
 pub struct ValueProposition<T: Config> {
     pub price_per_unit_of_data_per_block: BalanceOf<T>,
     pub bucket_data_limit: StorageDataUnit<T>,
+    pub available: bool,
 }
 
 impl<T: Config> ValueProposition<T> {
@@ -25,12 +26,15 @@ impl<T: Config> ValueProposition<T> {
         Self {
             price_per_unit_of_data_per_block,
             bucket_data_limit,
+            available: true,
         }
     }
 
-    /// Produce the ID of the ValueProposition
+    /// Produce the ID of the ValueProposition not including the `available` field.
     pub fn derive_id(&self) -> HashId<T> {
-        T::Hashing::hash_of(&self)
+        let mut concat = self.price_per_unit_of_data_per_block.encode();
+        concat.extend_from_slice(&self.bucket_data_limit.encode());
+        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 }
 

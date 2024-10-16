@@ -4307,6 +4307,233 @@ mod slash {
     }
 }
 
+mod add_value_prop {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn account_is_not_a_registered_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let value_prop = ValueProposition::<Test>::new(1, 10);
+
+                // Try to add a value proposition to an account that is not a registered MSP
+                assert_noop!(
+                    StorageProviders::add_value_prop(RuntimeOrigin::signed(alice), value_prop),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn value_prop_already_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount);
+
+                let value_prop = ValueProposition::<Test>::new(999, 999);
+
+                assert_ok!(StorageProviders::add_value_prop(
+                    RuntimeOrigin::signed(alice),
+                    value_prop.clone()
+                ));
+
+                assert_noop!(
+                    StorageProviders::add_value_prop(RuntimeOrigin::signed(alice), value_prop),
+                    Error::<Test>::ValuePropositionAlreadyExists
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn add_value_prop_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount);
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                let value_prop = ValueProposition::<Test>::new(999, 999);
+
+                assert_ok!(StorageProviders::add_value_prop(
+                    RuntimeOrigin::signed(alice),
+                    value_prop.clone()
+                ));
+
+                let value_prop_id = value_prop.derive_id();
+
+                // Check event is emitted
+                System::assert_last_event(
+                    Event::<Test>::ValuePropAdded {
+                        msp_id,
+                        value_prop_id,
+                        value_prop: value_prop.clone(),
+                    }
+                    .into(),
+                );
+
+                assert_eq!(
+                    crate::MainStorageProviderIdsToValuePropositions::<Test>::get(
+                        &msp_id,
+                        value_prop_id
+                    ),
+                    Some(value_prop)
+                );
+            });
+        }
+    }
+}
+
+mod make_value_prop_unavailable {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn account_is_not_a_registered_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let value_prop = ValueProposition::<Test>::new(1, 10);
+
+                // Try to make a value proposition unavailable to an account that is not a registered MSP
+                assert_noop!(
+                    StorageProviders::make_value_prop_unavailable(
+                        RuntimeOrigin::signed(alice),
+                        value_prop.derive_id()
+                    ),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn value_prop_does_not_exist() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount);
+
+                let value_prop = ValueProposition::<Test>::new(999, 999);
+
+                assert_noop!(
+                    StorageProviders::make_value_prop_unavailable(
+                        RuntimeOrigin::signed(alice),
+                        value_prop.derive_id()
+                    ),
+                    Error::<Test>::ValuePropositionNotFound
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn make_value_prop_unavailable_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount);
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                let value_prop = ValueProposition::<Test>::new(999, 999);
+
+                assert_ok!(StorageProviders::add_value_prop(
+                    RuntimeOrigin::signed(alice),
+                    value_prop.clone()
+                ));
+
+                let value_prop_id = value_prop.derive_id();
+
+                assert_ok!(StorageProviders::make_value_prop_unavailable(
+                    RuntimeOrigin::signed(alice),
+                    value_prop_id
+                ));
+
+                // Check event is emitted
+                System::assert_last_event(
+                    Event::<Test>::ValuePropUnavailable {
+                        msp_id,
+                        value_prop_id,
+                    }
+                    .into(),
+                );
+
+                assert_eq!(
+                    crate::MainStorageProviderIdsToValuePropositions::<Test>::get(
+                        &msp_id,
+                        value_prop_id
+                    )
+                    .unwrap(),
+                    ValueProposition::<Test> {
+                        price_per_unit_of_data_per_block: 999,
+                        bucket_data_limit: 999,
+                        available: false
+                    }
+                );
+            });
+        }
+
+        #[test]
+        fn create_bucket_fails_when_value_prop_is_unavailable() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount);
+
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                let value_prop = ValueProposition::<Test>::new(999, 999);
+
+                assert_ok!(StorageProviders::add_value_prop(
+                    RuntimeOrigin::signed(alice),
+                    value_prop.clone()
+                ));
+
+                let value_prop_id = value_prop.derive_id();
+
+                assert_ok!(StorageProviders::make_value_prop_unavailable(
+                    RuntimeOrigin::signed(alice),
+                    value_prop_id
+                ));
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &msp_id,
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to add a bucket with an unavailable value proposition
+                assert_noop!(
+                    StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None,
+                        value_prop_id
+                    ),
+                    Error::<Test>::ValuePropositionNotAvailable
+                );
+            });
+        }
+    }
+}
+
 // Helper functions for testing:
 
 /// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageDataUnit units

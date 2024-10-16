@@ -2783,7 +2783,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           newValueProp:
             | PalletStorageProvidersValueProposition
-            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any }
+            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any; available?: any }
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
@@ -2947,12 +2947,22 @@ declare module "@polkadot/api-base/types/submittable" {
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           valueProposition:
             | PalletStorageProvidersValueProposition
-            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any }
+            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any; available?: any }
             | string
             | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [AccountId32, H256, u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+      >;
+      /**
+       * Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
+       *
+       * This operation cannot be reversed. You can only add new value propositions.
+       * This will not affect existing buckets which are using this value proposition.
+       **/
+      makeValuePropUnavailable: AugmentedSubmittable<
+        (valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
@@ -3038,7 +3048,7 @@ declare module "@polkadot/api-base/types/submittable" {
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           valueProposition:
             | PalletStorageProvidersValueProposition
-            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any }
+            | { pricePerUnitOfDataPerBlock?: any; bucketDataLimit?: any; available?: any }
             | string
             | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array

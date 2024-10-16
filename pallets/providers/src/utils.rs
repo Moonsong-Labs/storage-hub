@@ -768,6 +768,50 @@ where
         Ok(Pays::No.into())
     }
 
+    pub(crate) fn do_add_value_prop(
+        who: &T::AccountId,
+        value_proposition: ValueProposition<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        let value_prop_id = value_proposition.derive_id();
+
+        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
+            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
+        }
+
+        MainStorageProviderIdsToValuePropositions::<T>::insert(
+            &msp_id,
+            value_prop_id,
+            &value_proposition,
+        );
+
+        Ok(msp_id)
+    }
+
+    pub(crate) fn do_make_value_prop_unavailable(
+        who: &T::AccountId,
+        value_prop_id: HashId<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
+            &msp_id,
+            value_prop_id,
+            |value_prop| {
+                let value_prop = value_prop
+                    .as_mut()
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+                value_prop.available = false;
+
+                Ok(msp_id)
+            },
+        )
+    }
+
     fn hold_balance(
         account_id: &T::AccountId,
         previous_deposit: BalanceOf<T>,
@@ -985,12 +1029,13 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
+        let value_prop =
+            MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+                .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
         ensure!(
-            MainStorageProviderIdsToValuePropositions::<T>::contains_key(
-                &provider_id,
-                &value_prop_id
-            ),
-            Error::<T>::ValuePropositionNotFound
+            value_prop.available,
+            Error::<T>::ValuePropositionNotAvailable
         );
 
         let deposit = T::BucketDeposit::get();

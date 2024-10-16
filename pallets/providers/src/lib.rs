@@ -459,6 +459,19 @@ pub mod pallet {
             provider_id: HashId<T>,
             amount_slashed: BalanceOf<T>,
         },
+
+        /// Event emitted when an MSP adds a new value proposition.
+        ValuePropAdded {
+            msp_id: MainStorageProviderId<T>,
+            value_prop_id: HashId<T>,
+            value_prop: ValueProposition<T>,
+        },
+
+        /// Event emitted when an MSP's value proposition is made unavailable.
+        ValuePropUnavailable {
+            msp_id: MainStorageProviderId<T>,
+            value_prop_id: HashId<T>,
+        },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -527,6 +540,10 @@ pub mod pallet {
         ProviderNotSlashable,
         /// Error thrown when the value proposition id is not found.
         ValuePropositionNotFound,
+        /// Error thrown when value proposition under a given id already exists.
+        ValuePropositionAlreadyExists,
+        /// Error thrown when a value proposition is not available.
+        ValuePropositionNotAvailable,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -880,10 +897,46 @@ pub mod pallet {
         #[pallet::call_index(7)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
-            _origin: OriginFor<T>,
-            _new_value_prop: ValueProposition<T>,
+            origin: OriginFor<T>,
+            new_value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: implement this
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            let msp_id = Self::do_add_value_prop(&who, new_value_prop.clone())?;
+
+            // Emit event
+            Self::deposit_event(Event::<T>::ValuePropAdded {
+                msp_id,
+                value_prop_id: new_value_prop.derive_id(),
+                value_prop: new_value_prop,
+            });
+
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
+        ///
+        /// This operation cannot be reversed. You can only add new value propositions.
+        /// This will not affect existing buckets which are using this value proposition.
+        #[pallet::call_index(8)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn make_value_prop_unavailable(
+            origin: OriginFor<T>,
+            value_prop_id: HashId<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            let msp_id = Self::do_make_value_prop_unavailable(&who, value_prop_id)?;
+
+            // Emit event
+            Self::deposit_event(Event::<T>::ValuePropUnavailable {
+                msp_id,
+                value_prop_id,
+            });
 
             Ok(().into())
         }
@@ -910,7 +963,7 @@ pub mod pallet {
         /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
         ///
         /// Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
-        #[pallet::call_index(8)]
+        #[pallet::call_index(9)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_msp_sign_up(
             origin: OriginFor<T>,
@@ -978,7 +1031,7 @@ pub mod pallet {
         /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
         ///
         /// Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_bsp_sign_up(
             origin: OriginFor<T>,
@@ -1031,7 +1084,7 @@ pub mod pallet {
         ///
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
-        #[pallet::call_index(10)]
+        #[pallet::call_index(11)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn slash(origin: OriginFor<T>, provider_id: HashId<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.

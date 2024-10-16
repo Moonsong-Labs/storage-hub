@@ -405,6 +405,8 @@ impl IndexerService {
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::ValuePropAdded { .. } => {}
+            pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -2186,6 +2186,29 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when an MSP adds a new value proposition.
+       **/
+      ValuePropAdded: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256, valueProp: PalletStorageProvidersValueProposition],
+        {
+          mspId: H256;
+          valuePropId: H256;
+          valueProp: PalletStorageProvidersValueProposition;
+        }
+      >;
+      /**
+       * Event emitted when an MSP's value proposition is made unavailable.
+       **/
+      ValuePropUnavailable: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256],
+        {
+          mspId: H256;
+          valuePropId: H256;
+        }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;

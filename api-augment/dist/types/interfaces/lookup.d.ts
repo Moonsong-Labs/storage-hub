@@ -1370,6 +1370,15 @@ declare const _default: {
         providerId: string;
         amountSlashed: string;
       };
+      ValuePropAdded: {
+        mspId: string;
+        valuePropId: string;
+        valueProp: string;
+      };
+      ValuePropUnavailable: {
+        mspId: string;
+        valuePropId: string;
+      };
     };
   };
   /**
@@ -1378,6 +1387,7 @@ declare const _default: {
   PalletStorageProvidersValueProposition: {
     pricePerUnitOfDataPerBlock: string;
     bucketDataLimit: string;
+    available: string;
   };
   /**
    * Lookup130: pallet_storage_providers::types::StorageProviderId<T>
@@ -3182,6 +3192,9 @@ declare const _default: {
       };
       add_value_prop: {
         newValueProp: string;
+      };
+      make_value_prop_unavailable: {
+        valuePropId: string;
       };
       force_msp_sign_up: {
         who: string;

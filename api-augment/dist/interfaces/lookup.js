@@ -1383,6 +1383,15 @@ export default {
       Slashed: {
         providerId: "H256",
         amountSlashed: "u128"
+      },
+      ValuePropAdded: {
+        mspId: "H256",
+        valuePropId: "H256",
+        valueProp: "PalletStorageProvidersValueProposition"
+      },
+      ValuePropUnavailable: {
+        mspId: "H256",
+        valuePropId: "H256"
       }
     }
   },
@@ -1391,7 +1400,8 @@ export default {
    **/
   PalletStorageProvidersValueProposition: {
     pricePerUnitOfDataPerBlock: "u128",
-    bucketDataLimit: "u64"
+    bucketDataLimit: "u64",
+    available: "bool"
   },
   /**
    * Lookup130: pallet_storage_providers::types::StorageProviderId<T>
@@ -3241,6 +3251,9 @@ export default {
       add_value_prop: {
         newValueProp: "PalletStorageProvidersValueProposition"
       },
+      make_value_prop_unavailable: {
+        valuePropId: "H256"
+      },
       force_msp_sign_up: {
         who: "AccountId32",
         mspId: "H256",
@@ -4126,6 +4139,7 @@ export default {
       "AppendBucketToMspFailed",
       "ProviderNotSlashable",
       "ValuePropositionNotFound",
+      "ValuePropositionAlreadyExists",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
       "PaymentStreamNotFound"

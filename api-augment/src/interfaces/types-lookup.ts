@@ -1851,6 +1851,17 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly amountSlashed: u128;
     } & Struct;
+    readonly isValuePropAdded: boolean;
+    readonly asValuePropAdded: {
+      readonly mspId: H256;
+      readonly valuePropId: H256;
+      readonly valueProp: PalletStorageProvidersValueProposition;
+    } & Struct;
+    readonly isValuePropUnavailable: boolean;
+    readonly asValuePropUnavailable: {
+      readonly mspId: H256;
+      readonly valuePropId: H256;
+    } & Struct;
     readonly type:
       | "MspRequestSignUpSuccess"
       | "MspSignUpSuccess"
@@ -1860,13 +1871,16 @@ declare module "@polkadot/types/lookup" {
       | "MspSignOffSuccess"
       | "BspSignOffSuccess"
       | "CapacityChanged"
-      | "Slashed";
+      | "Slashed"
+      | "ValuePropAdded"
+      | "ValuePropUnavailable";
   }
 
   /** @name PalletStorageProvidersValueProposition (129) */
   interface PalletStorageProvidersValueProposition extends Struct {
     readonly pricePerUnitOfDataPerBlock: u128;
     readonly bucketDataLimit: u64;
+    readonly available: bool;
   }
 
   /** @name PalletStorageProvidersStorageProviderId (130) */
@@ -4044,6 +4058,10 @@ declare module "@polkadot/types/lookup" {
     readonly asAddValueProp: {
       readonly newValueProp: PalletStorageProvidersValueProposition;
     } & Struct;
+    readonly isMakeValuePropUnavailable: boolean;
+    readonly asMakeValuePropUnavailable: {
+      readonly valuePropId: H256;
+    } & Struct;
     readonly isForceMspSignUp: boolean;
     readonly asForceMspSignUp: {
       readonly who: AccountId32;
@@ -4075,6 +4093,7 @@ declare module "@polkadot/types/lookup" {
       | "BspSignOff"
       | "ChangeCapacity"
       | "AddValueProp"
+      | "MakeValuePropUnavailable"
       | "ForceMspSignUp"
       | "ForceBspSignUp"
       | "Slash";
@@ -5101,6 +5120,7 @@ declare module "@polkadot/types/lookup" {
     readonly isAppendBucketToMspFailed: boolean;
     readonly isProviderNotSlashable: boolean;
     readonly isValuePropositionNotFound: boolean;
+    readonly isValuePropositionAlreadyExists: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
@@ -5131,6 +5151,7 @@ declare module "@polkadot/types/lookup" {
       | "AppendBucketToMspFailed"
       | "ProviderNotSlashable"
       | "ValuePropositionNotFound"
+      | "ValuePropositionAlreadyExists"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
       | "PaymentStreamNotFound";
