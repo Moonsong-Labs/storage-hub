@@ -2142,6 +2142,7 @@ declare module "@polkadot/types/lookup" {
     readonly asProofAccepted: {
       readonly provider: H256;
       readonly proof: PalletProofsDealerProof;
+      readonly lastTickProven: u32;
     } & Struct;
     readonly isNewChallengeSeed: boolean;
     readonly asNewChallengeSeed: {

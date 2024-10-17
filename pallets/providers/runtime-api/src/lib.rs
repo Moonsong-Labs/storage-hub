@@ -23,14 +23,16 @@ sp_api::decl_runtime_apis! {
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId>;
-        fn query_provider_multiaddresses(who: &ProviderId) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
+        fn query_provider_multiaddresses(provider_id: &ProviderId) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
         fn query_msp_id_of_bucket_id(bucket_id: &BucketId) -> Result<ProviderId, QueryMspIdOfBucketIdError>;
-        fn query_storage_provider_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
-        fn query_available_storage_capacity(who: &ProviderId) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
-        fn query_earliest_change_capacity_block(who: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
+        fn query_storage_provider_capacity(provider_id: &ProviderId) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
+        fn query_available_storage_capacity(provider_id: &ProviderId) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
+        fn query_earliest_change_capacity_block(bsp_id: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
         fn get_slash_amount_per_max_file_size() -> Balance;
         fn query_value_propositions_for_msp(who: &ProviderId) -> sp_runtime::Vec<(ValuePropId, ValueProposition)>;
+        fn get_bsp_stake(bsp_id: &BspId) -> Result<Balance, GetStakeError>;
+
     }
 }
 
@@ -72,6 +74,13 @@ pub enum QueryMspIdOfBucketIdError {
 /// Error type for the `query_provider_multiaddresses` runtime API call.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryProviderMultiaddressesError {
+    ProviderNotRegistered,
+    InternalError,
+}
+
+/// Error type for the `get_stake` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum GetStakeError {
     ProviderNotRegistered,
     InternalError,
 }

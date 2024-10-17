@@ -1621,7 +1621,8 @@ export default {
       },
       ProofAccepted: {
         provider: "H256",
-        proof: "PalletProofsDealerProof"
+        proof: "PalletProofsDealerProof",
+        lastTickProven: "u32"
       },
       NewChallengeSeed: {
         challengesTicker: "u32",

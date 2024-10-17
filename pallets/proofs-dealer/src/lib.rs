@@ -386,6 +386,7 @@ pub mod pallet {
         ProofAccepted {
             provider: ProviderIdFor<T>,
             proof: Proof<T>,
+            last_tick_proven: BlockNumberFor<T>,
         },
 
         /// A new challenge seed was generated.
@@ -594,10 +595,14 @@ pub mod pallet {
                 }
             };
 
-            Self::do_submit_proof(&provider, &proof)?;
+            let last_tick_proven = Self::do_submit_proof(&provider, &proof)?;
 
             // Emit event.
-            Self::deposit_event(Event::ProofAccepted { provider, proof });
+            Self::deposit_event(Event::ProofAccepted {
+                provider,
+                proof,
+                last_tick_proven,
+            });
 
             // Return a successful DispatchResultWithPostInfo.
             // If the proof is valid, the execution of this extrinsic should be refunded.

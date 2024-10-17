@@ -432,5 +432,9 @@ impl_runtime_apis! {
         fn query_value_propositions_for_msp(who: &ProviderId<Runtime>) -> Vec<(H256, ValueProposition<Runtime>)> {
             Providers::query_value_propositions_for_msp(who)
         }
+
+        fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
+            Providers::get_bsp_stake(bsp_id)
+        }
     }
 }
