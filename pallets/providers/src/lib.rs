@@ -275,7 +275,6 @@ pub mod pallet {
     /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
     /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
     /// - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-    /// - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
     #[pallet::storage]
     pub type MainStorageProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, MainStorageProviderId<T>, MainStorageProvider<T>>;
@@ -893,15 +892,6 @@ pub mod pallet {
         ///
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the account that wants to add a value proposition.
-        ///
-        /// Parameters:
-        /// - `new_value_prop`: The value proposition that the MSP wants to add to its service.
-        ///
-        /// This extrinsic will perform the following checks and logic:
-        /// 1. Check that the extrinsic was signed and get the signer.
-        /// 2. Check that the signer is registered as a MSP
-        /// 3. Check that the value proposition is valid (size and any other relevant checks)
-        /// 4. Update the MSPs storage to add the value proposition (with its identifier)
         ///
         /// Emits `ValuePropAdded` event when successful.
         #[pallet::call_index(7)]
