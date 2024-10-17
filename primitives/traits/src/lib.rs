@@ -1052,3 +1052,23 @@ pub trait UpdateStoragePrice {
         total_capacity: Self::StorageDataUnit,
     ) -> Self::Price;
 }
+
+/// A trait to calculate the percentage of charge funds by a Provider that should go to the treasury.
+///
+/// This is used by the Payment Streams pallet, which requires some type to implement this trait,
+/// and uses such implementation to calculate the percentage of charged funds by a Provider that should go to the treasury.
+pub trait TreasuryCutCalculator {
+    /// The numerical type which represents the balance type of the runtime.
+    type Balance: NumericalParam;
+    /// Type of the unit provided by Providers
+    type ProvidedUnit: NumericalParam + Into<u64>;
+
+    /// Calculate the percentage of charged funds by a Provider that should go to the treasury.
+    ///
+    /// Returns the percentage of charged funds by a Provider that should go to the treasury.
+    fn calculate_treasury_cut(
+        provided_amount: Self::ProvidedUnit,
+        used_amount: Self::ProvidedUnit,
+        amount_to_charge: Self::Balance,
+    ) -> Self::Balance;
+}

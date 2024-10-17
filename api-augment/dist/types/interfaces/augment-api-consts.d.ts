@@ -245,6 +245,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       newStreamDeposit: u32 & AugmentedConst<ApiType>;
       /**
+       * The treasury account of the runtime
+       **/
+      treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
+      /**
        * The number of ticks that a user will have to wait after it has been flagged as without funds to be able to clear that flag
        * and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.
        **/

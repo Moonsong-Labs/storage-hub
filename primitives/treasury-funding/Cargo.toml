@@ -1,0 +1,31 @@
+[package]
+name = "shp-treasury-funding"
+description = "Function that determines how much of the charges from Providers goes to the treasury."
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lib]
+
+[dependencies]
+log = { workspace = true }
+sp-arithmetic = { workspace = true }
+sp-core = { workspace = true }
+
+# Local
+shp-traits = { workspace = true }
+
+[features]
+default = ["std"]
+runtime-benchmarks = ["shp-traits/runtime-benchmarks"]
+std = ["log/std", "sp-arithmetic/std", "sp-core/std", "shp-traits/std"]
+try-runtime = ["shp-traits/try-runtime"]

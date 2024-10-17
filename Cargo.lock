@@ -6966,6 +6966,7 @@ dependencies = [
  "shp-data-price-updater",
  "shp-file-metadata",
  "shp-traits",
+ "shp-treasury-funding",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
  "sp-keyring",
@@ -7228,6 +7229,7 @@ dependencies = [
  "shp-data-price-updater",
  "shp-file-metadata",
  "shp-traits",
+ "shp-treasury-funding",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
  "sp-keyring",
@@ -7579,6 +7581,7 @@ dependencies = [
  "shp-constants",
  "shp-file-metadata",
  "shp-traits",
+ "shp-treasury-funding",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
  "sp-runtime 39.0.1",
@@ -7630,6 +7633,7 @@ dependencies = [
  "shp-constants",
  "shp-file-metadata",
  "shp-traits",
+ "shp-treasury-funding",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
  "sp-runtime 39.0.1",
@@ -7946,6 +7950,7 @@ dependencies = [
  "shp-constants",
  "shp-file-metadata",
  "shp-traits",
+ "shp-treasury-funding",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
  "sp-runtime 39.0.1",
@@ -12857,6 +12862,7 @@ dependencies = [
  "shp-file-metadata",
  "shp-forest-verifier",
  "shp-traits",
+ "shp-treasury-funding",
  "smallvec",
  "sp-api 34.0.0",
  "sp-block-builder",
@@ -13340,6 +13346,16 @@ dependencies = [
  "sp-runtime 39.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409)",
  "sp-trie 37.0.0",
+]
+
+[[package]]
+name = "shp-treasury-funding"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "shp-traits",
+ "sp-arithmetic 26.0.0",
+ "sp-core 34.0.0",
 ]
 
 [[package]]
@@ -15301,6 +15317,7 @@ dependencies = [
  "shp-file-metadata",
  "shp-forest-verifier",
  "shp-traits",
+ "shp-treasury-funding",
  "smallvec",
  "sp-api 34.0.0",
  "sp-block-builder",

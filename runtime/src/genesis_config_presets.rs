@@ -2,11 +2,11 @@
 
 use crate::*;
 use alloc::{format, vec, vec::Vec};
-use configs::ExistentialDeposit;
+use configs::{ExistentialDeposit, TreasuryAccount};
 use cumulus_primitives_core::ParaId;
 use serde_json::Value;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Pair, Public};
+use sp_core::{sr25519, Get, Pair, Public};
 use sp_genesis_builder::PresetId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
@@ -125,6 +125,7 @@ fn local_testnet_genesis() -> Value {
             get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
             get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
             get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
+            TreasuryAccount::get(),
         ],
         1u128 << 60,
         Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
@@ -158,6 +159,7 @@ fn development_config_genesis() -> Value {
             get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
             get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
             get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
+            TreasuryAccount::get(),
         ],
         1u128 << 60,
         Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
@@ -192,6 +194,7 @@ fn genesis_config() -> Value {
             get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
             get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
             get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
+            TreasuryAccount::get(),
         ],
         1u128 << 60,
         Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
