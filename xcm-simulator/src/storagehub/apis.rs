@@ -428,5 +428,9 @@ impl_runtime_apis! {
         fn query_provider_multiaddresses(who: &ProviderId<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
             Providers::query_provider_multiaddresses(who)
         }
+
+        fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
+            Providers::get_bsp_stake(bsp_id)
+        }
     }
 }
