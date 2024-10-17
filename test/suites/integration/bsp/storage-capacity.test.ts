@@ -8,7 +8,7 @@ import {
   sleep
 } from "../../../util";
 
-describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
+describeBspNet("BSPNet: Validating max storage", { only: true }, ({ before, it, createUserApi, createBspApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 
@@ -162,7 +162,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
   });
 
-  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
+  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", { only: true }, async () => {
     const capacityUsed = (
       await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
@@ -182,13 +182,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     // First storage request
     const source1 = "res/cloud.jpg";
     const location1 = "test/cloud.jpg";
-    const bucketName1 = "toobig-1";
+    const bucketName1 = "bucket-1";
     await userApi.file.newStorageRequest(source1, location1, bucketName1);
 
     // Second storage request
     const source2 = "res/adolphus.jpg";
     const location2 = "test/adolphus.jpg";
-    const bucketName2 = "nothingmuch-2";
+    const bucketName2 = "bucket-2";
     await userApi.file.newStorageRequest(source2, location2, bucketName2);
 
     //To allow for BSP to react to request
