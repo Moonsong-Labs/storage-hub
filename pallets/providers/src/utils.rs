@@ -16,8 +16,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
@@ -1570,5 +1571,18 @@ where
         } else {
             Err(QueryProviderMultiaddressesError::ProviderNotRegistered)
         }
+    }
+
+    pub fn get_bsp_stake(
+        bsp_id: &BackupStorageProviderId<T>,
+    ) -> Result<BalanceOf<T>, GetStakeError> {
+        let bsp =
+            BackupStorageProviders::<T>::get(bsp_id).ok_or(GetStakeError::ProviderNotRegistered)?;
+
+        let stake = T::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &bsp.owner_account,
+        );
+        Ok(stake)
     }
 }
