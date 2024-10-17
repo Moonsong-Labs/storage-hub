@@ -35,6 +35,7 @@ pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
 pub type MaxBatchMspRespondStorageRequests =
     pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
+pub type MaxUsersToCharge = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
 pub type MspStorageRequestResponse = pallet_file_system::types::MspStorageRequestResponse<Runtime>;
 pub type AcceptedStorageRequestParameters =
     pallet_file_system::types::AcceptedStorageRequestParameters<Runtime>;
