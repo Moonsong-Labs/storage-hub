@@ -8,7 +8,7 @@ import {
   sleep
 } from "../../../util";
 
-describeBspNet("BSPNet: Validating max storage", { only: true }, ({ before, it, createUserApi, createBspApi }) => {
+describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 
@@ -162,7 +162,7 @@ describeBspNet("BSPNet: Validating max storage", { only: true }, ({ before, it, 
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
   });
 
-  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", { only: true }, async () => {
+  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
     const capacityUsed = (
       await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )
