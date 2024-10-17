@@ -8,24 +8,25 @@ use shp_traits::{NumericalParam, TreasuryCutCalculator};
 use sp_arithmetic::{
     biguint::BigUint,
     traits::{SaturatedConversion, Zero},
-    PerThing, Perquintill,
+    FixedPointNumber, FixedU128, PerThing, Perquintill,
 };
 use sp_core::Get;
 
 /// A struct that implements the `TreasuryCutCalculator` trait, where the cut is 0%
-pub struct NoCutTreasuryCutCalculator<P: PerThing, S: NumericalParam + Into<u64>>(
+pub struct NoCutTreasuryCutCalculator<P: NumericalParam, S: NumericalParam + Into<u64>>(
     PhantomData<(P, S)>,
 );
 
-impl<P: PerThing, S: NumericalParam + Into<u64>> TreasuryCutCalculator
+impl<P: NumericalParam, S: NumericalParam + Into<u64>> TreasuryCutCalculator
     for NoCutTreasuryCutCalculator<P, S>
 {
-    type PercentageType = P;
+    type Balance = P;
     type ProvidedUnit = S;
     fn calculate_treasury_cut(
         _provided_amount: Self::ProvidedUnit,
         _used_amount: Self::ProvidedUnit,
-    ) -> Self::PercentageType {
+        _amount_to_charge: Self::Balance,
+    ) -> Self::Balance {
         P::zero()
     }
 }
@@ -33,38 +34,62 @@ impl<P: PerThing, S: NumericalParam + Into<u64>> TreasuryCutCalculator
 /// A struct that implements the `TreasuryCutCalculator` trait, where the cut is determined by the
 /// `compute_percentage_to_treasury` function.
 pub struct LinearThenPowerOfTwoTreasuryCutCalculator<
-    T: LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
->(PhantomData<T>);
+    T: LinearThenPowerOfTwoTreasuryCutCalculatorConfig<P>,
+    P: PerThing,
+>(PhantomData<(T, P)>);
 
 /// The configuration trait for the [`LinearThenPowerOfTwoTreasuryCutCalculator`].
-pub trait LinearThenPowerOfTwoTreasuryCutCalculatorConfig {
-    /// The PerThing type used to represent the percentage of funds that should go to the treasury.
-    type PercentageType: PerThing;
+pub trait LinearThenPowerOfTwoTreasuryCutCalculatorConfig<P: PerThing> {
+    /// The numerical type which represents the price of a storage request.
+    type Balance: NumericalParam + From<u128>;
     /// The numerical type used to represent a ProvidedUnit.
     type ProvidedUnit: NumericalParam + Into<u64>;
     /// The ideal system utilization rate. It's a PerThing since it should be a percentage.
-    type IdealUtilizationRate: Get<Self::PercentageType>;
+    type IdealUtilizationRate: Get<P>;
     /// The falloff or decay rate. It's a PerThing since it should be a percentage.
-    type DecayRate: Get<Self::PercentageType>;
+    type DecayRate: Get<P>;
+    /// The minimum cut for the treasury. It's a PerThing since it should be a percentage.
+    type MinimumCut: Get<P>;
+    /// The maximum cut for the treasury. It's a PerThing since it should be a percentage.
+    type MaximumCut: Get<P>;
 }
 
-impl<T> TreasuryCutCalculator for LinearThenPowerOfTwoTreasuryCutCalculator<T>
+impl<T, P> TreasuryCutCalculator for LinearThenPowerOfTwoTreasuryCutCalculator<T, P>
 where
-    T: LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
+    T: LinearThenPowerOfTwoTreasuryCutCalculatorConfig<P>,
+    P: PerThing,
 {
-    type PercentageType = T::PercentageType;
+    type Balance = T::Balance;
     type ProvidedUnit = T::ProvidedUnit;
     fn calculate_treasury_cut(
         provided_amount: Self::ProvidedUnit,
         used_amount: Self::ProvidedUnit,
-    ) -> Self::PercentageType {
-        let system_utilization = Self::PercentageType::from_rational(
-            used_amount.into().into(),
-            provided_amount.into().into(),
-        );
+        amount_to_charge: Self::Balance,
+    ) -> Self::Balance {
+        // Get the system utilization rate, ideal system utilization rate and falloff from the configuration.
+        let system_utilization =
+            P::from_rational(used_amount.into().into(), provided_amount.into().into());
         let ideal_system_utilization = T::IdealUtilizationRate::get();
         let falloff = T::DecayRate::get();
-        compute_percentage_to_treasury(system_utilization, ideal_system_utilization, falloff)
+
+        // Calculate the adjustment to be used to calculate the treasury cut.
+        let adjustment =
+            compute_percentage_to_treasury(system_utilization, ideal_system_utilization, falloff);
+
+        // Get the minimum and maximum cut from the configuration and calculate the difference between them.
+        let minimum_cut = T::MinimumCut::get();
+        let maximum_cut = T::MaximumCut::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Calculate the final treasury cut percentage by adjusting the minimum cut with the adjustment times the delta cut.
+        let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+        // Calculate the amount to transfer to the treasury by using the equation `amount_to_charge * treasury_cut_percentage`,
+        // where `treasury_cut_percentage` is obtained by getting the inner value of `treasury_cut` and dividing it by the FixedU128 type
+        // precision. We first multiply the inner value to not end up saturating to 0 when dividing.
+        // Example: if treasury cut ends up being 5%, the inner value of the FixedU128 will be 50_000_000_000_000_000. If the
+        // amount to charge was 10_000_000_000 (one DOT), then the result of this will correctly be 500_000_000 (0.05 DOT).
+        amount_to_charge * treasury_cut.into_inner().into() / FixedU128::DIV.into()
     }
 }
 

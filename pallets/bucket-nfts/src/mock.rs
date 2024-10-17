@@ -19,7 +19,7 @@ use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, MultiSignature, Perquintill, SaturatedConversion,
+    BuildStorage, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
@@ -94,6 +94,7 @@ parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+    pub const ExistentialDeposit: u128 = 1;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -127,7 +128,7 @@ impl pallet_balances::Config for Test {
     type Balance = Balance;
     type DustRemoval = ();
     type RuntimeEvent = RuntimeEvent;
-    type ExistentialDeposit = ConstU128<1>;
+    type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = ();
     type MaxLocks = ConstU32<10>;
@@ -312,7 +313,7 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
-    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Perquintill, Self::Units>;
+    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
 }
 // Converter from the BlockNumber type to the Balance type for math
@@ -421,6 +422,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
+            (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
     }
     .assimilate_storage(&mut t)

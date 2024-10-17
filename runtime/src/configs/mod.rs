@@ -511,12 +511,14 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
     }
 }
 
-impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig for Runtime {
-    type PercentageType = Perquintill;
+impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perquintill> for Runtime {
+    type Balance = Balance;
     type ProvidedUnit = StorageDataUnit;
     type IdealUtilizationRate =
         runtime_params::dynamic_params::runtime_config::IdealUtilizationRate;
     type DecayRate = runtime_params::dynamic_params::runtime_config::DecayRate;
+    type MinimumCut = runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut;
+    type MaximumCut = runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut;
 }
 
 impl pallet_payment_streams::Config for Runtime {
@@ -529,7 +531,7 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
-    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime>;
+    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perquintill>;
     type TreasuryAccount = TreasuryAccount;
 }
 

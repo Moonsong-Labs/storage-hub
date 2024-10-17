@@ -15,7 +15,7 @@ use sp_runtime::{
         AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One,
         Saturating, Zero,
     },
-    BoundedVec, DispatchError, PerThing,
+    BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -1058,8 +1058,8 @@ pub trait UpdateStoragePrice {
 /// This is used by the Payment Streams pallet, which requires some type to implement this trait,
 /// and uses such implementation to calculate the percentage of charged funds by a Provider that should go to the treasury.
 pub trait TreasuryCutCalculator {
-    /// The PerThing type which represents the percentage a percentage of a thing.
-    type PercentageType: PerThing;
+    /// The numerical type which represents the balance type of the runtime.
+    type Balance: NumericalParam;
     /// Type of the unit provided by Providers
     type ProvidedUnit: NumericalParam + Into<u64>;
 
@@ -1069,5 +1069,6 @@ pub trait TreasuryCutCalculator {
     fn calculate_treasury_cut(
         provided_amount: Self::ProvidedUnit,
         used_amount: Self::ProvidedUnit,
-    ) -> Self::PercentageType;
+        amount_to_charge: Self::Balance,
+    ) -> Self::Balance;
 }

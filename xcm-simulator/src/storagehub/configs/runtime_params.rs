@@ -45,6 +45,16 @@ pub mod dynamic_params {
         /// Decay rate of the power of two function that determines the percentage of funds that go to
         /// the treasury for utilization rates greater than the ideal.
         pub static DecayRate: Perquintill = Perquintill::from_percent(5);
+
+        #[codec(index = 13)]
+        #[allow(non_upper_case_globals)]
+        /// The minimum treasury cut that can be taken from the amount charged from a payment stream.
+        pub static MinimumTreasuryCut: Perquintill = Perquintill::from_percent(1);
+
+        #[codec(index = 14)]
+        #[allow(non_upper_case_globals)]
+        /// The maximum treasury cut that can be taken from the amount charged from a payment stream.
+        pub static MaximumTreasuryCut: Perquintill = Perquintill::from_percent(5);
     }
 }
 

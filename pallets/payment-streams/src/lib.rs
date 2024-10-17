@@ -36,10 +36,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface, SystemMetricsInterface};
-    use sp_runtime::{
-        traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, One, Saturating},
-        Perquintill,
-    };
+    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, One, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -65,7 +62,7 @@ pub mod pallet {
 
         /// The trait exposing the logic to calculate how much of the charged funds must go to the treasury.
         type TreasuryCutCalculator: shp_traits::TreasuryCutCalculator<
-            PercentageType = Perquintill,
+            Balance = BalanceOf<Self>,
             ProvidedUnit = Self::Units,
         >;
 
