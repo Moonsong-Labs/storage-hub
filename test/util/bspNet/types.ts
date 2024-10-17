@@ -7,6 +7,7 @@ import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { launchFullNetwork, launchNetwork } from "./testrunner";
 import type { BspNetTestApi } from "./test-api";
 import type { SealedBlock } from "./block";
+import type { HexString } from "@polkadot/util/types";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -52,7 +53,8 @@ export interface BspNetApi extends ApiPromise {
   sendNewStorageRequest(
     source: string,
     location: string,
-    bucketName: string
+    bucketName: string,
+    valuePropId?: HexString
   ): Promise<FileMetadata>;
 
   /**
@@ -61,7 +63,7 @@ export interface BspNetApi extends ApiPromise {
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to a new bucket event.
    */
-  createBucket(bucketName: string): Promise<Event>;
+  createBucket(bucketName: string, valuePropId?: HexString): Promise<Event>;
 
   /**
    * Asserts that a specific event occurred in a list of events.

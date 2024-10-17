@@ -1291,7 +1291,9 @@ import type {
   SaveFileToDisk,
   StorageDataUnit,
   StorageProviderId,
-  TrieRemoveMutation
+  TrieRemoveMutation,
+  ValuePropId,
+  ValueProposition
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 declare module "@polkadot/types/types/registry" {
@@ -2438,6 +2440,8 @@ declare module "@polkadot/types/types/registry" {
     ValidDisputeStatementKind: ValidDisputeStatementKind;
     ValidityAttestation: ValidityAttestation;
     ValidTransaction: ValidTransaction;
+    ValuePropId: ValuePropId;
+    ValueProposition: ValueProposition;
     VecInboundHrmpMessage: VecInboundHrmpMessage;
     VersionedMultiAsset: VersionedMultiAsset;
     VersionedMultiAssets: VersionedMultiAssets;
