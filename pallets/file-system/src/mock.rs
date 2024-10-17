@@ -154,7 +154,7 @@ parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
-	pub const ExistentialDeposit: u128 = 1;
+    pub const ExistentialDeposit: u128 = 1;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -519,7 +519,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
-			(TreasuryAccount::get(), ExistentialDeposit::get()),
+            (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
     }
     .assimilate_storage(&mut t)
