@@ -8,8 +8,9 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 pub mod types;
 pub mod utils;
 
