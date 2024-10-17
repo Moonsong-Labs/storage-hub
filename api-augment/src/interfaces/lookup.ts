@@ -3278,7 +3278,8 @@ export default {
       request_msp_sign_up: {
         capacity: "u64",
         multiaddresses: "Vec<Bytes>",
-        valueProposition: "PalletStorageProvidersValueProposition",
+        valuePropPricePerUnitOfDataPerBlock: "u128",
+        valuePropMaxDataLimit: "u64",
         paymentAccount: "AccountId32"
       },
       request_bsp_sign_up: {
@@ -3296,7 +3297,8 @@ export default {
         newCapacity: "u64"
       },
       add_value_prop: {
-        newValueProp: "PalletStorageProvidersValueProposition"
+        pricePerUnitOfDataPerBlock: "u128",
+        bucketDataLimit: "u64"
       },
       make_value_prop_unavailable: {
         valuePropId: "H256"
@@ -3306,7 +3308,8 @@ export default {
         mspId: "H256",
         capacity: "u64",
         multiaddresses: "Vec<Bytes>",
-        valueProposition: "PalletStorageProvidersValueProposition",
+        valuePropPricePerUnitOfDataPerBlock: "u128",
+        valuePropMaxDataLimit: "u64",
         paymentAccount: "AccountId32"
       },
       force_bsp_sign_up: {
@@ -4118,13 +4121,12 @@ export default {
     ]
   },
   /**
-   * Lookup436: pallet_storage_providers::types::StorageProvider<T>
+   * Lookup436: pallet_storage_providers::types::StorageProviderSignUpRequest<T>
    **/
-  PalletStorageProvidersStorageProvider: {
+  PalletStorageProvidersStorageProviderSignUpRequest: {
     _enum: {
       BackupStorageProvider: "PalletStorageProvidersBackupStorageProvider",
-      MainStorageProvider:
-        "(PalletStorageProvidersMainStorageProvider,PalletStorageProvidersValueProposition)"
+      MainStorageProvider: "PalletStorageProvidersMainStorageProviderSignUpRequest"
     }
   },
   /**
@@ -4140,6 +4142,13 @@ export default {
     paymentAccount: "AccountId32",
     reputationWeight: "u32",
     signUpBlock: "u32"
+  },
+  /**
+   * Lookup438: pallet_storage_providers::types::MainStorageProviderSignUpRequest<T>
+   **/
+  PalletStorageProvidersMainStorageProviderSignUpRequest: {
+    mspInfo: "PalletStorageProvidersMainStorageProvider",
+    valueProp: "PalletStorageProvidersValueProposition"
   },
   /**
    * Lookup439: pallet_storage_providers::types::MainStorageProvider<T>

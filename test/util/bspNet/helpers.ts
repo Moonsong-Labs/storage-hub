@@ -264,11 +264,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           ["/ip4/127.0.0.1/tcp/30350/p2p/12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfA"],
-          {
-            pricePerUnitOfDataPerBlock: 1,
-            bucketDataLimit: 500,
-            available: true
-          },
+          1,
+          500,
           alice.address
         )
       )

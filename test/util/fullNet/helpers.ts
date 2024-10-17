@@ -237,10 +237,8 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
           ShConsts.DUMMY_MSP_ID,
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
           [multiAddressMsp],
-          {
-            pricePerUnitOfDataPerBlock: 1,
-            bucketDataLimit: 500
-          },
+          1,
+          500,
           mspKey.address
         )
       )

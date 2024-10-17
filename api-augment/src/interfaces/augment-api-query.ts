@@ -61,7 +61,7 @@ import type {
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersStorageProviderSignUpRequest,
   PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
@@ -1600,7 +1600,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg: AccountId32 | string | Uint8Array
-        ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProvider, u32]>>>,
+        ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProviderSignUpRequest, u32]>>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;

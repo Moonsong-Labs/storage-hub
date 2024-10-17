@@ -3,7 +3,7 @@ use crate::{
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
         MainStorageProviderId, MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageDataUnit,
-        StorageProvider, StorageProviderId, ValueProposition,
+        StorageProviderId, StorageProviderSignUpRequest, ValueProposition,
     },
     Error, Event,
 };
@@ -49,6 +49,8 @@ mod sign_up {
 
         /// This module holds the success cases for Main Storage Providers
         mod msp {
+            use crate::types::MainStorageProviderSignUpRequest;
+
             use super::*;
             #[test]
             fn msp_request_sign_up_works() {
@@ -93,7 +95,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -129,19 +132,21 @@ mod sign_up {
                     assert_eq!(
                         alice_sign_up_request.unwrap(),
                         (
-                            StorageProvider::MainStorageProvider((
-                                MainStorageProvider {
-                                    buckets: BoundedVec::new(),
-                                    capacity: storage_amount,
-                                    capacity_used: 0,
-                                    multiaddresses,
-                                    last_capacity_change: current_block,
-                                    owner_account: alice,
-                                    payment_account: alice,
-                                    sign_up_block: current_block
-                                },
-                                value_prop
-                            )),
+                            StorageProviderSignUpRequest::MainStorageProvider(
+                                MainStorageProviderSignUpRequest {
+                                    msp_info: MainStorageProvider {
+                                        buckets: BoundedVec::new(),
+                                        capacity: storage_amount,
+                                        capacity_used: 0,
+                                        multiaddresses,
+                                        last_capacity_change: current_block,
+                                        owner_account: alice,
+                                        payment_account: alice,
+                                        sign_up_block: current_block
+                                    },
+                                    value_prop
+                                }
+                            ),
                             current_block
                         )
                     );
@@ -190,7 +195,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -282,7 +288,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -393,7 +400,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -402,7 +410,8 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         bob
                     ));
 
@@ -477,7 +486,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -485,19 +495,21 @@ mod sign_up {
                     let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
-                        == StorageProvider::MainStorageProvider((
-                            MainStorageProvider {
-                                buckets: BoundedVec::new(),
-                                capacity: storage_amount,
-                                capacity_used: 0,
-                                multiaddresses: multiaddresses.clone(),
-                                last_capacity_change: current_block,
-                                owner_account: alice,
-                                payment_account: alice,
-                                sign_up_block: current_block
-                            },
-                            value_prop
-                        ))));
+                        == StorageProviderSignUpRequest::MainStorageProvider(
+                            MainStorageProviderSignUpRequest {
+                                msp_info: MainStorageProvider {
+                                    buckets: BoundedVec::new(),
+                                    capacity: storage_amount,
+                                    capacity_used: 0,
+                                    multiaddresses: multiaddresses.clone(),
+                                    last_capacity_change: current_block,
+                                    owner_account: alice,
+                                    payment_account: alice,
+                                    sign_up_block: current_block
+                                },
+                                value_prop
+                            }
+                        )));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
                     // Cancel the sign up of Alice as a Main Storage Provider
@@ -603,18 +615,20 @@ mod sign_up {
                     assert_eq!(
                         alice_sign_up_request.unwrap(),
                         (
-                            StorageProvider::BackupStorageProvider(BackupStorageProvider {
-                                root: DefaultMerkleRoot::get(),
-                                capacity: storage_amount,
-                                capacity_used: 0,
-                                multiaddresses,
-                                last_capacity_change: current_block,
-                                owner_account: alice,
-                                payment_account: alice,
-                                reputation_weight:
-                                    <Test as crate::Config>::StartingReputationWeight::get(),
-                                sign_up_block: current_block
-                            }),
+                            StorageProviderSignUpRequest::BackupStorageProvider(
+                                BackupStorageProvider {
+                                    root: DefaultMerkleRoot::get(),
+                                    capacity: storage_amount,
+                                    capacity_used: 0,
+                                    multiaddresses,
+                                    last_capacity_change: current_block,
+                                    owner_account: alice,
+                                    payment_account: alice,
+                                    reputation_weight:
+                                        <Test as crate::Config>::StartingReputationWeight::get(),
+                                    sign_up_block: current_block
+                                }
+                            ),
                             current_block
                         )
                     );
@@ -975,18 +989,20 @@ mod sign_up {
                     let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
-                        == StorageProvider::BackupStorageProvider(BackupStorageProvider {
-                            capacity: storage_amount,
-                            capacity_used: 0,
-                            multiaddresses: multiaddresses.clone(),
-                            root: DefaultMerkleRoot::get(),
-                            last_capacity_change: current_block,
-                            owner_account: alice,
-                            payment_account: alice,
-                            reputation_weight:
-                                <Test as crate::Config>::StartingReputationWeight::get(),
-                            sign_up_block: current_block
-                        })));
+                        == StorageProviderSignUpRequest::BackupStorageProvider(
+                            BackupStorageProvider {
+                                capacity: storage_amount,
+                                capacity_used: 0,
+                                multiaddresses: multiaddresses.clone(),
+                                root: DefaultMerkleRoot::get(),
+                                last_capacity_change: current_block,
+                                owner_account: alice,
+                                payment_account: alice,
+                                reputation_weight:
+                                    <Test as crate::Config>::StartingReputationWeight::get(),
+                                sign_up_block: current_block
+                            }
+                        )));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
                     // Cancel the sign up of Alice as a Backup Storage Provider
@@ -1074,7 +1090,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1171,7 +1188,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1259,7 +1277,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1365,7 +1384,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1450,7 +1470,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1546,7 +1567,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1682,7 +1704,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1738,7 +1761,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1793,7 +1817,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -1803,7 +1828,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone(),
+                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.bucket_data_limit,
                             alice
                         ),
                         Error::<Test>::SignUpRequestPending
@@ -1995,7 +2021,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -2062,7 +2089,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             alice_msp.capacity,
                             alice_msp.multiaddresses.clone(),
-                            ValueProposition::<Test>::new(1, 10),
+                            1,
+                            10,
                             alice
                         ),
                         Error::<Test>::AlreadyRegistered
@@ -2085,7 +2113,8 @@ mod sign_up {
                             RuntimeOrigin::signed(bob),
                             bob_bsp.capacity,
                             bob_bsp.multiaddresses.clone(),
-                            ValueProposition::<Test>::new(1, 10),
+                            1,
+                            10,
                             bob
                         ),
                         Error::<Test>::AlreadyRegistered
@@ -2131,7 +2160,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone(),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit,
                         alice
                     ));
 
@@ -2160,7 +2190,8 @@ mod sign_up {
                             RuntimeOrigin::signed(bob),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone(),
+                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.bucket_data_limit,
                             bob
                         ),
                         Error::<Test>::SignUpRequestPending
@@ -2195,7 +2226,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone(),
+                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.bucket_data_limit,
                             alice
                         ),
                         Error::<Test>::StorageTooLow
@@ -2241,7 +2273,8 @@ mod sign_up {
                             RuntimeOrigin::signed(helen),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone(),
+                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.bucket_data_limit,
                             helen
                         ),
                         Error::<Test>::NotEnoughBalance
@@ -2280,7 +2313,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone(),
+                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.bucket_data_limit,
                             alice
                         ),
                         Error::<Test>::NoMultiAddress
@@ -4320,7 +4354,11 @@ mod add_value_prop {
 
                 // Try to add a value proposition to an account that is not a registered MSP
                 assert_noop!(
-                    StorageProviders::add_value_prop(RuntimeOrigin::signed(alice), value_prop),
+                    StorageProviders::add_value_prop(
+                        RuntimeOrigin::signed(alice),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit
+                    ),
                     Error::<Test>::NotRegistered
                 );
             });
@@ -4338,11 +4376,16 @@ mod add_value_prop {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.clone()
+                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.bucket_data_limit
                 ));
 
                 assert_noop!(
-                    StorageProviders::add_value_prop(RuntimeOrigin::signed(alice), value_prop),
+                    StorageProviders::add_value_prop(
+                        RuntimeOrigin::signed(alice),
+                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.bucket_data_limit
+                    ),
                     Error::<Test>::ValuePropositionAlreadyExists
                 );
             });
@@ -4365,7 +4408,8 @@ mod add_value_prop {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.clone()
+                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.bucket_data_limit
                 ));
 
                 let value_prop_id = value_prop.derive_id();
@@ -4451,7 +4495,8 @@ mod make_value_prop_unavailable {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.clone()
+                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.bucket_data_limit
                 ));
 
                 let value_prop_id = value_prop.derive_id();
@@ -4499,7 +4544,8 @@ mod make_value_prop_unavailable {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.clone()
+                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.bucket_data_limit
                 ));
 
                 let value_prop_id = value_prop.derive_id();
@@ -4570,7 +4616,8 @@ fn register_account_as_msp(
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        ValueProposition::<Test>::new(1, 10),
+        1,
+        10,
         account
     ));
 

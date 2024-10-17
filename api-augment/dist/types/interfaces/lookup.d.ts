@@ -3209,7 +3209,8 @@ declare const _default: {
       request_msp_sign_up: {
         capacity: string;
         multiaddresses: string;
-        valueProposition: string;
+        valuePropPricePerUnitOfDataPerBlock: string;
+        valuePropMaxDataLimit: string;
         paymentAccount: string;
       };
       request_bsp_sign_up: {
@@ -3227,7 +3228,8 @@ declare const _default: {
         newCapacity: string;
       };
       add_value_prop: {
-        newValueProp: string;
+        pricePerUnitOfDataPerBlock: string;
+        bucketDataLimit: string;
       };
       make_value_prop_unavailable: {
         valuePropId: string;
@@ -3237,7 +3239,8 @@ declare const _default: {
         mspId: string;
         capacity: string;
         multiaddresses: string;
-        valueProposition: string;
+        valuePropPricePerUnitOfDataPerBlock: string;
+        valuePropMaxDataLimit: string;
         paymentAccount: string;
       };
       force_bsp_sign_up: {
@@ -3960,9 +3963,9 @@ declare const _default: {
     _enum: string[];
   };
   /**
-   * Lookup436: pallet_storage_providers::types::StorageProvider<T>
+   * Lookup436: pallet_storage_providers::types::StorageProviderSignUpRequest<T>
    **/
-  PalletStorageProvidersStorageProvider: {
+  PalletStorageProvidersStorageProviderSignUpRequest: {
     _enum: {
       BackupStorageProvider: string;
       MainStorageProvider: string;
@@ -3981,6 +3984,13 @@ declare const _default: {
     paymentAccount: string;
     reputationWeight: string;
     signUpBlock: string;
+  };
+  /**
+   * Lookup438: pallet_storage_providers::types::MainStorageProviderSignUpRequest<T>
+   **/
+  PalletStorageProvidersMainStorageProviderSignUpRequest: {
+    mspInfo: string;
+    valueProp: string;
   };
   /**
    * Lookup439: pallet_storage_providers::types::MainStorageProvider<T>

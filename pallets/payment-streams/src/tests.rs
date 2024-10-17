@@ -34,7 +34,6 @@ pub type SpMinCapacity = <Test as pallet_storage_providers::Config>::SpMinCapaci
 pub type MaxMultiAddressAmount<Test> =
     <Test as pallet_storage_providers::Config>::MaxMultiAddressAmount;
 use pallet_storage_providers::types::MultiAddress;
-use pallet_storage_providers::types::ValueProposition;
 
 /// This module holds all tests for fixed-rate payment streams
 mod fixed_rate_streams {
@@ -4670,7 +4669,8 @@ fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        ValueProposition::<Test>::new(1, 10),
+        1,
+        10,
         account
     ));
 

@@ -3900,7 +3900,8 @@ declare module "@polkadot/types/lookup" {
     readonly asRequestMspSignUp: {
       readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
-      readonly valueProposition: PalletStorageProvidersValueProposition;
+      readonly valuePropPricePerUnitOfDataPerBlock: u128;
+      readonly valuePropMaxDataLimit: u64;
       readonly paymentAccount: AccountId32;
     } & Struct;
     readonly isRequestBspSignUp: boolean;
@@ -3922,7 +3923,8 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isAddValueProp: boolean;
     readonly asAddValueProp: {
-      readonly newValueProp: PalletStorageProvidersValueProposition;
+      readonly pricePerUnitOfDataPerBlock: u128;
+      readonly bucketDataLimit: u64;
     } & Struct;
     readonly isMakeValuePropUnavailable: boolean;
     readonly asMakeValuePropUnavailable: {
@@ -3934,7 +3936,8 @@ declare module "@polkadot/types/lookup" {
       readonly mspId: H256;
       readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
-      readonly valueProposition: PalletStorageProvidersValueProposition;
+      readonly valuePropPricePerUnitOfDataPerBlock: u128;
+      readonly valuePropMaxDataLimit: u64;
       readonly paymentAccount: AccountId32;
     } & Struct;
     readonly isForceBspSignUp: boolean;
@@ -4917,14 +4920,12 @@ declare module "@polkadot/types/lookup" {
       | "QueuePaused"
       | "RecursiveDisallowed";
   }
-  /** @name PalletStorageProvidersStorageProvider (436) */
-  interface PalletStorageProvidersStorageProvider extends Enum {
+  /** @name PalletStorageProvidersStorageProviderSignUpRequest (436) */
+  interface PalletStorageProvidersStorageProviderSignUpRequest extends Enum {
     readonly isBackupStorageProvider: boolean;
     readonly asBackupStorageProvider: PalletStorageProvidersBackupStorageProvider;
     readonly isMainStorageProvider: boolean;
-    readonly asMainStorageProvider: ITuple<
-      [PalletStorageProvidersMainStorageProvider, PalletStorageProvidersValueProposition]
-    >;
+    readonly asMainStorageProvider: PalletStorageProvidersMainStorageProviderSignUpRequest;
     readonly type: "BackupStorageProvider" | "MainStorageProvider";
   }
   /** @name PalletStorageProvidersBackupStorageProvider (437) */
@@ -4938,6 +4939,11 @@ declare module "@polkadot/types/lookup" {
     readonly paymentAccount: AccountId32;
     readonly reputationWeight: u32;
     readonly signUpBlock: u32;
+  }
+  /** @name PalletStorageProvidersMainStorageProviderSignUpRequest (438) */
+  interface PalletStorageProvidersMainStorageProviderSignUpRequest extends Struct {
+    readonly mspInfo: PalletStorageProvidersMainStorageProvider;
+    readonly valueProp: PalletStorageProvidersValueProposition;
   }
   /** @name PalletStorageProvidersMainStorageProvider (439) */
   interface PalletStorageProvidersMainStorageProvider extends Struct {

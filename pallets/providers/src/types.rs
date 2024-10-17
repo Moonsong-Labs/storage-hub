@@ -14,7 +14,10 @@ pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
     pub price_per_unit_of_data_per_block: BalanceOf<T>,
+    /// Maximum [`StorageDataUnit`]s that can be stored in a bucket.
     pub bucket_data_limit: StorageDataUnit<T>,
+    /// Newly created buckets can only specify available value propositions.
+    /// Any existing bucket with an unavailable value proposition are not affected.
     pub available: bool,
 }
 
@@ -87,9 +90,16 @@ pub struct Bucket<T: Config> {
 /// allowing to operate generically with both types.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub enum StorageProvider<T: Config> {
+pub enum StorageProviderSignUpRequest<T: Config> {
     BackupStorageProvider(BackupStorageProvider<T>),
-    MainStorageProvider((MainStorageProvider<T>, ValueProposition<T>)),
+    MainStorageProvider(MainStorageProviderSignUpRequest<T>),
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MainStorageProviderSignUpRequest<T: Config> {
+    pub msp_info: MainStorageProvider<T>,
+    pub value_prop: ValueProposition<T>,
 }
 
 /// Enum that represents a Storage Provider ID. It holds either a BackupStorageProviderId or a MainStorageProviderId,

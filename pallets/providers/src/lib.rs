@@ -25,7 +25,7 @@ pub use pallet::*;
 pub use scale_info::Type;
 use types::{
     BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
-    MainStorageProviderId, MerklePatriciaRoot, StorageDataUnit, StorageProvider,
+    MainStorageProviderId, MerklePatriciaRoot, StorageDataUnit, StorageProviderSignUpRequest,
 };
 
 #[frame_support::pallet]
@@ -248,8 +248,12 @@ pub mod pallet {
     /// - [request_msp_sign_up](crate::dispatchables::request_msp_sign_up) and [request_bsp_sign_up](crate::dispatchables::request_bsp_sign_up), which add a new entry to the map.
     /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up) and [cancel_sign_up](crate::dispatchables::cancel_sign_up), which remove an existing entry from the map.
     #[pallet::storage]
-    pub type SignUpRequests<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, (StorageProvider<T>, BlockNumberFor<T>)>;
+    pub type SignUpRequests<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        (StorageProviderSignUpRequest<T>, BlockNumberFor<T>),
+    >;
 
     /// The mapping from an AccountId to a MainStorageProviderId.
     ///
@@ -604,7 +608,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_proposition: ValueProposition<T>,
+            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -623,7 +628,13 @@ pub mod pallet {
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&msp_info, value_proposition)?;
+            Self::do_request_msp_sign_up(MainStorageProviderSignUpRequest {
+                msp_info,
+                value_prop: ValueProposition::<T>::new(
+                    value_prop_price_per_unit_of_data_per_block,
+                    value_prop_max_data_limit,
+                ),
+            })?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
@@ -889,28 +900,29 @@ pub mod pallet {
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a MSP
-        /// 3. Check that the MSP has not reached the maximum amount of value propositions
-        /// 4. Check that the value proposition is valid (size and any other relevant checks)
-        /// 5. Update the MSPs storage to add the value proposition (with its identifier)
+        /// 3. Check that the value proposition is valid (size and any other relevant checks)
+        /// 4. Update the MSPs storage to add the value proposition (with its identifier)
         ///
         /// Emits `ValuePropAdded` event when successful.
         #[pallet::call_index(7)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
             origin: OriginFor<T>,
-            new_value_prop: ValueProposition<T>,
+            price_per_unit_of_data_per_block: BalanceOf<T>,
+            bucket_data_limit: StorageDataUnit<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            let msp_id = Self::do_add_value_prop(&who, new_value_prop.clone())?;
+            let (msp_id, value_prop) =
+                Self::do_add_value_prop(&who, price_per_unit_of_data_per_block, bucket_data_limit)?;
 
             // Emit event
             Self::deposit_event(Event::<T>::ValuePropAdded {
                 msp_id,
-                value_prop_id: new_value_prop.derive_id(),
-                value_prop: new_value_prop,
+                value_prop_id: value_prop.derive_id(),
+                value_prop: value_prop,
             });
 
             Ok(().into())
@@ -971,7 +983,8 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_proposition: ValueProposition<T>,
+            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
@@ -989,8 +1002,16 @@ pub mod pallet {
                 sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
+            let sign_up_request = MainStorageProviderSignUpRequest {
+                msp_info,
+                value_prop: ValueProposition::<T>::new(
+                    value_prop_price_per_unit_of_data_per_block,
+                    value_prop_max_data_limit,
+                ),
+            };
+
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&msp_info, value_proposition.clone())?;
+            Self::do_request_msp_sign_up(sign_up_request.clone())?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
@@ -1003,8 +1024,7 @@ pub mod pallet {
             Self::do_msp_sign_up(
                 &who,
                 msp_id,
-                &msp_info,
-                value_proposition,
+                sign_up_request,
                 frame_system::Pallet::<T>::block_number(),
             )?;
 
@@ -1100,7 +1120,7 @@ impl<T: Config> Pallet<T> {
     /// A helper function to get the information of a sign up request of a user.
     pub fn get_sign_up_request(
         who: &T::AccountId,
-    ) -> Result<(StorageProvider<T>, BlockNumberFor<T>), Error<T>> {
+    ) -> Result<(StorageProviderSignUpRequest<T>, BlockNumberFor<T>), Error<T>> {
         SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)
     }
 

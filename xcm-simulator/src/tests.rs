@@ -1216,7 +1216,8 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                ValueProposition::<storagehub::Runtime>::new(1, 10),
+                1,
+                10,
                 ALICE
             ));
 
@@ -1473,7 +1474,8 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                value_prop,
+                1,
+                10,
                 ALICE
             ));
 
