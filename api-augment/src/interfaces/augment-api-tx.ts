@@ -2766,15 +2766,6 @@ declare module "@polkadot/api-base/types/submittable" {
        * The dispatch origin for this call must be Signed.
        * The origin must be the account that wants to add a value proposition.
        *
-       * Parameters:
-       * - `new_value_prop`: The value proposition that the MSP wants to add to its service.
-       *
-       * This extrinsic will perform the following checks and logic:
-       * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that the signer is registered as a MSP
-       * 3. Check that the value proposition is valid (size and any other relevant checks)
-       * 4. Update the MSPs storage to add the value proposition (with its identifier)
-       *
        * Emits `ValuePropAdded` event when successful.
        **/
       addValueProp: AugmentedSubmittable<

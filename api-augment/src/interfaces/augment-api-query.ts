@@ -1563,7 +1563,6 @@ declare module "@polkadot/api-base/types/storage" {
        * - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
        * - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
        * - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-       * - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
        **/
       mainStorageProviders: AugmentedQuery<
         ApiType,
