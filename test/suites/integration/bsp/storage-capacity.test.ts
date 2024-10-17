@@ -104,6 +104,12 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
     await userApi.sealBlock();
 
+    const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+    const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
+      bspApi.shConsts.DUMMY_BSP_ID
+    );
+    assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
+
     // Assert that the BSP was accepted as a volunteer.
     await userApi.assert.eventPresent("fileSystem", "AcceptedBspVolunteer");
   });
@@ -154,5 +160,61 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       userApi.errors.providers.NewCapacityLessThanUsedStorage.meta.index.toNumber();
     assert.strictEqual(eventInfo.asModule.index.toNumber(), providersPallet?.index.toNumber());
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
+  });
+
+  it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
+    const capacityUsed = (
+      await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
+    )
+      .unwrap()
+      .capacityUsed.toNumber();
+    await userApi.block.skipToMinChangeTime();
+    const minCapacity = userApi.consts.providers.spMinCapacity.toNumber();
+    const newCapacity = Math.max(minCapacity, capacityUsed + 1);
+
+    // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
+    const { extSuccess } = await userApi.sealBlock(
+      userApi.tx.providers.changeCapacity(newCapacity),
+      bspKey
+    );
+    assert.strictEqual(extSuccess, true);
+
+    // First storage request
+    const source1 = "res/cloud.jpg";
+    const location1 = "test/cloud.jpg";
+    const bucketName1 = "bucket-1";
+    await userApi.file.newStorageRequest(source1, location1, bucketName1);
+
+    // Second storage request
+    const source2 = "res/adolphus.jpg";
+    const location2 = "test/adolphus.jpg";
+    const bucketName2 = "bucket-2";
+    await userApi.file.newStorageRequest(source2, location2, bucketName2);
+
+    //To allow for BSP to react to request
+    await sleep(500);
+
+    await userApi.block.skipToMinChangeTime();
+
+    // Allow BSP enough time to send call to change capacity.
+    await sleep(500);
+
+    // Assert BSP has sent a call to increase its capacity.
+    await bspApi.assert.extrinsicPresent({
+      module: "providers",
+      method: "changeCapacity",
+      checkTxPool: true
+    });
+
+    await userApi.sealBlock();
+
+    // Assert that the capacity has changed.
+    await userApi.assert.eventPresent("providers", "CapacityChanged");
+
+    const updatedCapacity = BigInt(userApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+    const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
+      bspApi.shConsts.DUMMY_BSP_ID
+    );
+    assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
   });
 });
