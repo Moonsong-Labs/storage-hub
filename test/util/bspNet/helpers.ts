@@ -266,7 +266,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
           ["/ip4/127.0.0.1/tcp/30350/p2p/12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfA"],
           {
             pricePerUnitOfDataPerBlock: 1,
-            bucketDataLimit: 500
+            bucketDataLimit: 500,
+            available: true
           },
           alice.address
         )
