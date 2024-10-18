@@ -238,4 +238,13 @@ export interface StorageProviderId extends Enum {
 /** @name TrieRemoveMutation */
 export interface TrieRemoveMutation extends Struct {}
 
+/** @name ValuePropId */
+export interface ValuePropId extends H256 {}
+
+/** @name ValueProposition */
+export interface ValueProposition extends Struct {
+  readonly price_per_unit_of_data_per_block: u64;
+  readonly bucket_data_limit: StorageDataUnit;
+}
+
 export type PHANTOM_STORAGEHUBCLIENT = "storagehubclient";
