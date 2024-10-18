@@ -1271,6 +1271,136 @@ mod fixed_rate_streams {
         }
 
         #[test]
+        fn charge_multiple_users_payment_streams_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+                let charlie: AccountId = 2;
+                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
+
+                // Register Alice as a MSP with 100 units of data and get her MSP ID
+                register_account_as_msp(alice, 100);
+                let alice_msp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Create a payment stream from Bob to Alice of 10 units per block
+                let bob_rate: BalanceOf<Test> = 10;
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &alice_msp_id,
+                        &bob,
+                        bob_rate
+                    )
+                );
+
+                // Create a payment stream from Charlie to Alice of 20 units per block
+                let charlie_rate: BalanceOf<Test> = 20;
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &alice_msp_id,
+                        &charlie,
+                        charlie_rate
+                    )
+                );
+
+                // Check the new free balance of Bob (after the new stream deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let bob_new_balance =
+                    bob_initial_balance - bob_rate * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check the new free balance of Charlie (after the new stream deposit)
+                let charlie_new_balance = charlie_initial_balance
+                    - charlie_rate * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&charlie), charlie_new_balance);
+
+                // Set the last valid proof of the payment streams from Bob to Alice and from Charlie to Alice to 10 blocks ahead
+                run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
+
+                // Charge both payment streams
+                let user_accounts = vec![bob, charlie];
+                assert_ok!(PaymentStreams::charge_multiple_users_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    user_accounts.clone().try_into().unwrap()
+                ));
+
+                // Check that Bob was charged 10 blocks at the 10 units/block rate
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_new_balance - 10 * bob_rate
+                );
+                System::assert_has_event(
+                    Event::<Test>::PaymentStreamCharged {
+                        user_account: bob,
+                        provider_id: alice_msp_id,
+                        amount: 10 * bob_rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
+                    }
+                    .into(),
+                );
+
+                // Check that Charlie was charged 10 blocks at the 20 units/block rate
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_new_balance - 10 * charlie_rate
+                );
+                System::assert_has_event(
+                    Event::<Test>::PaymentStreamCharged {
+                        user_account: charlie,
+                        provider_id: alice_msp_id,
+                        amount: 10 * charlie_rate,
+                        last_tick_charged: last_chargeable_tick,
+                        charged_at_tick: System::block_number(),
+                    }
+                    .into(),
+                );
+
+                // Check that the UsersCharged event was emitted
+                System::assert_has_event(
+                    Event::<Test>::UsersCharged {
+                        user_accounts: user_accounts.try_into().unwrap(),
+                        provider_id: alice_msp_id,
+                        charged_at_tick: PaymentStreams::get_current_tick(),
+                    }
+                    .into(),
+                );
+
+                // Get the payment stream information for Bob
+                let bob_payment_stream_info =
+                    PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
+                        .unwrap();
+
+                // The payment stream should be updated with the correct last charged proof
+                assert_eq!(
+                    bob_payment_stream_info.last_charged_tick,
+                    PaymentStreams::get_current_tick()
+                );
+
+                // Check the same for Charlie
+                let charlie_payment_stream_info =
+                    PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &charlie)
+                        .unwrap();
+
+                // The payment stream should be updated with the correct last charged proof
+                assert_eq!(
+                    charlie_payment_stream_info.last_charged_tick,
+                    PaymentStreams::get_current_tick()
+                );
+            });
+        }
+
+        #[test]
         fn charge_payment_streams_fails_if_msp_account_has_not_registered_as_msp() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;

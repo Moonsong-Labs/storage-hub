@@ -55,6 +55,7 @@ shp-traits = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }
+pallet-payment-streams = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 
@@ -79,6 +80,7 @@ std = [
 	"shp-forest-verifier/std",
 	"shp-traits/std",
 	"pallet-file-system/std",
+	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 ]
@@ -86,6 +88,7 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
+	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
