@@ -29,7 +29,7 @@ use frame_support::weights::{
 };
 pub use parachains_common::BlockNumber;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-pub use sp_runtime::{MultiAddress, Perbill, Permill};
+pub use sp_runtime::{MultiAddress, Perbill, Permill, Perquintill};
 use sp_std::prelude::Vec;
 
 #[cfg(any(feature = "std", test))]

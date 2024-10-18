@@ -60,6 +60,12 @@ pub mod pallet {
             TickNumber = BlockNumberFor<Self>,
         >;
 
+        /// The trait exposing the logic to calculate how much of the charged funds must go to the treasury.
+        type TreasuryCutCalculator: shp_traits::TreasuryCutCalculator<
+            Balance = BalanceOf<Self>,
+            ProvidedUnit = Self::Units,
+        >;
+
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;
 
@@ -91,6 +97,10 @@ pub mod pallet {
         /// and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.
         #[pallet::constant]
         type UserWithoutFundsCooldown: Get<BlockNumberFor<Self>>;
+
+        /// The treasury account of the runtime
+        #[pallet::constant]
+        type TreasuryAccount: Get<Self::AccountId>;
     }
 
     #[pallet::pallet]

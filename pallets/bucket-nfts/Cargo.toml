@@ -42,6 +42,7 @@ pallet-file-system = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-payment-streams = { workspace = true }
 shp-constants = { workspace = true }
+shp-treasury-funding = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
@@ -61,6 +62,7 @@ runtime-benchmarks = [
 	"pallet-storage-providers/runtime-benchmarks",
 	"shp-file-metadata/runtime-benchmarks",
 	"shp-traits/runtime-benchmarks",
+	"shp-treasury-funding/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -76,6 +78,7 @@ std = [
 	"scale-info/std",
 	"shp-file-metadata/std",
 	"shp-traits/std",
+	"shp-treasury-funding/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-keyring/std",
@@ -88,5 +91,6 @@ try-runtime = [
 	"pallet-storage-providers/try-runtime",
 	"shp-file-metadata/try-runtime",
 	"shp-traits/try-runtime",
+	"shp-treasury-funding/try-runtime",
 	"sp-runtime/try-runtime",
 ]

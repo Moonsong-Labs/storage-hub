@@ -21,6 +21,7 @@ scale-info = { workspace = true }
 # Local
 pallet-payment-streams-runtime-api = { workspace = true }
 shp-traits = { workspace = true }
+shp-treasury-funding = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, optional = true }
@@ -53,6 +54,10 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"shp-traits/runtime-benchmarks",
+	"shp-treasury-funding/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -66,6 +71,7 @@ std = [
 	"pallet-storage-providers/std",
 	"scale-info/std",
 	"shp-traits/std",
+	"shp-treasury-funding/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
@@ -74,5 +80,7 @@ std = [
 try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
+	"shp-traits/try-runtime",
+	"shp-treasury-funding/try-runtime",
 	"sp-runtime/try-runtime",
 ]

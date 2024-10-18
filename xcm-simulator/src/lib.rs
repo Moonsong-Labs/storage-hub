@@ -1,7 +1,9 @@
 #![recursion_limit = "256"]
 
+use sp_core::Get;
 use sp_runtime::BuildStorage;
 use sp_tracing;
+use storagehub::configs::{ExistentialDeposit, TreasuryAccount};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain, TestExt};
@@ -270,6 +272,7 @@ pub fn sh_ext() -> sp_io::TestExternalities {
             (BOB, INITIAL_BALANCE),
             (sh_parent_account_id(), INITIAL_BALANCE),
             (sh_sibling_account_id(NON_SYS_PARA_ID), INITIAL_BALANCE),
+            (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
     }
     .assimilate_storage(&mut t)

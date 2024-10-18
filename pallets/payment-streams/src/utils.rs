@@ -14,6 +14,7 @@ use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_traits::{
     MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
+    TreasuryCutCalculator,
 };
 use sp_runtime::{
     traits::{Convert, One},
@@ -669,7 +670,6 @@ where
 							);
 
                             // Check if the total amount charged would overflow
-                            // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
                             ensure!(
                                 total_amount_charged
                                     .checked_add(&amount_to_charge)
@@ -677,11 +677,27 @@ where
                                 ArithmeticError::Overflow
                             );
 
+                            // Get, from the total amount to charge, the cut for the treasury and the cut for the provider
+                            let total_provided_amount =
+                                <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity(
+                                );
+                            let used_provided_amount = <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
+                            let treasury_cut = <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(total_provided_amount, used_provided_amount, amount_to_charge);
+                            let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
                             // Charge the payment stream from the user's balance
                             T::NativeBalance::transfer(
                                 user_account,
                                 &provider_payment_account,
-                                amount_to_charge,
+                                provider_cut,
+                                Preservation::Preserve,
+                            )?;
+
+                            // Send the rest of the funds to the treasury
+                            T::NativeBalance::transfer(
+                                user_account,
+                                &T::TreasuryAccount::get(),
+                                treasury_cut,
                                 Preservation::Preserve,
                             )?;
 
@@ -799,15 +815,15 @@ where
 
                             // Get the payment account of the SP
                             let provider_payment_account = expect_or_err!(
-                        <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-                            *provider_id
-                        ),
-                        "Provider should exist and have a payment account if its ID exists.",
-                        Error::<T>::ProviderInconsistencyError
-                    );
+                        		<T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                            		*provider_id
+                        		),
+                        		"Provider should exist and have a payment account if its ID exists.",
+                        		Error::<T>::ProviderInconsistencyError
+                    		);
 
                             // Check if the total amount charged would overflow
-                            // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                            // NOTE: We check this BEFORE transferring the amount to the provider.
                             ensure!(
                                 total_amount_charged
                                     .checked_add(&amount_to_charge)
@@ -815,11 +831,27 @@ where
                                 ArithmeticError::Overflow
                             );
 
+                            // Get, from the total amount to charge, the cut for the treasury and the cut for the provider
+                            let total_provided_amount =
+                                <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity(
+                                );
+                            let used_provided_amount = <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
+                            let treasury_cut = <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(total_provided_amount, used_provided_amount, amount_to_charge);
+                            let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
                             // Charge the payment stream from the user's balance
                             T::NativeBalance::transfer(
                                 user_account,
                                 &provider_payment_account,
-                                amount_to_charge,
+                                provider_cut,
+                                Preservation::Preserve,
+                            )?;
+
+                            // Send the rest of the funds to the treasury
+                            T::NativeBalance::transfer(
+                                user_account,
+                                &T::TreasuryAccount::get(),
+                                treasury_cut,
                                 Preservation::Preserve,
                             )?;
 
@@ -872,6 +904,12 @@ where
             Precision::Exact,
         )?;
 
+        // Get the system metrics to calculate the treasury cut for each payment stream.
+        let total_provided_amount =
+            <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
+        let used_provided_amount =
+            <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
+
         // Get all payment streams of the user
         let fixed_rate_payment_streams = Self::get_fixed_rate_payment_streams_of_user(user_account);
         let dynamic_rate_payment_streams =
@@ -893,16 +931,33 @@ where
             // If the amount to charge is greater than the deposit, just charge the deposit
             let amount_to_charge = amount_to_charge.min(fixed_rate_payment_stream.user_deposit);
 
-            // Transfer the amount to charge from the user to the Provider
+            // Get the cut for the treasury and the cut for the provider
+            let treasury_cut =
+                <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
+                    total_provided_amount,
+                    used_provided_amount,
+                    amount_to_charge,
+                );
+            let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
+            // Transfer the provider's cut from the user to the Provider
             let provider_payment_account = expect_or_err!(
                 <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(provider_id),
                 "Provider should exist and have a payment account if its ID exists.",
                 Error::<T>::ProviderInconsistencyError
             );
             T::NativeBalance::transfer(
-                &user_account,
+                user_account,
                 &provider_payment_account,
-                amount_to_charge,
+                provider_cut,
+                Preservation::Preserve,
+            )?;
+
+            // Send the rest of the funds to the treasury
+            T::NativeBalance::transfer(
+                user_account,
+                &T::TreasuryAccount::get(),
+                treasury_cut,
                 Preservation::Preserve,
             )?;
 
@@ -930,16 +985,33 @@ where
             // If the amount to charge is greater than the deposit, just charge the deposit
             let amount_to_charge = amount_to_charge.min(dynamic_rate_payment_stream.user_deposit);
 
-            // Transfer the amount to charge from the user to the Provider
+            // Get the cut for the treasury and the cut for the provider
+            let treasury_cut =
+                <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
+                    total_provided_amount,
+                    used_provided_amount,
+                    amount_to_charge,
+                );
+            let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
+            // Transfer the provider's cut from the user to the Provider
             let provider_payment_account = expect_or_err!(
                 <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(provider_id),
                 "Provider should exist and have a payment account if its ID exists.",
                 Error::<T>::ProviderInconsistencyError
             );
             T::NativeBalance::transfer(
-                &user_account,
+                user_account,
                 &provider_payment_account,
-                amount_to_charge,
+                provider_cut,
+                Preservation::Preserve,
+            )?;
+
+            // Send the rest of the funds to the treasury
+            T::NativeBalance::transfer(
+                user_account,
+                &T::TreasuryAccount::get(),
+                treasury_cut,
                 Preservation::Preserve,
             )?;
 
@@ -1173,7 +1245,20 @@ where
             }
         };
 
-        // Release the deposit from the user and transfer the amount to charge to the Provider to pay for the unpaid services
+        // Get, from the total amount to charge, the cut for the treasury and the cut for the provider
+        let total_provided_amount =
+            <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
+        let used_provided_amount =
+            <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
+        let treasury_cut =
+            <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
+                total_provided_amount,
+                used_provided_amount,
+                amount_to_charge,
+            );
+        let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
+        // Release the deposit from the user to pay for their services
         let provider_payment_account = expect_or_err!(
             <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(*provider_id),
             "Provider should exist and have a payment account if its ID exists.",
@@ -1185,10 +1270,20 @@ where
             deposit,
             Precision::Exact,
         )?;
+
+        // Send the provider's cut to the provider
         T::NativeBalance::transfer(
-            &user_account,
+            user_account,
             &provider_payment_account,
-            amount_to_charge,
+            provider_cut,
+            Preservation::Preserve,
+        )?;
+
+        // Send the rest of the funds to the treasury
+        T::NativeBalance::transfer(
+            user_account,
+            &T::TreasuryAccount::get(),
+            treasury_cut,
             Preservation::Preserve,
         )?;
 
