@@ -11,8 +11,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// TODO #[cfg(feature = "runtime-benchmarks")]
+// TODO mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
