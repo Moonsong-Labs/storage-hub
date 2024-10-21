@@ -8,6 +8,11 @@ homepage = "https://moonsonglabs.com/"
 [profile.release]
 panic = "unwind"
 
+[profile.production]
+codegen-units = 1
+inherits = "release"
+lto = true
+
 [workspace]
 members = [
 	"runtime",
