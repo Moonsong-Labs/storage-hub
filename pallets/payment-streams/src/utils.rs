@@ -566,7 +566,8 @@ where
         let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
         // Get the last chargeable info for this provider
-        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_info =
+            Self::get_last_chargeable_info_by_priviledge_provider(provider_id);
         let last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
 
         // If the fixed-rate payment stream exists:
@@ -1493,5 +1494,21 @@ where
         }
 
         payment_streams
+    }
+
+    pub fn get_last_chargeable_info_by_priviledge_provider(
+        provider_id: &ProviderIdFor<T>,
+    ) -> ProviderLastChargeableInfo<T> {
+        let msp_id = PriviledgeProvider::<T>::get(provider_id);
+
+        // This is a msp if it in the PriviledgeProvider
+        if msp_id.is_some() {
+            return ProviderLastChargeableInfo {
+                last_chargeable_tick: Self::get_current_tick(),
+                price_index: Default::default(),
+            };
+        }
+
+        return LastChargeableInfo::<T>::get(provider_id);
     }
 }
