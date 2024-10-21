@@ -69,8 +69,7 @@ import type {
   StorageDataUnit,
   StorageProviderId,
   TrieRemoveMutation,
-  ValuePropId,
-  ValueProposition
+  ValuePropositionWithId
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
@@ -568,7 +567,7 @@ declare module "@polkadot/api-base/types/calls" {
         ApiType,
         (
           mspId: MainStorageProviderId | string | Uint8Array
-        ) => Observable<Vec<ITuple<[ValuePropId, ValueProposition]>>>
+        ) => Observable<Vec<ValuePropositionWithId>>
       >;
       /**
        * Generic call

@@ -141,9 +141,11 @@ import type {
   PalletStorageProvidersHoldReason,
   PalletStorageProvidersMainStorageProvider,
   PalletStorageProvidersMainStorageProviderSignUpRequest,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersSignUpRequestSpParams,
   PalletStorageProvidersStorageProviderId,
-  PalletStorageProvidersStorageProviderSignUpRequest,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   PalletSudoCall,
   PalletSudoError,
   PalletSudoEvent,
@@ -418,9 +420,11 @@ declare module "@polkadot/types/types/registry" {
     PalletStorageProvidersHoldReason: PalletStorageProvidersHoldReason;
     PalletStorageProvidersMainStorageProvider: PalletStorageProvidersMainStorageProvider;
     PalletStorageProvidersMainStorageProviderSignUpRequest: PalletStorageProvidersMainStorageProviderSignUpRequest;
+    PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
+    PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
     PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
-    PalletStorageProvidersStorageProviderSignUpRequest: PalletStorageProvidersStorageProviderSignUpRequest;
     PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
+    PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
     PalletSudoCall: PalletSudoCall;
     PalletSudoError: PalletSudoError;
     PalletSudoEvent: PalletSudoEvent;

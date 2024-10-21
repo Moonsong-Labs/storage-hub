@@ -20,12 +20,11 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-use frame_system::pallet_prelude::BlockNumberFor;
 pub use pallet::*;
 pub use scale_info::Type;
 use types::{
     BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
-    MainStorageProviderId, MerklePatriciaRoot, StorageDataUnit, StorageProviderSignUpRequest,
+    MainStorageProviderId, MerklePatriciaRoot, SignUpRequest, StorageDataUnit,
 };
 
 #[frame_support::pallet]
@@ -248,12 +247,8 @@ pub mod pallet {
     /// - [request_msp_sign_up](crate::dispatchables::request_msp_sign_up) and [request_bsp_sign_up](crate::dispatchables::request_bsp_sign_up), which add a new entry to the map.
     /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up) and [cancel_sign_up](crate::dispatchables::cancel_sign_up), which remove an existing entry from the map.
     #[pallet::storage]
-    pub type SignUpRequests<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        T::AccountId,
-        (StorageProviderSignUpRequest<T>, BlockNumberFor<T>),
-    >;
+    pub type SignUpRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, SignUpRequest<T>>;
 
     /// The mapping from an AccountId to a MainStorageProviderId.
     ///
@@ -409,7 +404,7 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
-            value_prop: (HashId<T>, ValueProposition<T>),
+            value_prop: ValuePropositionWithId<T>,
         },
 
         /// Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
@@ -466,14 +461,14 @@ pub mod pallet {
         /// Event emitted when an MSP adds a new value proposition.
         ValuePropAdded {
             msp_id: MainStorageProviderId<T>,
-            value_prop_id: HashId<T>,
+            value_prop_id: ValuePropId<T>,
             value_prop: ValueProposition<T>,
         },
 
         /// Event emitted when an MSP's value proposition is made unavailable.
         ValuePropUnavailable {
             msp_id: MainStorageProviderId<T>,
-            value_prop_id: HashId<T>,
+            value_prop_id: ValuePropId<T>,
         },
     }
 
@@ -912,7 +907,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::ValuePropAdded {
                 msp_id,
                 value_prop_id: value_prop.derive_id(),
-                value_prop: value_prop,
+                value_prop,
             });
 
             Ok(().into())
@@ -926,7 +921,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn make_value_prop_unavailable(
             origin: OriginFor<T>,
-            value_prop_id: HashId<T>,
+            value_prop_id: ValuePropId<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -1108,9 +1103,7 @@ pub mod pallet {
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
     /// A helper function to get the information of a sign up request of a user.
-    pub fn get_sign_up_request(
-        who: &T::AccountId,
-    ) -> Result<(StorageProviderSignUpRequest<T>, BlockNumberFor<T>), Error<T>> {
+    pub fn get_sign_up_request(who: &T::AccountId) -> Result<SignUpRequest<T>, Error<T>> {
         SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)
     }
 

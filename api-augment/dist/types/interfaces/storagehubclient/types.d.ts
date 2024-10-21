@@ -208,4 +208,9 @@ export interface ValueProposition extends Struct {
   readonly price_per_unit_of_data_per_block: u64;
   readonly bucket_data_limit: StorageDataUnit;
 }
+/** @name ValuePropositionWithId */
+export interface ValuePropositionWithId extends Struct {
+  readonly id: ValuePropId;
+  readonly value_prop: ValueProposition;
+}
 export type PHANTOM_STORAGEHUBCLIENT = "storagehubclient";

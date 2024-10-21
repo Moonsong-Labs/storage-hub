@@ -239,7 +239,7 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
         type: "MainStorageProviderId"
       }
     ],
-    type: "Vec<(ValuePropId, ValueProposition)>"
+    type: "Vec<ValuePropositionWithId>"
   }
 };
 

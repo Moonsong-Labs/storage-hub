@@ -6,7 +6,7 @@ use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropId, ValueProposition>
+    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropositionWithId>
     where
         BlockNumber: Codec,
         BspId: Codec,
@@ -18,8 +18,7 @@ sp_api::decl_runtime_apis! {
         Balance: Codec,
         BucketId: Codec,
         Multiaddresses: Codec,
-        ValuePropId: Codec,
-        ValueProposition: Codec,
+        ValuePropositionWithId: Codec,
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId>;
@@ -30,7 +29,7 @@ sp_api::decl_runtime_apis! {
         fn query_earliest_change_capacity_block(bsp_id: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
         fn get_slash_amount_per_max_file_size() -> Balance;
-        fn query_value_propositions_for_msp(who: &ProviderId) -> sp_runtime::Vec<(ValuePropId, ValueProposition)>;
+        fn query_value_propositions_for_msp(who: &ProviderId) -> sp_runtime::Vec<ValuePropositionWithId>;
         fn get_bsp_stake(bsp_id: &BspId) -> Result<Balance, GetStakeError>;
 
     }

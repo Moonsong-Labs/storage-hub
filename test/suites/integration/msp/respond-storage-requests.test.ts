@@ -35,7 +35,7 @@ describeMspNet(
         userApi.shConsts.DUMMY_MSP_ID
       );
 
-      const valuePropId = valueProps[0][0];
+      const valuePropId = valueProps[0].id;
 
       const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
@@ -172,7 +172,7 @@ describeMspNet(
         userApi.shConsts.DUMMY_MSP_ID
       );
 
-      const valuePropId = valueProps[0][0];
+      const valuePropId = valueProps[0].id;
 
       const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =

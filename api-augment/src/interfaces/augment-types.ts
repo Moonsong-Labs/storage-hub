@@ -1293,7 +1293,8 @@ import type {
   StorageProviderId,
   TrieRemoveMutation,
   ValuePropId,
-  ValueProposition
+  ValueProposition,
+  ValuePropositionWithId
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 declare module "@polkadot/types/types/registry" {
@@ -2442,6 +2443,7 @@ declare module "@polkadot/types/types/registry" {
     ValidTransaction: ValidTransaction;
     ValuePropId: ValuePropId;
     ValueProposition: ValueProposition;
+    ValuePropositionWithId: ValuePropositionWithId;
     VecInboundHrmpMessage: VecInboundHrmpMessage;
     VersionedMultiAsset: VersionedMultiAsset;
     VersionedMultiAssets: VersionedMultiAssets;

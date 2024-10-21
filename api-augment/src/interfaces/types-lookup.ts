@@ -1815,7 +1815,7 @@ declare module "@polkadot/types/lookup" {
       readonly mspId: H256;
       readonly multiaddresses: Vec<Bytes>;
       readonly capacity: u64;
-      readonly valueProp: ITuple<[H256, PalletStorageProvidersValueProposition]>;
+      readonly valueProp: PalletStorageProvidersValuePropositionWithId;
     } & Struct;
     readonly isBspRequestSignUpSuccess: boolean;
     readonly asBspRequestSignUpSuccess: {
@@ -1880,6 +1880,12 @@ declare module "@polkadot/types/lookup" {
       | "Slashed"
       | "ValuePropAdded"
       | "ValuePropUnavailable";
+  }
+
+  /** @name PalletStorageProvidersValuePropositionWithId (128) */
+  interface PalletStorageProvidersValuePropositionWithId extends Struct {
+    readonly id: H256;
+    readonly valueProp: PalletStorageProvidersValueProposition;
   }
 
   /** @name PalletStorageProvidersValueProposition (129) */
@@ -5163,8 +5169,14 @@ declare module "@polkadot/types/lookup" {
       | "RecursiveDisallowed";
   }
 
-  /** @name PalletStorageProvidersStorageProviderSignUpRequest (436) */
-  interface PalletStorageProvidersStorageProviderSignUpRequest extends Enum {
+  /** @name PalletStorageProvidersSignUpRequest (435) */
+  interface PalletStorageProvidersSignUpRequest extends Struct {
+    readonly spSignUpRequest: PalletStorageProvidersSignUpRequestSpParams;
+    readonly at: u32;
+  }
+
+  /** @name PalletStorageProvidersSignUpRequestSpParams (436) */
+  interface PalletStorageProvidersSignUpRequestSpParams extends Enum {
     readonly isBackupStorageProvider: boolean;
     readonly asBackupStorageProvider: PalletStorageProvidersBackupStorageProvider;
     readonly isMainStorageProvider: boolean;

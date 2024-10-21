@@ -24,7 +24,7 @@ export const sendNewStorageRequest = async (
       mspId ?? ShConsts.DUMMY_MSP_ID
     );
 
-    localValuePropId = valueProps[0][0];
+    localValuePropId = valueProps[0].id;
   }
 
   if (localValuePropId === undefined) {
@@ -93,7 +93,7 @@ export const createBucket = async (
       mspId ?? ShConsts.DUMMY_MSP_ID
     );
 
-    localValuePropId = valueProps[0][0];
+    localValuePropId = valueProps[0].id;
   }
 
   if (localValuePropId === undefined) {

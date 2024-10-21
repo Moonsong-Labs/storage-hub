@@ -235,7 +235,7 @@ const STORAGE_PROVIDERS_V1 = {
         type: "MainStorageProviderId"
       }
     ],
-    type: "Vec<(ValuePropId, ValueProposition)>"
+    type: "Vec<ValuePropositionWithId>"
   }
 };
 const PAYMENT_STREAMS_V1 = {

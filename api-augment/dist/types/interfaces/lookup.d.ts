@@ -1382,6 +1382,13 @@ declare const _default: {
     };
   };
   /**
+   * Lookup128: pallet_storage_providers::types::ValuePropositionWithId<T>
+   **/
+  PalletStorageProvidersValuePropositionWithId: {
+    id: string;
+    valueProp: string;
+  };
+  /**
    * Lookup129: pallet_storage_providers::types::ValueProposition<T>
    **/
   PalletStorageProvidersValueProposition: {
@@ -3963,9 +3970,16 @@ declare const _default: {
     _enum: string[];
   };
   /**
-   * Lookup436: pallet_storage_providers::types::StorageProviderSignUpRequest<T>
+   * Lookup435: pallet_storage_providers::types::SignUpRequest<T>
    **/
-  PalletStorageProvidersStorageProviderSignUpRequest: {
+  PalletStorageProvidersSignUpRequest: {
+    spSignUpRequest: string;
+    at: string;
+  };
+  /**
+   * Lookup436: pallet_storage_providers::types::SignUpRequestSpParams<T>
+   **/
+  PalletStorageProvidersSignUpRequestSpParams: {
     _enum: {
       BackupStorageProvider: string;
       MainStorageProvider: string;

@@ -42,6 +42,10 @@ export const ALL_TYPES = {
     price_per_unit_of_data_per_block: "u64",
     bucket_data_limit: "StorageDataUnit"
   },
+  ValuePropositionWithId: {
+    id: "ValuePropId",
+    value_prop: "ValueProposition"
+  },
   BackupStorageProvider: {
     capacity: "StorageData",
     data_used: "StorageData",

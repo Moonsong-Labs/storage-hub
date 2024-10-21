@@ -2,8 +2,9 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
-        MainStorageProviderId, MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageDataUnit,
-        StorageProviderId, StorageProviderSignUpRequest, ValueProposition,
+        MainStorageProviderId, MaxBuckets, MaxMultiAddressAmount, MultiAddress,
+        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
+        ValuePropositionWithId,
     },
     Error, Event,
 };
@@ -49,7 +50,7 @@ mod sign_up {
 
         /// This module holds the success cases for Main Storage Providers
         mod msp {
-            use crate::types::MainStorageProviderSignUpRequest;
+            use crate::types::{MainStorageProviderSignUpRequest, SignUpRequest};
 
             use super::*;
             #[test]
@@ -131,8 +132,8 @@ mod sign_up {
                     assert!(alice_sign_up_request.is_ok());
                     assert_eq!(
                         alice_sign_up_request.unwrap(),
-                        (
-                            StorageProviderSignUpRequest::MainStorageProvider(
+                        SignUpRequest::<Test> {
+                            sp_sign_up_request: SignUpRequestSpParams::MainStorageProvider(
                                 MainStorageProviderSignUpRequest {
                                     msp_info: MainStorageProvider {
                                         buckets: BoundedVec::new(),
@@ -147,8 +148,8 @@ mod sign_up {
                                     value_prop
                                 }
                             ),
-                            current_block
-                        )
+                            at: current_block
+                        }
                     );
                 });
             }
@@ -239,7 +240,10 @@ mod sign_up {
                             multiaddresses,
                             capacity: storage_amount,
                             msp_id: alice_sp_id.unwrap(),
-                            value_prop: (value_prop.derive_id(), value_prop),
+                            value_prop: ValuePropositionWithId {
+                                id: value_prop.derive_id(),
+                                value_prop,
+                            },
                         }
                         .into(),
                     );
@@ -331,7 +335,10 @@ mod sign_up {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
-                            value_prop: (value_prop.derive_id(), value_prop),
+                            value_prop: ValuePropositionWithId {
+                                id: value_prop.derive_id(),
+                                value_prop,
+                            },
                             msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
@@ -493,24 +500,27 @@ mod sign_up {
 
                     // Check that Alice's request to sign up as a Main Storage Provider exists and is the one we just created
                     let current_block = frame_system::Pallet::<Test>::block_number();
-                    let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
-                    assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
-                        == StorageProviderSignUpRequest::MainStorageProvider(
-                            MainStorageProviderSignUpRequest {
-                                msp_info: MainStorageProvider {
-                                    buckets: BoundedVec::new(),
-                                    capacity: storage_amount,
-                                    capacity_used: 0,
-                                    multiaddresses: multiaddresses.clone(),
-                                    last_capacity_change: current_block,
-                                    owner_account: alice,
-                                    payment_account: alice,
-                                    sign_up_block: current_block
-                                },
-                                value_prop
-                            }
-                        )));
-                    assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
+                    let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice)
+                        .expect("Alice's sign up request should exist after requesting to sign up");
+                    assert!(
+                        alice_sign_up_request.sp_sign_up_request
+                            == SignUpRequestSpParams::MainStorageProvider(
+                                MainStorageProviderSignUpRequest {
+                                    msp_info: MainStorageProvider {
+                                        buckets: BoundedVec::new(),
+                                        capacity: storage_amount,
+                                        capacity_used: 0,
+                                        multiaddresses: multiaddresses.clone(),
+                                        last_capacity_change: current_block,
+                                        owner_account: alice,
+                                        payment_account: alice,
+                                        sign_up_block: current_block
+                                    },
+                                    value_prop
+                                }
+                            )
+                    );
+                    assert!(alice_sign_up_request.at == current_block);
 
                     // Cancel the sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(
@@ -535,6 +545,8 @@ mod sign_up {
 
         /// This module holds the success cases for Backup Storage Providers
         mod bsp {
+            use crate::types::SignUpRequest;
+
             use super::*;
 
             #[test]
@@ -610,12 +622,12 @@ mod sign_up {
 
                     // Check that Alice's request is in the requests list and matches the info provided
                     let current_block = frame_system::Pallet::<Test>::block_number();
-                    let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
-                    assert!(alice_sign_up_request.is_ok());
+                    let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice)
+                        .expect("Alice's sign up request should exist after requesting to sign up");
                     assert_eq!(
-                        alice_sign_up_request.unwrap(),
-                        (
-                            StorageProviderSignUpRequest::BackupStorageProvider(
+                        alice_sign_up_request,
+                        SignUpRequest::<Test> {
+                            sp_sign_up_request: SignUpRequestSpParams::BackupStorageProvider(
                                 BackupStorageProvider {
                                     root: DefaultMerkleRoot::get(),
                                     capacity: storage_amount,
@@ -629,8 +641,8 @@ mod sign_up {
                                     sign_up_block: current_block
                                 }
                             ),
-                            current_block
-                        )
+                            at: current_block
+                        }
                     );
                 });
             }
@@ -987,23 +999,26 @@ mod sign_up {
 
                     // Check that Alice's request to sign up as a Backup Storage Provider exists and is the one we just created
                     let current_block = frame_system::Pallet::<Test>::block_number();
-                    let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
-                    assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
-                        == StorageProviderSignUpRequest::BackupStorageProvider(
-                            BackupStorageProvider {
-                                capacity: storage_amount,
-                                capacity_used: 0,
-                                multiaddresses: multiaddresses.clone(),
-                                root: DefaultMerkleRoot::get(),
-                                last_capacity_change: current_block,
-                                owner_account: alice,
-                                payment_account: alice,
-                                reputation_weight:
-                                    <Test as crate::Config>::StartingReputationWeight::get(),
-                                sign_up_block: current_block
-                            }
-                        )));
-                    assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
+                    let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice)
+                        .expect("Alice's sign up request should exist after requesting to sign up");
+                    assert!(
+                        alice_sign_up_request.sp_sign_up_request
+                            == SignUpRequestSpParams::BackupStorageProvider(
+                                BackupStorageProvider {
+                                    capacity: storage_amount,
+                                    capacity_used: 0,
+                                    multiaddresses: multiaddresses.clone(),
+                                    root: DefaultMerkleRoot::get(),
+                                    last_capacity_change: current_block,
+                                    owner_account: alice,
+                                    payment_account: alice,
+                                    reputation_weight:
+                                        <Test as crate::Config>::StartingReputationWeight::get(),
+                                    sign_up_block: current_block
+                                }
+                            )
+                    );
+                    assert!(alice_sign_up_request.at == current_block);
 
                     // Cancel the sign up of Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(
@@ -1225,7 +1240,10 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
                             msp_id: alice_sp_id.unwrap(),
-                            value_prop: (value_prop.derive_id(), value_prop),
+                            value_prop: ValuePropositionWithId {
+                                id: value_prop.derive_id(),
+                                value_prop,
+                            },
                         }
                         .into(),
                     );
@@ -1314,7 +1332,10 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
                             msp_id: alice_sp_id.unwrap(),
-                            value_prop: (value_prop.derive_id(), value_prop),
+                            value_prop: ValuePropositionWithId {
+                                id: value_prop.derive_id(),
+                                value_prop,
+                            },
                         }
                         .into(),
                     );
@@ -1421,7 +1442,10 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
                             msp_id: alice_sp_id.unwrap(),
-                            value_prop: (value_prop.derive_id(), value_prop),
+                            value_prop: ValuePropositionWithId {
+                                id: value_prop.derive_id(),
+                                value_prop,
+                            },
                         }
                         .into(),
                     );
@@ -1499,7 +1523,10 @@ mod sign_up {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
-                            value_prop: (value_prop.derive_id(), value_prop),
+                            value_prop: ValuePropositionWithId {
+                                id: value_prop.derive_id(),
+                                value_prop,
+                            },
                             msp_id: alice_sp_id.unwrap(),
                         }
                         .into(),
@@ -4652,7 +4679,10 @@ fn register_account_as_msp(
             msp_id,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
-            value_prop: (value_prop_id, value_prop),
+            value_prop: ValuePropositionWithId {
+                id: value_prop_id,
+                value_prop: value_prop.clone(),
+            },
         }
         .into(),
     );

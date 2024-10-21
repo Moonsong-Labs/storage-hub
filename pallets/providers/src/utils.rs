@@ -29,7 +29,8 @@ use shp_traits::{
 use sp_std::vec::Vec;
 use types::{
     Bucket, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress, Multiaddresses,
-    ProviderId, StorageProviderId, StorageProviderSignUpRequest, ValueProposition,
+    ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId, ValueProposition,
+    ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -140,10 +141,10 @@ where
         // Store the sign up request in the SignUpRequests mapping
         SignUpRequests::<T>::insert(
             who,
-            (
-                StorageProviderSignUpRequest::MainStorageProvider(sign_up_request),
-                frame_system::Pallet::<T>::block_number(),
-            ),
+            SignUpRequest::<T> {
+                sp_sign_up_request: SignUpRequestSpParams::MainStorageProvider(sign_up_request),
+                at: frame_system::Pallet::<T>::block_number(),
+            },
         );
 
         Ok(())
@@ -220,10 +221,10 @@ where
         // Store the sign up request in the SignUpRequests mapping
         SignUpRequests::<T>::insert(
             who,
-            (
-                StorageProviderSignUpRequest::BackupStorageProvider(bsp_info.clone()),
-                frame_system::Pallet::<T>::block_number(),
-            ),
+            SignUpRequest::<T> {
+                sp_sign_up_request: SignUpRequestSpParams::BackupStorageProvider(bsp_info.clone()),
+                at: frame_system::Pallet::<T>::block_number(),
+            },
         );
 
         Ok(())
@@ -254,7 +255,7 @@ where
     /// according to the type of Storage Provider that the user is trying to sign up as
     pub fn do_confirm_sign_up(who: &T::AccountId) -> DispatchResult {
         // Check that the signer has requested to sign up as a Storage Provider
-        let (sp, request_block) =
+        let sign_up_request =
             SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)?;
 
         // Get the ProviderId by using the AccountId as the seed for a random generator
@@ -264,17 +265,17 @@ where
         // Check that the maximum block number after which the randomness is invalid is greater than or equal to the block number when the
         // request was made to ensure that the randomness was not known when the request was made
         ensure!(
-            block_number_when_random >= request_block,
+            block_number_when_random >= sign_up_request.at,
             Error::<T>::RandomnessNotValidYet
         );
 
         // Check what type of Storage Provider the signer is trying to sign up as and dispatch the corresponding logic
-        match sp {
-            StorageProviderSignUpRequest::MainStorageProvider(sign_up_request) => {
-                Self::do_msp_sign_up(who, sp_id, sign_up_request, request_block)?;
+        match sign_up_request.sp_sign_up_request {
+            SignUpRequestSpParams::MainStorageProvider(msp_params) => {
+                Self::do_msp_sign_up(who, sp_id, msp_params, sign_up_request.at)?;
             }
-            StorageProviderSignUpRequest::BackupStorageProvider(bsp_info) => {
-                Self::do_bsp_sign_up(who, sp_id, &bsp_info, request_block)?;
+            SignUpRequestSpParams::BackupStorageProvider(bsp_params) => {
+                Self::do_bsp_sign_up(who, sp_id, &bsp_params, sign_up_request.at)?;
             }
         }
 
@@ -330,7 +331,10 @@ where
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
             capacity: sign_up_request.msp_info.capacity.clone(),
-            value_prop: (value_prop_id, value_prop),
+            value_prop: ValuePropositionWithId {
+                id: value_prop_id,
+                value_prop: value_prop.clone(),
+            },
         });
 
         Ok(())
@@ -794,7 +798,7 @@ where
 
     pub(crate) fn do_make_value_prop_unavailable(
         who: &T::AccountId,
-        value_prop_id: HashId<T>,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<MainStorageProviderId<T>, DispatchError> {
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
@@ -1003,7 +1007,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
-    type ValuePropId = HashId<T>;
+    type ValuePropId = ValuePropId<T>;
 
     fn add_bucket(
         provider_id: Self::ProviderId,
@@ -1643,9 +1647,10 @@ where
 
     pub fn query_value_propositions_for_msp(
         msp_id: &MainStorageProviderId<T>,
-    ) -> Vec<(HashId<T>, ValueProposition<T>)> {
+    ) -> Vec<ValuePropositionWithId<T>> {
         MainStorageProviderIdsToValuePropositions::<T>::iter_prefix(msp_id)
-            .collect::<Vec<(HashId<T>, ValueProposition<T>)>>()
+            .map(|(id, vp)| ValuePropositionWithId { id, value_prop: vp })
+            .collect::<Vec<ValuePropositionWithId<T>>>()
     }
 
     pub fn get_bsp_stake(

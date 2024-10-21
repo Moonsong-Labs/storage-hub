@@ -1351,7 +1351,7 @@ export default {
         mspId: "H256",
         multiaddresses: "Vec<Bytes>",
         capacity: "u64",
-        valueProp: "(H256,PalletStorageProvidersValueProposition)"
+        valueProp: "PalletStorageProvidersValuePropositionWithId"
       },
       BspRequestSignUpSuccess: {
         who: "AccountId32",
@@ -1396,6 +1396,13 @@ export default {
         valuePropId: "H256"
       }
     }
+  },
+  /**
+   * Lookup128: pallet_storage_providers::types::ValuePropositionWithId<T>
+   **/
+  PalletStorageProvidersValuePropositionWithId: {
+    id: "H256",
+    valueProp: "PalletStorageProvidersValueProposition"
   },
   /**
    * Lookup129: pallet_storage_providers::types::ValueProposition<T>
@@ -4121,9 +4128,16 @@ export default {
     ]
   },
   /**
-   * Lookup436: pallet_storage_providers::types::StorageProviderSignUpRequest<T>
+   * Lookup435: pallet_storage_providers::types::SignUpRequest<T>
    **/
-  PalletStorageProvidersStorageProviderSignUpRequest: {
+  PalletStorageProvidersSignUpRequest: {
+    spSignUpRequest: "PalletStorageProvidersSignUpRequestSpParams",
+    at: "u32"
+  },
+  /**
+   * Lookup436: pallet_storage_providers::types::SignUpRequestSpParams<T>
+   **/
+  PalletStorageProvidersSignUpRequestSpParams: {
     _enum: {
       BackupStorageProvider: "PalletStorageProvidersBackupStorageProvider",
       MainStorageProvider: "PalletStorageProvidersMainStorageProviderSignUpRequest"

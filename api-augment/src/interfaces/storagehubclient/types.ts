@@ -247,4 +247,10 @@ export interface ValueProposition extends Struct {
   readonly bucket_data_limit: StorageDataUnit;
 }
 
+/** @name ValuePropositionWithId */
+export interface ValuePropositionWithId extends Struct {
+  readonly id: ValuePropId;
+  readonly value_prop: ValueProposition;
+}
+
 export type PHANTOM_STORAGEHUBCLIENT = "storagehubclient";

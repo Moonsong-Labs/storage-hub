@@ -34,6 +34,7 @@ import type {
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -1662,14 +1663,14 @@ declare module "@polkadot/api-base/types/events" {
           mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
-          valueProp: ITuple<[H256, PalletStorageProvidersValueProposition]>
+          valueProp: PalletStorageProvidersValuePropositionWithId
         ],
         {
           who: AccountId32;
           mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: ITuple<[H256, PalletStorageProvidersValueProposition]>;
+          valueProp: PalletStorageProvidersValuePropositionWithId;
         }
       >;
       /**

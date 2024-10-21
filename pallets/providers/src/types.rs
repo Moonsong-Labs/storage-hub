@@ -10,6 +10,15 @@ use sp_runtime::BoundedVec;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
 
+pub type ValuePropId<T> = HashId<T>;
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct ValuePropositionWithId<T: Config> {
+    pub id: ValuePropId<T>,
+    pub value_prop: ValueProposition<T>,
+}
+
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
@@ -86,11 +95,18 @@ pub struct Bucket<T: Config> {
     pub value_prop_id: HashId<T>,
 }
 
-/// Enum that represents a Storage Provider. It holds either a BackupStorageProvider or a MainStorageProvider,
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct SignUpRequest<T: Config> {
+    pub sp_sign_up_request: SignUpRequestSpParams<T>,
+    pub at: BlockNumberFor<T>,
+}
+
+/// Enum that represents a Storage Provider sign up request parameters. It holds either a BackupStorageProvider or a MainStorageProvider,
 /// allowing to operate generically with both types.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub enum StorageProviderSignUpRequest<T: Config> {
+pub enum SignUpRequestSpParams<T: Config> {
     BackupStorageProvider(BackupStorageProvider<T>),
     MainStorageProvider(MainStorageProviderSignUpRequest<T>),
 }
