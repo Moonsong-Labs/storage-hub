@@ -59,7 +59,7 @@ pub struct BackupStorageProvider<T: Config> {
 pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
-    pub msp_id: MainStorageProviderId<T>,
+    pub msp_id: Option<MainStorageProviderId<T>>,
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     pub size: StorageDataUnit<T>,

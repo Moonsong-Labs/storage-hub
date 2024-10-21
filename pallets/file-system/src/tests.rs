@@ -8207,7 +8207,7 @@ fn create_bucket(
         Some(Bucket {
             root: <Test as pallet_storage_providers::pallet::Config>::DefaultMerkleRoot::get(),
             user_id: owner.clone(),
-            msp_id,
+            msp_id: Some(msp_id),
             private: false,
             read_access_group_id: None,
             size: 0,

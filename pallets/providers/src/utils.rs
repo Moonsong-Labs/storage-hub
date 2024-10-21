@@ -888,7 +888,9 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     }
 
     fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
-        Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
+        let bucket = Buckets::<T>::get(bucket_id).map(|bucket| bucket)?;
+
+        bucket.msp_id.map(|msp_id| msp_id)
     }
 
     fn get_read_access_group_id_of_bucket(
@@ -913,7 +915,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 
     fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
         if let Some(bucket) = Buckets::<T>::get(bucket_id) {
-            bucket.msp_id == *msp_id
+            bucket.msp_id == Some(*msp_id)
         } else {
             false
         }
@@ -933,7 +935,9 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Ok(bucket.size)
     }
 
-    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError> {
+    fn get_msp_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(bucket.msp_id)
     }
@@ -985,7 +989,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
-            msp_id: provider_id,
+            msp_id: Some(provider_id),
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id,
@@ -1003,7 +1007,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.msp_id = *new_msp;
+            bucket.msp_id = Some(*new_msp);
 
             Ok(())
         })
@@ -1021,19 +1025,21 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
         let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        MainStorageProviderIdsToBuckets::<T>::mutate_exists(
-            &bucket.msp_id,
-            |buckets| match buckets {
-                Some(b) => {
-                    b.retain(|b| b != &bucket_id);
+        let msp_id = match bucket.msp_id {
+            Some(msp_id) => msp_id,
+            None => return Err(Error::<T>::BucketMustHaveMspForOperation.into()),
+        };
 
-                    if b.is_empty() {
-                        *buckets = None;
-                    }
+        MainStorageProviderIdsToBuckets::<T>::mutate_exists(&msp_id, |buckets| match buckets {
+            Some(b) => {
+                b.retain(|b| b != &bucket_id);
+
+                if b.is_empty() {
+                    *buckets = None;
                 }
-                _ => {}
-            },
-        );
+            }
+            _ => {}
+        });
 
         // Release the bucket deposit hold
         T::NativeBalance::release(
@@ -1251,8 +1257,9 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
-            let msp_for_bucket = bucket.msp_id;
-            if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
+            let msp_id = bucket.msp_id.map(|msp_id| msp_id)?;
+
+            if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
                 Some(msp.owner_account)
             } else {
                 None
@@ -1555,7 +1562,7 @@ where
 
     pub fn query_msp_id_of_bucket_id(
         bucket_id: &BucketId<T>,
-    ) -> Result<MainStorageProviderId<T>, QueryMspIdOfBucketIdError> {
+    ) -> Result<Option<MainStorageProviderId<T>>, QueryMspIdOfBucketIdError> {
         let bucket =
             Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
         Ok(bucket.msp_id)

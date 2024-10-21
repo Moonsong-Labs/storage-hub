@@ -527,6 +527,8 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when an operation requires an MSP to be storing the bucket.
+        BucketMustHaveMspForOperation,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.

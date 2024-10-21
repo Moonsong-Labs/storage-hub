@@ -179,7 +179,9 @@ pub trait ReadBucketsInterface {
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError>;
 
     /// Get the MSP of a bucket.
-    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError>;
+    fn get_msp_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError>;
 }
 
 /// A trait to change the state of buckets registered in the system, such as updating their privacy

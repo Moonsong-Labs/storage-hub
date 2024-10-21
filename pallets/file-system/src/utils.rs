@@ -339,6 +339,80 @@ where
         Ok(())
     }
 
+    pub(crate) fn do_msp_respond_move_bucket_request(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+        response: BucketMoveRequestResponse,
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
+            .ok_or(Error::<T>::NotAMsp)?;
+
+        // Check if the sender is the MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check if the move bucket request exists for MSP and bucket.
+        let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
+        ensure!(
+            move_bucket_requester.is_some(),
+            Error::<T>::MoveBucketRequestNotFound
+        );
+
+        if response == BucketMoveRequestResponse::Rejected {
+            <PendingBucketsToMove<T>>::remove(&bucket_id);
+            <PendingMoveBucketRequests<T>>::remove(&msp_id, bucket_id);
+
+            return Ok(msp_id);
+        }
+
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+
+        let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
+
+        // A bucket should have an MSP still part of the bucket data when the user initiated a move bucket request.
+        // When an MSP
+        if let Some(msp_id) = previous_msp_id {
+            let bucket_owner =
+                <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+            // Charge user and delete the payment stream between previous msp and user.
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket_owner,
+            )?;
+
+            // Decrease the used capacity of the previous MSP.
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &msp_id,
+                bucket_size,
+            )?;
+        }
+
+        // Check if MSP has enough available capacity to store the bucket.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
+                >= bucket_size,
+            Error::<T>::InsufficientAvailableCapacity
+        );
+
+        // Change the MSP that stores the bucket.
+        <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
+
+        // Increase the used capacity of the new MSP.
+        <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
+
+        <PendingBucketsToMove<T>>::remove(&bucket_id);
+
+        Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
+
+        Ok(msp_id)
+    }
+
     pub(crate) fn do_bsp_add_data_server_for_move_bucket_request(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
@@ -368,68 +442,6 @@ where
         DataServersForMoveBucket::<T>::insert(&bucket_id, &bsp_id, ());
 
         Ok(bsp_id)
-    }
-
-    pub(crate) fn do_msp_respond_move_bucket_request(
-        sender: T::AccountId,
-        bucket_id: BucketIdFor<T>,
-        response: BucketMoveRequestResponse,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
-            .ok_or(Error::<T>::NotAMsp)?;
-
-        // Check if the sender is the MSP.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
-            Error::<T>::NotAMsp
-        );
-
-        // Check if the move bucket request exists for MSP and bucket.
-        let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
-        ensure!(
-            move_bucket_requester.is_some(),
-            Error::<T>::MoveBucketRequestNotFound
-        );
-
-        if response == BucketMoveRequestResponse::Rejected {
-            <PendingBucketsToMove<T>>::remove(&bucket_id);
-            <PendingMoveBucketRequests<T>>::remove(&msp_id, bucket_id);
-
-            return Ok(msp_id);
-        }
-
-        let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
-
-        // Decrease the used capacity of the current MSP.
-        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
-
-        // Check if MSP has enough available capacity to store the bucket.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
-                >= bucket_size,
-            Error::<T>::InsufficientAvailableCapacity
-        );
-
-        // Change the MSP that stores the bucket.
-        <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
-
-        // Decrease the used capacity of the previous MSP.
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &previous_msp_id,
-            bucket_size,
-        )?;
-
-        // Increase the used capacity of the new MSP.
-        <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
-            &msp_id,
-            bucket_size,
-        )?;
-
-        <PendingBucketsToMove<T>>::remove(&bucket_id);
-
-        Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
-
-        Ok(msp_id)
     }
 
     /// Update the privacy of a bucket.
@@ -756,6 +768,29 @@ where
         };
 
         Ok(result)
+    }
+
+    pub(crate) fn do_msp_stop_storing_bucket(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        // Check if the sender is an MSP.
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
+            .ok_or(Error::<T>::NotAMsp)?;
+
+        // Check if the MSP is indeed an MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check if the MSP is storing the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
+            Error::<T>::MspNotStoringBucket
+        );
+
+        Ok(msp_id)
     }
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.

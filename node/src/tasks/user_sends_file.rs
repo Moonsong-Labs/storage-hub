@@ -90,7 +90,8 @@ where
                     event.bucket_id,
                     e
                 )
-            })?;
+            })?
+            .ok_or(anyhow::anyhow!("MSP ID not found for bucket ID {:?}. This can happen if the MSP stopped storing the bucket while processing this storage request.", event.bucket_id))?;
 
         let msp_multiaddresses = self
             .storage_hub_handler

@@ -22,7 +22,7 @@ sp_api::decl_runtime_apis! {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId>;
         fn query_provider_multiaddresses(provider_id: &ProviderId) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
-        fn query_msp_id_of_bucket_id(bucket_id: &BucketId) -> Result<ProviderId, QueryMspIdOfBucketIdError>;
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId) -> Result<Option<ProviderId>, QueryMspIdOfBucketIdError>;
         fn query_storage_provider_capacity(provider_id: &ProviderId) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
         fn query_available_storage_capacity(provider_id: &ProviderId) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
         fn query_earliest_change_capacity_block(bsp_id: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;

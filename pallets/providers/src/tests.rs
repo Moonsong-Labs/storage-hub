@@ -3939,7 +3939,7 @@ mod add_bucket {
                     Bucket::<Test> {
                         root: DefaultMerkleRoot::get(),
                         user_id: bucket_owner,
-                        msp_id,
+                        msp_id: Some(msp_id),
                         private: false,
                         read_access_group_id: None,
                         size: 0,
