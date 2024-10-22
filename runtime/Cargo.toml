@@ -43,6 +43,7 @@ pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 
 shp-constants = { workspace = true }
+shp-data-price-updater = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
@@ -184,7 +185,6 @@ runtime-benchmarks = [
 	"cumulus-pallet-parachain-system/runtime-benchmarks",
 	"cumulus-pallet-session-benchmarking/runtime-benchmarks",
 	"cumulus-pallet-xcmp-queue/runtime-benchmarks",
-	"cumulus-primitives-aura/std",
 	"cumulus-primitives-core/runtime-benchmarks",
 	"cumulus-primitives-utility/runtime-benchmarks",
 	"frame-benchmarking/runtime-benchmarks",

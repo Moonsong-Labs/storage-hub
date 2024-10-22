@@ -8,6 +8,11 @@ homepage = "https://moonsonglabs.com/"
 [profile.release]
 panic = "unwind"
 
+[profile.production]
+codegen-units = 1
+inherits = "release"
+lto = true
+
 [workspace]
 members = [
 	"runtime",
@@ -200,6 +205,7 @@ shc-rpc = { path = "client/rpc", default-features = false }
 
 # Local - StorageHub Primitives (used by the runtime and the node, must be no_std compatible)
 shp-constants = { path = "primitives/constants", default-features = false }
+shp-data-price-updater = { path = "primitives/data-price-updater", default-features = false }
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
 shp-file-metadata = { path = "primitives/file-metadata", default-features = false }
 shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
