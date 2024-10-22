@@ -565,17 +565,15 @@ where
         // Initiate the variable that will hold the total amount that has been charged
         let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
-        // Get the last chargeable info for this provider
-        let last_chargeable_info =
-            Self::get_last_chargeable_info_by_priviledge_provider(provider_id);
-        let last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
+        // Get last chargeable tick (default is current)
+        let mut last_chargeable_tick = Self::get_current_tick();
 
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
             // Check if the user is flagged as without funds to execute the correct charging logic
             match UsersWithoutFunds::<T>::get(user_account) {
                 Some(_) => {
-                    // If the user has been flagged as without funds, manage it accordingly
+                    // If the user has been fldo_charge_paymentagged as without funds, manage it accordingly
                     Self::manage_user_without_funds(
                         &provider_id,
                         &user_account,
@@ -713,6 +711,9 @@ where
 
         // If the dynamic-rate payment stream exists:
         if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
+            let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+            last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
+
             match UsersWithoutFunds::<T>::get(user_account) {
                 Some(_) => {
                     // If the user has been flagged as without funds, manage it accordingly
@@ -1494,21 +1495,5 @@ where
         }
 
         payment_streams
-    }
-
-    pub fn get_last_chargeable_info_by_priviledge_provider(
-        provider_id: &ProviderIdFor<T>,
-    ) -> ProviderLastChargeableInfo<T> {
-        let msp_id = PriviledgeProvider::<T>::get(provider_id);
-
-        // This is a msp if it in the PriviledgeProvider
-        if msp_id.is_some() {
-            return ProviderLastChargeableInfo {
-                last_chargeable_tick: Self::get_current_tick(),
-                price_index: Default::default(),
-            };
-        }
-
-        return LastChargeableInfo::<T>::get(provider_id);
     }
 }

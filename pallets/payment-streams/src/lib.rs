@@ -195,9 +195,6 @@ pub mod pallet {
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
 
-    #[pallet::storage]
-    pub type PriviledgeProvider<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
-
     /// The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
     /// This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
@@ -217,6 +214,10 @@ pub mod pallet {
     /// - [do_update_price_index](crate::utils::do_update_price_index), which updates the accumulated price index, adding to it the current price.
     #[pallet::storage]
     pub type AccumulatedPriceIndex<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+
+    // List of priviledge providers
+    #[pallet::storage]
+    pub type PriviledgeProvider<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
 
     // Genesis config:
 
@@ -430,8 +431,6 @@ pub mod pallet {
                 rate,
             });
 
-            PriviledgeProvider::<T>::insert(provider_id, ());
-
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
@@ -510,8 +509,6 @@ pub mod pallet {
                 user_account,
                 provider_id: provider_id,
             });
-
-            PriviledgeProvider::<T>::remove(provider_id);
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
