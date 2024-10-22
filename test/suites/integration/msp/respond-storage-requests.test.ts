@@ -23,7 +23,7 @@ describeMspNet(
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
       const mspNodePeerId = await mspApi.rpc.system.localPeerId();
-      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp.expectedPeerId);
+      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
     it("MSP receives file from user after issued storage request", async () => {
@@ -154,7 +154,7 @@ describeMspNet(
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
       const mspNodePeerId = await mspApi.rpc.system.localPeerId();
-      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp.expectedPeerId);
+      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
     it("MSP receives files from user after issued storage requests", async () => {
@@ -192,7 +192,7 @@ describeMspNet(
         );
       }
 
-      await userApi.sealBlock(txs, shUser);
+      await userApi.sealBlock(txs, shUser, false);
 
       // Allow time for the MSP to receive and store the file from the user
       await sleep(3000);
@@ -329,7 +329,7 @@ describeMspNet(
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
       const mspNodePeerId = await mspApi.rpc.system.localPeerId();
-      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp.expectedPeerId);
+      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
     it("MSP rejects storage request since it is already being stored", async () => {
