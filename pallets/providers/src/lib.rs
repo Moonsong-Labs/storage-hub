@@ -461,6 +461,13 @@ pub mod pallet {
             provider_id: HashId<T>,
             amount_slashed: BalanceOf<T>,
         },
+
+        /// Event emitted when a bucket's root has been changed.
+        BucketRootChanged {
+            bucket_id: BucketId<T>,
+            old_root: MerklePatriciaRoot<T>,
+            new_root: MerklePatriciaRoot<T>,
+        },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong

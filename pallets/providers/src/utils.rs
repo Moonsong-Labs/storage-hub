@@ -1011,6 +1011,13 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            Self::deposit_event(Event::<T>::BucketRootChanged {
+                bucket_id,
+                old_root: bucket.root,
+                new_root,
+            });
+
             bucket.root = new_root;
 
             Ok(())
