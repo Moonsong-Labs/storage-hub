@@ -39,7 +39,9 @@ serde = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-payment-streams = { workspace = true }
 shp-constants = { workspace = true }
+shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
+shp-forest-verifier = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }

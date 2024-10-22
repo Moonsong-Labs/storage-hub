@@ -548,12 +548,12 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 parameter_types! {
     pub const RandomChallengesPerBlock: u32 = 10;
     pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    pub const TargetTicksStorageOfSubmitters: u32 = 3;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const ChallengeTicksTolerance: u32 = 50;
-    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
-    pub const TargetTicksStorageOfSubmitters: u32 = 3;
 }
 
 impl pallet_proofs_dealer::Config for Runtime {

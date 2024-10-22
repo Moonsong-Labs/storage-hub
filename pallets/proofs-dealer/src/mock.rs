@@ -11,7 +11,11 @@ use frame_support::{
     BoundedBTreeSet,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+#[cfg(feature = "runtime-benchmarks")]
+use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{FileMetadata, Fingerprint};
+#[cfg(feature = "runtime-benchmarks")]
+use shp_forest_verifier::ForestVerifier;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
 };
@@ -277,7 +281,18 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
     type MerkleTrieHashing = BlakeTwo256;
+    #[cfg(feature = "runtime-benchmarks")]
+    type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    #[cfg(not(feature = "runtime-benchmarks"))]
     type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type KeyVerifier = FileKeyVerifier<
+        LayoutV1<BlakeTwo256>,
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    #[cfg(not(feature = "runtime-benchmarks"))]
     type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
