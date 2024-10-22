@@ -514,6 +514,9 @@ pub mod pallet {
         /// not sufficient for the challenges made.
         ForestProofVerificationFailed,
 
+        /// The number of key proofs submitted does not match the number of keys proven in the forest proof.
+        IncorrectNumberOfKeyProofs,
+
         /// There is at least one key proven in the forest proof, that does not have a corresponding
         /// key proof.
         KeyProofNotFound,

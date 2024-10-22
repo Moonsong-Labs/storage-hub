@@ -322,6 +322,12 @@ where
             }
         };
 
+        // Check that the correct number of key proofs were submitted.
+        ensure!(
+            key_proofs.len() == forest_keys_proven.len(),
+            Error::<T>::IncorrectNumberOfKeyProofs
+        );
+
         // Verify each key proof.
         for key_proven in forest_keys_proven {
             // Check that there is a key proof for each key proven.
