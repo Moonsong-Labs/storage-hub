@@ -25,7 +25,6 @@ pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
-    pub buckets: Buckets<T>,
     pub capacity: StorageDataUnit<T>,
     pub capacity_used: StorageDataUnit<T>,
     pub multiaddresses: Multiaddresses<T>,
@@ -122,11 +121,6 @@ pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type
 
 /// ValuePropId is the type that identifies the different Main Storage Provider value propositions, to allow tiered solutions
 pub type ValuePropId<T> = <T as crate::Config>::ValuePropId;
-
-/// MaxBuckets is the maximum amount of buckets that a Main Storage Provider can have.
-pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
-/// Buckets is a vector of the buckets that a Main Storage Provider has.
-pub type Buckets<T> = BoundedVec<Bucket<T>, MaxBuckets<T>>;
 
 /// Type alias for the `ReputationWeightType` type used in the Storage Providers pallet.
 pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;

@@ -207,10 +207,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxProtocols: Get<u32>;
 
-        /// The maximum amount of Buckets that a MSP can have.
-        #[pallet::constant]
-        type MaxBuckets: Get<u32>;
-
         /// The amount that an account has to deposit to create a bucket.
         #[pallet::constant]
         type BucketDeposit: Get<BalanceOf<Self>>;
@@ -304,7 +300,7 @@ pub mod pallet {
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
-    /// The mapping from a MainStorageProviderId to a vector of BucketIds.
+    /// The double mapping from a MainStorageProviderId to a BucketIds.
     ///
     /// This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
     ///
@@ -312,11 +308,13 @@ pub mod pallet {
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
     /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
     #[pallet::storage]
-    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         MainStorageProviderId<T>,
-        BoundedVec<BucketId<T>, T::MaxBuckets>,
+        Blake2_128Concat,
+        BucketId<T>,
+        (),
     >;
 
     /// The mapping from an AccountId to a BackupStorageProviderId.
@@ -597,7 +595,6 @@ pub mod pallet {
 
             // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
-                buckets: BoundedVec::default(),
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
@@ -930,7 +927,6 @@ pub mod pallet {
 
             // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
-                buckets: BoundedVec::default(),
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),

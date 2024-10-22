@@ -997,9 +997,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
-
-        MainStorageProviderIdsToBuckets::<T>::try_append(&provider_id, bucket_id)
-            .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+        MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
         Ok(())
     }
@@ -1011,6 +1009,22 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
             Ok(())
         })
+    }
+
+    fn remove_msp_bucket(bucket_id: &Self::BucketId) -> DispatchResult {
+        let msp_id = Buckets::<T>::try_mutate(bucket_id, |bucket| {
+            let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            let msp_id = bucket.msp_id;
+
+            bucket.msp_id = None;
+            Ok::<_, DispatchError>(msp_id)
+        })?;
+
+        if let Some(msp_id) = msp_id {
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+        }
+
+        Ok(())
     }
 
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
@@ -1030,16 +1044,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             None => return Err(Error::<T>::BucketMustHaveMspForOperation.into()),
         };
 
-        MainStorageProviderIdsToBuckets::<T>::mutate_exists(&msp_id, |buckets| match buckets {
-            Some(b) => {
-                b.retain(|b| b != &bucket_id);
-
-                if b.is_empty() {
-                    *buckets = None;
-                }
-            }
-            _ => {}
-        });
+        MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
 
         // Release the bucket deposit hold
         T::NativeBalance::release(

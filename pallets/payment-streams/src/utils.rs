@@ -1302,6 +1302,20 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         FixedRatePaymentStreams::<T>::get(provider_id, user_account)
     }
 
+    fn get_inner_fixed_rate_payment_stream_value(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<<Self::Balance as Inspect<Self::AccountId>>::Balance> {
+        FixedRatePaymentStreams::<T>::get(provider_id, user_account).map(|stream| stream.rate)
+    }
+
+    fn fixed_rate_payment_stream_exists(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> bool {
+        FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account)
+    }
+
     fn create_dynamic_rate_payment_stream(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,

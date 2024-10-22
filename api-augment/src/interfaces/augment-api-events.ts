@@ -500,6 +500,14 @@ declare module "@polkadot/api-base/types/events" {
         { results: PalletFileSystemMspRespondStorageRequestsResult }
       >;
       /**
+       * Notifies that a MSP has stopped storing a bucket.
+       **/
+      MspStoppedStoringBucket: AugmentedEvent<
+        ApiType,
+        [mspId: H256, owner: AccountId32, bucketId: H256],
+        { mspId: H256; owner: AccountId32; bucketId: H256 }
+      >;
+      /**
        * Notifies that a new bucket has been created.
        **/
       NewBucket: AugmentedEvent<

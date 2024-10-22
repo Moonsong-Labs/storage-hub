@@ -482,7 +482,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -671,6 +670,8 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+    type ZeroSizeBucketFixedRate =
+        runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

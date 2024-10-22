@@ -255,6 +255,7 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 pub struct MockUserSolvency;
@@ -359,7 +360,6 @@ impl pallet_storage_providers::Config for Test {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;

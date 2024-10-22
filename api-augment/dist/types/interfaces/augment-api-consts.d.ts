@@ -121,6 +121,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * 0-size bucket fixed rate payment stream.
+       **/
+      zeroSizeBucketFixedRate: u128 & AugmentedConst<ApiType>;
+      /**
        * Generic const
        **/
       [key: string]: Codec;
@@ -400,10 +404,6 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
        **/
       maxBlocksForRandomness: u32 & AugmentedConst<ApiType>;
-      /**
-       * The maximum amount of Buckets that a MSP can have.
-       **/
-      maxBuckets: u32 & AugmentedConst<ApiType>;
       /**
        * The estimated maximum size of an unknown file.
        *

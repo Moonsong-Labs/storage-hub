@@ -410,7 +410,6 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        buckets: BoundedVec::default(),
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),

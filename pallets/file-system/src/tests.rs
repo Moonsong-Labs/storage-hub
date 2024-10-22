@@ -23,8 +23,8 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
 use shp_traits::{
-    MutateStorageProvidersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
-    ReadStorageProvidersInterface, TrieRemoveMutation,
+    MutateStorageProvidersInterface, PaymentStreamsInterface, ReadBucketsInterface,
+    ReadChallengeableProvidersInterface, ReadStorageProvidersInterface, TrieRemoveMutation,
 };
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -103,7 +103,7 @@ mod create_bucket_tests {
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::NewBucket {
-                        who: owner,
+                        who: owner.clone(),
                         msp_id,
                         bucket_id,
                         name,
@@ -112,6 +112,9 @@ mod create_bucket_tests {
                     }
                     .into(),
                 );
+
+                // Check fixed rate payment stream is created
+                assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
             });
         }
 
@@ -4603,7 +4606,6 @@ mod bsp_confirm {
                     let location =
                         FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
                     let fingerprint = H256::repeat_byte(i as u8);
-
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
                     let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
@@ -8117,6 +8119,135 @@ mod stop_storing_for_insolvent_user {
     }
 }
 
+mod msp_stop_storing_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn msp_not_registered() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                let none_registered_msp = Keyring::Dave.to_account_id();
+                let none_registered_msp_signed = RuntimeOrigin::signed(none_registered_msp.clone());
+
+                // Try to stop storing for the bucket.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket(none_registered_msp_signed, bucket_id),
+                    Error::<Test>::NotAMsp
+                );
+            });
+        }
+
+        #[test]
+        fn msp_not_storing_bucket() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                let another_msp = Keyring::Dave.to_account_id();
+                add_msp_to_provider_storage(&another_msp);
+                let another_msp_signed = RuntimeOrigin::signed(another_msp.clone());
+
+                // Try to stop storing for the bucket.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket(another_msp_signed, bucket_id),
+                    Error::<Test>::MspNotStoringBucket
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn msp_stop_storing_bucket_works_payment_stream_deleted() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
+                // Check that the current rate is the equivalent to two zero size buckets.
+                assert_eq!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap(), zero_size_bucket_rate);
+
+                // Dispatch MSP stop storing bucket.
+                assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStoppedStoringBucket {
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                    }
+                    .into(),
+                );
+
+                // Check that the payment stream between the user and the MSP was deleted since there are no more buckets stored by the MSP for the user.
+                assert!(!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner_account_id));
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_works_payment_stream_updated() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                let another_name = BoundedVec::try_from(b"another_bucket".to_vec()).unwrap();
+                create_bucket(&owner_account_id.clone(), another_name, msp_id);
+
+                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
+                // Check that the current rate is the equivalent to two zero size buckets.
+                assert_eq!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap(), zero_size_bucket_rate * 2);
+
+                // Dispatch MSP stop storing bucket.
+                assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStoppedStoringBucket {
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                    }
+                    .into(),
+                );
+
+                // Check that the payment stream between the user and the MSP was updated since there are still buckets stored by the MSP for the user.
+                assert!(
+                    <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner_account_id)
+                );
+            });
+        }
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -8159,7 +8290,6 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        buckets: BoundedVec::default(),
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
@@ -8212,6 +8342,11 @@ fn create_bucket(
             read_access_group_id: None,
             size: 0,
         })
+    );
+
+    assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
+    assert!(
+        <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner).is_some()
     );
 
     bucket_id

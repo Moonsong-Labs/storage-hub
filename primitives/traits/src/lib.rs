@@ -269,6 +269,9 @@ pub trait MutateBucketsInterface {
     /// Change MSP of a bucket.
     fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult;
 
+    /// Set a bucket's `msp_id` to `None` and also removing the element from the list in `MainStorageProviderIdsToBuckets`
+    fn remove_msp_bucket(bucket_id: &Self::BucketId) -> DispatchResult;
+
     /// Change the root of a bucket.
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult;
 
@@ -924,6 +927,18 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::FixedRatePaymentStream>;
+
+    /// Get inner rate value of a fixed-rate payment stream between a User and a Provider
+    fn get_inner_fixed_rate_payment_stream_value(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Check if a fixed-rate payment stream exists between a User and a Provider.
+    fn fixed_rate_payment_stream_exists(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> bool;
 
     /// Create a new dynamic-rate payment stream from a User to a Provider.
     fn create_dynamic_rate_payment_stream(

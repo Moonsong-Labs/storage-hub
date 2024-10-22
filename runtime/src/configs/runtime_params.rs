@@ -89,6 +89,13 @@ pub mod dynamic_params {
         /// 9 = 48 - l * (e ^ (0.3 - 0) - 1)
         /// l = (48 - 9) / (e ^ (0.3 - 0) - 1) ≈ 111
         pub static LowerExponentFactor: u32 = 111;
+
+        #[codec(index = 11)]
+        #[allow(non_upper_case_globals)]
+        /// 0-size bucket fixed rate payment stream.
+        ///
+        /// Determining the rate to add to a fixed payment stream between an MSP and a user.
+        pub static ZeroSizeBucketFixedRate: Balance = 1;
     }
 }
 

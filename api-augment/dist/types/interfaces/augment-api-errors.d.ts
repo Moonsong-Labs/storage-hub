@@ -243,6 +243,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FileSizeCannotBeZero: AugmentedError<ApiType>;
       /**
+       * Failed to fetch the rate for the payment stream.
+       **/
+      FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
+      /**
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -982,6 +986,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a bucket ID already exists in storage.
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Error thrown when an operation requires an MSP to be storing the bucket.
+       **/
+      BucketMustHaveMspForOperation: AugmentedError<ApiType>;
       /**
        * Error thrown when a bucket ID is not found in storage.
        **/

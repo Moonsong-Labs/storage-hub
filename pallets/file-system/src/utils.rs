@@ -251,8 +251,6 @@ where
         name: BucketNameFor<T>,
         private: bool,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
-        // TODO: Hold user funds for the bucket creation.
-
         // Check if the MSP is indeed an MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
@@ -271,11 +269,37 @@ where
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
-            sender,
+            sender.clone(),
             bucket_id,
             private,
             maybe_collection_id.clone(),
         )?;
+
+        if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+            &msp_id, &sender,
+        ) {
+            let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                    &msp_id,
+                    &sender,
+                )
+                .ok_or(Error::<T>::FixedRatePaymentStreamNotFound)?;
+
+            // Add 0-size bucket rate to the current rate.
+            <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                &msp_id,
+                &sender,
+                current_rate
+                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .ok_or(Error::<T>::FixedRatePaymentStreamNotFound)?,
+            )?;
+        } else {
+            // Create a payment stream between the MSP and the user with a 0-size bucket rate.
+            <T::PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                &msp_id,
+                &sender,
+                T::ZeroSizeBucketFixedRate::get(),
+            )?;
+        }
 
         Ok((bucket_id, maybe_collection_id))
     }
@@ -773,10 +797,11 @@ where
     pub(crate) fn do_msp_stop_storing_bucket(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+    ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
         // Check if the sender is an MSP.
-        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
-            .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotAMsp)?;
 
         // Check if the MSP is indeed an MSP.
         ensure!(
@@ -790,7 +815,42 @@ where
             Error::<T>::MspNotStoringBucket
         );
 
-        Ok(msp_id)
+        let bucket_owner = <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+            &msp_id,
+            &bucket_owner,
+        )
+        .ok_or(Error::<T>::FixedRatePaymentStreamNotFound)?;
+
+        // TODO: Calculate rate based on value proposition
+        let rate_from_bucket = current_rate.saturating_sub(1u32.into());
+
+        // If the new rate is lower than the 0-size bucket rate, then delete the payment stream since we can assume there is no more buckets being stored.
+        if rate_from_bucket < T::ZeroSizeBucketFixedRate::get() {
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket_owner,
+            )?;
+        } else {
+            <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket_owner,
+                current_rate.saturating_sub(rate_from_bucket.into()),
+            )?;
+        }
+
+        // Decrease the used capacity of the MSP.
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
+
+        // Remove the MSP from the bucket.
+        <T::Providers as MutateBucketsInterface>::remove_msp_bucket(&bucket_id)?;
+
+        Ok((msp_id, bucket_owner))
     }
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.

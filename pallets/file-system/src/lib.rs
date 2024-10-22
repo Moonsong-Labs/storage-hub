@@ -276,6 +276,12 @@ pub mod pallet {
         /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
         type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
+
+        /// 0-size bucket fixed rate payment stream.
+        #[pallet::constant]
+        type ZeroSizeBucketFixedRate: Get<
+            <<Self::PaymentStreams as shp_traits::PaymentStreamsInterface>::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance,
+        >;
     }
 
     #[pallet::pallet]
@@ -745,6 +751,8 @@ pub mod pallet {
         InvalidBucketIdFileKeyPair,
         /// Key already exists in mapping when it should not.
         InconsistentStateKeyAlreadyExists,
+        /// Failed to fetch the rate for the payment stream.
+        FixedRatePaymentStreamNotFound,
     }
 
     #[pallet::call]
@@ -973,11 +981,11 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let msp_id = Self::do_msp_stop_storing_bucket(who.clone(), bucket_id)?;
+            let (msp_id, owner) = Self::do_msp_stop_storing_bucket(who.clone(), bucket_id)?;
 
             Self::deposit_event(Event::MspStoppedStoringBucket {
                 msp_id,
-                owner: who,
+                owner,
                 bucket_id,
             });
 

@@ -2,13 +2,13 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, MainStorageProvider, MainStorageProviderId,
-        MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageDataUnit, StorageProvider,
-        StorageProviderId, ValuePropId, ValueProposition,
+        MaxMultiAddressAmount, MultiAddress, StorageDataUnit, StorageProvider, StorageProviderId,
+        ValuePropId, ValueProposition,
     },
     Error, Event,
 };
 
-use frame_support::{assert_err, assert_noop, assert_ok, dispatch::Pays, BoundedVec};
+use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{fungible::InspectHold, Get, OnFinalize, OnIdle, OnInitialize},
@@ -134,7 +134,6 @@ mod sign_up {
                         alice_sign_up_request.unwrap(),
                         (
                             StorageProvider::MainStorageProvider(MainStorageProvider {
-                                buckets: BoundedVec::new(),
                                 capacity: storage_amount,
                                 capacity_used: 0,
                                 multiaddresses,
@@ -506,7 +505,6 @@ mod sign_up {
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
                         == StorageProvider::MainStorageProvider(MainStorageProvider {
-                            buckets: BoundedVec::new(),
                             capacity: storage_amount,
                             capacity_used: 0,
                             multiaddresses: multiaddresses.clone(),
@@ -3844,49 +3842,6 @@ mod add_bucket {
                 );
             });
         }
-
-        #[test]
-        fn add_bucket_passed_max_bucket_msp_capacity() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
-                    &bucket_owner,
-                    bucket_name,
-                );
-
-                // Add the maximum amount of buckets for Alice
-                for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name =
-                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
-                        &bucket_owner,
-                        bucket_name,
-                    );
-                    assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
-                        bucket_owner,
-                        bucket_id,
-                        false,
-                        None
-                    ));
-                }
-
-                // Try to add another bucket for Alice
-                assert_err!(
-                    StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
-                    Error::<Test>::AppendBucketToMspFailed
-                );
-            });
-        }
     }
 
     mod success {
@@ -3928,9 +3883,10 @@ mod add_bucket {
                     BucketDeposit::get()
                 );
 
-                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
-
-                assert_eq!(buckets.len(), 1);
+                assert!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
+                        .is_some()
+                );
 
                 let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
 
@@ -3945,49 +3901,6 @@ mod add_bucket {
                         size: 0,
                     }
                 );
-            });
-        }
-
-        #[test]
-        fn add_buckets_to_max_capacity() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-
-                // Add the maximum amount of buckets for Alice
-                for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name =
-                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
-                        &bucket_owner,
-                        bucket_name,
-                    );
-                    assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
-                        bucket_owner,
-                        bucket_id,
-                        false,
-                        None
-                    ));
-
-                    let expected_hold_amount =
-                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
-                    assert_eq!(
-                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
-                        expected_hold_amount
-                    );
-                }
-
-                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
-
-                let max_buckets: u32 = MaxBuckets::<Test>::get();
-                assert_eq!(buckets.len(), max_buckets as usize);
             });
         }
     }
@@ -4053,9 +3966,9 @@ mod remove_root_bucket {
                 ));
 
                 // Check that the bucket was added to the MSP
-                assert_eq!(
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap(),
-                    vec![bucket_id]
+                assert!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
+                        .is_some()
                 );
 
                 // Remove the bucket
@@ -4074,79 +3987,9 @@ mod remove_root_bucket {
                 assert_eq!(crate::Buckets::<Test>::get(&bucket_id), None);
 
                 // Check that the bucket was removed from the MSP
-                assert_eq!(
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
-                    None
-                );
-            });
-        }
-
-        #[test]
-        fn remove_root_buckets_multiple() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-
-                // Add the maximum amount of buckets for Alice
-                for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name =
-                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
-                        &bucket_owner,
-                        bucket_name,
-                    );
-                    assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
-                        bucket_owner,
-                        bucket_id,
-                        false,
-                        None
-                    ));
-
-                    let expected_hold_amount =
-                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
-                    assert_eq!(
-                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
-                        expected_hold_amount
-                    );
-                }
-
-                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
-
-                let max_buckets: u32 = MaxBuckets::<Test>::get();
-                assert_eq!(buckets.len(), max_buckets as usize);
-
-                // Remove all the buckets
-                for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name =
-                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
-                        &bucket_owner,
-                        bucket_name,
-                    );
-                    assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
-                }
-
-                // Check that the bucket deposits are returned to the bucket owner
-                assert_eq!(NativeBalance::free_balance(&bucket_owner), accounts::BOB.1);
-
-                // Check that the bucket deposits are no longer on hold
-                assert_eq!(
-                    NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
-                    0
-                );
-
-                // Check that all the buckets were removed
-                assert_eq!(
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
-                    None
+                assert!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
+                        .is_none()
                 );
             });
         }
@@ -4432,7 +4275,6 @@ fn register_account_as_msp(
     (
         deposit_for_storage_amount,
         MainStorageProvider {
-            buckets: BoundedVec::new(),
             capacity: storage_amount,
             capacity_used: 0,
             multiaddresses,
