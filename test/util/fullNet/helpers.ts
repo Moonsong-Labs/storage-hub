@@ -189,9 +189,13 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
       bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.msp2.containerName
     );
 
-    const mspPeerId1 = await getContainerPeerId(`http://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
+    const mspPeerId1 = await getContainerPeerId(
+      `http://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`
+    );
     console.log(`sh-msp-1 Peer ID: ${mspPeerId1}`);
-    const mspPeerId2 = await getContainerPeerId(`http://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
+    const mspPeerId2 = await getContainerPeerId(
+      `http://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`
+    );
     console.log(`sh-msp-2 Peer ID: ${mspPeerId2}`);
 
     const multiAddressMsp1 = `/ip4/${mspId1}/tcp/30350/p2p/${mspPeerId1}`;
