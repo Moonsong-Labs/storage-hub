@@ -56,7 +56,7 @@ services:
       ]
   sh-msp-2:
     image: storage-hub:local
-    container_name: docker-sh-msp-1
+    container_name: docker-sh-msp-2
     platform: linux/amd64
     ports:
       - "9778:9944"
