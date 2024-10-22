@@ -530,7 +530,7 @@ where
                 .wait_for_block(earliest_change_capacity_block)
                 .await?;
 
-            // wwe read from the queue
+            // we read from the queue
             let mut capacity_queue = self.capacity_queue.lock().await;
 
             // if the queue is not empty it is that the capacity hasn't been updated yet
@@ -555,14 +555,14 @@ where
                     .watch_for_success(&self.storage_hub_handler.blockchain)
                     .await?;
 
-                drop(capacity_queue);
-
                 info!(
                     target: LOG_TARGET,
                     "Increased storage capacity to {:?} bytes",
                     new_capacity
                 );
             }
+
+            drop(capacity_queue);
 
             let available_capacity = self
                 .storage_hub_handler
@@ -676,11 +676,11 @@ where
     /// The `max_storage_capacity` is returned if the new capacity exceeds it.
     fn calculate_capacity(
         &self,
-        size: StorageDataUnit,
+        required_additional_capacity: StorageDataUnit,
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (size + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = (required_additional_capacity + jump_capacity - 1) / jump_capacity;
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
