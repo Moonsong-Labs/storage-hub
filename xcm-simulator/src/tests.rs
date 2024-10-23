@@ -10,6 +10,7 @@ use pallet_file_system;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
 use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
 use sp_core::H256;
+use sp_runtime::bounded_vec;
 use sp_weights::WeightMeter;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
@@ -1194,7 +1195,7 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
-        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, 10);
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, bounded_vec![], 10);
         let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
             let mut multiaddresses: BoundedVec<
@@ -1217,6 +1218,7 @@ mod users {
                 capacity,
                 multiaddresses.clone(),
                 1,
+                bounded_vec![],
                 10,
                 ALICE
             ));
@@ -1452,7 +1454,7 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
-        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, 10);
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, bounded_vec![], 10);
         let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
             let mut multiaddresses: BoundedVec<
@@ -1475,6 +1477,7 @@ mod users {
                 capacity,
                 multiaddresses.clone(),
                 1,
+                bounded_vec![],
                 10,
                 ALICE
             ));

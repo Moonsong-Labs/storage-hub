@@ -238,6 +238,7 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
           [multiAddressMsp],
           1,
+          "Terms of Service...",
           500,
           mspKey.address
         )

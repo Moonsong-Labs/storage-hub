@@ -412,6 +412,7 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of Buckets that a MSP can have.
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
+      maxCommitmentSize: u32 & AugmentedConst<ApiType>;
       /**
        * The estimated maximum size of an unknown file.
        *

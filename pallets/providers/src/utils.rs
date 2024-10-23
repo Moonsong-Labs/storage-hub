@@ -28,9 +28,9 @@ use shp_traits::{
 };
 use sp_std::vec::Vec;
 use types::{
-    Bucket, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress, Multiaddresses,
-    ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId, ValueProposition,
-    ValuePropositionWithId,
+    Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
+    Multiaddresses, ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId,
+    ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -309,6 +309,7 @@ where
         let (_, value_prop) = Self::do_add_value_prop(
             who,
             sign_up_request.value_prop.price_per_unit_of_data_per_block,
+            sign_up_request.value_prop.commitment,
             sign_up_request.value_prop.bucket_data_limit,
         )?;
 
@@ -778,13 +779,17 @@ where
     pub(crate) fn do_add_value_prop(
         who: &T::AccountId,
         price_per_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
         bucket_data_limit: StorageDataUnit<T>,
     ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
-        let value_prop =
-            ValueProposition::<T>::new(price_per_unit_of_data_per_block, bucket_data_limit);
+        let value_prop = ValueProposition::<T>::new(
+            price_per_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
         let value_prop_id = value_prop.derive_id();
 
         if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {

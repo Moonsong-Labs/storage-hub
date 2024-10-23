@@ -265,6 +265,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           ["/ip4/127.0.0.1/tcp/30350/p2p/12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfA"],
           1,
+          "Terms of Service...",
           500,
           alice.address
         )

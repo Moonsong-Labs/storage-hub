@@ -8301,12 +8301,12 @@ fn add_msp_to_provider_storage(
         msp_hash,
     );
 
-    let value_prop = ValueProposition::<Test>::new(1, 100);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
     let value_prop_id = value_prop.derive_id();
     pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
         msp_hash,
         value_prop_id,
-        ValueProposition::<Test>::new(1, 100),
+        ValueProposition::<Test>::new(1, bounded_vec![], 100),
     );
 
     (msp_hash, value_prop_id)

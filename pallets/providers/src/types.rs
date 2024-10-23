@@ -23,6 +23,7 @@ pub struct ValuePropositionWithId<T: Config> {
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
     pub price_per_unit_of_data_per_block: BalanceOf<T>,
+    pub commitment: Commitment<T>,
     /// Maximum [`StorageDataUnit`]s that can be stored in a bucket.
     pub bucket_data_limit: StorageDataUnit<T>,
     /// Newly created buckets can only specify available value propositions.
@@ -33,10 +34,12 @@ pub struct ValueProposition<T: Config> {
 impl<T: Config> ValueProposition<T> {
     pub fn new(
         price_per_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
         bucket_data_limit: StorageDataUnit<T>,
     ) -> Self {
         Self {
             price_per_unit_of_data_per_block,
+            commitment,
             bucket_data_limit,
             available: true,
         }
@@ -45,10 +48,13 @@ impl<T: Config> ValueProposition<T> {
     /// Produce the ID of the ValueProposition not including the `available` field.
     pub fn derive_id(&self) -> HashId<T> {
         let mut concat = self.price_per_unit_of_data_per_block.encode();
+        concat.extend_from_slice(&self.commitment.encode());
         concat.extend_from_slice(&self.bucket_data_limit.encode());
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 }
+
+pub type Commitment<T> = BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize>;
 
 /// Structure that represents a Main Storage Provider. It holds the buckets that the MSP has, the total data that the MSP is able to store,
 /// the amount of data that it is storing, and its libp2p multiaddresses.

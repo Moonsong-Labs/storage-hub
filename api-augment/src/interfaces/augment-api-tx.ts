@@ -2771,9 +2771,10 @@ declare module "@polkadot/api-base/types/submittable" {
       addValueProp: AugmentedSubmittable<
         (
           pricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
           bucketDataLimit: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u128, u64]
+        [u128, Bytes, u64]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Backup Storage Provider.
@@ -2932,10 +2933,11 @@ declare module "@polkadot/api-base/types/submittable" {
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
           valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u64, Vec<Bytes>, u128, u64, AccountId32]
+        [AccountId32, H256, u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
       >;
       /**
        * Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
@@ -3030,10 +3032,11 @@ declare module "@polkadot/api-base/types/submittable" {
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
           valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u64, Vec<Bytes>, u128, u64, AccountId32]
+        [u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
       >;
       /**
        * Dispatchable extrinsic to slash a _slashable_ Storage Provider.

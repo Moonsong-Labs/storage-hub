@@ -229,6 +229,9 @@ pub mod pallet {
         /// attacker would have to lock up a large amount of funds for this period of time.
         #[pallet::constant]
         type BspSignUpLockPeriod: Get<BlockNumberFor<Self>>;
+
+        #[pallet::constant]
+        type MaxCommitmentSize: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -603,6 +606,7 @@ pub mod pallet {
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
             value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            commitment: Commitment<T>,
             value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
@@ -626,6 +630,7 @@ pub mod pallet {
                 msp_info,
                 value_prop: ValueProposition::<T>::new(
                     value_prop_price_per_unit_of_data_per_block,
+                    commitment,
                     value_prop_max_data_limit,
                 ),
             })?;
@@ -894,14 +899,19 @@ pub mod pallet {
         pub fn add_value_prop(
             origin: OriginFor<T>,
             price_per_unit_of_data_per_block: BalanceOf<T>,
+            commitment: Commitment<T>,
             bucket_data_limit: StorageDataUnit<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            let (msp_id, value_prop) =
-                Self::do_add_value_prop(&who, price_per_unit_of_data_per_block, bucket_data_limit)?;
+            let (msp_id, value_prop) = Self::do_add_value_prop(
+                &who,
+                price_per_unit_of_data_per_block,
+                commitment,
+                bucket_data_limit,
+            )?;
 
             // Emit event
             Self::deposit_event(Event::<T>::ValuePropAdded {
@@ -969,6 +979,7 @@ pub mod pallet {
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
             value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            commitment: Commitment<T>,
             value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
@@ -991,6 +1002,7 @@ pub mod pallet {
                 msp_info,
                 value_prop: ValueProposition::<T>::new(
                     value_prop_price_per_unit_of_data_per_block,
+                    commitment,
                     value_prop_max_data_limit,
                 ),
             };

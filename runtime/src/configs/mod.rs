@@ -491,6 +491,7 @@ impl pallet_storage_providers::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 parameter_types! {

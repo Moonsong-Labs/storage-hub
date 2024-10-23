@@ -4,7 +4,7 @@ use pallet_storage_providers::types::ValueProposition;
 use shp_traits::ReadBucketsInterface;
 use sp_core::{ByteArray, Hasher};
 use sp_keyring::sr25519::Keyring;
-use sp_runtime::BoundedVec;
+use sp_runtime::{bounded_vec, BoundedVec};
 
 use crate::{
     mock::{new_test_ext, BucketNfts, FileSystem, RuntimeOrigin, System, Test},
@@ -437,7 +437,7 @@ fn add_msp_to_provider_storage(
         msp_hash,
     );
 
-    let value_prop = ValueProposition::<Test>::new(1, 100);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
     let value_prop_id = value_prop.derive_id();
     pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
         msp_hash,

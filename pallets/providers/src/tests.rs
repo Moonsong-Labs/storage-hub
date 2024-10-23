@@ -19,6 +19,7 @@ use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
     ReadProvidersInterface,
 };
+use sp_runtime::bounded_vec;
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -69,7 +70,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
 
                     let storage_amount: StorageDataUnit<Test> = 100;
 
@@ -97,6 +98,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -170,7 +172,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
@@ -197,6 +199,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -266,7 +269,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
@@ -293,6 +296,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -362,7 +366,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount_alice: StorageDataUnit<Test> = 100;
                     let storage_amount_bob: StorageDataUnit<Test> = 300;
 
@@ -408,6 +412,7 @@ mod sign_up {
                         storage_amount_alice,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -418,6 +423,7 @@ mod sign_up {
                         storage_amount_bob,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         bob
                     ));
@@ -482,7 +488,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -494,6 +500,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1060,7 +1067,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount_alice: StorageDataUnit<Test> = 100;
                     let storage_amount_bob: StorageDataUnit<Test> = 300;
 
@@ -1106,6 +1113,7 @@ mod sign_up {
                         storage_amount_alice,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1178,7 +1186,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount_alice: StorageDataUnit<Test> = 100;
                     let storage_amount_bob: StorageDataUnit<Test> = 300;
 
@@ -1204,6 +1212,7 @@ mod sign_up {
                         storage_amount_alice,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1270,7 +1279,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount_alice: StorageDataUnit<Test> = 100;
                     let storage_amount_bob: StorageDataUnit<Test> = 300;
 
@@ -1296,6 +1305,7 @@ mod sign_up {
                         storage_amount_alice,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1380,7 +1390,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount_alice: StorageDataUnit<Test> = 100;
                     let storage_amount_bob: StorageDataUnit<Test> = 300;
 
@@ -1406,6 +1416,7 @@ mod sign_up {
                         storage_amount_alice,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1483,7 +1494,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -1495,6 +1506,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1549,7 +1561,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount_alice: StorageDataUnit<Test> = 100;
                     let storage_amount_bob: StorageDataUnit<Test> = 300;
 
@@ -1595,6 +1607,7 @@ mod sign_up {
                         storage_amount_alice,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1720,7 +1733,7 @@ mod sign_up {
                             .unwrap(),
                     );
 
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -1732,6 +1745,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1777,7 +1791,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -1789,6 +1803,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1833,7 +1848,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -1845,6 +1860,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -1856,6 +1872,7 @@ mod sign_up {
                             storage_amount,
                             multiaddresses.clone(),
                             value_prop.price_per_unit_of_data_per_block,
+                            value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
                         ),
@@ -2037,7 +2054,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -2049,6 +2066,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -2117,6 +2135,7 @@ mod sign_up {
                             alice_msp.capacity,
                             alice_msp.multiaddresses.clone(),
                             1,
+                            bounded_vec![],
                             10,
                             alice
                         ),
@@ -2141,6 +2160,7 @@ mod sign_up {
                             bob_bsp.capacity,
                             bob_bsp.multiaddresses.clone(),
                             1,
+                            bounded_vec![],
                             10,
                             bob
                         ),
@@ -2175,7 +2195,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and Bob
@@ -2188,6 +2208,7 @@ mod sign_up {
                         storage_amount,
                         multiaddresses.clone(),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
                     ));
@@ -2218,6 +2239,7 @@ mod sign_up {
                             storage_amount,
                             multiaddresses.clone(),
                             value_prop.price_per_unit_of_data_per_block,
+                            value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             bob
                         ),
@@ -2241,7 +2263,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 1;
 
                     // Get the Account Id of Alice
@@ -2254,6 +2276,7 @@ mod sign_up {
                             storage_amount,
                             multiaddresses.clone(),
                             value_prop.price_per_unit_of_data_per_block,
+                            value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
                         ),
@@ -2288,7 +2311,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Helen (who has no balance)
@@ -2301,6 +2324,7 @@ mod sign_up {
                             storage_amount,
                             multiaddresses.clone(),
                             value_prop.price_per_unit_of_data_per_block,
+                            value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             helen
                         ),
@@ -2328,7 +2352,7 @@ mod sign_up {
                         MultiAddress<Test>,
                         MaxMultiAddressAmount<Test>,
                     > = BoundedVec::new();
-                    let value_prop = ValueProposition::<Test>::new(1, 10);
+                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
                     let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
@@ -2341,6 +2365,7 @@ mod sign_up {
                             storage_amount,
                             multiaddresses.clone(),
                             value_prop.price_per_unit_of_data_per_block,
+                            value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
                         ),
@@ -4377,13 +4402,14 @@ mod add_value_prop {
         fn account_is_not_a_registered_msp() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let value_prop = ValueProposition::<Test>::new(1, 10);
+                let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
 
                 // Try to add a value proposition to an account that is not a registered MSP
                 assert_noop!(
                     StorageProviders::add_value_prop(
                         RuntimeOrigin::signed(alice),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit
                     ),
                     Error::<Test>::NotRegistered
@@ -4399,11 +4425,12 @@ mod add_value_prop {
                 let (_deposit_amount, _alice_msp, _) =
                     register_account_as_msp(alice, storage_amount);
 
-                let value_prop = ValueProposition::<Test>::new(999, 999);
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
                     value_prop.price_per_unit_of_data_per_block,
+                    value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
 
@@ -4411,6 +4438,7 @@ mod add_value_prop {
                     StorageProviders::add_value_prop(
                         RuntimeOrigin::signed(alice),
                         value_prop.price_per_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
                         value_prop.bucket_data_limit
                     ),
                     Error::<Test>::ValuePropositionAlreadyExists
@@ -4431,11 +4459,12 @@ mod add_value_prop {
                     register_account_as_msp(alice, storage_amount);
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
-                let value_prop = ValueProposition::<Test>::new(999, 999);
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
                     value_prop.price_per_unit_of_data_per_block,
+                    value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
 
@@ -4472,7 +4501,7 @@ mod make_value_prop_unavailable {
         fn account_is_not_a_registered_msp() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let value_prop = ValueProposition::<Test>::new(1, 10);
+                let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
 
                 // Try to make a value proposition unavailable to an account that is not a registered MSP
                 assert_noop!(
@@ -4493,7 +4522,7 @@ mod make_value_prop_unavailable {
                 let (_deposit_amount, _alice_msp, _) =
                     register_account_as_msp(alice, storage_amount);
 
-                let value_prop = ValueProposition::<Test>::new(999, 999);
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_noop!(
                     StorageProviders::make_value_prop_unavailable(
@@ -4518,11 +4547,12 @@ mod make_value_prop_unavailable {
                     register_account_as_msp(alice, storage_amount);
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
-                let value_prop = ValueProposition::<Test>::new(999, 999);
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
                     value_prop.price_per_unit_of_data_per_block,
+                    value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
 
@@ -4550,6 +4580,7 @@ mod make_value_prop_unavailable {
                     .unwrap(),
                     ValueProposition::<Test> {
                         price_per_unit_of_data_per_block: 999,
+                        commitment: bounded_vec![],
                         bucket_data_limit: 999,
                         available: false
                     }
@@ -4567,11 +4598,12 @@ mod make_value_prop_unavailable {
 
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
-                let value_prop = ValueProposition::<Test>::new(999, 999);
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
                     value_prop.price_per_unit_of_data_per_block,
+                    value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
 
@@ -4644,6 +4676,7 @@ fn register_account_as_msp(
         storage_amount,
         multiaddresses.clone(),
         1,
+        bounded_vec![],
         10,
         account
     ));
@@ -4669,7 +4702,7 @@ fn register_account_as_msp(
 
     let msp_id = StorageProviders::get_provider_id(account).unwrap();
 
-    let value_prop = ValueProposition::<Test>::new(1, 10);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
     let value_prop_id = value_prop.derive_id();
 
     // Check that the confirm MSP sign up event was emitted
