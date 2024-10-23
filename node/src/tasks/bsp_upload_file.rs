@@ -1,4 +1,4 @@
-use std::{cmp::max, str::FromStr, time::Duration};
+use std::{cmp::max, ops::Add, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -56,7 +56,7 @@ where
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
     file_key_cleanup: Option<H256>,
-    capacity_queue: Arc<Mutex<Vec<u64>>>,
+    capacity_queue: Arc<Mutex<u64>>,
 }
 
 impl<FL, FSH> Clone for BspUploadFileTask<FL, FSH>
@@ -82,7 +82,7 @@ where
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
-            capacity_queue: Arc::new(Mutex::new(vec![])),
+            capacity_queue: Arc::new(Mutex::new(0_u64)),
         }
     }
 }
@@ -520,7 +520,7 @@ where
             // we registered it to the queue
             let mut capacity_queue = self.capacity_queue.lock().await;
 
-            capacity_queue.push(event.size);
+            *capacity_queue = capacity_queue.add(event.size);
 
             drop(capacity_queue);
 
@@ -534,8 +534,8 @@ where
             let mut capacity_queue = self.capacity_queue.lock().await;
 
             // if the queue is not empty it is that the capacity hasn't been updated yet
-            if !capacity_queue.is_empty() {
-                let size: u64 = capacity_queue.drain(..).sum();
+            if *capacity_queue > 0 {
+                let size: u64 = *capacity_queue;
 
                 let new_capacity = self.calculate_capacity(size, current_capacity)?;
 
@@ -554,6 +554,8 @@ where
                     ))
                     .watch_for_success(&self.storage_hub_handler.blockchain)
                     .await?;
+
+                *capacity_queue = 0;
 
                 info!(
                     target: LOG_TARGET,
