@@ -143,7 +143,6 @@ export async function describeMspNet<
       let userApiPromise: Promise<EnrichedBspApi>;
       let bspApiPromise: Promise<EnrichedBspApi>;
       let mspApiPromise: Promise<EnrichedBspApi>;
-      let msp2ApiPromise: Promise<EnrichedBspApi>;
       let responseListenerPromise: ReturnType<typeof launchFullNetwork>;
 
       before(async () => {
@@ -164,7 +163,6 @@ export async function describeMspNet<
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
         mspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
-        msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
       });
 
       after(async () => {
