@@ -69,22 +69,19 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletCollatorSelectionError,
   PalletCollatorSelectionEvent,
-  PalletFileSystemAcceptedStorageRequestParameters,
-  PalletFileSystemBatchResponses,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemFileKeyWithProof,
   PalletFileSystemMoveBucketRequestMetadata,
-  PalletFileSystemMspAcceptedBatchStorageRequests,
-  PalletFileSystemMspFailedBatchStorageRequests,
-  PalletFileSystemMspRejectedBatchStorageRequests,
-  PalletFileSystemMspRespondStorageRequestsResult,
-  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
+  PalletFileSystemStorageRequestMspAcceptedFileKeys,
+  PalletFileSystemStorageRequestMspBucketResponse,
   PalletMessageQueueBookState,
   PalletMessageQueueCall,
   PalletMessageQueueError,
@@ -346,22 +343,19 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionCandidateInfo: PalletCollatorSelectionCandidateInfo;
     PalletCollatorSelectionError: PalletCollatorSelectionError;
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
-    PalletFileSystemAcceptedStorageRequestParameters: PalletFileSystemAcceptedStorageRequestParameters;
-    PalletFileSystemBatchResponses: PalletFileSystemBatchResponses;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
-    PalletFileSystemMspAcceptedBatchStorageRequests: PalletFileSystemMspAcceptedBatchStorageRequests;
-    PalletFileSystemMspFailedBatchStorageRequests: PalletFileSystemMspFailedBatchStorageRequests;
-    PalletFileSystemMspRejectedBatchStorageRequests: PalletFileSystemMspRejectedBatchStorageRequests;
-    PalletFileSystemMspRespondStorageRequestsResult: PalletFileSystemMspRespondStorageRequestsResult;
-    PalletFileSystemMspStorageRequestResponse: PalletFileSystemMspStorageRequestResponse;
+    PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
+    PalletFileSystemStorageRequestMspAcceptedFileKeys: PalletFileSystemStorageRequestMspAcceptedFileKeys;
+    PalletFileSystemStorageRequestMspBucketResponse: PalletFileSystemStorageRequestMspBucketResponse;
     PalletMessageQueueBookState: PalletMessageQueueBookState;
     PalletMessageQueueCall: PalletMessageQueueCall;
     PalletMessageQueueError: PalletMessageQueueError;

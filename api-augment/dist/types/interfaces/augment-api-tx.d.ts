@@ -13,7 +13,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
-  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -493,13 +493,6 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
-       * Add yourself as a data server for providing the files of the bucket requested to be moved.
-       **/
-      bspAddDataServerForMoveBucketRequest: AugmentedSubmittable<
-        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
-      >;
-      /**
        * Executed by a BSP to confirm to stop storing a file.
        *
        * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
@@ -662,22 +655,20 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       mspRespondStorageRequestsMultipleBuckets: AugmentedSubmittable<
         (
-          fileKeyResponsesInput:
-            | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
-            | [
-                H256 | string | Uint8Array,
-                (
-                  | PalletFileSystemMspStorageRequestResponse
-                  | {
-                      accept?: any;
-                      reject?: any;
-                    }
-                  | string
-                  | Uint8Array
-                )
-              ][]
+          storageRequestMspResponse:
+            | Vec<PalletFileSystemStorageRequestMspBucketResponse>
+            | (
+                | PalletFileSystemStorageRequestMspBucketResponse
+                | {
+                    bucketId?: any;
+                    accept?: any;
+                    reject?: any;
+                  }
+                | string
+                | Uint8Array
+              )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
+        [Vec<PalletFileSystemStorageRequestMspBucketResponse>]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (

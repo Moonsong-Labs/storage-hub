@@ -210,6 +210,7 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to verify proof: required to provide a proof of non-inclusion.
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
+      FailedFileKey: AugmentedError<ApiType>;
       /**
        * Failed to decode threshold.
        **/
