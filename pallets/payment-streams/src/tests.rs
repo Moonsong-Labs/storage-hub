@@ -201,13 +201,13 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick: System::block_number(),
-                //         price_index: 100,
-                //     },
-                // );
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: 100,
+                    },
+                );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and the payment stream will get flagged as without funds)
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -916,14 +916,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Charge the payment stream from Bob to Alice
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -991,14 +991,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead, with a 10 units/block price index rate
                 run_to_block(System::block_number() + 10);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Advance some blocks so the last valid proof is not the same as the current block
                 run_to_block(System::block_number() + 5);
@@ -1009,16 +1009,16 @@ mod fixed_rate_streams {
                     bob
                 ));
 
-                // Check that Bob was charged 10 blocks at the 10 units/block rate
+                // Check that Bob was charged 15 blocks at the 15 units/block rate
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
-                    bob_new_balance - 10 * rate
+                    bob_new_balance - 15 * rate
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
-                        amount: 10 * rate,
+                        amount: 15 * rate,
                         last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
@@ -1032,18 +1032,12 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info_by_priviledge_provider(&alice_msp_id);
 
                 // The payment stream should be updated with the correct last charged proof
                 assert_eq!(
                     payment_stream_info.last_charged_tick,
                     alice_last_chargeable_info.last_chargeable_tick
-                );
-
-                // And not with the current block
-                assert_ne!(
-                    payment_stream_info.last_charged_tick,
-                    System::block_number()
                 );
             });
         }
@@ -1094,14 +1088,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Charge the payment stream from Bob to Alice
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -1182,14 +1176,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Charge the payment stream from Bob to Alice
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -1226,14 +1220,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
                 run_to_block(System::block_number() + 20);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 300,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 300,
+                    },
+                );
 
                 // Charge the payment stream from Bob to Alice
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -1342,13 +1336,13 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 1000 blocks ahead
                 run_to_block(System::block_number() + 1000);
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick: System::block_number(),
-                //         price_index: 100,
-                //     },
-                // );
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: 100,
+                    },
+                );
 
                 // Try to charge the payment stream from Bob to Alice
                 assert_noop!(
@@ -1408,14 +1402,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and the payment stream will get flagged as without funds)
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -1505,14 +1499,14 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &alice_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
                 assert_ok!(PaymentStreams::charge_payment_streams(
@@ -1544,14 +1538,14 @@ mod fixed_rate_streams {
                 );
 
                 // Set the last valid proof of Charlie to the current block
-                // let last_chargeable_tick = System::block_number();
-                // LastChargeableInfo::<Test>::insert(
-                //     &charlie_msp_id,
-                //     ProviderLastChargeableInfo {
-                //         last_chargeable_tick,
-                //         price_index: 100,
-                //     },
-                // );
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
 
                 // Try to charge the payment stream from Bob to Charlie
                 assert_ok!(PaymentStreams::charge_payment_streams(

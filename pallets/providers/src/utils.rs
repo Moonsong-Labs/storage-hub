@@ -310,6 +310,8 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
+        <T::PaymentStreams as PaymentStreamsInterface>::add_priviledge_provider(&msp_id)?;
+
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::MspSignUpSuccess {
             who: who.clone(),
@@ -423,6 +425,8 @@ where
                 None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
             }
         })?;
+
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_priviledge_provider(&msp_id)?;
 
         Ok(msp_id)
     }
@@ -1429,7 +1433,7 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
     }
 
     fn update_provider_after_key_removal(
-        who: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         removed_trie_value: &Vec<u8>,
     ) -> DispatchResult {
         // Get the removed file's metadata
@@ -1451,18 +1455,18 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider
-        Self::decrease_capacity_used(who, file_size)?;
+        Self::decrease_capacity_used(provider_id, file_size)?;
 
         // Update the provider's payment stream with the user
         let previous_amount_provided =
             <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
-                who,
+                provider_id,
                 &owner,
             )
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
         let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
         <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-            who,
+            provider_id,
             &owner,
             &new_amount_provided,
         )?;
