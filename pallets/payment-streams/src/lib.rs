@@ -215,6 +215,10 @@ pub mod pallet {
     #[pallet::storage]
     pub type AccumulatedPriceIndex<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
+    // List of priviledge providers
+    #[pallet::storage]
+    pub type PriviledgeProvider<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
+
     // Genesis config:
 
     #[pallet::genesis_config]

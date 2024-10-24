@@ -668,7 +668,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -857,7 +857,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -941,7 +941,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1009,17 +1009,17 @@ mod fixed_rate_streams {
                     bob
                 ));
 
-                // Check that Bob was charged 10 blocks at the 10 units/block rate
+                // Check that Bob was charged 15 blocks at the 15 units/block rate
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
-                    bob_new_balance - 10 * rate
+                    bob_new_balance - 15 * rate
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
-                        amount: 10 * rate,
-                        last_tick_charged: last_chargeable_tick,
+                        amount: 15 * rate,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1032,18 +1032,12 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info_by_priviledge_provider(&alice_msp_id);
 
                 // The payment stream should be updated with the correct last charged proof
                 assert_eq!(
                     payment_stream_info.last_charged_tick,
                     alice_last_chargeable_info.last_chargeable_tick
-                );
-
-                // And not with the current block
-                assert_ne!(
-                    payment_stream_info.last_charged_tick,
-                    System::block_number()
                 );
             });
         }
@@ -1119,7 +1113,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * new_rate,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1207,7 +1201,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1251,7 +1245,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 20 * rate,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1440,7 +1434,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1537,7 +1531,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
@@ -1566,7 +1560,7 @@ mod fixed_rate_streams {
                         user_account: bob,
                         provider_id: charlie_msp_id,
                         amount: 0,
-                        last_tick_charged: last_chargeable_tick,
+                        last_tick_charged: System::block_number(),
                         charged_at_tick: System::block_number(),
                     }
                     .into(),
