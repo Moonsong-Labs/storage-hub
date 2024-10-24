@@ -322,7 +322,7 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
     } catch {
       invariant(
         i < iterations - 1,
-        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
+        `Failed to detect MSP respond extrinsic in txPool after ${(i * delay) / 1000}s`
       );
     }
   }
