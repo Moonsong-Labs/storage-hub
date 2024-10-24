@@ -470,7 +470,6 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
@@ -492,6 +491,7 @@ impl pallet_storage_providers::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 parameter_types! {

@@ -344,7 +344,10 @@ describeBspNet(
 
         // BSP two tries to spam the chain to advance until it can volunteer
         if ((await userApi.rpc.chain.getHeader()).number.toNumber() !== bsp2VolunteerTick) {
-          await userApi.block.skipTo(bsp2VolunteerTick, { spam: true, verbose: true });
+          await userApi.block.skipTo(bsp2VolunteerTick, {
+            spam: true,
+            verbose: true
+          });
         }
 
         const tickAfterSpamResult = (

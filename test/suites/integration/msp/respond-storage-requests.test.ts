@@ -31,7 +31,13 @@ describeMspNet(
       const destination = "test/adolphus.jpg";
       const bucketName = "nothingmuch-0";
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+
+      const valuePropId = valueProps[0].id;
+
+      const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
@@ -162,7 +168,13 @@ describeMspNet(
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
       const bucketName = "nothingmuch-3";
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+
+      const valuePropId = valueProps[0].id;
+
+      const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 

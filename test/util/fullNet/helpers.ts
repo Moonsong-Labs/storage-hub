@@ -237,11 +237,9 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
           ShConsts.DUMMY_MSP_ID,
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
           [multiAddressMsp],
-          {
-            identifier: ShConsts.VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
-          },
+          1,
+          "Terms of Service...",
+          500,
           mspKey.address
         )
       )

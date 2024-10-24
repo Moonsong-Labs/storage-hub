@@ -31,7 +31,7 @@ use shp_traits::{
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
-use crate::types::AcceptedStorageRequestParameters;
+use crate::types::{AcceptedStorageRequestParameters, ValuePropId};
 use crate::{
     pallet,
     types::{
@@ -250,6 +250,7 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // TODO: Hold user funds for the bucket creation.
 
@@ -275,6 +276,7 @@ where
             bucket_id,
             private,
             maybe_collection_id.clone(),
+            value_prop_id,
         )?;
 
         Ok((bucket_id, maybe_collection_id))
