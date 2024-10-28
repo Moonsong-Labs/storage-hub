@@ -4310,6 +4310,7 @@ export default {
       "SeedNotFound",
       "CheckpointChallengesNotFound",
       "ForestProofVerificationFailed",
+      "IncorrectNumberOfKeyProofs",
       "KeyProofNotFound",
       "KeyProofVerificationFailed",
       "FailedToApplyDelta",

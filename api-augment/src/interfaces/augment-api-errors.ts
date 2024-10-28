@@ -911,6 +911,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ForestProofVerificationFailed: AugmentedError<ApiType>;
       /**
+       * The number of key proofs submitted does not match the number of keys proven in the forest proof.
+       **/
+      IncorrectNumberOfKeyProofs: AugmentedError<ApiType>;
+      /**
        * There is at least one key proven in the forest proof, that does not have a corresponding
        * key proof.
        **/

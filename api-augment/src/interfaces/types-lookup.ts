@@ -5419,6 +5419,7 @@ declare module "@polkadot/types/lookup" {
     readonly isSeedNotFound: boolean;
     readonly isCheckpointChallengesNotFound: boolean;
     readonly isForestProofVerificationFailed: boolean;
+    readonly isIncorrectNumberOfKeyProofs: boolean;
     readonly isKeyProofNotFound: boolean;
     readonly isKeyProofVerificationFailed: boolean;
     readonly isFailedToApplyDelta: boolean;
@@ -5442,6 +5443,7 @@ declare module "@polkadot/types/lookup" {
       | "SeedNotFound"
       | "CheckpointChallengesNotFound"
       | "ForestProofVerificationFailed"
+      | "IncorrectNumberOfKeyProofs"
       | "KeyProofNotFound"
       | "KeyProofVerificationFailed"
       | "FailedToApplyDelta"
