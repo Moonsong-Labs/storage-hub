@@ -1,9 +1,9 @@
 use shp_traits::TreasuryCutCalculator;
 use sp_arithmetic::{PerThing, PerU16, Perbill, Percent, Perquintill};
 
-/// This test the precision and panics if error too big error.
+/// This tests the precision and panics if the error is too big.
 ///
-/// error is asserted to be less or equal to 8/accuracy or 8*f64::EPSILON
+/// The error is asserted to be less or equal to 8/accuracy or 8*f64::EPSILON
 fn test_precision<P: PerThing>(system_utilisation: P, ideal_system_utilisation: P, falloff: P) {
     let accuracy_f64 = Into::<u128>::into(P::ACCURACY) as f64;
     let res = shp_treasury_funding::compute_adjustment_over_minimum_cut(
@@ -25,7 +25,7 @@ fn test_precision<P: PerThing>(system_utilisation: P, ideal_system_utilisation: 
     }
 }
 
-/// compute the percentage of funds to treasury using floats
+/// Compute the percentage of the adjustment of the treasury cut using floats instead of PerThings
 fn float_ftt<P: PerThing>(system_utilisation: P, ideal_system_utilisation: P, falloff: P) -> f64 {
     let accuracy_f64 = Into::<u128>::into(P::ACCURACY) as f64;
 

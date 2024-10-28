@@ -8,7 +8,7 @@ use shp_traits::{NumericalParam, TreasuryCutCalculator};
 use sp_arithmetic::{
     biguint::BigUint,
     traits::{SaturatedConversion, UniqueSaturatedInto, Zero},
-    FixedPointNumber, FixedU128, MultiplyArg, PerThing, Perquintill,
+    PerThing, Perquintill,
 };
 use sp_core::Get;
 
