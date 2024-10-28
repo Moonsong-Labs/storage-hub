@@ -297,6 +297,7 @@ impl crate::Config for Test {
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 
 // Build genesis storage according to the mock runtime.
