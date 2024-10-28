@@ -180,8 +180,9 @@ where
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Check that the challenges tick is lower than the current tick.
+        let current_tick = ChallengesTicker::<T>::get();
         ensure!(
-            challenges_tick < ChallengesTicker::<T>::get(),
+            challenges_tick < current_tick,
             Error::<T>::ChallengesTickNotReached
         );
 
@@ -189,14 +190,14 @@ where
         // i.e. that the challenges tick is within the ticks this pallet keeps track of.
         expect_or_err!(
             challenges_tick
-                > ChallengesTicker::<T>::get()
+                > current_tick
                     .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
             "Challenges tick is too old, beyond the history this pallet keeps track of. This should not be possible.",
             Error::<T>::ChallengesTickTooOld,
             bool
         );
 
-        // Check that the submitter is not submitting the proof to late, i.e. that the challenges tick
+        // Check that the submitter is not submitting the proof too late, i.e. that the challenges tick
         // is not greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
         // This should never happen, as the `TickToProvidersDeadlines` StorageMap is
         // cleaned up every block. Therefore, if a Provider reached this deadline, it should have been
@@ -205,7 +206,7 @@ where
             .checked_add(&T::ChallengeTicksTolerance::get())
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         expect_or_err!(
-            challenges_tick_deadline > frame_system::Pallet::<T>::block_number(),
+            challenges_tick_deadline > current_tick,
             "Challenges tick is too late, the proof should be submitted at most `T::ChallengeTicksTolerance::get()` ticks after the challenges tick.",
             Error::<T>::ChallengesTickTooLate,
             bool
@@ -366,18 +367,14 @@ where
         TickToProvidersDeadlines::<T>::set(next_challenges_tick_deadline, submitter, Some(()));
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
-        let current_tick_valid_submitters =
-            ValidProofSubmittersLastTicks::<T>::take(ChallengesTicker::<T>::get());
+        let current_tick_valid_submitters = ValidProofSubmittersLastTicks::<T>::take(current_tick);
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
                 let did_not_already_exist = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
                 // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
                 if did_not_already_exist {
-                    ValidProofSubmittersLastTicks::<T>::insert(
-                        ChallengesTicker::<T>::get(),
-                        valid_submitters,
-                    );
+                    ValidProofSubmittersLastTicks::<T>::insert(current_tick, valid_submitters);
                 }
             }
             // If the set doesn't exist, we create it and insert the submitter.
@@ -390,10 +387,7 @@ where
                     Error::<T>::TooManyValidProofSubmitters,
                     result
                 );
-                ValidProofSubmittersLastTicks::<T>::insert(
-                    ChallengesTicker::<T>::get(),
-                    new_valid_submitters,
-                );
+                ValidProofSubmittersLastTicks::<T>::insert(current_tick, new_valid_submitters);
             }
         }
 
