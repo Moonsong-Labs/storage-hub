@@ -2064,9 +2064,9 @@ declare const _default: {
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: string;
   /**
-   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilizationRate
+   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilisationRate
    **/
-  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilizationRate: string;
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: string;
   /**
    * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::DecayRate
    **/
@@ -2103,7 +2103,7 @@ declare const _default: {
       MinPrice: string;
       UpperExponentFactor: string;
       LowerExponentFactor: string;
-      IdealUtilizationRate: string;
+      IdealUtilisationRate: string;
       DecayRate: string;
       MinimumTreasuryCut: string;
       MaximumTreasuryCut: string;
@@ -3808,7 +3808,7 @@ declare const _default: {
       MinPrice: string;
       UpperExponentFactor: string;
       LowerExponentFactor: string;
-      IdealUtilizationRate: string;
+      IdealUtilisationRate: string;
       DecayRate: string;
       MinimumTreasuryCut: string;
       MaximumTreasuryCut: string;

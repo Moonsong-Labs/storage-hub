@@ -2050,7 +2050,7 @@ export default {
       "MinPrice",
       "UpperExponentFactor",
       "LowerExponentFactor",
-      "IdealUtilizationRate",
+      "IdealUtilisationRate",
       "DecayRate",
       "MinimumTreasuryCut",
       "MaximumTreasuryCut"
@@ -2103,9 +2103,9 @@ export default {
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: "Null",
   /**
-   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilizationRate
+   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilisationRate
    **/
-  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilizationRate: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: "Null",
   /**
    * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::DecayRate
    **/
@@ -2143,7 +2143,7 @@ export default {
       MinPrice: "u128",
       UpperExponentFactor: "u32",
       LowerExponentFactor: "u32",
-      IdealUtilizationRate: "Perquintill",
+      IdealUtilisationRate: "Perquintill",
       DecayRate: "Perquintill",
       MinimumTreasuryCut: "Perquintill",
       MaximumTreasuryCut: "Perquintill"
@@ -3910,8 +3910,8 @@ export default {
         "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u32>)",
       LowerExponentFactor:
         "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u32>)",
-      IdealUtilizationRate:
-        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilizationRate,Option<Perquintill>)",
+      IdealUtilisationRate:
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,Option<Perquintill>)",
       DecayRate:
         "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate,Option<Perquintill>)",
       MinimumTreasuryCut:

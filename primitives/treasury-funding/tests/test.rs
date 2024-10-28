@@ -122,7 +122,7 @@ mod linear_then_power_of_two_cut {
     use shp_treasury_funding::{
         LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
     };
-    use sp_arithmetic::{FixedPointNumber, FixedU128};
+    use sp_arithmetic::{traits::Saturating, FixedPointNumber, FixedU128};
     use sp_core::Get;
 
     use super::*;
@@ -131,7 +131,7 @@ mod linear_then_power_of_two_cut {
     struct IdealUtilisationRate<P: PerThing>(core::marker::PhantomData<P>);
     impl<P: PerThing> Get<P> for IdealUtilisationRate<P> {
         fn get() -> P {
-            P::from_rational(60, 100)
+            P::from_rational(85, 100)
         }
     }
 
@@ -157,33 +157,65 @@ mod linear_then_power_of_two_cut {
     }
 
     struct MockConfig;
-    impl<P: PerThing> LinearThenPowerOfTwoTreasuryCutCalculatorConfig<P> for MockConfig {
+    impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perquintill> for MockConfig {
         type Balance = u128;
         type ProvidedUnit = u64;
-        type IdealUtilisationRate = IdealUtilisationRate<P>;
-        type DecayRate = DecayRate<P>;
-        type MinimumCut = MinimumCut<P>;
-        type MaximumCut = MaximumCut<P>;
+        type IdealUtilisationRate = IdealUtilisationRate<Perquintill>;
+        type DecayRate = DecayRate<Perquintill>;
+        type MinimumCut = MinimumCut<Perquintill>;
+        type MaximumCut = MaximumCut<Perquintill>;
     }
-    type TestTreasuryCutCalculator<P> = LinearThenPowerOfTwoTreasuryCutCalculator<MockConfig, P>;
+    impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for MockConfig {
+        type Balance = u128;
+        type ProvidedUnit = u64;
+        type IdealUtilisationRate = IdealUtilisationRate<Perbill>;
+        type DecayRate = DecayRate<Perbill>;
+        type MinimumCut = MinimumCut<Perbill>;
+        type MaximumCut = MaximumCut<Perbill>;
+    }
+    impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<PerU16> for MockConfig {
+        type Balance = u128;
+        type ProvidedUnit = u64;
+        type IdealUtilisationRate = IdealUtilisationRate<PerU16>;
+        type DecayRate = DecayRate<PerU16>;
+        type MinimumCut = MinimumCut<PerU16>;
+        type MaximumCut = MaximumCut<PerU16>;
+    }
+    impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Percent> for MockConfig {
+        type Balance = u128;
+        type ProvidedUnit = u64;
+        type IdealUtilisationRate = IdealUtilisationRate<Percent>;
+        type DecayRate = DecayRate<Percent>;
+        type MinimumCut = MinimumCut<Percent>;
+        type MaximumCut = MaximumCut<Percent>;
+    }
+
+    type TestTreasuryCutCalculatorPerquintill =
+        LinearThenPowerOfTwoTreasuryCutCalculator<MockConfig, Perquintill>;
+    type TestTreasuryCutCalculatorPerbill =
+        LinearThenPowerOfTwoTreasuryCutCalculator<MockConfig, Perbill>;
+    type TestTreasuryCutCalculatorPerU16 =
+        LinearThenPowerOfTwoTreasuryCutCalculator<MockConfig, PerU16>;
+    type TestTreasuryCutCalculatorPercent =
+        LinearThenPowerOfTwoTreasuryCutCalculator<MockConfig, Percent>;
 
     #[test]
-    fn correctly_returns_lineal_cut_until_ideal_utilisation_rate() {
-        fn correctly_returns_lineal_cut_until_ideal_utilisation_rate<P: PerThing>() {
-            // We calculate what the linear decayment of the treasury cut should be
-            let minimum_cut = MinimumCut::<P>::get();
-            let maximum_cut = MaximumCut::<P>::get();
-            let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+    fn correctly_returns_lineal_cut_until_ideal_utilisation_rate_perquintill() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<Perquintill>::get();
+        let maximum_cut = MaximumCut::<Perquintill>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
 
-            // Then for each utilisation rate between 0 and the ideal rate we calculate the treasury cut
-            let ideal_utilisation_rate: P = IdealUtilisationRate::<P>::get();
-            let ideal_utilisation_rate_as_percentage: u128 =
-                Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100 / P::ACCURACY.into();
-            for used_amount in 0..ideal_utilisation_rate_as_percentage {
-                let provided_amount = 100;
-                let amount_to_charge = 100000;
-                let res: u128 =
-                    <TestTreasuryCutCalculator<P> as TreasuryCutCalculator>::calculate_treasury_cut(
+        // Then for each utilisation rate between 0 and the ideal rate we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<Perquintill>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / Perquintill::ACCURACY as u128;
+        for used_amount in 0..ideal_utilisation_rate_as_percentage {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res =
+                    <TestTreasuryCutCalculatorPerquintill as TreasuryCutCalculator>::calculate_treasury_cut(
                         provided_amount,
                         used_amount.try_into().expect(
                             "Used amount is at most 100 so it should comfortably fit into u64",
@@ -191,74 +223,279 @@ mod linear_then_power_of_two_cut {
                         amount_to_charge,
                     );
 
-                // We manually calculate the treasury cut with the parameters calculated before for the linear formula
-                let adjustment = (P::from_rational(used_amount, provided_amount.into())
-                    / ideal_utilisation_rate)
-                    .left_from_one();
-                let treasury_cut: FixedU128 =
-                    minimum_cut.saturating_add(delta_cut * adjustment).into();
-
-                // And then we check that both match
-                assert_eq!(
-                    res,
-                    amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV
-                );
-            }
-        }
-
-        correctly_returns_lineal_cut_until_ideal_utilisation_rate::<Perquintill>();
-
-        correctly_returns_lineal_cut_until_ideal_utilisation_rate::<PerU16>();
-
-        correctly_returns_lineal_cut_until_ideal_utilisation_rate::<Perbill>();
-
-        correctly_returns_lineal_cut_until_ideal_utilisation_rate::<Percent>();
-    }
-
-    #[test]
-    fn correctly_decays_with_power_of_2_after_ideal_utilisation_rate() {
-        fn correctly_decays_with_power_of_2_after_ideal_utilisation_rate<P: PerThing>() {
-            // We calculate what the linear decayment of the treasury cut should be
-            let minimum_cut = MinimumCut::<P>::get();
-            let maximum_cut = MaximumCut::<P>::get();
-            let delta_cut = maximum_cut.saturating_sub(minimum_cut);
-
-            // Then for each utilisation rate between the ideal rate and 100 we calculate the treasury cut
-            let ideal_utilisation_rate: P = IdealUtilisationRate::<P>::get();
-            let ideal_utilisation_rate_as_percentage: u128 =
-                Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100 / P::ACCURACY.into();
-            for used_amount in ideal_utilisation_rate_as_percentage..100 {
-                let provided_amount = 100;
-                let amount_to_charge = 100000;
-                let res: u128 =
-                    <TestTreasuryCutCalculator<P> as TreasuryCutCalculator>::calculate_treasury_cut(
-                        provided_amount,
-                        used_amount.try_into().expect(
-                            "Used amount is at most 100 so it should comfortably fit into u64",
-                        ),
-                        amount_to_charge,
-                    );
-
-                // We manually calculate the treasury cut with the parameters calculated before for the linear formula
-                let adjustment = (ideal_utilisation_rate
-                    / P::from_rational(used_amount, provided_amount.into()))
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (Perquintill::from_rational(used_amount, provided_amount.into())
+                / ideal_utilisation_rate)
                 .left_from_one();
-                let treasury_cut: FixedU128 =
-                    minimum_cut.saturating_add(delta_cut * adjustment).into();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
 
-                // And then we check that the treasury cut increases faster than linearly
-                if treasury_cut != minimum_cut.into() {
-                    assert!(res > amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV);
-                }
+            // And then we check that both match
+            assert_eq!(
+                res,
+                amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV
+            );
+        }
+    }
+
+    #[test]
+    fn correctly_returns_lineal_cut_until_ideal_utilisation_rate_perbill() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<Perbill>::get();
+        let maximum_cut = MaximumCut::<Perbill>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Then for each utilisation rate between 0 and the ideal rate we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<Perbill>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / Perbill::ACCURACY as u128;
+        for used_amount in 0..ideal_utilisation_rate_as_percentage {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res =
+                <TestTreasuryCutCalculatorPerbill as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
+
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (Perbill::from_rational(used_amount, provided_amount.into())
+                / ideal_utilisation_rate)
+                .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+            // And then we check that both match
+            assert_eq!(
+                res,
+                amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV
+            );
+        }
+    }
+
+    #[test]
+    fn correctly_returns_lineal_cut_until_ideal_utilisation_rate_per_u16() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<PerU16>::get();
+        let maximum_cut = MaximumCut::<PerU16>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Then for each utilisation rate between 0 and the ideal rate we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<PerU16>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / PerU16::ACCURACY as u128;
+        for used_amount in 0..ideal_utilisation_rate_as_percentage {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res =
+                <TestTreasuryCutCalculatorPerU16 as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
+
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (PerU16::from_rational(used_amount, provided_amount.into())
+                / ideal_utilisation_rate)
+                .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+            // And then we check that both match
+            assert_eq!(
+                res,
+                amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV
+            );
+        }
+    }
+
+    #[test]
+    fn correctly_returns_lineal_cut_until_ideal_utilisation_rate_percent() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<Percent>::get();
+        let maximum_cut = MaximumCut::<Percent>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Then for each utilisation rate between 0 and the ideal rate we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<Percent>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / Percent::ACCURACY as u128;
+        for used_amount in 0..ideal_utilisation_rate_as_percentage {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res =
+                <TestTreasuryCutCalculatorPercent as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
+
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (Percent::from_rational(used_amount, provided_amount.into())
+                / ideal_utilisation_rate)
+                .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+            // And then we check that both match
+            assert_eq!(
+                res,
+                amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV
+            );
+        }
+    }
+
+    #[test]
+    fn correctly_decays_with_power_of_2_after_ideal_utilisation_rate_perquintill() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<Perquintill>::get();
+        let maximum_cut = MaximumCut::<Perquintill>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Then for each utilisation rate between the ideal rate and 100 we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<Perquintill>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / Perquintill::ACCURACY as u128;
+        for used_amount in ideal_utilisation_rate_as_percentage..100 {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res: u128 =
+                <TestTreasuryCutCalculatorPerquintill as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
+
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (ideal_utilisation_rate
+                / Perquintill::from_rational(used_amount, provided_amount.into()))
+            .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+            // And then we check that the treasury cut increases faster than linearly
+            if treasury_cut != minimum_cut.into() {
+                assert!(res > amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV);
             }
         }
+    }
 
-        correctly_decays_with_power_of_2_after_ideal_utilisation_rate::<Perquintill>();
+    #[test]
+    fn correctly_decays_with_power_of_2_after_ideal_utilisation_rate_perbill() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<Perbill>::get();
+        let maximum_cut = MaximumCut::<Perbill>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
 
-        correctly_decays_with_power_of_2_after_ideal_utilisation_rate::<PerU16>();
+        // Then for each utilisation rate between the ideal rate and 100 we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<Perbill>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / Perbill::ACCURACY as u128;
+        for used_amount in ideal_utilisation_rate_as_percentage..100 {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res: u128 =
+                <TestTreasuryCutCalculatorPerbill as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
 
-        correctly_decays_with_power_of_2_after_ideal_utilisation_rate::<Perbill>();
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (ideal_utilisation_rate
+                / Perbill::from_rational(used_amount, provided_amount.into()))
+            .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
 
-        correctly_decays_with_power_of_2_after_ideal_utilisation_rate::<Percent>();
+            // And then we check that the treasury cut increases faster than linearly
+            if treasury_cut != minimum_cut.into() {
+                assert!(res > amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV);
+            }
+        }
+    }
+
+    #[test]
+    fn correctly_decays_with_power_of_2_after_ideal_utilisation_rate_per_u16() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<PerU16>::get();
+        let maximum_cut = MaximumCut::<PerU16>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Then for each utilisation rate between the ideal rate and 100 we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<PerU16>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / PerU16::ACCURACY as u128;
+        for used_amount in ideal_utilisation_rate_as_percentage..100 {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res: u128 =
+                <TestTreasuryCutCalculatorPerU16 as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
+
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (ideal_utilisation_rate
+                / PerU16::from_rational(used_amount, provided_amount.into()))
+            .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+            // And then we check that the treasury cut increases faster than linearly
+            if treasury_cut != minimum_cut.into() {
+                assert!(res > amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV);
+            }
+        }
+    }
+
+    #[test]
+    fn correctly_decays_with_power_of_2_after_ideal_utilisation_rate_percent() {
+        // We calculate what the linear decayment of the treasury cut should be
+        let minimum_cut = MinimumCut::<Percent>::get();
+        let maximum_cut = MaximumCut::<Percent>::get();
+        let delta_cut = maximum_cut.saturating_sub(minimum_cut);
+
+        // Then for each utilisation rate between the ideal rate and 100 we calculate the treasury cut
+        let ideal_utilisation_rate = IdealUtilisationRate::<Percent>::get();
+        let ideal_utilisation_rate_as_percentage: u128 =
+            Into::<u128>::into(ideal_utilisation_rate.deconstruct()) * 100
+                / Percent::ACCURACY as u128;
+        for used_amount in ideal_utilisation_rate_as_percentage..100 {
+            let provided_amount = 100;
+            let amount_to_charge = 100000;
+            let res: u128 =
+                <TestTreasuryCutCalculatorPercent as TreasuryCutCalculator>::calculate_treasury_cut(
+                    provided_amount,
+                    used_amount
+                        .try_into()
+                        .expect("Used amount is at most 100 so it should comfortably fit into u64"),
+                    amount_to_charge,
+                );
+
+            // We manually calculate the treasury cut with the parameters calculated before for the linear formula
+            let adjustment = (ideal_utilisation_rate
+                / Percent::from_rational(used_amount, provided_amount.into()))
+            .left_from_one();
+            let treasury_cut: FixedU128 = minimum_cut.saturating_add(delta_cut * adjustment).into();
+
+            // And then we check that the treasury cut increases faster than linearly
+            if treasury_cut != minimum_cut.into() {
+                assert!(res > amount_to_charge * treasury_cut.into_inner() / FixedU128::DIV);
+            }
+        }
     }
 }

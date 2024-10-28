@@ -2553,7 +2553,7 @@ declare module "@polkadot/types/lookup" {
     readonly isMinPrice: boolean;
     readonly isUpperExponentFactor: boolean;
     readonly isLowerExponentFactor: boolean;
-    readonly isIdealUtilizationRate: boolean;
+    readonly isIdealUtilisationRate: boolean;
     readonly isDecayRate: boolean;
     readonly isMinimumTreasuryCut: boolean;
     readonly isMaximumTreasuryCut: boolean;
@@ -2569,7 +2569,7 @@ declare module "@polkadot/types/lookup" {
       | "MinPrice"
       | "UpperExponentFactor"
       | "LowerExponentFactor"
-      | "IdealUtilizationRate"
+      | "IdealUtilisationRate"
       | "DecayRate"
       | "MinimumTreasuryCut"
       | "MaximumTreasuryCut";
@@ -2600,8 +2600,8 @@ declare module "@polkadot/types/lookup" {
   type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor = Null;
   /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor (194) */
   type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilizationRate (195) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilizationRate = Null;
+  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate (195) */
+  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate = Null;
   /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate (196) */
   type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate = Null;
   /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut (197) */
@@ -2639,8 +2639,8 @@ declare module "@polkadot/types/lookup" {
     readonly asUpperExponentFactor: u32;
     readonly isLowerExponentFactor: boolean;
     readonly asLowerExponentFactor: u32;
-    readonly isIdealUtilizationRate: boolean;
-    readonly asIdealUtilizationRate: Perquintill;
+    readonly isIdealUtilisationRate: boolean;
+    readonly asIdealUtilisationRate: Perquintill;
     readonly isDecayRate: boolean;
     readonly asDecayRate: Perquintill;
     readonly isMinimumTreasuryCut: boolean;
@@ -2659,7 +2659,7 @@ declare module "@polkadot/types/lookup" {
       | "MinPrice"
       | "UpperExponentFactor"
       | "LowerExponentFactor"
-      | "IdealUtilizationRate"
+      | "IdealUtilisationRate"
       | "DecayRate"
       | "MinimumTreasuryCut"
       | "MaximumTreasuryCut";
@@ -4668,10 +4668,10 @@ declare module "@polkadot/types/lookup" {
         Option<u32>
       ]
     >;
-    readonly isIdealUtilizationRate: boolean;
-    readonly asIdealUtilizationRate: ITuple<
+    readonly isIdealUtilisationRate: boolean;
+    readonly asIdealUtilisationRate: ITuple<
       [
-        StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilizationRate,
+        StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,
         Option<Perquintill>
       ]
     >;
@@ -4708,7 +4708,7 @@ declare module "@polkadot/types/lookup" {
       | "MinPrice"
       | "UpperExponentFactor"
       | "LowerExponentFactor"
-      | "IdealUtilizationRate"
+      | "IdealUtilisationRate"
       | "DecayRate"
       | "MinimumTreasuryCut"
       | "MaximumTreasuryCut";
