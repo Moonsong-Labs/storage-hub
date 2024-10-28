@@ -42,3 +42,5 @@ shp-file-metadata = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }
+
+actors-framework-macro = { workspace = true }
