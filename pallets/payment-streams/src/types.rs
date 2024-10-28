@@ -66,5 +66,5 @@ pub type UnitsProvidedFor<T> = <T as Config>::Units;
 pub type ProviderIdFor<T> =
     <<T as crate::Config>::ProvidersPallet as ReadProvidersInterface>::ProviderId;
 
-/// Syntatic sugar for the maximum amount of Users a Provider can charge in a batch.
+/// Syntactic sugar for the maximum amount of Users a Provider can charge in a batch.
 pub type MaxUsersToChargeFor<T> = <T as Config>::MaxUsersToCharge;
