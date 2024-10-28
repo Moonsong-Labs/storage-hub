@@ -304,6 +304,7 @@ mod benches {
         [cumulus_pallet_xcmp_queue, XcmpQueue]
         [nfts, Nfts]
         [pallet_parameters, Parameters]
+        [pallet_proofs_dealer, ProofsDealer]
     );
 }
 
