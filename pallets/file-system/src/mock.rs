@@ -357,6 +357,7 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;

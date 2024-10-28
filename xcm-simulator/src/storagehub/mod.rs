@@ -287,6 +287,9 @@ frame_benchmarking::define_benchmarks!(
     [pallet_collator_selection, CollatorSelection]
     [cumulus_pallet_parachain_system, ParachainSystem]
     [cumulus_pallet_xcmp_queue, XcmpQueue]
+    [nfts, Nfts]
+    [pallet_parameters, Parameters]
+    [pallet_proofs_dealer, ProofsDealer]
 );
 
 cumulus_pallet_parachain_system::register_validate_block! {

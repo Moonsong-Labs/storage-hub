@@ -7636,6 +7636,7 @@ dependencies = [
  "shp-treasury-funding",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
+ "sp-keyring",
  "sp-runtime 39.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409)",
  "sp-trie 37.0.0",

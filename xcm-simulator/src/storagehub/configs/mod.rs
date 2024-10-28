@@ -591,6 +591,7 @@ parameter_types! {
 
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_proofs_dealer::weights::SubstrateWeight<Runtime>;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;
