@@ -1074,6 +1074,12 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       onPollTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
+      priviledgeProvider: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<Null>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * The mapping from a user to if it has been registered to the network and the amount of payment streams it has.
        *

@@ -2915,7 +2915,7 @@ declare module "@polkadot/api-base/types/submittable" {
         [AccountId32, H256, u64, Vec<Bytes>, AccountId32, Option<u32>]
       >;
       /**
-       * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+       * Dispatchable extrinsic that allows to forcefully and automatically sign up a Main Storage Provider.
        *
        * The dispatch origin for this call must be Root.
        * The `who` parameter is the account that wants to sign up as a Main Storage Provider.
