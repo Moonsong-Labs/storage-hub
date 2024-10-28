@@ -1053,10 +1053,10 @@ pub trait UpdateStoragePrice {
     ) -> Self::Price;
 }
 
-/// A trait to calculate the percentage of charge funds by a Provider that should go to the treasury.
+/// A trait to calculate the cut that should go to the Treasury, from what's charged by a Provider.
 ///
 /// This is used by the Payment Streams pallet, which requires some type to implement this trait,
-/// and uses such implementation to calculate the percentage of charged funds by a Provider that should go to the treasury.
+/// and uses such implementation to calculate the cut that should go to the Treasury, from what's charged by a Provider.
 pub trait TreasuryCutCalculator {
     /// The numerical type which represents the balance type of the runtime.
     type Balance: NumericalParam;

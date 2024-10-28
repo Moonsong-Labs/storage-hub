@@ -514,8 +514,8 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
 impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perquintill> for Runtime {
     type Balance = Balance;
     type ProvidedUnit = StorageDataUnit;
-    type IdealUtilizationRate =
-        runtime_params::dynamic_params::runtime_config::IdealUtilizationRate;
+    type IdealUtilisationRate =
+        runtime_params::dynamic_params::runtime_config::IdealUtilisationRate;
     type DecayRate = runtime_params::dynamic_params::runtime_config::DecayRate;
     type MinimumCut = runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut;
     type MaximumCut = runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut;

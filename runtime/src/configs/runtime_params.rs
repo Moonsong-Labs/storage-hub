@@ -94,13 +94,13 @@ pub mod dynamic_params {
 
         #[codec(index = 11)]
         #[allow(non_upper_case_globals)]
-        /// Ideal utilization rate of the system
-        pub static IdealUtilizationRate: Perquintill = Perquintill::from_percent(60);
+        /// Ideal utilisation rate of the system
+        pub static IdealUtilisationRate: Perquintill = Perquintill::from_percent(85);
 
         #[codec(index = 12)]
         #[allow(non_upper_case_globals)]
         /// Decay rate of the power of two function that determines the percentage of funds that go to
-        /// the treasury for utilization rates greater than the ideal.
+        /// the treasury for utilisation rates greater than the ideal.
         pub static DecayRate: Perquintill = Perquintill::from_percent(5);
 
         #[codec(index = 13)]
