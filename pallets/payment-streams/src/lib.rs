@@ -944,13 +944,13 @@ impl<T: Config> Pallet<T> {
         OnPollTicker::<T>::get()
     }
 
-	/// A helper function to get the current price per unit per tick of the system
-	pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
-		CurrentPricePerUnitPerTick::<T>::get()
-	}
+    /// A helper function to get the current price per unit per tick of the system
+    pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
+        CurrentPricePerUnitPerTick::<T>::get()
+    }
 
-	/// A helper function to get the accumulated price index of the system
-	pub fn get_accumulated_price_index() -> BalanceOf<T> {
-		AccumulatedPriceIndex::<T>::get()
-	}
+    /// A helper function to get the accumulated price index of the system
+    pub fn get_accumulated_price_index() -> BalanceOf<T> {
+        AccumulatedPriceIndex::<T>::get()
+    }
 }
