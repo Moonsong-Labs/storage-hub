@@ -125,7 +125,10 @@ where
     /// has been a Checkpoint Challenge block in between the last tick proven and the current tick.
     /// If there has been, the Provider should have included proofs for the challenges in that block.
     /// It then verifies the forest proof and each key proof, using the `ForestVerifier` and `KeyVerifier`.
-    pub fn do_submit_proof(submitter: &ProviderIdFor<T>, proof: &Proof<T>) -> DispatchResult {
+    pub fn do_submit_proof(
+        submitter: &ProviderIdFor<T>,
+        proof: &Proof<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
         let forest_proof = &proof.forest_proof;
         let key_proofs = &proof.key_proofs;
 
@@ -388,7 +391,7 @@ where
             }
         }
 
-        Ok(())
+        Ok(challenges_tick)
     }
 
     /// Generate a new round of challenges, be it random or checkpoint.

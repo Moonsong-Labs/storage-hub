@@ -16,8 +16,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
@@ -1299,14 +1300,11 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance>
     {
-        if let Some(bucket) = Buckets::<T>::get(&who) {
-            match MainStorageProviders::<T>::get(bucket.msp_id) {
-                Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
-                    &HoldReason::BucketDeposit.into(),
-                    &related_msp.owner_account,
-                )),
-                None => None,
-            }
+        if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &msp.owner_account,
+            ))
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
             Some(T::NativeBalance::balance_on_hold(
                 &HoldReason::StorageProviderDeposit.into(),
@@ -1577,5 +1575,18 @@ where
         } else {
             Err(QueryProviderMultiaddressesError::ProviderNotRegistered)
         }
+    }
+
+    pub fn get_bsp_stake(
+        bsp_id: &BackupStorageProviderId<T>,
+    ) -> Result<BalanceOf<T>, GetStakeError> {
+        let bsp =
+            BackupStorageProviders::<T>::get(bsp_id).ok_or(GetStakeError::ProviderNotRegistered)?;
+
+        let stake = T::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &bsp.owner_account,
+        );
+        Ok(stake)
     }
 }

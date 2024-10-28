@@ -9,6 +9,7 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use sp_core::H256;
 use sp_runtime::traits::Header;
 
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::EventsRetrievalError;
 use shc_common::{
@@ -16,6 +17,7 @@ use shc_common::{
     types::{BlockNumber, ParachainClient},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
+use sp_api::ProvideRuntimeApi;
 use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -105,7 +107,7 @@ impl IndexerService {
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.index_event(conn, &ev.event).await?;
+                    self.index_event(conn, &ev.event, block_hash).await?;
                 }
 
                 Ok(())
@@ -120,6 +122,7 @@ impl IndexerService {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
+        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             RuntimeEvent::BucketNfts(event) => self.index_bucket_nfts_event(conn, event).await?,
@@ -130,7 +133,9 @@ impl IndexerService {
             RuntimeEvent::ProofsDealer(event) => {
                 self.index_proofs_dealer_event(conn, event).await?
             }
-            RuntimeEvent::Providers(event) => self.index_providers_event(conn, event).await?,
+            RuntimeEvent::Providers(event) => {
+                self.index_providers_event(conn, event, block_hash).await?
+            }
             RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
@@ -301,13 +306,24 @@ impl IndexerService {
 
     async fn index_proofs_dealer_event<'a, 'b: 'a>(
         &'b self,
-        _conn: &mut DbConnection<'a>,
+        conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
-            pallet_proofs_dealer::Event::ProofAccepted { .. } => {}
+            pallet_proofs_dealer::Event::ProofAccepted {
+                provider,
+                proof: _proof,
+                last_tick_proven,
+            } => {
+                Bsp::update_last_tick_proven(
+                    conn,
+                    provider.to_string(),
+                    (*last_tick_proven).into(),
+                )
+                .await?;
+            }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
             pallet_proofs_dealer::Event::SlashableProvider { .. } => {}
@@ -323,6 +339,7 @@ impl IndexerService {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {}
@@ -332,6 +349,14 @@ impl IndexerService {
                 multiaddresses,
                 capacity,
             } => {
+                let stake = self
+                    .client
+                    .runtime_api()
+                    .get_bsp_stake(block_hash, bsp_id)
+                    .expect("to have a stake")
+                    .unwrap_or(Default::default())
+                    .into();
+
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     let multiaddress_str =
@@ -345,6 +370,7 @@ impl IndexerService {
                     capacity.into(),
                     sql_multiaddresses,
                     bsp_id.to_string(),
+                    stake,
                 )
                 .await?;
             }
@@ -361,8 +387,19 @@ impl IndexerService {
                 old_capacity: _old_capacity,
                 next_block_when_change_allowed: _next_block_when_change_allowed,
             } => match provider_id {
-                StorageProviderId::BackupStorageProvider(_) => {
+                StorageProviderId::BackupStorageProvider(bsp_id) => {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+
+                    // update also the stake
+                    let stake = self
+                        .client
+                        .runtime_api()
+                        .get_bsp_stake(block_hash, bsp_id)
+                        .expect("to have a stake")
+                        .unwrap_or(Default::default())
+                        .into();
+
+                    Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
                 }
                 StorageProviderId::MainStorageProvider(_) => {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
@@ -403,7 +440,20 @@ impl IndexerService {
             } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
-            pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::Slashed {
+                provider_id,
+                amount_slashed: _amount_slashed,
+            } => {
+                let stake = self
+                    .client
+                    .runtime_api()
+                    .get_bsp_stake(block_hash, provider_id)
+                    .expect("to have a stake")
+                    .unwrap_or(Default::default())
+                    .into();
+
+                Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -431,5 +431,9 @@ impl_runtime_apis! {
         fn get_slash_amount_per_max_file_size() -> Balance {
             Providers::get_slash_amount_per_max_file_size()
         }
+
+        fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
+            Providers::get_bsp_stake(bsp_id)
+        }
     }
 }

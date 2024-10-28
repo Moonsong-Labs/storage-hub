@@ -916,11 +916,15 @@ fn submit_proof_success() {
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
 
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
         // Check for event submitted.
         System::assert_last_event(
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
+                last_tick_proven,
             }
             .into(),
         );
@@ -1061,11 +1065,15 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
 
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
         // Check for event submitted.
         System::assert_last_event(
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
+                last_tick_proven,
             }
             .into(),
         );
@@ -3410,11 +3418,15 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             None
         ));
 
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(alice_provider_id).unwrap();
+
         // Check for event submitted.
         System::assert_last_event(
             Event::ProofAccepted {
                 provider: alice_provider_id,
                 proof,
+                last_tick_proven,
             }
             .into(),
         );

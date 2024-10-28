@@ -181,6 +181,8 @@ pub const DAYS: BlockNumber = HOURS * 24;
 pub const UNIT: Balance = 1_000_000_000_000;
 pub const MILLIUNIT: Balance = 1_000_000_000;
 pub const MICROUNIT: Balance = 1_000_000;
+pub const NANOUNIT: Balance = 1_000;
+pub const PICOUNIT: Balance = 1;
 
 /// The existential deposit. Set to 1/10 of the Connected Relay Chain.
 pub const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
@@ -302,6 +304,7 @@ mod benches {
         [cumulus_pallet_xcmp_queue, XcmpQueue]
         [nfts, Nfts]
         [pallet_parameters, Parameters]
+        [pallet_proofs_dealer, ProofsDealer]
     );
 }
 
