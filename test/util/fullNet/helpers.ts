@@ -6,7 +6,7 @@ import path from "node:path";
 import * as util from "node:util";
 import { bspKey, mspKey, mspTwoKey, shUser } from "../pjsKeyring";
 import { showContainers } from "../network";
-import type { BspNetConfig, Initialised } from "../bspNet/types";
+import type { BspNetConfig } from "../bspNet/types";
 import * as ShConsts from "../network/consts.ts";
 import { BspNetTestApi, type EnrichedBspApi } from "../network/test-api.ts";
 import invariant from "tiny-invariant";
@@ -14,6 +14,7 @@ import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
 import { forceSignupBsp } from "../bspNet/helpers.ts";
 import { sleep } from "../timer.ts";
+import type { Initialised } from "./types.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -346,4 +347,20 @@ export const runInitialisedFullNet = async (
   } finally {
     userApi?.disconnect();
   }
+};
+
+export const launchFullNetwork = async (
+  config: BspNetConfig,
+  initialised: boolean | "multi" = false
+): Promise<Initialised | undefined> => {
+  if (initialised === "multi") {
+    throw new Error("multi initialisation not supported for fullNet");
+  }
+
+  if (initialised) {
+    return await runInitialisedFullNet(config);
+  }
+
+  await runSimpleFullNet(config);
+  return undefined;
 };

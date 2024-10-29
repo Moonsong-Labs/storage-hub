@@ -1,5 +1,4 @@
 import type { ApiPromise } from "@polkadot/api";
-import type { FileMetadata } from "../bspNet/types";
 import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
 import * as ShConsts from "./consts";
@@ -79,3 +78,29 @@ export const createBucket = async (
 
   return event;
 };
+
+/**
+ * Represents the metadata of a file.
+ *
+ * @interface
+ * @property {string} fileKey - The file key of the stored file.
+ * @property {string} bucketId - The bucket ID registered of the file.
+ * @property {string} location - The remote location of the file.
+ * @property {string} owner - The owner of the file.
+ * @property {string} fingerprint - The generated fingerprint of the file.
+ * @property {number} fileSize - The size of the file in bytes.
+ */
+export interface FileMetadata {
+  /**The file key of the stored file. */
+  fileKey: string;
+  /**The bucket ID registered of the file. */
+  bucketId: string;
+  /**The remote location of the file. */
+  location: string;
+  /**The owner of the file. */
+  owner: string;
+  /**The generated fingerprint of the file. */
+  fingerprint: string;
+  /**The size of the file in bytes. */
+  fileSize: number;
+}

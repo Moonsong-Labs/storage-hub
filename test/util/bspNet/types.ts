@@ -2,11 +2,12 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { EventRecord, Event, H256 } from "@polkadot/types/interfaces";
+import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
-import type { launchFullNetwork, launchNetwork } from "./testrunner";
+import type { launchNetwork } from "./testrunner";
 import type { BspNetTestApi } from "../network/test-api";
 import type { SealedBlock } from "../network/block";
+import type { FileMetadata, ToxicInfo } from "../network";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -76,61 +77,6 @@ export interface BspNetApi extends ApiPromise {
     method: string,
     events?: EventRecord[]
   ): { event: Event; data: Codec[] & IEventData };
-}
-
-/**
- * Represents information about a network toxicity.
- * This interface is used to describe a Toxic "debuff" that can be applied to a running toxiproxy.
- *
- * @interface
- * @property {("latency"|"down"|"bandwidth"|"slow_close"|"timeout"|"reset_peer"|"slicer"|"limit_data")} type - The type of network toxic.
- * @property {string} name - The name of the network toxic.
- * @property {("upstream"|"downstream")} stream - The link direction of the network toxic.
- * @property {number} toxicity - The probability of the toxic being applied to a link (defaults to 1.0, 100%)
- * @property {Object} attributes - A map of toxic-specific attributes
- */
-export interface ToxicInfo {
-  type:
-    | "latency"
-    | "down"
-    | "bandwidth"
-    | "slow_close"
-    | "timeout"
-    | "reset_peer"
-    | "slicer"
-    | "limit_data";
-  name: string;
-  stream: "upstream" | "downstream";
-  toxicity: number;
-  attributes: {
-    [key: string]: string | number | undefined;
-  };
-}
-
-/**
- * Represents the metadata of a file.
- *
- * @interface
- * @property {string} fileKey - The file key of the stored file.
- * @property {string} bucketId - The bucket ID registered of the file.
- * @property {string} location - The remote location of the file.
- * @property {string} owner - The owner of the file.
- * @property {string} fingerprint - The generated fingerprint of the file.
- * @property {number} fileSize - The size of the file in bytes.
- */
-export interface FileMetadata {
-  /**The file key of the stored file. */
-  fileKey: string;
-  /**The bucket ID registered of the file. */
-  bucketId: string;
-  /**The remote location of the file. */
-  location: string;
-  /**The owner of the file. */
-  owner: string;
-  /**The generated fingerprint of the file. */
-  fingerprint: string;
-  /**The size of the file in bytes. */
-  fileSize: number;
 }
 
 /**
@@ -230,76 +176,6 @@ export type BspNetContext = {
 };
 
 /**
- * Context object provided to test suites for interacting with the BSP network.
- * Contains utility functions and configuration for setting up and manipulating the test environment.
- */
-export type FullNetContext = {
-  /**
-   * Test runner's wrapped 'it' function for defining individual test cases.
-   */
-  it: typeof it;
-
-  /**
-   * Creates and returns a connected API instance for a user node.
-   * @returns A promise that resolves to an enriched api instance for user operations.
-   */
-  createUserApi: () => ReturnType<typeof BspNetTestApi.create>;
-
-  /**
-   * Creates and returns a connected API instance for a BSP node.
-   * @returns A promise that resolves to an enriched api instance for BSP operations.
-   */
-  createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
-
-  /**
-   * Creates and returns a connected API instance for a MSP node.
-   * @returns A promise that resolves to an enriched api instance for MSP operations.
-   */
-  createMspApi: () => ReturnType<typeof BspNetTestApi.create> | undefined;
-
-  /**
-   * Creates and returns a connected API instance for a BSP node.
-   * @returns A promise that resolves to  an enriched api instance for BSP operations.
-   */
-  createApi: (
-    endpoint: `ws://${string}` | `wss://${string}`
-  ) => ReturnType<typeof BspNetTestApi.create>;
-
-  /**
-   * The current configuration of the BSP network for this test run.
-   */
-  bspNetConfig: BspNetConfig;
-
-  /**
-   * Before hook for test setup operations.
-   */
-  before: typeof before;
-
-  /**
-   * After hook for test cleanup operations.
-   */
-  after: typeof after;
-
-  beforeEach: typeof beforeEach;
-
-  afterEach: typeof afterEach;
-
-  /**
-   * Retrieves the response from launching the network.
-   * @returns The result of the launchFullNetwork function, which may include network details or initialization data (for multiInitialised network only).
-   */
-  getLaunchResponse: () => ReturnType<typeof launchFullNetwork>;
-};
-
-/**
- * Represents the initial state of the network after initialisation.
- */
-export type Initialised = {
-  /** A list of bucket IDs created during network initialisation */
-  bucketIds: H256[];
-};
-
-/**
  * Network configuration options for BspNet tests.
  */
 export type NetworkConfig =
@@ -368,27 +244,4 @@ export type InitialisedMultiBspNetwork = {
   fileData: FileMetadata;
 };
 
-/**
- * Options for creating a block in the chain.
- */
-export type SealBlockOptions = {
-  /**
-   * Optional extrinsic(s) to include in the sealed block.
-   * Can be a single extrinsic or an array of extrinsics.
-   */
-  calls?:
-    | SubmittableExtrinsic<"promise", ISubmittableResult>
-    | SubmittableExtrinsic<"promise", ISubmittableResult>[];
 
-  /**
-   * Optional signer for the extrinsics.
-   * If not provided, a default signer (usually 'alice') will be used.
-   */
-  signer?: KeyringPair;
-
-  /**
-   * Whether to finalize the block after sealing.
-   * Defaults to true if not specified.
-   */
-  finaliseBlock?: boolean;
-};

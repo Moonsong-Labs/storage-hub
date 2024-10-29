@@ -8,3 +8,4 @@ export * from "./asserts";
 export * from "./docker";
 export * from "./timer";
 export * from "./rpc";
+export * from "./network";

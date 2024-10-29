@@ -7,5 +7,4 @@ export * from "./fileHelpers";
 export * from "./test-api";
 export * from "./api";
 
-
 export * as ShConsts from './consts';

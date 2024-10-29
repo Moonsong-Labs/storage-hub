@@ -9,12 +9,12 @@ import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
 import * as BspNetBlock from "./block";
-import { sealBlock } from "./block";
+import { sealBlock, type SealBlockOptions } from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from ".";
 import * as Files from "./fileHelpers";
 import * as NodeBspNet from "./node";
-import type { BspNetApi, SealBlockOptions } from "../bspNet/types";
+import type { BspNetApi } from "../bspNet/types";
 import * as Waits from "./waits";
 import { addBsp } from "../bspNet/helpers";
 
