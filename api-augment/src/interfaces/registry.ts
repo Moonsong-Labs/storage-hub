@@ -76,6 +76,7 @@ import type {
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemMspAcceptedBatchStorageRequests,
   PalletFileSystemMspFailedBatchStorageRequests,
@@ -353,6 +354,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
     PalletFileSystemMspAcceptedBatchStorageRequests: PalletFileSystemMspAcceptedBatchStorageRequests;
     PalletFileSystemMspFailedBatchStorageRequests: PalletFileSystemMspFailedBatchStorageRequests;
