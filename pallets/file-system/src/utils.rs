@@ -2,7 +2,11 @@ use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
-    traits::{nonfungibles_v2::Create, Get},
+    traits::{
+        fungible::{InspectHold, MutateHold},
+        nonfungibles_v2::Create,
+        Get,
+    },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
@@ -44,7 +48,7 @@ use crate::{
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
     },
-    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
+    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, HoldReason, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
     TickRangeToMaximumThreshold,
@@ -251,12 +255,17 @@ where
         name: BucketNameFor<T>,
         private: bool,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
-        // TODO: Hold user funds for the bucket creation.
-
         // Check if the MSP is indeed an MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
+        );
+
+        // Check if we can hold the bucket creation deposit from the user
+        let deposit = T::BucketCreationDeposit::get();
+        ensure!(
+            T::Currency::can_hold(&HoldReason::BucketCreationDeposit.into(), &sender, deposit),
+            Error::<T>::CannotHoldDeposit
         );
 
         // Create collection only if bucket is private
@@ -268,6 +277,9 @@ where
         };
 
         let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&msp_id, &sender, name);
+
+        // Hold the deposit from the user
+        T::Currency::hold(&HoldReason::BucketCreationDeposit.into(), &sender, deposit)?;
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,

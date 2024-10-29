@@ -16,7 +16,7 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
-    traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
+    traits::{fungible::InspectHold, nonfungibles_v2::Destroy, Hooks, OriginTrait},
     weights::Weight,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -61,6 +61,24 @@ mod create_bucket_tests {
                 );
             });
         }
+
+        #[test]
+        fn create_bucket_user_without_enough_funds_for_deposit_fail() {
+            new_test_ext().execute_with(|| {
+                let owner_without_balance = Keyring::Ferdie.to_account_id();
+                let origin = RuntimeOrigin::signed(owner_without_balance.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = true;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                assert_noop!(
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private),
+                    Error::<Test>::CannotHoldDeposit
+                );
+            });
+        }
     }
 
     mod success {
@@ -70,6 +88,8 @@ mod create_bucket_tests {
         fn create_private_bucket_success() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
+                let owner_initial_balance = <Test as Config>::Currency::free_balance(&owner);
+                let bucket_creation_deposit = <Test as Config>::BucketCreationDeposit::get();
                 let origin = RuntimeOrigin::signed(owner.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
@@ -98,6 +118,19 @@ mod create_bucket_tests {
                     )
                     .unwrap()
                     .is_some()
+                );
+
+                // Check that the deposit was held from the owner's balance
+                assert_eq!(
+                    <Test as Config>::Currency::balance_on_hold(
+                        &RuntimeHoldReason::FileSystem(crate::HoldReason::BucketCreationDeposit),
+                        &owner
+                    ),
+                    bucket_creation_deposit
+                );
+                assert_eq!(
+                    <Test as Config>::Currency::free_balance(&owner),
+                    owner_initial_balance - bucket_creation_deposit
                 );
 
                 // Assert that the correct event was deposited
