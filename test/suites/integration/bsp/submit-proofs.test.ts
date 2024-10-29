@@ -165,32 +165,31 @@ describeBspNet(
       );
     });
 
-    it(
-      "BSP stops storing last file",
-      async () => {
-        let inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [fileData.fileKey]);
-        // Build transaction for BSP-Three to stop storing the only file it has.
-        await userApi.sealBlock(
-          bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-            fileData.fileKey,
-            fileData.bucketId,
-            fileData.location,
-            fileData.owner,
-            fileData.fingerprint,
-            fileData.fileSize,
-            false,
-            inclusionForestProof.toString(),
-          ),
-          bspThreeKey
-        );
+    it("BSP stops storing last file", async () => {
+      let inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [
+        fileData.fileKey
+      ]);
+      // Build transaction for BSP-Three to stop storing the only file it has.
+      await userApi.sealBlock(
+        bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+          fileData.fileKey,
+          fileData.bucketId,
+          fileData.location,
+          fileData.owner,
+          fileData.fingerprint,
+          fileData.fileSize,
+          false,
+          inclusionForestProof.toString()
+        ),
+        bspThreeKey
+      );
 
-        await sleep(5000);
-        userApi.assert.fetchEventData(
-          userApi.events.fileSystem.BspRequestedToStopStoring,
-          await userApi.query.system.events()
-        );    
-      }
-    );
+      await sleep(5000);
+      userApi.assert.fetchEventData(
+        userApi.events.fileSystem.BspRequestedToStopStoring,
+        await userApi.query.system.events()
+      );
+    });
 
     it(
       "BSP can correctly delete a file from its forest and runtime correctly updates its root",
