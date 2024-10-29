@@ -239,6 +239,7 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;

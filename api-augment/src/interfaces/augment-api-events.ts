@@ -1204,6 +1204,15 @@ declare module "@polkadot/api-base/types/events" {
        **/
       UserPaidDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
+       * Event emitted when multiple payment streams have been charged from a Provider. Provides information about
+       * the charged users, the Provider that received the funds and the tick when the charge happened.
+       **/
+      UsersCharged: AugmentedEvent<
+        ApiType,
+        [userAccounts: Vec<AccountId32>, providerId: H256, chargedAtTick: u32],
+        { userAccounts: Vec<AccountId32>; providerId: H256; chargedAtTick: u32 }
+      >;
+      /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
        * correctly paid all their outstanding debt and can now contract new services again.
        **/
