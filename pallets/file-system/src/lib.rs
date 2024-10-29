@@ -481,6 +481,7 @@ pub mod pallet {
             name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
+            value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket is being moved to a new MSP.
         MoveBucketRequested {
@@ -750,11 +751,12 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
+            value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             let (bucket_id, maybe_collection_id) =
-                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private)?;
+                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private, value_prop_id)?;
 
             Self::deposit_event(Event::NewBucket {
                 who,
@@ -763,6 +765,7 @@ pub mod pallet {
                 name,
                 collection_id: maybe_collection_id,
                 private,
+                value_prop_id,
             });
 
             Ok(())

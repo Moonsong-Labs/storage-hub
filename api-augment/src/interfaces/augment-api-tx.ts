@@ -32,7 +32,6 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
-  PalletStorageProvidersValueProposition,
   ShpFileKeyVerifierFileKeyProof,
   SpRuntimeMultiSignature,
   SpTrieStorageProofCompactProof,
@@ -519,9 +518,10 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
-          private: bool | boolean | Uint8Array
+          private: bool | boolean | Uint8Array,
+          valuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool]
+        [H256, Bytes, bool, H256]
       >;
       deleteFile: AugmentedSubmittable<
         (
@@ -2804,27 +2804,15 @@ declare module "@polkadot/api-base/types/submittable" {
        * The dispatch origin for this call must be Signed.
        * The origin must be the account that wants to add a value proposition.
        *
-       * Parameters:
-       * - `new_value_prop`: The value proposition that the MSP wants to add to its service.
-       *
-       * This extrinsic will perform the following checks and logic:
-       * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that the signer is registered as a MSP
-       * 3. Check that the MSP has not reached the maximum amount of value propositions
-       * 4. Check that the value proposition is valid (size and any other relevant checks)
-       * 5. Update the MSPs storage to add the value proposition (with its identifier)
-       *
        * Emits `ValuePropAdded` event when successful.
        **/
       addValueProp: AugmentedSubmittable<
         (
-          newValueProp:
-            | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
-            | string
-            | Uint8Array
+          pricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          bucketDataLimit: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [PalletStorageProvidersValueProposition]
+        [u128, Bytes, u64]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Backup Storage Provider.
@@ -2982,14 +2970,22 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
-            | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
-            | string
-            | Uint8Array,
+          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [AccountId32, H256, u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
+      >;
+      /**
+       * Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
+       *
+       * This operation cannot be reversed. You can only add new value propositions.
+       * This will not affect existing buckets which are using this value proposition.
+       **/
+      makeValuePropUnavailable: AugmentedSubmittable<
+        (valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
@@ -3073,14 +3069,12 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
-            | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
-            | string
-            | Uint8Array,
+          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
       >;
       /**
        * Dispatchable extrinsic to slash a _slashable_ Storage Provider.
