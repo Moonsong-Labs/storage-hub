@@ -7,7 +7,7 @@ import {
   type FileMetadata,
   ShConsts
 } from "../../../util";
-import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
+import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/network/consts";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",

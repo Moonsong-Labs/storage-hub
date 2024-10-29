@@ -19,15 +19,15 @@ import {
   bspTwoSeed,
   shUser
 } from "../pjsKeyring";
-import { addBspContainer, showContainers } from "./docker";
+import { addBspContainer, showContainers } from "../network/docker";
 import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
-import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
-import * as ShConsts from "./consts.ts";
-import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
+import { CAPACITY, MAX_STORAGE_CAPACITY } from "../network/consts.ts";
+import * as ShConsts from "../network/consts.ts";
+import { BspNetTestApi, type EnrichedBspApi } from "../network/test-api.ts";
 import invariant from "tiny-invariant";
 import * as fs from "node:fs";
 import { parse, stringify } from "yaml";
-import { sealBlock } from "./block.ts";
+import { sealBlock } from "../network/block.ts";
 import type { ApiPromise } from "@polkadot/api";
 import { sleep } from "../timer.ts";
 

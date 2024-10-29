@@ -6,7 +6,7 @@ import {
   runMultipleInitialisedBspsNet,
   runSimpleBspNet
 } from "./helpers";
-import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
+import { BspNetTestApi, type EnrichedBspApi } from "../network/test-api";
 import type {
   BspNetConfig,
   BspNetContext,
@@ -14,7 +14,7 @@ import type {
   Initialised,
   TestOptions
 } from "./types";
-import * as ShConsts from "./consts";
+import * as ShConsts from "../network/consts";
 import { runInitialisedFullNet, runSimpleFullNet } from "../fullNet/helpers";
 
 export const launchEventEmitter = new EventEmitter();

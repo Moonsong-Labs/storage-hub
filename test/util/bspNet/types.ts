@@ -5,8 +5,8 @@ import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/type
 import type { EventRecord, Event, H256 } from "@polkadot/types/interfaces";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { launchFullNetwork, launchNetwork } from "./testrunner";
-import type { BspNetTestApi } from "./test-api";
-import type { SealedBlock } from "./block";
+import type { BspNetTestApi } from "../network/test-api";
+import type { SealedBlock } from "../network/block";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.

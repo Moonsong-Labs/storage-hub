@@ -1,5 +1,5 @@
 import type { ApiPromise } from "@polkadot/api";
-import type { FileMetadata } from "./types";
+import type { FileMetadata } from "../bspNet/types";
 import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
 import * as ShConsts from "./consts";
