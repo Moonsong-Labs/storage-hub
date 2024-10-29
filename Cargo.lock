@@ -13049,6 +13049,7 @@ dependencies = [
  "lazy_static",
  "log",
  "pallet-file-system",
+ "pallet-payment-streams",
  "pallet-proofs-dealer",
  "pallet-storage-providers",
  "parity-scale-codec",

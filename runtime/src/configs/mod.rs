@@ -517,6 +517,7 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 
 // TODO: remove this and replace with pallet treasury

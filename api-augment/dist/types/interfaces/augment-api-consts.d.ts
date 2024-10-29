@@ -241,6 +241,11 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
+       * The maximum amount of Users that a Provider can charge in a single extrinsic execution.
+       * This is used to prevent a Provider from charging too many Users in a single block, which could lead to a DoS attack.
+       **/
+      maxUsersToCharge: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
        * `NewStreamDeposit * rate` will be held as a deposit.
