@@ -1371,6 +1371,14 @@ declare const _default: {
         providerId: string;
         amountSlashed: string;
       };
+      MultiAddressAdded: {
+        providerId: string;
+        newMultiaddress: string;
+      };
+      MultiAddressRemoved: {
+        providerId: string;
+        removedMultiaddress: string;
+      };
     };
   };
   /**
@@ -3224,6 +3232,12 @@ declare const _default: {
       };
       add_value_prop: {
         newValueProp: string;
+      };
+      add_multiaddress: {
+        newMultiaddress: string;
+      };
+      remove_multiaddress: {
+        multiaddress: string;
       };
       force_msp_sign_up: {
         who: string;

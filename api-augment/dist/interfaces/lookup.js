@@ -1384,6 +1384,14 @@ export default {
       Slashed: {
         providerId: "H256",
         amountSlashed: "u128"
+      },
+      MultiAddressAdded: {
+        providerId: "H256",
+        newMultiaddress: "Bytes"
+      },
+      MultiAddressRemoved: {
+        providerId: "H256",
+        removedMultiaddress: "Bytes"
       }
     }
   },
@@ -3292,6 +3300,12 @@ export default {
       add_value_prop: {
         newValueProp: "PalletStorageProvidersValueProposition"
       },
+      add_multiaddress: {
+        newMultiaddress: "Bytes"
+      },
+      remove_multiaddress: {
+        multiaddress: "Bytes"
+      },
       force_msp_sign_up: {
         who: "AccountId32",
         mspId: "H256",
@@ -4191,6 +4205,10 @@ export default {
       "BucketAlreadyExists",
       "AppendBucketToMspFailed",
       "ProviderNotSlashable",
+      "MultiAddressesMaxAmountReached",
+      "MultiAddressNotFound",
+      "MultiAddressAlreadyExists",
+      "LastMultiAddressCantBeRemoved",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
       "PaymentStreamNotFound"

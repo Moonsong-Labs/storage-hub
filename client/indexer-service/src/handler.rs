@@ -455,6 +455,8 @@ impl IndexerService {
 
                 Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
             }
+            pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
+            pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())
