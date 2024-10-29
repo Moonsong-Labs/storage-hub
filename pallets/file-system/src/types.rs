@@ -57,11 +57,11 @@ pub struct StorageRequestMetadata<T: Config> {
     /// SPs will expect a connection request to be initiated by the user with this Peer Id.
     pub user_peer_ids: PeerIds<T>,
 
-    /// List of storage providers that can serve the data that is requested to be stored.
+    /// List of backup storage providers that can act as a data server for a storage request, serving the data that is requested to be stored.
     ///
     /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
-    /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
-    pub data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
+    /// BSPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
+    pub data_server_sps: BoundedVec<ProviderIdFor<T>, MaxDataServers<T>>,
 
     /// Number of BSPs requested to store the data.
     ///
@@ -373,8 +373,8 @@ pub type KeyProof<T> =
 pub type FileKeyHasher<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHashing;
 
-/// Alias for the `MaxBspsPerStorageRequest` type used in the FileSystem pallet.
-pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
+/// Alias for the `MaxDataServers` type used in the FileSystem pallet.
+pub type MaxDataServers<T> = <T as crate::Config>::MaxDataServers;
 
 /// Alias for the `MaxBatchConfirmStorageRequests` type used in the FileSystem pallet.
 pub type MaxBatchConfirmStorageRequests<T> = <T as crate::Config>::MaxBatchConfirmStorageRequests;

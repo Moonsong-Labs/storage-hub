@@ -38,8 +38,8 @@ use crate::{
         BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
         FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
-        MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
+        MaxBatchMspRespondStorageRequests, MaxDataServers, MerkleHash, MoveBucketRequestMetadata,
+        MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
@@ -519,7 +519,7 @@ where
         msp_id: Option<ProviderIdFor<T>>,
         bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
-        data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
+        data_server_sps: BoundedVec<ProviderIdFor<T>, MaxDataServers<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
 
@@ -1311,6 +1311,14 @@ where
                     file_key: file_key.0,
                 });
             } else {
+                // Add the BSP as a data server for this file.
+                expect_or_err!(
+                    storage_request_metadata.data_server_sps.try_push(bsp_id),
+                    "Failed to push BSP as data server but the bounded vec should have space",
+                    Error::<T>::StorageRequestBspsRequiredFulfilled,
+                    result
+                );
+
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(&file_key.0, Some(storage_request_metadata.clone()));
 
@@ -1456,7 +1464,7 @@ where
     /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
     ///
     /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1.
+    ///     Therefore, we decrement the `bsps_confirmed` by 1 and remove the BSP as a data server for the file.
     ///
     /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
     ///
@@ -1539,7 +1547,7 @@ where
             Some(mut storage_request_metadata) => {
                 match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
-                    // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
+                    // We need to decrement the number of bsps confirmed and volunteered, remove the BSP as a data server and from the storage request.
                     Some(bsp) => {
                         expect_or_err!(
                             bsp.confirmed,
@@ -1555,6 +1563,10 @@ where
                         storage_request_metadata.bsps_volunteered = storage_request_metadata
                             .bsps_volunteered
                             .saturating_sub(ReplicationTargetType::<T>::one());
+
+                        storage_request_metadata
+                            .data_server_sps
+                            .retain(|&x| x != bsp_id);
 
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }

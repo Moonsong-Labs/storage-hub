@@ -40,7 +40,7 @@ The goal here is to have half of the replication target $R_{t}$ be probabilistic
 $$T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
 
 $T_{gsp}$: _Threshold global starting point_
-$R_{t}$: _Replication target_ (number of BSPs required to fulfill a storage request, otherwise known as `MaxBspsPerStorageRequest`)
+$R_{t}$: _Replication target_ (number of BSPs required to fulfill a storage request, otherwise known as `MaxDataServers`)
 $W_{g}$: _Global weight_ (cumulative weight of all BSPs)
 $M$: _Maximum threshold_ (all BSPs would be eligible to volunteer, for example `u32::MAX`)
 

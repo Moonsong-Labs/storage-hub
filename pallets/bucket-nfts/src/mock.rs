@@ -241,7 +241,7 @@ impl pallet_file_system::Config for Test {
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxDataServers = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
