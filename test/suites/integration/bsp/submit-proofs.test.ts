@@ -5,7 +5,8 @@ import {
   sleep,
   type EnrichedBspApi,
   type FileMetadata,
-  ShConsts
+  ShConsts,
+  bspThreeKey
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
 
@@ -166,24 +167,28 @@ describeBspNet(
 
     it(
       "BSP stops storing last file",
-      { skip: "Not implemented yet. Needs RPC method to build proofs." },
       async () => {
-        // TODO: Build inclusion forest proof for file.
-        // TODO: BSP-Three sends transaction to stop storing the only file it has.
-        console.log(fileData);
-        // // Build transaction for BSP-Three to stop storing the only file it has.
-        // const call = bspThreeApi.sealBlock(
-        //   bspThreeApi.tx.fileSystem.bspStopStoring(
-        //     fileData.fileKey,
-        //     fileData.bucketId,
-        //     fileData.location,
-        //     fileData.owner,
-        //     fileData.fingerprint,
-        //     fileData.fileSize,
-        //     false
-        //   ),
-        //   bspThreeKey
-        // );
+        let inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [fileData.fileKey]);
+        // Build transaction for BSP-Three to stop storing the only file it has.
+        await userApi.sealBlock(
+          bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+            fileData.fileKey,
+            fileData.bucketId,
+            fileData.location,
+            fileData.owner,
+            fileData.fingerprint,
+            fileData.fileSize,
+            false,
+            inclusionForestProof.toString(),
+          ),
+          bspThreeKey
+        );
+
+        await sleep(5000);
+        userApi.assert.fetchEventData(
+          userApi.events.fileSystem.BspRequestedToStopStoring,
+          await userApi.query.system.events()
+        );    
       }
     );
 
