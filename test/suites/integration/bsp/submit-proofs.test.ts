@@ -166,7 +166,7 @@ describeBspNet(
     });
 
     it("BSP stops storing last file", async () => {
-      let inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [
+      const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(null, [
         fileData.fileKey
       ]);
       // Build transaction for BSP-Three to stop storing the only file it has.
