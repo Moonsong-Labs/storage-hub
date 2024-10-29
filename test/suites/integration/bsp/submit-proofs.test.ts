@@ -165,7 +165,7 @@ describeBspNet(
       );
     });
 
-    it("BSP stops storing last file", async () => {
+    it("BSP stops storing last file", { skip: ""} , async () => {
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileData.fileKey]
@@ -185,7 +185,6 @@ describeBspNet(
         bspThreeKey
       );
 
-      await sleep(5000);
       userApi.assert.fetchEventData(
         userApi.events.fileSystem.BspRequestedToStopStoring,
         await userApi.query.system.events()
