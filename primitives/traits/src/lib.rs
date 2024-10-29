@@ -962,10 +962,10 @@ pub trait PaymentStreamsInterface {
     ) -> bool;
 
     /// Add a priviledge provider to the PriviledgerProvider storage.
-    fn add_priviledge_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 
     /// Remove a priviledge provider to the PriviledgerProvider storage.
-    fn remove_priviledge_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.

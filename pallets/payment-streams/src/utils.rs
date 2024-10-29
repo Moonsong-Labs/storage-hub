@@ -881,7 +881,7 @@ where
         // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
         for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
             // Get the amount that should be charged for this payment stream
-            let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+            let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(provider_id);
             let amount_to_charge = fixed_rate_payment_stream
                 .rate
                 .checked_mul(&T::BlockNumberToBalance::convert(
@@ -922,7 +922,7 @@ where
         for (provider_id, dynamic_rate_payment_stream) in dynamic_rate_payment_streams {
             // Get the amount that should be charged for this payment stream
             let price_index_at_last_chargeable_tick =
-                LastChargeableInfo::<T>::get(provider_id).price_index;
+                Self::get_last_chargeable_info_with_privilege(&provider_id).price_index;
             let amount_to_charge = price_index_at_last_chargeable_tick
                 .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                 .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
@@ -1388,14 +1388,14 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
             || DynamicRatePaymentStreams::<T>::contains_key(provider_id, user_account)
     }
 
-    fn add_priviledge_provider(provider_id: &Self::ProviderId) -> DispatchResult {
-        PriviledgeProvider::<T>::insert(provider_id, ());
+    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
+        PrivilegedProviders::<T>::insert(provider_id, ());
 
         Ok(())
     }
 
-    fn remove_priviledge_provider(provider_id: &Self::ProviderId) -> DispatchResult {
-        PriviledgeProvider::<T>::remove(provider_id);
+    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
+        PrivilegedProviders::<T>::remove(provider_id);
 
         Ok(())
     }
@@ -1522,13 +1522,11 @@ where
         payment_streams
     }
 
-    pub fn get_last_chargeable_info_by_priviledge_provider(
+    pub fn get_last_chargeable_info_with_privilege(
         provider_id: &ProviderIdFor<T>,
     ) -> ProviderLastChargeableInfo<T> {
-        let msp_id = PriviledgeProvider::<T>::get(provider_id);
-
-        // This is a msp if it in the PriviledgeProvider
-        if msp_id.is_some() {
+        // If this is a Privileged Provider, then it is allowed to charge up to the current tick.
+        if let Some(_) = PrivilegedProviders::<T>::get(provider_id) {
             return ProviderLastChargeableInfo {
                 last_chargeable_tick: Self::get_current_tick(),
                 price_index: Default::default(),

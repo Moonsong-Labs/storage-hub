@@ -215,9 +215,12 @@ pub mod pallet {
     #[pallet::storage]
     pub type AccumulatedPriceIndex<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
-    // List of priviledge providers
+    /// Mapping of Privileged Providers.
+    ///
+    /// Privileged Providers are those who are allowed to charge up to the current tick in
+    /// fixed rate payment streams, regardless of their [`LastChargeableInfo`].
     #[pallet::storage]
-    pub type PriviledgeProvider<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
+    pub type PrivilegedProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
 
     // Genesis config:
 
