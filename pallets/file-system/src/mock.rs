@@ -247,6 +247,7 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -353,6 +354,7 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;

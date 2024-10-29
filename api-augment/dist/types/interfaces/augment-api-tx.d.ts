@@ -2245,6 +2245,44 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     paymentStreams: {
       /**
+       * Dispatchable extrinsic that allows Providers to charge multiple User's payment streams.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the Provider that has at least one type of payment stream with each of the Users.
+       *
+       * Parameters:
+       * - `user_accounts`: The array of User Account IDs that have payment streams with the Provider.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the array of Users is not bigger than the maximum allowed.
+       * 3. Execute a for loop for each User in the array of User Account IDs, in which it:
+       * a. Checks that a payment stream between the signer (Provider) and the User exists
+       * b. If there is a fixed-rate payment stream:
+       * 1. Get the rate of the payment stream
+       * 2. Get the difference between the last charged tick number and the last chargeable tick number of the stream
+       * 3. Calculate the amount to charge doing `rate * difference`
+       * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+       * 5. Update the last charged tick number of the payment stream
+       * c. If there is a dynamic-rate payment stream:
+       * 1. Get the amount provided by the Provider
+       * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
+       * 3. Calculate the amount to charge doing `amount_provided * difference`
+       * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+       * 5. Update the price index when the stream was last charged of the payment stream
+       *
+       * Emits a `PaymentStreamCharged` per User that had to pay and a `UsersCharged` event when successful.
+       *
+       * Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
+       * will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
+       **/
+      chargeMultipleUsersPaymentStreams: AugmentedSubmittable<
+        (
+          userAccounts: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]
+        ) => SubmittableExtrinsic<ApiType>,
+        [Vec<AccountId32>]
+      >;
+      /**
        * Dispatchable extrinsic that allows Providers to charge a payment stream from a User.
        *
        * The dispatch origin for this call must be Signed.

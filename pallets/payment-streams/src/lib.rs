@@ -11,8 +11,8 @@
 pub mod types;
 mod utils;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// TODO #[cfg(feature = "runtime-benchmarks")]
+// TODO mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -91,6 +91,11 @@ pub mod pallet {
         /// and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.
         #[pallet::constant]
         type UserWithoutFundsCooldown: Get<BlockNumberFor<Self>>;
+
+        /// The maximum amount of Users that a Provider can charge in a single extrinsic execution.
+        /// This is used to prevent a Provider from charging too many Users in a single block, which could lead to a DoS attack.
+        #[pallet::constant]
+        type MaxUsersToCharge: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -112,7 +117,7 @@ pub mod pallet {
     /// This is used to store and manage fixed-rate payment streams between Users and Providers.
     ///
     /// This storage is updated in:
-    /// - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which adds a new entry to the map.
+    /// - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which adds a new entry to the map.
     /// - [delete_fixed_rate_payment_stream](crate::dispatchables::delete_fixed_rate_payment_stream), which removes the corresponding entry from the map.
     /// - [update_fixed_rate_payment_stream](crate::dispatchables::update_fixed_rate_payment_stream), which updates the entry's `rate`.
     /// - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_tick`.
@@ -131,7 +136,7 @@ pub mod pallet {
     /// This is used to store and manage dynamic-rate payment streams between Users and Providers.
     ///
     /// This storage is updated in:
-    /// - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which adds a new entry to the map.
+    /// - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which adds a new entry to the map.
     /// - [delete_dynamic_rate_payment_stream](crate::dispatchables::delete_dynamic_rate_payment_stream), which removes the corresponding entry from the map.
     /// - [update_dynamic_rate_payment_stream](crate::dispatchables::update_dynamic_rate_payment_stream), which updates the entry's `amount_provided`.
     /// - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `price_index_when_last_charged`.
@@ -187,8 +192,8 @@ pub mod pallet {
     /// that a user has and it is also useful to check if a user has registered to the network.
     ///
     /// This storage is updated in:
-    /// - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
-    /// - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+    /// - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+    /// - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
     /// - [remove_fixed_rate_payment_stream](crate::dispatchables::remove_fixed_rate_payment_stream), which removes one from this storage and releases the deposit.
     /// - [remove_dynamic_rate_payment_stream](crate::dispatchables::remove_dynamic_rate_payment_stream), which removes one from this storage and releases the deposit.
     #[pallet::storage]
@@ -290,6 +295,13 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
             last_tick_charged: BlockNumberFor<T>,
+            charged_at_tick: BlockNumberFor<T>,
+        },
+        /// Event emitted when multiple payment streams have been charged from a Provider. Provides information about
+        /// the charged users, the Provider that received the funds and the tick when the charge happened.
+        UsersCharged {
+            user_accounts: BoundedVec<T::AccountId, T::MaxUsersToCharge>,
+            provider_id: ProviderIdFor<T>,
             charged_at_tick: BlockNumberFor<T>,
         },
         /// Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
@@ -702,6 +714,67 @@ pub mod pallet {
             Ok(().into())
         }
 
+        /// Dispatchable extrinsic that allows Providers to charge multiple User's payment streams.
+        ///
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the Provider that has at least one type of payment stream with each of the Users.
+        ///
+        /// Parameters:
+        /// - `user_accounts`: The array of User Account IDs that have payment streams with the Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the array of Users is not bigger than the maximum allowed.
+        /// 3. Execute a for loop for each User in the array of User Account IDs, in which it:
+        /// 	a. Checks that a payment stream between the signer (Provider) and the User exists
+        /// 	b. If there is a fixed-rate payment stream:
+        ///    		1. Get the rate of the payment stream
+        ///    		2. Get the difference between the last charged tick number and the last chargeable tick number of the stream
+        ///    		3. Calculate the amount to charge doing `rate * difference`
+        ///    		4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+        ///    		5. Update the last charged tick number of the payment stream
+        /// 	c. If there is a dynamic-rate payment stream:
+        ///    		1. Get the amount provided by the Provider   
+        ///    		2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
+        ///    		3. Calculate the amount to charge doing `amount_provided * difference`
+        ///    		4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+        ///    		5. Update the price index when the stream was last charged of the payment stream
+        ///
+        /// Emits a `PaymentStreamCharged` per User that had to pay and a `UsersCharged` event when successful.
+        ///
+        /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
+        /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
+        #[pallet::call_index(7)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        pub fn charge_multiple_users_payment_streams(
+            origin: OriginFor<T>,
+            user_accounts: BoundedVec<T::AccountId, T::MaxUsersToCharge>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer
+            let provider_account = ensure_signed(origin)?;
+
+            // Get the Provider ID of the signer
+            let provider_id =
+                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(provider_account)
+                    .ok_or(Error::<T>::NotAProvider)?;
+
+            // Execute checks and logic, update storage
+            Self::do_charge_multiple_users_payment_streams(&provider_id, &user_accounts)?;
+
+            // Get the last tick to add it to the event
+            let charged_at_tick = Self::get_current_tick();
+
+            // Emit the corresponding event (we always emit it even if the charged amount was 0)
+            Self::deposit_event(Event::<T>::UsersCharged {
+                user_accounts,
+                provider_id,
+                charged_at_tick,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
         /// Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
         /// its deposits.
         ///
@@ -720,7 +793,7 @@ pub mod pallet {
         /// Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
         /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
         /// finds more convenient to wait for Providers to get its deposits one by one instead.
-        #[pallet::call_index(7)]
+        #[pallet::call_index(8)]
         #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
         pub fn pay_outstanding_debt(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
@@ -758,7 +831,7 @@ pub mod pallet {
         /// Notes: this extrinsic iterates over all remaining payment streams of the user and charges them, so it can be expensive in terms of weight.
         /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
         /// finds more convenient to wait for Providers to get its deposits one by one instead.
-        #[pallet::call_index(8)]
+        #[pallet::call_index(9)]
         #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
         pub fn clear_insolvent_flag(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
@@ -869,5 +942,15 @@ impl<T: Config> Pallet<T> {
     /// A helper function to get the current Tick of the system
     pub fn get_current_tick() -> BlockNumberFor<T> {
         OnPollTicker::<T>::get()
+    }
+
+    /// A helper function to get the current price per unit per tick of the system
+    pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
+        CurrentPricePerUnitPerTick::<T>::get()
+    }
+
+    /// A helper function to get the accumulated price index of the system
+    pub fn get_accumulated_price_index() -> BalanceOf<T> {
+        AccumulatedPriceIndex::<T>::get()
     }
 }

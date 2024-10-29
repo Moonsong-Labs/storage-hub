@@ -518,6 +518,7 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 
 // TODO: remove this and replace with pallet treasury
@@ -558,6 +559,7 @@ parameter_types! {
 
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_proofs_dealer::weights::SubstrateWeight<Runtime>;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;

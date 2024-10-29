@@ -120,6 +120,7 @@ impl Get<AccountId> for TreasuryAccount {
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersPallet = StorageProviders;
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
@@ -238,6 +239,7 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
