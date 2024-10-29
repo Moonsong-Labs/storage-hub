@@ -37,6 +37,7 @@ pub type MaxBatchMspRespondStorageRequests =
 pub type StorageRequestMspBucketResponse =
     pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
 pub type StorageRequestMspResponse = pallet_file_system::types::StorageRequestMspResponse<Runtime>;
+pub type MaxUsersToCharge = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
 pub type RejectedStorageRequestReason = pallet_file_system::types::RejectedStorageRequestReason;
 pub type RejectedStorageRequest = pallet_file_system::types::RejectedStorageRequest<Runtime>;
 pub type StorageRequestMspAcceptedFileKeys =
