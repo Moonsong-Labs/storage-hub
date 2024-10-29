@@ -7,11 +7,7 @@ import {
   runSimpleBspNet
 } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "../network/test-api";
-import type {
-  BspNetConfig,
-  BspNetContext,
-  TestOptions
-} from "./types";
+import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
 import * as ShConsts from "../network/consts";
 
 export const launchEventEmitter = new EventEmitter();
@@ -115,7 +111,6 @@ export async function describeBspNet<
     });
   }
 }
-
 
 export const launchNetwork = async (
   config: BspNetConfig,

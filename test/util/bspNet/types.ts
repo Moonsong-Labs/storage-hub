@@ -243,5 +243,3 @@ export type InitialisedMultiBspNetwork = {
    */
   fileData: FileMetadata;
 };
-
-
