@@ -20,7 +20,11 @@ scale-info = { workspace = true }
 
 # Local
 pallet-proofs-dealer-runtime-api = { workspace = true }
+pallet-storage-providers = { workspace = true, optional = true }
 shp-traits = { workspace = true }
+shp-file-key-verifier = { workspace = true, optional = true }
+shp-file-metadata = { workspace = true, optional = true }
+shp-forest-verifier = { workspace = true, optional = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, optional = true }
@@ -30,7 +34,11 @@ frame-system = { workspace = true }
 sp-keyring = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+sp-trie = { workspace = true, optional = true }
 sp-weights = { workspace = true }
+
+# Frame
+pallet-balances = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -58,7 +66,12 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
+	"shp-file-key-verifier/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"shp-forest-verifier/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"sp-trie",
 ]
 std = [
 	"codec/std",

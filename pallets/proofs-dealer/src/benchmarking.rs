@@ -1,15 +1,49 @@
 //! Benchmarking setup for pallet-proofs-dealer
+
 use frame_benchmarking::v2::*;
 
-#[benchmarks]
+#[benchmarks(
+    where
+        // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
+        T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
+        // The Storage Providers pallet is the `Providers` pallet that this pallet requires.
+        T: crate::Config<ProvidersPallet = pallet_storage_providers::Pallet<T>>,
+        // The `Balances` pallet is the `NativeBalance` pallet that this pallet requires.
+        T: crate::Config<NativeBalance = pallet_balances::Pallet<T>>,
+        // The `Balances` pallet is the `NativeBalance` pallet that `pallet_storage_providers::Config` requires.
+        T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
+        // The `Proof` inner type of the `ForestVerifier` trait is `CompactProof`.
+        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = sp_trie::CompactProof>,
+        // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
+        <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
+        // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
+        pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
+        // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
+        T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
+)]
 mod benchmarks {
-    use frame_support::{assert_ok, traits::fungible::Mutate};
-    use frame_system::RawOrigin;
+    use frame_support::{
+        assert_ok,
+        traits::{
+            fungible::{Mutate, MutateHold},
+            Get,
+        },
+    };
+    use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
+    use shp_traits::ReadChallengeableProvidersInterface;
     use sp_runtime::traits::Hash;
+    use sp_std::{collections::btree_map::BTreeMap, vec};
+    use sp_trie::CompactProof;
 
     use super::*;
     use crate::{
-        pallet, types::MerkleTrieHashingFor, Call, ChallengesQueue, Config, Event, Pallet,
+        pallet,
+        types::{
+            ChallengeTicksToleranceFor, KeyProof, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
+            RandomChallengesPerBlockFor,
+        },
+        Call, ChallengesQueue, ChallengesTicker, Config, Event, LastTickProviderSubmittedAProofFor,
+        Pallet, TickToChallengesSeed, TickToProvidersDeadlines,
     };
 
     #[benchmark]
@@ -41,6 +75,133 @@ mod benchmarks {
         let challenges_queue = ChallengesQueue::<T>::get();
         assert_eq!(challenges_queue.len(), 1);
         assert_eq!(challenges_queue[0], file_key);
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn submit_proof() -> Result<(), BenchmarkError> {
+        // Setup initial conditions.
+        let caller: T::AccountId = whitelisted_caller();
+        let provider_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &caller,
+            provider_balance,
+        ));
+
+        // Register caller as a Provider in Providers pallet.
+        let provider_id = <T as frame_system::Config>::Hashing::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::insert(
+            &caller,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<T>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: caller.clone(),
+                payment_account: caller.clone(),
+                reputation_weight:
+                    <T as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
+            },
+        );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<T as crate::Config>::NativeBalance::hold(
+            &pallet_storage_providers::HoldReason::StorageProviderDeposit.into(),
+            &caller,
+            provider_balance / 100u32.into(),
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = <T as frame_system::Config>::Hashing::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&provider_id, |provider| {
+            provider.as_mut().expect("Provider should exist").root = root;
+        });
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<T>::get();
+        let last_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedAProofFor::<T>::insert(
+            &provider_id,
+            last_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<T> as ReadChallengeableProvidersInterface>::get_stake(provider_id)
+                .unwrap();
+        let challenge_period = crate::Pallet::<T>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: BlockNumberFor<T> = ChallengeTicksToleranceFor::<T>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        TickToProvidersDeadlines::<T>::insert(prev_deadline, provider_id, ());
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<T> as ReadChallengeableProvidersInterface>::get_stake(provider_id)
+                .unwrap();
+        let challenge_period = crate::Pallet::<T>::stake_to_challenge_period(providers_stake);
+        let current_block = frame_system::Pallet::<T>::block_number();
+        let challenge_block = current_block + challenge_period;
+        frame_system::Pallet::<T>::set_block_number(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: BlockNumberFor<T> = ChallengeTicksToleranceFor::<T>::get();
+        let current_block = frame_system::Pallet::<T>::block_number();
+        frame_system::Pallet::<T>::set_block_number(
+            current_block + challenge_ticks_tolerance - 1u32.into(),
+        );
+
+        // Manually set the current tick.
+        ChallengesTicker::<T>::set(frame_system::Pallet::<T>::block_number());
+
+        // Set the seed for the challenge block.
+        let seed = <T as frame_system::Config>::Hashing::hash(b"seed");
+        TickToChallengesSeed::<T>::insert(challenge_block, seed);
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<T>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<T>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for i in 0..challenges.len() {
+            key_proofs.insert(
+                challenges[i],
+                KeyProof::<T> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    }
+                    .into(),
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Generate proof.
+        let proof = Proof::<T> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Call some extrinsic.
+        #[extrinsic_call]
+        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
 
         Ok(())
     }
