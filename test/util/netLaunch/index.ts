@@ -163,7 +163,7 @@ export class NetworkLauncher {
         log: true,
         env: {
           ...process.env,
-          NODE_KEY: ShConsts.NODE_INFOS.msp.nodeKey,
+          NODE_KEY: ShConsts.NODE_INFOS.msp1.nodeKey,
           BSP_IP: bspIp,
           BSP_PEER_ID: bspPeerId
         }
