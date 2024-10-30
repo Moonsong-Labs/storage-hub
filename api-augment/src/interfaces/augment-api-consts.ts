@@ -82,13 +82,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum number of BSPs that can act as a data server for a file.
-       *
-       * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
-       **/
-      maxDataServers: u32 & AugmentedConst<ApiType>;
-      /**
        * Maximum number of expired items (per type) to clean up in a single block.
        **/
       maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;

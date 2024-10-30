@@ -218,13 +218,6 @@ pub mod pallet {
             CollectionId = CollectionIdFor<Self>,
         >;
 
-        /// Maximum number of BSPs that can act as a data server for a file.
-        ///
-        /// This is used to limit the number of BSPs storing a file and claiming rewards for it.
-        /// If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
-        #[pallet::constant]
-        type MaxDataServers: Get<u32>;
-
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
@@ -880,7 +873,6 @@ pub mod pallet {
                 Some(msp_id),
                 None,
                 Some(peer_ids.clone()),
-                Default::default(),
             )?;
 
             // BSPs listen to this event and volunteer to store the file

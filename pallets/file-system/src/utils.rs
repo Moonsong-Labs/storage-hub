@@ -15,7 +15,6 @@ use sp_runtime::{
 };
 use sp_std::{
     collections::{btree_map::BTreeMap, btree_set::BTreeSet},
-    vec,
     vec::Vec,
 };
 
@@ -38,7 +37,7 @@ use crate::{
         BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
         FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MaxDataServers, MerkleHash, MoveBucketRequestMetadata,
+        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata,
         MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
@@ -519,7 +518,6 @@ where
         msp_id: Option<ProviderIdFor<T>>,
         bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
-        data_server_sps: BoundedVec<ProviderIdFor<T>, MaxDataServers<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
 
@@ -579,7 +577,6 @@ where
             size,
             msp,
             user_peer_ids: user_peer_ids.unwrap_or_default(),
-            data_server_sps,
             bsps_required,
             bsps_confirmed: ReplicationTargetType::<T>::zero(),
             bsps_volunteered: ReplicationTargetType::<T>::zero(),
@@ -1311,14 +1308,6 @@ where
                     file_key: file_key.0,
                 });
             } else {
-                // Add the BSP as a data server for this file.
-                expect_or_err!(
-                    storage_request_metadata.data_server_sps.try_push(bsp_id),
-                    "Failed to push BSP as data server but the bounded vec should have space",
-                    Error::<T>::StorageRequestBspsRequiredFulfilled,
-                    result
-                );
-
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(&file_key.0, Some(storage_request_metadata.clone()));
 
@@ -1564,10 +1553,6 @@ where
                             .bsps_volunteered
                             .saturating_sub(ReplicationTargetType::<T>::one());
 
-                        storage_request_metadata
-                            .data_server_sps
-                            .retain(|&x| x != bsp_id);
-
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
@@ -1583,7 +1568,8 @@ where
                 <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata));
             }
             // We hit scenario 3. There is no storage request opened for the file.
-            // We need to create a new storage request with a single bsp required.
+            // We need to create a new storage request with a single bsp required and
+            // add this BSP as a data server if they can serve the file.
             None => {
                 Self::do_request_storage(
                     owner,
@@ -1594,12 +1580,19 @@ where
                     None,
                     Some(ReplicationTargetType::<T>::one()),
                     None,
-                    if can_serve {
-                        BoundedVec::try_from(vec![bsp_id]).unwrap()
-                    } else {
-                        BoundedVec::default()
-                    },
                 )?;
+
+                if can_serve {
+                    // Add the BSP as a data server for the file.
+                    <StorageRequestBsps<T>>::insert(
+                        &file_key,
+                        &bsp_id,
+                        StorageRequestBspsMetadata::<T> {
+                            confirmed: true,
+                            _phantom: Default::default(),
+                        },
+                    );
+                }
             }
         };
 

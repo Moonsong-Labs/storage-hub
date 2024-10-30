@@ -467,7 +467,6 @@ impl crate::Config for Test {
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type MaxDataServers = ConstU32<10>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;

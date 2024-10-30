@@ -4026,37 +4026,36 @@ declare const _default: {
     size_: string;
     msp: string;
     userPeerIds: string;
-    dataServerSps: string;
     bspsRequired: string;
     bspsConfirmed: string;
     bspsVolunteered: string;
   };
   /**
-   * Lookup450: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   * Lookup449: pallet_file_system::types::StorageRequestBspsMetadata<T>
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: string;
   };
   /**
-   * Lookup459: pallet_file_system::types::MoveBucketRequestMetadata<T>
+   * Lookup458: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: string;
   };
   /**
-   * Lookup460: pallet_file_system::pallet::Error<T>
+   * Lookup459: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: string[];
   };
   /**
-   * Lookup466: pallet_proofs_dealer::pallet::Error<T>
+   * Lookup465: pallet_proofs_dealer::pallet::Error<T>
    **/
   PalletProofsDealerError: {
     _enum: string[];
   };
   /**
-   * Lookup469: pallet_payment_streams::types::FixedRatePaymentStream<T>
+   * Lookup468: pallet_payment_streams::types::FixedRatePaymentStream<T>
    **/
   PalletPaymentStreamsFixedRatePaymentStream: {
     rate: string;
@@ -4065,7 +4064,7 @@ declare const _default: {
     outOfFundsTick: string;
   };
   /**
-   * Lookup470: pallet_payment_streams::types::DynamicRatePaymentStream<T>
+   * Lookup469: pallet_payment_streams::types::DynamicRatePaymentStream<T>
    **/
   PalletPaymentStreamsDynamicRatePaymentStream: {
     amountProvided: string;
@@ -4074,26 +4073,26 @@ declare const _default: {
     outOfFundsTick: string;
   };
   /**
-   * Lookup471: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+   * Lookup470: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
    **/
   PalletPaymentStreamsProviderLastChargeableInfo: {
     lastChargeableTick: string;
     priceIndex: string;
   };
   /**
-   * Lookup472: pallet_payment_streams::pallet::Error<T>
+   * Lookup471: pallet_payment_streams::pallet::Error<T>
    **/
   PalletPaymentStreamsError: {
     _enum: string[];
   };
   /**
-   * Lookup473: pallet_bucket_nfts::pallet::Error<T>
+   * Lookup472: pallet_bucket_nfts::pallet::Error<T>
    **/
   PalletBucketNftsError: {
     _enum: string[];
   };
   /**
-   * Lookup474: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
+   * Lookup473: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
    **/
   PalletNftsCollectionDetails: {
     owner: string;
@@ -4104,13 +4103,13 @@ declare const _default: {
     attributes: string;
   };
   /**
-   * Lookup479: pallet_nfts::types::CollectionRole
+   * Lookup478: pallet_nfts::types::CollectionRole
    **/
   PalletNftsCollectionRole: {
     _enum: string[];
   };
   /**
-   * Lookup480: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
+   * Lookup479: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
    **/
   PalletNftsItemDetails: {
     owner: string;
@@ -4118,42 +4117,42 @@ declare const _default: {
     deposit: string;
   };
   /**
-   * Lookup481: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup480: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemDeposit: {
     account: string;
     amount: string;
   };
   /**
-   * Lookup486: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
+   * Lookup485: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
    **/
   PalletNftsCollectionMetadata: {
     deposit: string;
     data: string;
   };
   /**
-   * Lookup487: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
+   * Lookup486: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
    **/
   PalletNftsItemMetadata: {
     deposit: string;
     data: string;
   };
   /**
-   * Lookup488: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup487: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemMetadataDeposit: {
     account: string;
     amount: string;
   };
   /**
-   * Lookup491: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup490: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeDeposit: {
     account: string;
     amount: string;
   };
   /**
-   * Lookup495: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
+   * Lookup494: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
    **/
   PalletNftsPendingSwap: {
     desiredCollection: string;
@@ -4162,63 +4161,63 @@ declare const _default: {
     deadline: string;
   };
   /**
-   * Lookup497: pallet_nfts::types::PalletFeature
+   * Lookup496: pallet_nfts::types::PalletFeature
    **/
   PalletNftsPalletFeature: {
     _enum: string[];
   };
   /**
-   * Lookup498: pallet_nfts::pallet::Error<T, I>
+   * Lookup497: pallet_nfts::pallet::Error<T, I>
    **/
   PalletNftsError: {
     _enum: string[];
   };
   /**
-   * Lookup501: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+   * Lookup500: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
    **/
   FrameSystemExtensionsCheckNonZeroSender: string;
   /**
-   * Lookup502: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+   * Lookup501: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
    **/
   FrameSystemExtensionsCheckSpecVersion: string;
   /**
-   * Lookup503: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+   * Lookup502: frame_system::extensions::check_tx_version::CheckTxVersion<T>
    **/
   FrameSystemExtensionsCheckTxVersion: string;
   /**
-   * Lookup504: frame_system::extensions::check_genesis::CheckGenesis<T>
+   * Lookup503: frame_system::extensions::check_genesis::CheckGenesis<T>
    **/
   FrameSystemExtensionsCheckGenesis: string;
   /**
-   * Lookup507: frame_system::extensions::check_nonce::CheckNonce<T>
+   * Lookup506: frame_system::extensions::check_nonce::CheckNonce<T>
    **/
   FrameSystemExtensionsCheckNonce: string;
   /**
-   * Lookup508: frame_system::extensions::check_weight::CheckWeight<T>
+   * Lookup507: frame_system::extensions::check_weight::CheckWeight<T>
    **/
   FrameSystemExtensionsCheckWeight: string;
   /**
-   * Lookup509: pallet_transaction_payment::ChargeTransactionPayment<T>
+   * Lookup508: pallet_transaction_payment::ChargeTransactionPayment<T>
    **/
   PalletTransactionPaymentChargeTransactionPayment: string;
   /**
-   * Lookup510: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
+   * Lookup509: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
    **/
   CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: string;
   /**
-   * Lookup511: frame_metadata_hash_extension::CheckMetadataHash<T>
+   * Lookup510: frame_metadata_hash_extension::CheckMetadataHash<T>
    **/
   FrameMetadataHashExtensionCheckMetadataHash: {
     mode: string;
   };
   /**
-   * Lookup512: frame_metadata_hash_extension::Mode
+   * Lookup511: frame_metadata_hash_extension::Mode
    **/
   FrameMetadataHashExtensionMode: {
     _enum: string[];
   };
   /**
-   * Lookup513: storage_hub_runtime::Runtime
+   * Lookup512: storage_hub_runtime::Runtime
    **/
   StorageHubRuntimeRuntime: string;
 };
