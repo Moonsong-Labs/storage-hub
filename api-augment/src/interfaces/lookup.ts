@@ -1386,6 +1386,14 @@ export default {
         providerId: "H256",
         amountSlashed: "u128"
       },
+      MultiAddressAdded: {
+        providerId: "H256",
+        newMultiaddress: "Bytes"
+      },
+      MultiAddressRemoved: {
+        providerId: "H256",
+        removedMultiaddress: "Bytes"
+      },
       ValuePropAdded: {
         mspId: "H256",
         valuePropId: "H256",
@@ -3318,6 +3326,12 @@ export default {
       make_value_prop_unavailable: {
         valuePropId: "H256"
       },
+      add_multiaddress: {
+        newMultiaddress: "Bytes"
+      },
+      remove_multiaddress: {
+        multiaddress: "Bytes"
+      },
       force_msp_sign_up: {
         who: "AccountId32",
         mspId: "H256",
@@ -4234,6 +4248,10 @@ export default {
       "BucketAlreadyExists",
       "AppendBucketToMspFailed",
       "ProviderNotSlashable",
+      "MultiAddressesMaxAmountReached",
+      "MultiAddressNotFound",
+      "MultiAddressAlreadyExists",
+      "LastMultiAddressCantBeRemoved",
       "ValuePropositionNotFound",
       "ValuePropositionAlreadyExists",
       "ValuePropositionNotAvailable",
