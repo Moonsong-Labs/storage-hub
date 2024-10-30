@@ -28,6 +28,7 @@ import type {
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -663,7 +664,8 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
-          private: bool
+          private: bool,
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -672,6 +674,7 @@ declare module "@polkadot/api-base/types/events" {
           name: Bytes;
           collectionId: Option<u32>;
           private: bool;
+          valuePropId: H256;
         }
       >;
       /**
@@ -2135,17 +2138,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MspRequestSignUpSuccess: AugmentedEvent<
         ApiType,
-        [
-          who: AccountId32,
-          multiaddresses: Vec<Bytes>,
-          capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
-        ],
+        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
         }
       >;
       /**
@@ -2171,14 +2168,36 @@ declare module "@polkadot/api-base/types/events" {
           mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
+          valueProp: PalletStorageProvidersValuePropositionWithId
         ],
         {
           who: AccountId32;
           mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
+          valueProp: PalletStorageProvidersValuePropositionWithId;
+        }
+      >;
+      /**
+       * Event emitted when a Provider has added a new MultiAddress to its account.
+       **/
+      MultiAddressAdded: AugmentedEvent<
+        ApiType,
+        [providerId: H256, newMultiaddress: Bytes],
+        {
+          providerId: H256;
+          newMultiaddress: Bytes;
+        }
+      >;
+      /**
+       * Event emitted when a Provider has removed a MultiAddress from its account.
+       **/
+      MultiAddressRemoved: AugmentedEvent<
+        ApiType,
+        [providerId: H256, removedMultiaddress: Bytes],
+        {
+          providerId: H256;
+          removedMultiaddress: Bytes;
         }
       >;
       /**
@@ -2201,6 +2220,29 @@ declare module "@polkadot/api-base/types/events" {
         {
           providerId: H256;
           amountSlashed: u128;
+        }
+      >;
+      /**
+       * Event emitted when an MSP adds a new value proposition.
+       **/
+      ValuePropAdded: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256, valueProp: PalletStorageProvidersValueProposition],
+        {
+          mspId: H256;
+          valuePropId: H256;
+          valueProp: PalletStorageProvidersValueProposition;
+        }
+      >;
+      /**
+       * Event emitted when an MSP's value proposition is made unavailable.
+       **/
+      ValuePropUnavailable: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256],
+        {
+          mspId: H256;
+          valuePropId: H256;
         }
       >;
       /**

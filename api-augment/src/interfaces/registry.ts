@@ -76,6 +76,7 @@ import type {
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemMspAcceptedBatchStorageRequests,
   PalletFileSystemMspFailedBatchStorageRequests,
@@ -146,9 +147,12 @@ import type {
   PalletStorageProvidersEvent,
   PalletStorageProvidersHoldReason,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersMainStorageProviderSignUpRequest,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersSignUpRequestSpParams,
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   PalletSudoCall,
   PalletSudoError,
   PalletSudoEvent,
@@ -357,6 +361,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
     PalletFileSystemMspAcceptedBatchStorageRequests: PalletFileSystemMspAcceptedBatchStorageRequests;
     PalletFileSystemMspFailedBatchStorageRequests: PalletFileSystemMspFailedBatchStorageRequests;
@@ -427,9 +432,12 @@ declare module "@polkadot/types/types/registry" {
     PalletStorageProvidersEvent: PalletStorageProvidersEvent;
     PalletStorageProvidersHoldReason: PalletStorageProvidersHoldReason;
     PalletStorageProvidersMainStorageProvider: PalletStorageProvidersMainStorageProvider;
-    PalletStorageProvidersStorageProvider: PalletStorageProvidersStorageProvider;
+    PalletStorageProvidersMainStorageProviderSignUpRequest: PalletStorageProvidersMainStorageProviderSignUpRequest;
+    PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
+    PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
     PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
     PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
+    PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
     PalletSudoCall: PalletSudoCall;
     PalletSudoError: PalletSudoError;
     PalletSudoEvent: PalletSudoEvent;

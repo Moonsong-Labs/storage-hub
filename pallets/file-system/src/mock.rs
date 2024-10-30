@@ -1,3 +1,4 @@
+use crate as pallet_file_system;
 use core::marker::PhantomData;
 use frame_support::{
     derive_impl,
@@ -288,7 +289,6 @@ impl pallet_storage_providers::Config for Test {
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
@@ -309,6 +309,7 @@ impl pallet_storage_providers::Config for Test {
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -452,6 +453,8 @@ pub(crate) type ThresholdType = u32;
 
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 1;
+    pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
 impl crate::Config for Test {
@@ -469,6 +472,7 @@ impl crate::Config for Test {
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<10>;
@@ -485,6 +489,7 @@ impl crate::Config for Test {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
 }
 
 // If we ever require a better mock that doesn't just return true if it is Eve, change this.
