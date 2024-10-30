@@ -1099,6 +1099,18 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageTooLow: AugmentedError<ApiType>;
       /**
+       * Error thrown when value proposition under a given id already exists.
+       **/
+      ValuePropositionAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a value proposition is not available.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
+       * Error thrown when the value proposition id is not found.
+       **/
+      ValuePropositionNotFound: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;
