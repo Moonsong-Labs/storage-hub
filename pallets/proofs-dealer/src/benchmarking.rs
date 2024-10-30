@@ -22,6 +22,7 @@ use frame_benchmarking::v2::*;
         T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
 )]
 mod benchmarks {
+    use codec::{Decode, Encode};
     use frame_support::{
         assert_ok,
         traits::{
@@ -30,20 +31,21 @@ mod benchmarks {
         },
     };
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
-    use shp_traits::ReadChallengeableProvidersInterface;
-    use sp_runtime::traits::Hash;
-    use sp_std::{collections::btree_map::BTreeMap, vec};
+    use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
+    use sp_runtime::{traits::Hash, BoundedVec};
+    use sp_std::{collections::btree_map::BTreeMap, vec, vec::Vec};
     use sp_trie::CompactProof;
 
     use super::*;
     use crate::{
         pallet,
         types::{
-            ChallengeTicksToleranceFor, KeyProof, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
-            RandomChallengesPerBlockFor,
+            ChallengeTicksToleranceFor, KeyFor, KeyProof, MaxCustomChallengesPerBlockFor,
+            MerkleTrieHashingFor, Proof, ProvidersPalletFor,
         },
-        Call, ChallengesQueue, ChallengesTicker, Config, Event, LastTickProviderSubmittedAProofFor,
-        Pallet, TickToChallengesSeed, TickToProvidersDeadlines,
+        Call, ChallengesQueue, ChallengesTicker, Config, Event, LastCheckpointTick,
+        LastTickProviderSubmittedAProofFor, Pallet, TickToChallengesSeed,
+        TickToCheckpointChallenges, TickToProvidersDeadlines,
     };
 
     #[benchmark]
@@ -121,6 +123,8 @@ mod benchmarks {
             provider_balance / 100u32.into(),
         ));
 
+        // TODO: Build Provider's Forest.
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = <T as frame_system::Config>::Hashing::hash(b"1234");
@@ -169,18 +173,25 @@ mod benchmarks {
         let seed = <T as frame_system::Config>::Hashing::hash(b"seed");
         TickToChallengesSeed::<T>::insert(challenge_block, seed);
 
-        // Calculate challenges from seed, so that we can mock a key proof for each.
-        let challenges = crate::Pallet::<T>::generate_challenges_from_seed(
-            seed,
-            &provider_id,
-            RandomChallengesPerBlockFor::<T>::get(),
-        );
+        // Calculate the custom challenges to respond to, so that we can generate a proof for each.
+        let custom_challenges =
+            generate_challenges::<T>(MaxCustomChallengesPerBlockFor::<T>::get());
+        let challenged_keys = custom_challenges
+            .iter()
+            .map(|(key, _)| *key)
+            .collect::<Vec<_>>();
 
-        // Creating a vec of proofs with some content to pass verification.
+        // Set the custom challenges in the last checkpoint challenge tick,
+        // which in this case is going to be 1.
+        let last_checkpoint_tick = 1u32.into();
+        LastCheckpointTick::<T>::set(last_checkpoint_tick);
+        TickToCheckpointChallenges::<T>::insert(last_checkpoint_tick, custom_challenges.clone());
+
+        // TODO: Creating a vec of proofs with some content to pass verification.
         let mut key_proofs = BTreeMap::new();
-        for i in 0..challenges.len() {
+        for i in 0..challenged_keys.len() {
             key_proofs.insert(
-                challenges[i],
+                challenged_keys[i],
                 KeyProof::<T> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -191,7 +202,7 @@ mod benchmarks {
             );
         }
 
-        // Generate proof.
+        // TODO: Generate proof.
         let proof = Proof::<T> {
             forest_proof: CompactProof {
                 encoded_nodes: vec![vec![0]],
@@ -210,5 +221,23 @@ mod benchmarks {
             Pallet,
             crate::mock::new_test_ext(),
             crate::mock::Test,
+    }
+
+    fn generate_challenges<T: Config>(
+        n: u32,
+    ) -> BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>
+    {
+        let mut custom_challenges = Vec::new();
+        for _ in 0..n {
+            let encoded_challenge =
+                b"0x12b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314".encode();
+            let typed_challenge =
+                <T as crate::Config>::MerkleTrieHash::decode(&mut encoded_challenge.as_ref())
+                    .unwrap();
+
+            let custom_challenge = (typed_challenge, None);
+            custom_challenges.push(custom_challenge);
+        }
+        BoundedVec::try_from(custom_challenges).expect("Length of custom challenges should be less than or equal to MaxCustomChallengesPerBlockFor")
     }
 }
