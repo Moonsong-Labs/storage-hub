@@ -36,6 +36,16 @@ export const ALL_TYPES = {
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
   StorageDataUnit: "u32",
+  Multiaddresses: "BoundedVec<u8, 5>",
+  ValuePropId: "H256",
+  ValueProposition: {
+    price_per_unit_of_data_per_block: "u64",
+    bucket_data_limit: "StorageDataUnit"
+  },
+  ValuePropositionWithId: {
+    id: "ValuePropId",
+    value_prop: "ValueProposition"
+  },
   BackupStorageProvider: {
     capacity: "StorageData",
     data_used: "StorageData",
@@ -104,7 +114,26 @@ export const ALL_TYPES = {
   QueryBspConfirmChunksToProveForFileError: {
     _enum: {
       StorageRequestNotFound: null,
+      ConfirmChunks: "QueryConfirmChunksToProveForFileError",
       InternalError: null
+    }
+  },
+  QueryMspConfirmChunksToProveForFileError: {
+    _enum: {
+      StorageRequestNotFound: null,
+      ConfirmChunks: "QueryConfirmChunksToProveForFileError",
+      InternalError: null
+    }
+  },
+  QueryProviderMultiaddressesError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalApiError: null
+    }
+  },
+  QueryConfirmChunksToProveForFileError: {
+    _enum: {
+      ChallengedChunkToChunkIdError: null
     }
   },
   GetUsersWithDebtOverThresholdError: {
@@ -131,6 +160,12 @@ export const ALL_TYPES = {
   QueryEarliestChangeCapacityBlockError: {
     _enum: {
       ProviderNotRegistered: null,
+      InternalApiError: null
+    }
+  },
+  QueryMspIdOfBucketIdError: {
+    _enum: {
+      BucketNotFound: null,
       InternalApiError: null
     }
   }

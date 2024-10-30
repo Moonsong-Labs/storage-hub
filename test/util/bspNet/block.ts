@@ -9,7 +9,7 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import { alice } from "../pjsKeyring";
+import { alice, bob } from "../pjsKeyring";
 import { isExtSuccess } from "../extrinsics";
 import { sleep } from "../timer";
 import * as ShConsts from "./consts";
@@ -171,9 +171,11 @@ export async function runToNextChallengePeriodBlock(
   nextChallengeTick: number,
   provider: string
 ): Promise<number> {
-  const challengeTickToChallengedProviders =
-    await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeTick, provider);
-  strictEqual(challengeTickToChallengedProviders.isSome, true);
+  const tickToProvidersDeadlines = await api.query.proofsDealer.tickToProvidersDeadlines(
+    nextChallengeTick,
+    provider
+  );
+  strictEqual(tickToProvidersDeadlines.isSome, true);
 
   const blockNumber = await api.query.system.number();
   for (let i = blockNumber.toNumber(); i < nextChallengeTick - 1; i++) {
@@ -216,6 +218,10 @@ export async function runToNextChallengePeriodBlock(
  *                            - If false or undefined, doesn't wait between blocks.
  * @param watchForBspProofs - Optional. An array of BSP IDs to watch for proofs.
  *                            If specified, the function will wait for BSP proofs at appropriate intervals.
+ * @param spam - Optional. If specified, the function will spam the chain with blocks.
+ *                            - If true, the function will spam all blocks.
+ *                            - If false or undefined, the function will not spam the chain.
+ *                            - If a number, the function will spam the chain for that many blocks, and then continue with non-spammed blocks.
  *
  * @returns A Promise that resolves to a SealedBlock object representing the last sealed block.
  *
@@ -237,7 +243,9 @@ export const advanceToBlock = async (
   api: ApiPromise,
   blockNumber: number,
   waitBetweenBlocks?: number | boolean,
-  watchForBspProofs?: string[]
+  watchForBspProofs?: string[],
+  spam?: number | boolean,
+  verbose?: boolean
 ): Promise<SealedBlock> => {
   // If watching for BSP proofs, we need to know the blocks at which they are challenged.
   const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
@@ -272,9 +280,56 @@ export const advanceToBlock = async (
     `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
   );
   const blocksToAdvance = blockNumber - currentBlockNumber;
+
+  let blocksToSpam = 0;
+  if (spam) {
+    if (typeof spam === "number") {
+      blocksToSpam = spam;
+    } else {
+      blocksToSpam = blocksToAdvance;
+    }
+  }
+
+  // Get the maximum block weight for normal class.
+  // This is used to check if the block weight is reaching that maximum.
+  const maxNormalBlockWeight = api.consts.system.blockWeights.perClass.normal.maxTotal.unwrap();
+
   for (let i = 0; i < blocksToAdvance; i++) {
+    if (spam && i < blocksToSpam) {
+      if (verbose) {
+        console.log(`Spamming block ${i + 1} of ${blocksToSpam}`);
+      }
+      // The nonce of the spamming transactions should be incremented by 1 for each transaction.
+      let nonce = (await api.rpc.system.accountNextIndex(alice.address)).toNumber();
+
+      // We don't consider the proof size of the weight because we're spamming with transfers from
+      // and to the same account. So the proof size is the same, regardless of the number of transfers.
+      let accumulatedTransferWeightRefTime = 0;
+      while (
+        accumulatedTransferWeightRefTime + ShConsts.TRANSFER_WEIGHT_REF_TIME <=
+        maxNormalBlockWeight.refTime.toNumber()
+      ) {
+        // We use transfers instead of remarks because with remarks the tx pool gets filled up before
+        // we reach the maximum block weight.
+        await api.tx.balances.transferAllowDeath(bob.address, 1).signAndSend(alice, { nonce });
+
+        accumulatedTransferWeightRefTime += ShConsts.TRANSFER_WEIGHT_REF_TIME;
+        nonce += 1;
+      }
+    }
+
     blockResult = await sealBlock(api);
     currentBlockNumber += 1;
+
+    const blockWeight = await api.query.system.blockWeight();
+    const blockWeightNormal = blockWeight.normal;
+
+    if (spam && i < blocksToSpam && verbose) {
+      console.log(`Normal block weight for block ${i + 1}: ${blockWeightNormal}`);
+
+      const currentTick = (await api.call.proofsDealerApi.getCurrentTick()).toNumber();
+      console.log(`Current tick: ${currentTick}`);
+    }
 
     // Check if we need to wait for BSP proofs.
     if (watchForBspProofs) {

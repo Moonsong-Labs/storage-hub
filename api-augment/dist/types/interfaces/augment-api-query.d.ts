@@ -25,6 +25,7 @@ import type {
   CumulusPalletXcmpQueueQueueConfigData,
   CumulusPrimitivesCoreAggregateMessageOrigin,
   FrameSupportDispatchPerDispatchClassWeight,
+  FrameSupportTokensMiscIdAmount,
   FrameSystemAccountInfo,
   FrameSystemCodeUpgradeAuthorization,
   FrameSystemEventRecord,
@@ -32,7 +33,6 @@ import type {
   FrameSystemPhase,
   PalletBalancesAccountData,
   PalletBalancesBalanceLock,
-  PalletBalancesIdAmount,
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
@@ -55,22 +55,26 @@ import type {
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
   PalletXcmRemoteLockedFungibleRecord,
   PalletXcmVersionMigrationStage,
   PolkadotCorePrimitivesOutboundHrmpMessage,
-  PolkadotPrimitivesV6AbridgedHostConfiguration,
-  PolkadotPrimitivesV6PersistedValidationData,
-  PolkadotPrimitivesV6UpgradeGoAhead,
-  PolkadotPrimitivesV6UpgradeRestriction,
+  PolkadotPrimitivesV8AbridgedHostConfiguration,
+  PolkadotPrimitivesV8PersistedValidationData,
+  PolkadotPrimitivesV8UpgradeGoAhead,
+  PolkadotPrimitivesV8UpgradeRestriction,
   ShpTraitsTrieRemoveMutation,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
+  StagingXcmV4Instruction,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntimeHoldReason,
   StorageHubRuntimeSessionKeys,
   XcmVersionedAssetId,
@@ -178,7 +182,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       freezes: AugmentedQuery<
         ApiType,
-        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<PalletBalancesIdAmount>>,
+        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<FrameSupportTokensMiscIdAmount>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
@@ -206,6 +210,8 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Any liquidity locks on some account balances.
        * NOTE: Should only be accessed when setting, changing and freeing a lock.
+       *
+       * Use of locks is deprecated in favour of freezes. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       locks: AugmentedQuery<
         ApiType,
@@ -215,6 +221,8 @@ declare module "@polkadot/api-base/types/storage" {
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
        * Named reserves on some account balances.
+       *
+       * Use of reserves is deprecated in favour of holds. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       reserves: AugmentedQuery<
         ApiType,
@@ -280,11 +288,6 @@ declare module "@polkadot/api-base/types/storage" {
       [key: string]: QueryableStorageEntry<ApiType>;
     };
     fileSystem: {
-      /**
-       * Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-       **/
-      blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * Bookkeeping of the buckets containing open storage requests.
        **/
@@ -462,6 +465,11 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+       **/
+      tickRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/
@@ -766,7 +774,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       hostConfiguration: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6AbridgedHostConfiguration>>,
+        () => Observable<Option<PolkadotPrimitivesV8AbridgedHostConfiguration>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -912,7 +920,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeGoAhead: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6UpgradeGoAhead>>,
+        () => Observable<Option<PolkadotPrimitivesV8UpgradeGoAhead>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -927,7 +935,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeRestrictionSignal: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6UpgradeRestriction>>,
+        () => Observable<Option<PolkadotPrimitivesV8UpgradeRestriction>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -950,10 +958,33 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       validationData: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV6PersistedValidationData>>,
+        () => Observable<Option<PolkadotPrimitivesV8PersistedValidationData>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Generic query
+       **/
+      [key: string]: QueryableStorageEntry<ApiType>;
+    };
+    parameters: {
+      /**
+       * Stored parameters.
+       **/
+      parameters: AugmentedQuery<
+        ApiType,
+        (
+          arg:
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey
+            | {
+                RuntimeConfig: any;
+              }
+            | string
+            | Uint8Array
+        ) => Observable<Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>>,
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey]
+      > &
+        QueryableStorageEntry<ApiType, [StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey]>;
       /**
        * Generic query
        **/
@@ -963,7 +994,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
+       * This is equivalent to what it would have cost to provide one unit of the provided service since the beginning of the network.
        * We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
        * when the payment stream was last charged, and the index at the last chargeable tick.
        *
@@ -988,7 +1019,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to store and manage dynamic-rate payment streams between Users and Providers.
        *
        * This storage is updated in:
-       * - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which adds a new entry to the map.
+       * - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which adds a new entry to the map.
        * - [delete_dynamic_rate_payment_stream](crate::dispatchables::delete_dynamic_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_dynamic_rate_payment_stream](crate::dispatchables::update_dynamic_rate_payment_stream), which updates the entry's `amount_provided`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `price_index_when_last_charged`.
@@ -1008,7 +1039,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to store and manage fixed-rate payment streams between Users and Providers.
        *
        * This storage is updated in:
-       * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which adds a new entry to the map.
+       * - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which adds a new entry to the map.
        * - [delete_fixed_rate_payment_stream](crate::dispatchables::delete_fixed_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_fixed_rate_payment_stream](crate::dispatchables::update_fixed_rate_payment_stream), which updates the entry's `rate`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_tick`.
@@ -1039,6 +1070,15 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * The last tick from the Providers Proof Submitters pallet that was registered.
+       *
+       * This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
+       * registered. For the tick in this storage element, this pallet already knows the Providers that submitted
+       * a valid proof.
+       **/
+      lastSubmittersTickRegistered: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A counter of blocks for which Providers can charge their streams.
        *
        * This counter is not necessarily the same as the block number, as the last chargeable info of Providers
@@ -1055,8 +1095,8 @@ declare module "@polkadot/api-base/types/storage" {
        * that a user has and it is also useful to check if a user has registered to the network.
        *
        * This storage is updated in:
-       * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
-       * - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+       * - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+       * - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
        * - [remove_fixed_rate_payment_stream](crate::dispatchables::remove_fixed_rate_payment_stream), which removes one from this storage and releases the deposit.
        * - [remove_dynamic_rate_payment_stream](crate::dispatchables::remove_dynamic_rate_payment_stream), which removes one from this storage and releases the deposit.
        **/
@@ -1135,6 +1175,20 @@ declare module "@polkadot/api-base/types/storage" {
       queryCounter: AugmentedQuery<ApiType, () => Observable<u64>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * If [`ShouldRecordXcm`] is set to true, then the last XCM program executed locally
+       * will be stored here.
+       * Runtime APIs can fetch the XCM that was executed by accessing this value.
+       *
+       * Only relevant if this pallet is being used as the [`xcm_executor::traits::RecordXcm`]
+       * implementation in the XCM executor configuration.
+       **/
+      recordedXcm: AugmentedQuery<
+        ApiType,
+        () => Observable<Option<Vec<StagingXcmV4Instruction>>>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * Fungible assets which we know are locked on a remote chain.
        **/
       remoteLockedFungibles: AugmentedQuery<
@@ -1161,6 +1215,17 @@ declare module "@polkadot/api-base/types/storage" {
        * then the destinations whose XCM version is unknown are considered unreachable.
        **/
       safeXcmVersion: AugmentedQuery<ApiType, () => Observable<Option<u32>>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Whether or not incoming XCMs (both executed locally and received) should be recorded.
+       * Only one XCM program will be recorded at a time.
+       * This is meant to be used in runtime APIs, and it's advised it stays false
+       * for all other use cases, so as to not degrade regular performance.
+       *
+       * Only relevant if this pallet is being used as the [`xcm_executor::traits::RecordXcm`]
+       * implementation in the XCM executor configuration.
+       **/
+      shouldRecordXcm: AugmentedQuery<ApiType, () => Observable<bool>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The Latest versions that we know various locations support.
@@ -1273,50 +1338,43 @@ declare module "@polkadot/api-base/types/storage" {
        * This counter is not necessarily the same as the block number, as challenges are
        * distributed in the `on_poll` hook, which happens at the beginning of every block,
        * so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
-       * During MBMsm, the block number increases, but `ChallengesTicker` does not.
+       * During MBMsm, the block number increases, but [`ChallengesTicker`] does not.
        **/
       challengesTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A mapping from challenge tick to a vector of challenged Providers for that tick.
+       * A boolean that represents whether the [`ChallengesTicker`] is paused.
        *
-       * This is used to keep track of the Providers that have been challenged, and should
-       * submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
-       * key in the mapping. Providers who do submit a proof are removed from their respective
-       * entry and pushed forward to the next tick in which they should submit a proof.
-       * Those who are still in the entry by the time the tick is reached are considered to
-       * have failed to submit a proof and subject to slashing.
+       * By default, this is `false`, meaning that the [`ChallengesTicker`] is incremented every time `on_poll` is called.
+       * This can be set to `true` which would pause the [`ChallengesTicker`], preventing `do_new_challenges_round` from
+       * being executed. Therefore:
+       * - No new random challenges would be emitted and added to [`TickToChallengesSeed`].
+       * - No new checkpoint challenges would be emitted and added to [`TickToCheckpointChallenges`].
+       * - Deadlines for proof submissions are indefinitely postponed.
        **/
-      challengeTickToChallengedProviders: AugmentedQuery<
-        ApiType,
-        (
-          arg1: u32 | AnyNumber | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<Null>>,
-        [u32, H256]
-      > &
-        QueryableStorageEntry<ApiType, [u32, H256]>;
+      challengesTickerPaused: AugmentedQuery<ApiType, () => Observable<Option<Null>>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * The challenge tick of the last checkpoint challenge round.
        *
-       * This is used to determine when to include the challenges from the `ChallengesQueue` and
-       * `PriorityChallengesQueue` in the `TickToCheckpointChallenges` StorageMap. These checkpoint
+       * This is used to determine when to include the challenges from the [`ChallengesQueue`] and
+       * [`PriorityChallengesQueue`] in the [`TickToCheckpointChallenges`] StorageMap. These checkpoint
        * challenge rounds have to be answered by ALL Providers, and this is enforced by the
        * `submit_proof` extrinsic.
        **/
       lastCheckpointTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A value that represents the last tick that was deleted from the `ValidProofSubmittersLastTicks` StorageMap.
+       * A value that represents the last tick that was deleted from the [`ValidProofSubmittersLastTicks`] StorageMap.
        *
-       * This is used to know which tick to delete from the `ValidProofSubmittersLastTicks` StorageMap when the
+       * This is used to know which tick to delete from the [`ValidProofSubmittersLastTicks`] StorageMap when the
        * `on_idle` hook is called.
        **/
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
-       * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
+       * If for a Provider `p`, `LastTickProviderSubmittedAProofFor[p]` is `n`, then the
        * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
        *
        * This gets updated when a Provider submits a proof successfully and is used to determine the
@@ -1331,6 +1389,25 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+       *
+       * This is used to check if the network is presumably under a spam attack.
+       **/
+      notFullBlocksCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A mapping from block number to the weight used in that block.
+       *
+       * This is used to check if the network is presumably under a spam attack.
+       * It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
+       **/
+      pastBlocksWeight: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<SpWeightsWeightV2Weight>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
       /**
        * A priority queue of keys that have been challenged manually.
        *
@@ -1359,7 +1436,7 @@ declare module "@polkadot/api-base/types/storage" {
        * A mapping from challenges tick to a random seed used for generating the challenges in that tick.
        *
        * This is used to keep track of the challenges' seed in the past.
-       * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+       * This mapping goes back only [`ChallengeHistoryLengthFor`] blocks. Previous challenges are removed.
        **/
       tickToChallengesSeed: AugmentedQuery<
         ApiType,
@@ -1372,8 +1449,8 @@ declare module "@polkadot/api-base/types/storage" {
        *
        * This is used to keep track of the challenges that have been made in the past, specifically
        * in the checkpoint challenge rounds.
-       * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-       * This mapping goes back only `ChallengeHistoryLength` ticks. Previous challenges are removed.
+       * The vector is bounded by [`MaxCustomChallengesPerBlockFor`].
+       * This mapping goes back only [`ChallengeHistoryLengthFor`] ticks. Previous challenges are removed.
        **/
       tickToCheckpointChallenges: AugmentedQuery<
         ApiType,
@@ -1384,11 +1461,30 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * A mapping from challenge tick to a vector of challenged Providers for that tick.
+       *
+       * This is used to keep track of the Providers that have been challenged, and should
+       * submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
+       * key in the mapping. Providers who do submit a proof are removed from their respective
+       * entry and pushed forward to the next tick in which they should submit a proof.
+       * Those who are still in the entry by the time the tick is reached are considered to
+       * have failed to submit a proof and subject to slashing.
+       **/
+      tickToProvidersDeadlines: AugmentedQuery<
+        ApiType,
+        (
+          arg1: u32 | AnyNumber | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [u32, H256]
+      > &
+        QueryableStorageEntry<ApiType, [u32, H256]>;
+      /**
        * A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.
        *
        * This is used to keep track of the Providers that have submitted proofs in the last few
-       * ticks, where availability only up to the last `TargetTicksStorageOfSubmitters` ticks is guaranteed.
-       * This storage is then made available for other pallets to use through the `ReadProofSubmittersInterface`.
+       * ticks, where availability only up to the last [`Config::TargetTicksStorageOfSubmitters`] ticks is guaranteed.
+       * This storage is then made available for other pallets to use through the `ProofSubmittersInterface`.
        **/
       validProofSubmittersLastTicks: AugmentedQuery<
         ApiType,
@@ -1501,6 +1597,21 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+       *
+       * These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+       * limit of data that can be stored in the bucket.
+       **/
+      mainStorageProviderIdsToValuePropositions: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersValueProposition>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * The mapping from a MainStorageProviderId to a MainStorageProvider.
        *
        * This is used to get a Main Storage Provider's metadata.
@@ -1510,7 +1621,6 @@ declare module "@polkadot/api-base/types/storage" {
        * - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
        * - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
        * - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-       * - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
        **/
       mainStorageProviders: AugmentedQuery<
         ApiType,
@@ -1547,7 +1657,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg: AccountId32 | string | Uint8Array
-        ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProvider, u32]>>>,
+        ) => Observable<Option<PalletStorageProvidersSignUpRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;

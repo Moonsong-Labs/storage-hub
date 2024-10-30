@@ -1,13 +1,18 @@
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    derive_impl,
+    dispatch::DispatchClass,
+    parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
     weights::{constants::RocksDbWeight, Weight, WeightMeter},
     BoundedBTreeSet,
 };
-use frame_system as system;
+use frame_system::{
+    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight,
+};
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
+use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadUserSolvencyInterface,
@@ -16,12 +21,11 @@ use shp_traits::{
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, DispatchError, MultiSignature, SaturatedConversion,
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify, Zero},
+    BuildStorage, DispatchError, MultiSignature, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
-use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -58,39 +62,92 @@ impl Randomness<H256, BlockNumber> for MockRandomness {
     }
 }
 
-/// Rolls to the desired block. Returns the number of blocks played.
+/// Rolls to the desired block, with non-spammed blocks. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
     let mut num_blocks = 0;
     let mut block = System::block_number();
     while block < n {
-        block = roll_one_block();
+        block = roll_one_block(false);
         num_blocks += 1;
     }
     num_blocks
 }
 
-// Rolls forward one block. Returns the new block number.
-fn roll_one_block() -> BlockNumber {
+/// Rolls to the desired block with spammed blocks. Returns the number of blocks played.
+pub(crate) fn roll_to_spammed(n: BlockNumber) -> BlockNumber {
+    let mut num_blocks = 0;
+    let mut block = System::block_number();
+    while block < n {
+        block = roll_one_block(true);
+        num_blocks += 1;
+    }
+    num_blocks
+}
+
+/// Rolls forward one block. Returns the new block number.
+///
+/// It can be configured whether the block is spammed or not.
+/// A spammed block is one where there is no weight left for other transactions.
+fn roll_one_block(spammed: bool) -> BlockNumber {
     System::set_block_number(System::block_number() + 1);
     ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
+
+    // Set block weight usage.
+    let normal_weight = if spammed {
+        let weights: BlockWeights = <Test as frame_system::Config>::BlockWeights::get();
+        weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block)
+    } else {
+        Zero::zero()
+    };
+    let block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+        DispatchClass::Normal => normal_weight,
+        DispatchClass::Operational => Zero::zero(),
+        DispatchClass::Mandatory => Zero::zero(),
+    });
+    BlockWeight::<Test>::set(block_weight);
+
     FileSystem::on_idle(System::block_number(), Weight::MAX);
+    ProofsDealer::on_finalize(System::block_number());
     System::block_number()
 }
 
 // Configure a mock runtime to test the pallet.
-construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        FileSystem: crate::{Pallet, Call, Storage, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
-        ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
-        PaymentStreams: pallet_payment_streams::{Pallet, Call, Storage, Event<T>, HoldReason},
-        BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
-        Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type FileSystem = crate;
+    #[runtime::pallet_index(3)]
+    pub type Providers = pallet_storage_providers;
+    #[runtime::pallet_index(4)]
+    pub type ProofsDealer = pallet_proofs_dealer;
+    #[runtime::pallet_index(5)]
+    pub type PaymentStreams = pallet_payment_streams;
+    #[runtime::pallet_index(6)]
+    pub type BucketNfts = pallet_bucket_nfts;
+    #[runtime::pallet_index(7)]
+    pub type Nfts = pallet_nfts;
+}
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -99,7 +156,7 @@ parameter_types! {
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -190,6 +247,7 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -216,17 +274,21 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type FileMetadataManager = shp_file_metadata::FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -241,6 +303,8 @@ impl pallet_storage_providers::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -255,6 +319,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         None
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+
     fn get_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) -> Option<u32> {
         None
     }
@@ -262,7 +330,6 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
@@ -270,8 +337,24 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        Weight::from_parts(10_000, 0)
+            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        Perbill::from_percent(50)
+    }
+}
+
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
@@ -283,15 +366,18 @@ impl pallet_proofs_dealer::Config for Test {
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
-    type ChallengeHistoryLength = ConstU64<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU64<10>;
+    type ChallengeHistoryLength = ConstU64<30>;
+    type ChallengesQueueLength = ConstU32<25>;
+    type CheckpointChallengePeriod = ConstU64<20>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
     type MinChallengePeriod = ConstU64<4>;
-    type ChallengeTicksTolerance = ConstU64<20>;
+    type ChallengeTicksTolerance = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -369,11 +455,12 @@ impl crate::Config for Test {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
+    type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
@@ -396,8 +483,7 @@ impl crate::Config for Test {
     type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
-// TODO: To write tests we probably should use the actual implementation instead of this mock.
-// (Or at least a better mock)
+// If we ever require a better mock that doesn't just return true if it is Eve, change this.
 pub struct MockUserSolvency;
 impl ReadUserSolvencyInterface for MockUserSolvency {
     type AccountId = AccountId;
@@ -413,13 +499,13 @@ impl ReadUserSolvencyInterface for MockUserSolvency {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-    let mut t = system::GenesisConfig::<Test>::default()
+    let mut t = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap();
 
     crate::GenesisConfig::<Test> {
         replication_target: 2,
-        block_range_to_maximum_threshold: 1,
+        tick_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -437,7 +523,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     .unwrap();
 
     let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| System::set_block_number(1));
+    ext.execute_with(|| roll_one_block(false));
     ext
 }
 

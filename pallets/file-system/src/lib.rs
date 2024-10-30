@@ -38,8 +38,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// TODO #[cfg(feature = "runtime-benchmarks")]
+// TODO mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -50,8 +50,8 @@ pub mod pallet {
         pallet_prelude::{ValueQuery, *},
         sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
+            fungible::*,
             nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
-            Currency,
         },
         Blake2_128Concat,
     };
@@ -95,6 +95,8 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+            > + shp_traits::SystemMetricsInterface<
+                ProvidedUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             >;
 
         /// The trait for issuing challenges and verifying proofs.
@@ -108,7 +110,13 @@ pub mod pallet {
             AccountId = Self::AccountId,
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
-        >;
+        >
+        + shp_traits::MutatePricePerUnitPerTickInterface<PricePerUnitPerTick = BalanceOf<Self>>;
+
+        type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
+            Price = BalanceOf<Self>,
+            StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+            >;
 
         /// The trait for checking user solvency in the system
         type UserSolvency: shp_traits::ReadUserSolvencyInterface<AccountId = Self::AccountId>;
@@ -171,8 +179,13 @@ pub mod pallet {
             + One
             + Zero;
 
-        /// The type to convert a threshold to a block number.
-        type ThresholdTypeToBlockNumber: ConvertBack<Self::ThresholdType, BlockNumberFor<Self>>;
+        /// The type to convert a threshold to a tick number.
+        ///
+        /// For more information on what "ticks" are, see the [Proofs Dealer pallet](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/proofs-dealer/README.md).
+        type ThresholdTypeToTickNumber: ConvertBack<
+            Self::ThresholdType,
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber,
+        >;
 
         /// The type to convert a hash to a threshold.
         type HashToThresholdType: Convert<Self::Hash, Self::ThresholdType>;
@@ -190,7 +203,11 @@ pub mod pallet {
         >;
 
         /// The currency mechanism, used for paying for reserves.
-        type Currency: Currency<Self::AccountId>;
+        type Currency: Inspect<Self::AccountId>
+            + Mutate<Self::AccountId>
+            + hold::Balanced<Self::AccountId>
+            + freeze::Inspect<Self::AccountId>
+            + freeze::Mutate<Self::AccountId>;
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
@@ -212,7 +229,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
-        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests`.
+        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
         #[pallet::constant]
         type MaxBatchMspRespondStorageRequests: Get<u32>;
 
@@ -265,7 +282,6 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    #[pallet::getter(fn storage_requests)]
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
@@ -276,7 +292,6 @@ pub mod pallet {
     ///
     /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_bsps)]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -289,7 +304,6 @@ pub mod pallet {
 
     /// Bookkeeping of the buckets containing open storage requests.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_buckets)]
     pub type BucketsWithStorageRequests<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -302,7 +316,6 @@ pub mod pallet {
 
     /// A map of blocks to expired storage requests.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_expirations)]
     pub type StorageRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -313,7 +326,6 @@ pub mod pallet {
 
     /// A map of blocks to expired file deletion requests.
     #[pallet::storage]
-    #[pallet::getter(fn file_deletion_request_expirations)]
     pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -324,7 +336,6 @@ pub mod pallet {
 
     /// A map of blocks to expired move bucket requests.
     #[pallet::storage]
-    #[pallet::getter(fn move_bucket_request_expirations)]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -337,7 +348,6 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_storage_request_expiration_block)]
     pub type NextAvailableStorageRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -345,7 +355,6 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_file_deletion_request_expiration_block)]
     pub type NextAvailableFileDeletionRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -353,7 +362,6 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_move_bucket_request_expiration_block)]
     pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -363,14 +371,12 @@ pub mod pallet {
     /// attempt to accelerate this block pointer as close to or up to the current block number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
-    #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// Pending file deletion requests.
     ///
     /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
     #[pallet::storage]
-    #[pallet::getter(fn pending_file_deletion_requests)]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -386,7 +392,6 @@ pub mod pallet {
     /// The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
     /// of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
     #[pallet::storage]
-    #[pallet::getter(fn pending_stop_storing_requests)]
     pub type PendingStopStoringRequests<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -401,7 +406,6 @@ pub mod pallet {
     /// A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
     /// The value is the user who requested the move.
     #[pallet::storage]
-    #[pallet::getter(fn pending_move_bucket_requests)]
     pub type PendingMoveBucketRequests<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -413,7 +417,6 @@ pub mod pallet {
 
     /// BSP data servers for move bucket requests.
     #[pallet::storage]
-    #[pallet::getter(fn data_servers_for_move_bucket)]
     pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
@@ -425,7 +428,6 @@ pub mod pallet {
 
     /// Bookkeeping of buckets that are pending to be moved to a new MSP.
     #[pallet::storage]
-    #[pallet::getter(fn pending_buckets_to_move)]
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
@@ -433,32 +435,29 @@ pub mod pallet {
     ///
     /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
     #[pallet::storage]
-    #[pallet::getter(fn replication_target)]
     pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
-    /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+    /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
-    #[pallet::getter(fn block_range_to_maximum_threshold)]
-    pub type BlockRangeToMaximumThreshold<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type TickRangeToMaximumThreshold<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub replication_target: ReplicationTargetType<T>,
-        pub block_range_to_maximum_threshold: BlockNumberFor<T>,
+        pub tick_range_to_maximum_threshold: TickNumber<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let replication_target = 1u32.into();
-            let block_range_to_maximum_threshold = 10u32.into();
+            let tick_range_to_maximum_threshold = 10u32.into();
 
             ReplicationTarget::<T>::put(replication_target);
-            BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+            TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
 
             Self {
                 replication_target,
-                block_range_to_maximum_threshold,
+                tick_range_to_maximum_threshold,
             }
         }
     }
@@ -467,7 +466,7 @@ pub mod pallet {
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             ReplicationTarget::<T>::put(self.replication_target);
-            BlockRangeToMaximumThreshold::<T>::put(self.block_range_to_maximum_threshold);
+            TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
         }
     }
 
@@ -482,6 +481,7 @@ pub mod pallet {
             name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
+            value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket is being moved to a new MSP.
         MoveBucketRequested {
@@ -554,7 +554,7 @@ pub mod pallet {
         },
         /// Notifies that a file key has been queued for a priority challenge for file deletion.
         PriorityChallengeForFileDeletionQueued {
-            issuer: EitherAccountIdOrProviderId<T>,
+            issuer: EitherAccountIdOrMspId<T>,
             file_key: MerkleHash<T>,
         },
         /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -628,7 +628,7 @@ pub mod pallet {
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
-        BspsRequiredExceedsMax,
+        BspsRequiredExceedsTarget,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
@@ -664,8 +664,6 @@ pub mod pallet {
         FailedToDecodeThreshold,
         /// BSP did not succeed threshold check.
         AboveThreshold,
-        /// Failed to convert block number to threshold.
-        FailedToConvertBlockNumber,
         /// Arithmetic error in threshold calculation.
         ThresholdArithmeticError,
         /// Failed to convert to primitive type.
@@ -706,8 +704,8 @@ pub mod pallet {
         NoGlobalReputationWeightSet,
         /// Maximum threshold cannot be zero.
         MaximumThresholdCannotBeZero,
-        /// Block range to maximum threshold cannot be zero.
-        BlockRangeToMaximumThresholdCannotBeZero,
+        /// Tick range to maximum threshold cannot be zero.
+        TickRangeToMaximumThresholdCannotBeZero,
         /// Pending stop storing request not found.
         PendingStopStoringRequestNotFound,
         /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
@@ -740,6 +738,8 @@ pub mod pallet {
         TooManyStorageRequestResponses,
         /// Bucket id and file key pair is invalid.
         InvalidBucketIdFileKeyPair,
+        /// Key already exists in mapping when it should not.
+        InconsistentStateKeyAlreadyExists,
     }
 
     #[pallet::call]
@@ -751,11 +751,12 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
+            value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             let (bucket_id, maybe_collection_id) =
-                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private)?;
+                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private, value_prop_id)?;
 
             Self::deposit_event(Event::NewBucket {
                 who,
@@ -764,6 +765,7 @@ pub mod pallet {
                 name,
                 collection_id: maybe_collection_id,
                 private,
+                value_prop_id,
             });
 
             Ok(())
@@ -934,15 +936,18 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Used by a MSP to confirm storing a file that was assigned to it.
+        /// Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
         ///
-        /// The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-        /// in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-        /// the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
+        /// This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
+        /// accepted, rejected or have failed to be processed in the results of the event emitted.
+        ///
+        /// The MSP has to provide a file proof for all the file keys that are being accepted and a non-inclusion proof for the file keys
+        /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
+        /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn msp_respond_storage_requests(
+        pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
             file_key_responses_input: FileKeyResponsesInput<T>,
         ) -> DispatchResult {
@@ -1197,7 +1202,7 @@ pub mod pallet {
         pub fn set_global_parameters(
             origin: OriginFor<T>,
             replication_target: Option<T::ReplicationTargetType>,
-            block_range_to_maximum_threshold: Option<BlockNumberFor<T>>,
+            tick_range_to_maximum_threshold: Option<TickNumber<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
@@ -1211,13 +1216,13 @@ pub mod pallet {
                 ReplicationTarget::<T>::put(replication_target);
             }
 
-            if let Some(block_range_to_maximum_threshold) = block_range_to_maximum_threshold {
+            if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {
                 ensure!(
-                    block_range_to_maximum_threshold > BlockNumberFor::<T>::zero(),
-                    Error::<T>::BlockRangeToMaximumThresholdCannotBeZero
+                    tick_range_to_maximum_threshold > TickNumber::<T>::zero(),
+                    Error::<T>::TickRangeToMaximumThresholdCannotBeZero
                 );
 
-                BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+                TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
             }
 
             Ok(().into())
@@ -1229,6 +1234,12 @@ pub mod pallet {
     where
         u32: TryFrom<BlockNumberFor<T>>,
     {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
+
+            Self::do_on_poll(weight);
+        }
+
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut remaining_weight = remaining_weight;
 

@@ -4,8 +4,7 @@ use rand::Rng;
 use shp_file_metadata::ChunkId;
 use shp_file_metadata::FileMetadata;
 use shp_file_metadata::Fingerprint;
-use shp_traits::AsCompact;
-use shp_traits::CommitmentVerifier;
+use shp_traits::{AsCompact, CommitmentVerifier};
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,

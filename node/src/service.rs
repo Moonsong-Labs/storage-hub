@@ -12,17 +12,17 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
-use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
+use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_common::types::BCSV_KEY_TYPE;
+use shc_common::types::{BlockHash, OpaqueBlock, BCSV_KEY_TYPE};
 use shc_rpc::StorageHubClientRpcConfig;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 // Local Runtime Types
 use storage_hub_runtime::{
+    apis::RuntimeApi,
     opaque::{Block, Hash},
-    RuntimeApi,
 };
 
 // Cumulus Imports
@@ -34,7 +34,7 @@ use cumulus_client_service::{
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
 use cumulus_primitives_core::{
-    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair},
+    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair, ValidationCode},
     ParaId,
 };
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
@@ -44,8 +44,10 @@ use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{config::IncomingRequest, NetworkBlock, ProtocolName};
-use sc_network_sync::SyncingService;
+use sc_network::{
+    config::IncomingRequest, service::traits::NetworkService, NetworkBackend, NetworkBlock,
+    ProtocolName,
+};
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
@@ -71,7 +73,6 @@ use crate::{
 //* the StorageHub services crates
 type ParachainExecutor = shc_common::types::ParachainExecutor;
 type ParachainClient = shc_common::types::ParachainClient;
-type ParachainNetworkService = shc_common::types::ParachainNetworkService;
 
 pub(crate) type ParachainBackend = TFullBackend<Block>;
 
@@ -114,17 +115,18 @@ pub fn new_partial(
         .transpose()?;
 
     let heap_pages = config
+        .executor
         .default_heap_pages
         .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
             extra_pages: h as _,
         });
 
     let executor = ParachainExecutor::builder()
-        .with_execution_method(config.wasm_method)
+        .with_execution_method(config.executor.wasm_method)
         .with_onchain_heap_alloc_strategy(heap_pages)
         .with_offchain_heap_alloc_strategy(heap_pages)
-        .with_max_runtime_instances(config.max_runtime_instances)
-        .with_runtime_cache_size(config.runtime_cache_size)
+        .with_max_runtime_instances(config.executor.max_runtime_instances)
+        .with_runtime_cache_size(config.executor.runtime_cache_size)
         .build();
 
     let (client, backend, keystore_container, task_manager) =
@@ -168,7 +170,7 @@ pub fn new_partial(
             config,
             telemetry.as_ref().map(|telemetry| telemetry.handle()),
             &task_manager,
-        )?
+        )
     };
 
     let select_chain = if dev_service {
@@ -193,7 +195,7 @@ async fn init_sh_builder<R, S>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
-    network: Arc<ParachainNetworkService>,
+    network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
 ) -> Option<(
     StorageHubBuilder<R, S>,
@@ -285,7 +287,7 @@ where
 }
 
 /// Start a development node with the given solo chain `Configuration`.
-async fn start_dev_impl<R, S>(
+async fn start_dev_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -301,6 +303,7 @@ where
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
+    Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -348,7 +351,13 @@ where
         .sr25519_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
         .expect("Invalid dev signing key provided.");
 
-    let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
+        &config.network,
+        config
+            .prometheus_config
+            .as_ref()
+            .map(|cfg| cfg.registry.clone()),
+    );
     let collator = config.role.is_authority();
     let prometheus_registry = config.prometheus_registry().cloned();
     let select_chain = maybe_select_chain
@@ -364,6 +373,10 @@ where
         ));
     }
 
+    let metrics = Network::register_notification_metrics(
+        config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+    );
+
     let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
         sc_service::build_network(sc_service::BuildNetworkParams {
             config: &config,
@@ -373,8 +386,9 @@ where
             spawn_handle: task_manager.spawn_handle(),
             import_queue,
             block_announce_validator_builder: None,
-            warp_sync_params: None,
+            warp_sync_config: None,
             block_relay: None,
+            metrics,
         })?;
 
     if config.offchain_worker.enabled {
@@ -390,7 +404,7 @@ where
                 transaction_pool: Some(OffchainTransactionPoolFactory::new(
                     transaction_pool.clone(),
                 )),
-                network_provider: network.clone(),
+                network_provider: Arc::new(network.clone()),
                 is_validator: config.role.is_authority(),
                 enable_http_requests: false,
                 custom_extensions: move |_| vec![],
@@ -460,13 +474,12 @@ where
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
 
-        Box::new(move |deny_unsafe, _| {
+        Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: command_sink.clone(),
-                deny_unsafe,
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
@@ -507,7 +520,7 @@ where
         // Here you can check whether the hardware meets your chains' requirements. Putting a link
         // in there and swapping out the requirements for your own are probably a good idea. The
         // requirements for a para-chain are dictated by its relay-chain.
-        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench) {
+        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if collator => {
                 log::warn!(
 				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
@@ -583,21 +596,22 @@ where
                 ))),
                 create_inherent_data_providers: move |block: Hash, ()| {
                     let current_para_block = client_for_cidp
-                    .number(block)
-                    .expect("Header lookup should succeed")
-                    .expect("Header passed in as parent should be present in backend.");
+                    	.number(block)
+                    	.expect("Header lookup should succeed")
+                    	.expect("Header passed in as parent should be present in backend.");
 
-                    let hash = client
-                        .hash(current_para_block.saturating_sub(1))
-                        .expect("Hash of the desired block must be present")
-                        .expect("Hash of the desired block should exist");
+					let hash = client
+						.hash(current_para_block.saturating_sub(1))
+						.expect("Hash of the desired block must be present")
+						.expect("Hash of the desired block should exist");
 
-                    let para_header = client
-                        .expect_header(hash)
-                        .expect("Expected parachain header should exist")
-                        .encode();
+					let para_header = client
+						.expect_header(hash)
+						.expect("Expected parachain header should exist")
+						.encode();
 
-                    let para_head_data = HeadData(para_header).encode();
+					let raw_para_head_data = HeadData(para_header);
+					let para_head_data = raw_para_head_data.encode();
 
                     let client_for_xcm = client_for_cidp.clone();
 
@@ -633,6 +647,8 @@ where
                         let mocked_parachain = {
                             MockValidationDataInherentDataProvider {
                                 current_para_block,
+								para_id,
+								current_para_block_head: Some(raw_para_head_data),
                                 relay_offset: 1000,
                                 relay_blocks_per_para_block: 2,
                                 para_blocks_per_relay_epoch: 0,
@@ -640,7 +656,6 @@ where
                                 xcm_config: MockXcmConfig::new(
                                     &*client_for_xcm,
                                     block,
-                                    Default::default(),
                                     Default::default(),
                                 ),
                                 raw_downward_messages: vec![],
@@ -665,7 +680,7 @@ where
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-async fn start_node_impl<R, S>(
+async fn start_node_impl<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -682,13 +697,19 @@ where
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
+    Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
     let params = new_partial(&parachain_config, false)?;
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
-    let mut net_config =
-        sc_network::config::FullNetworkConfiguration::new(&parachain_config.network);
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
+        &parachain_config.network,
+        parachain_config
+            .prometheus_config
+            .as_ref()
+            .map(|cfg| cfg.registry.clone()),
+    );
 
     let client = params.client.clone();
     let backend = params.backend.clone();
@@ -768,7 +789,7 @@ where
                 transaction_pool: Some(OffchainTransactionPoolFactory::new(
                     transaction_pool.clone(),
                 )),
-                network_provider: network.clone(),
+                network_provider: Arc::new(network.clone()),
                 is_validator: parachain_config.role.is_authority(),
                 enable_http_requests: false,
                 custom_extensions: move |_| vec![],
@@ -796,13 +817,12 @@ where
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
 
-        Box::new(move |deny_unsafe, _| {
+        Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
-                deny_unsafe,
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
@@ -843,7 +863,7 @@ where
         // Here you can check whether the hardware meets your chains' requirements. Putting a link
         // in there and swapping out the requirements for your own are probably a good idea. The
         // requirements for a para-chain are dictated by its relay-chain.
-        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench) {
+        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if validator => {
                 log::warn!(
 				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
@@ -901,7 +921,6 @@ where
             &task_manager,
             relay_chain_interface.clone(),
             transaction_pool,
-            sync_service.clone(),
             params.keystore_container.keystore(),
             relay_chain_slot_duration,
             para_id,
@@ -923,34 +942,24 @@ fn build_import_queue(
     config: &Configuration,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
-) -> Result<sc_consensus::DefaultImportQueue<Block>, sc_service::Error> {
-    let slot_duration = cumulus_client_consensus_aura::slot_duration(&*client)?;
+) -> sc_consensus::DefaultImportQueue<Block> {
+    cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
+        sp_consensus_aura::sr25519::AuthorityPair,
+        _,
+        _,
+        _,
+        _,
+    >(
+        client,
+        block_import,
+        move |_, _| async move {
+            let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
-    Ok(
-        cumulus_client_consensus_aura::equivocation_import_queue::fully_verifying_import_queue::<
-            sp_consensus_aura::sr25519::AuthorityPair,
-            _,
-            _,
-            _,
-            _,
-        >(
-            client,
-            block_import,
-            move |_, _| async move {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-
-                let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                    *timestamp,
-                    slot_duration,
-                );
-
-                Ok((slot, timestamp))
-            },
-            slot_duration,
-            &task_manager.spawn_essential_handle(),
-            config.prometheus_registry(),
-            telemetry,
-        ),
+            Ok(timestamp)
+        },
+        &task_manager.spawn_essential_handle(),
+        config.prometheus_registry(),
+        telemetry,
     )
 }
 
@@ -963,7 +972,6 @@ fn start_consensus(
     task_manager: &TaskManager,
     relay_chain_interface: Arc<dyn RelayChainInterface>,
     transaction_pool: Arc<sc_transaction_pool::FullPool<Block, ParachainClient>>,
-    sync_oracle: Arc<SyncingService<Block>>,
     keystore: KeystorePtr,
     relay_chain_slot_duration: Duration,
     para_id: ParaId,
@@ -1005,7 +1013,6 @@ fn start_consensus(
                 .ok()
                 .map(|c| ValidationCode::from(c).hash())
         },
-        sync_oracle,
         keystore,
         collator_key,
         para_id,
@@ -1013,14 +1020,13 @@ fn start_consensus(
         relay_chain_slot_duration,
         proposer,
         collator_service,
-        authoring_duration: Duration::from_millis(1500),
+        authoring_duration: Duration::from_millis(2000),
         reinitialize: false,
     };
 
-    let fut =
-        aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _, _, _>(
-            params,
-        );
+    let fut = aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _, _>(
+        params,
+    );
     task_manager
         .spawn_essential_handle()
         .spawn("aura", None, fut);
@@ -1028,7 +1034,7 @@ fn start_consensus(
     Ok(())
 }
 
-pub async fn start_dev_node(
+pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -1042,7 +1048,7 @@ pub async fn start_dev_node(
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_dev_impl::<BspProvider, InMemoryStorageLayer>(
+                start_dev_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1053,7 +1059,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<BspProvider, RocksDbStorageLayer>(
+                start_dev_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1064,7 +1070,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_dev_impl::<MspProvider, InMemoryStorageLayer>(
+                start_dev_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1075,7 +1081,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<MspProvider, RocksDbStorageLayer>(
+                start_dev_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1086,7 +1092,7 @@ pub async fn start_dev_node(
                 .await
             }
             (&ProviderType::User, _) => {
-                start_dev_impl::<UserRole, NoStorageLayer>(
+                start_dev_impl::<UserRole, NoStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -1099,7 +1105,7 @@ pub async fn start_dev_node(
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_dev_impl::<UserRole, NoStorageLayer>(
+        start_dev_impl::<UserRole, NoStorageLayer, Network>(
             config,
             None,
             indexer_options,
@@ -1111,7 +1117,7 @@ pub async fn start_dev_node(
     }
 }
 
-pub async fn start_parachain_node(
+pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -1126,7 +1132,7 @@ pub async fn start_parachain_node(
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_node_impl::<BspProvider, InMemoryStorageLayer>(
+                start_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1138,7 +1144,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_node_impl::<BspProvider, RocksDbStorageLayer>(
+                start_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1150,7 +1156,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_node_impl::<MspProvider, InMemoryStorageLayer>(
+                start_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1162,7 +1168,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_node_impl::<MspProvider, RocksDbStorageLayer>(
+                start_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1174,7 +1180,7 @@ pub async fn start_parachain_node(
                 .await
             }
             (&ProviderType::User, _) => {
-                start_node_impl::<UserRole, NoStorageLayer>(
+                start_node_impl::<UserRole, NoStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1188,7 +1194,7 @@ pub async fn start_parachain_node(
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_node_impl::<UserRole, NoStorageLayer>(
+        start_node_impl::<UserRole, NoStorageLayer, Network>(
             parachain_config,
             polkadot_config,
             collator_options,

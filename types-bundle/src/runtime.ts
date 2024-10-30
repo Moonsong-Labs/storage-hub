@@ -1,8 +1,8 @@
 import type { DefinitionCall, DefinitionsCall } from "@polkadot/types/types";
 
 const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
-  query_earliest_file_volunteer_block: {
-    description: "Query the earliest block number that a BSP can volunteer for a file.",
+  query_earliest_file_volunteer_tick: {
+    description: "Query the earliest tick number that a BSP can volunteer for a file.",
     params: [
       {
         name: "bspId",
@@ -28,6 +28,20 @@ const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>"
+  },
+  query_msp_confirm_chunks_to_prove_for_file: {
+    description: "Query the chunks that a MSP needs to prove to confirm that it is storing a file.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      },
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>"
   }
 };
 
@@ -162,6 +176,11 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
     ],
     type: "Option<Balance>"
   },
+  get_slash_amount_per_max_file_size: {
+    description: "Get the slashable amount corresponding to the configured max file size.",
+    params: [],
+    type: "Balance"
+  },
   query_storage_provider_capacity: {
     description: "Query the storage provider capacity.",
     params: [
@@ -191,6 +210,36 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<BlockNumber, QueryEarliestChangeCapacityBlockError>"
+  },
+  query_msp_id_of_bucket_id: {
+    description: "Query the MSP ID of a bucket ID.",
+    params: [
+      {
+        name: "bucketId",
+        type: "H256"
+      }
+    ],
+    type: "Result<ProviderId, QueryMspIdOfBucketIdError>"
+  },
+  query_provider_multiaddresses: {
+    description: "Query the provider's multiaddresses.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<Multiaddresses, QueryProviderMultiaddressesError>"
+  },
+  query_value_propositions_for_msp: {
+    description: "Query the value propositions for a MSP.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "Vec<ValuePropositionWithId>"
   }
 };
 

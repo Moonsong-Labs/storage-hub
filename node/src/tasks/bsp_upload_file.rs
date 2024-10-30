@@ -1,4 +1,4 @@
-use std::{cmp::max, str::FromStr, time::Duration};
+use std::{cmp::max, ops::Add, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -22,6 +22,9 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
+
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
@@ -53,6 +56,7 @@ where
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
     file_key_cleanup: Option<H256>,
+    capacity_queue: Arc<Mutex<u64>>,
 }
 
 impl<FL, FSH> Clone for BspUploadFileTask<FL, FSH>
@@ -64,6 +68,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
+            capacity_queue: Arc::clone(&self.capacity_queue),
         }
     }
 }
@@ -77,6 +82,7 @@ where
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
+            capacity_queue: Arc::new(Mutex::new(0_u64)),
         }
     }
 }
@@ -402,16 +408,11 @@ where
                 .insert_files_metadata(file_metadatas.as_slice())?;
         }
 
-        // Release the forest root write "lock".
-        let forest_root_write_result = forest_root_write_tx.send(());
-        if forest_root_write_result.is_err() {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
-            ));
-        }
-
-        Ok(())
+        // Release the forest root write "lock" and finish the task.
+        self.storage_hub_handler
+            .blockchain
+            .release_forest_root_write_lock(forest_root_write_tx)
+            .await
     }
 }
 
@@ -503,12 +504,6 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
 
-            let new_capacity = self.calculate_capacity(&event, current_capacity)?;
-
-            let call = storage_hub_runtime::RuntimeCall::Providers(
-                pallet_storage_providers::Call::change_capacity { new_capacity },
-            );
-
             let earliest_change_capacity_block = self
                 .storage_hub_handler
                 .blockchain
@@ -522,29 +517,54 @@ where
                     anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
+            // we registered it to the queue
+            let mut capacity_queue = self.capacity_queue.lock().await;
+
+            *capacity_queue = capacity_queue.add(event.size);
+
+            drop(capacity_queue);
+
             // Wait for the earliest block where the capacity can be changed.
             self.storage_hub_handler
                 .blockchain
                 .wait_for_block(earliest_change_capacity_block)
                 .await?;
 
-            self.storage_hub_handler
-                .blockchain
-                .send_extrinsic(call, Tip::from(0))
-                .await?
-                .with_timeout(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .extrinsic_retry_timeout,
-                ))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await?;
+            // we read from the queue
+            let mut capacity_queue = self.capacity_queue.lock().await;
 
-            info!(
-                target: LOG_TARGET,
-                "Increased storage capacity to {:?} bytes",
-                new_capacity
-            );
+            // if the queue is not empty it is that the capacity hasn't been updated yet
+            if *capacity_queue > 0 {
+                let size: u64 = *capacity_queue;
+
+                let new_capacity = self.calculate_capacity(size, current_capacity)?;
+
+                let call = storage_hub_runtime::RuntimeCall::Providers(
+                    pallet_storage_providers::Call::change_capacity { new_capacity },
+                );
+
+                self.storage_hub_handler
+                    .blockchain
+                    .send_extrinsic(call, Tip::from(0))
+                    .await?
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    ))
+                    .watch_for_success(&self.storage_hub_handler.blockchain)
+                    .await?;
+
+                *capacity_queue = 0;
+
+                info!(
+                    target: LOG_TARGET,
+                    "Increased storage capacity to {:?} bytes",
+                    new_capacity
+                );
+            }
+
+            drop(capacity_queue);
 
             let available_capacity = self
                 .storage_hub_handler
@@ -578,25 +598,25 @@ where
         self.file_key_cleanup = Some(file_key.into());
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
-        let earliest_volunteer_block = self
+        let earliest_volunteer_tick = self
             .storage_hub_handler
             .blockchain
-            .query_file_earliest_volunteer_block(own_bsp_id, file_key.into())
+            .query_file_earliest_volunteer_tick(own_bsp_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,
-            "Waiting for block {:?} to volunteer for file {:?}",
-            earliest_volunteer_block,
+            "Waiting for tick {:?} to volunteer for file {:?}",
+            earliest_volunteer_tick,
             file_key
         );
 
-        // TODO: if the earliest block is too far away, we should drop the task.
+        // TODO: if the earliest tick is too far away, we should drop the task.
         // TODO: based on the limit above, also add a timeout for the task.
         self.storage_hub_handler
             .blockchain
-            .wait_for_block(earliest_volunteer_block)
+            .wait_for_tick(earliest_volunteer_tick)
             .await?;
 
         // Optimistically register the file for upload in the file transfer service.
@@ -653,16 +673,16 @@ where
     /// Calculate the new capacity after adding the required capacity for the file.
     ///
     /// The new storage capacity will be increased by the jump capacity until it reaches the
-    /// `max_storage_capacity` or it
+    /// `max_storage_capacity`.
     ///
     /// The `max_storage_capacity` is returned if the new capacity exceeds it.
     fn calculate_capacity(
-        &mut self,
-        event: &NewStorageRequest,
+        &self,
+        required_additional_capacity: StorageDataUnit,
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (event.size + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = (required_additional_capacity + jump_capacity - 1) / jump_capacity;
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {

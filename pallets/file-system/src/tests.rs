@@ -1,4 +1,5 @@
 use crate::{
+    self as file_system,
     mock::*,
     types::{
         AcceptedStorageRequestParameters, BatchResponses, BucketIdFor, BucketMoveRequestResponse,
@@ -6,11 +7,11 @@ use crate::{
         MspFailedBatchStorageRequests, MspRejectedBatchStorageRequests,
         MspRespondStorageRequestsResult, MspStorageRequestResponse, PeerIds,
         PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl, ThresholdType,
+        StorageRequestMetadata, StorageRequestTtl, ThresholdType, ValuePropId,
     },
-    BlockRangeToMaximumThreshold, Config, DataServersForMoveBucket, Error, Event,
-    PendingBucketsToMove, PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
-    StorageRequestExpirations, StorageRequests,
+    Config, DataServersForMoveBucket, Error, Event, PendingBucketsToMove,
+    PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
+    StorageRequestExpirations, StorageRequests, TickRangeToMaximumThreshold,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -20,8 +21,11 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
-use pallet_storage_providers::types::Bucket;
-use shp_traits::{ReadBucketsInterface, ReadStorageProvidersInterface, TrieRemoveMutation};
+use pallet_storage_providers::types::{Bucket, ValueProposition};
+use shp_traits::{
+    MutateStorageProvidersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
+    ReadStorageProvidersInterface, TrieRemoveMutation,
+};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -36,6 +40,8 @@ mod create_bucket_tests {
     use super::*;
 
     mod failure {
+        use crate::types::ValuePropId;
+
         use super::*;
 
         #[test]
@@ -51,7 +57,8 @@ mod create_bucket_tests {
                         origin,
                         H256::from_slice(&msp.as_slice()),
                         name,
-                        true
+                        true,
+                        ValuePropId::<Test>::default()
                     ),
                     Error::<Test>::NotAMsp
                 );
@@ -71,7 +78,7 @@ mod create_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -84,7 +91,8 @@ mod create_bucket_tests {
                     origin,
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -105,6 +113,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -120,7 +129,7 @@ mod create_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = false;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -133,7 +142,8 @@ mod create_bucket_tests {
                     origin,
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -154,6 +164,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: None,
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -180,16 +191,17 @@ mod request_move_bucket {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -217,16 +229,17 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -249,15 +262,16 @@ mod request_move_bucket {
                 let origin = RuntimeOrigin::signed(owner.clone());
                 let msp_charlie = Keyring::Charlie.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_charlie_id, value_prop_id) = add_msp_to_provider_storage(&msp_charlie);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_charlie_id),
@@ -274,12 +288,12 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_charlie_id, value_prop_id) = add_msp_to_provider_storage(&msp_charlie);
                 let msp_dave_id =
                     <<Test as frame_system::Config>::Hashing as Hasher>::hash(&msp_dave.as_slice());
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
@@ -297,11 +311,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
@@ -318,11 +332,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Issue storage request with a big file size
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -345,7 +359,7 @@ mod request_move_bucket {
                     peer_ids.clone(),
                 ));
 
-				// Compute the file key.
+                // Compute the file key.
                 let file_key = FileSystem::compute_file_key(
                     owner.clone(),
                     bucket_id,
@@ -355,9 +369,10 @@ mod request_move_bucket {
                 );
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Manually set enough capacity for Charlie
                 pallet_storage_providers::MainStorageProviders::<Test>::mutate(
@@ -370,17 +385,19 @@ mod request_move_bucket {
                 );
 
                 // Dispatch the MSP accept request.
-                // This opereration increases the bucket size.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
-					RuntimeOrigin::signed(msp_charlie),
+                // This operation increases the bucket size.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp_charlie),
                     bounded_vec![(
                         bucket_id,
                         MspStorageRequestResponse {
-                            accept:
-                            Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(file_key, CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                })],
+                            accept: Some(AcceptedStorageRequestParameters {
+                                file_keys_and_proofs: bounded_vec![(
+                                    file_key,
+                                    CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                )],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
@@ -391,7 +408,7 @@ mod request_move_bucket {
                 ));
 
                 // Check bucket size
-                let bucket_size = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id).unwrap();
+                let bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
                 assert_eq!(bucket_size, size);
 
                 // BSP confirm storage request
@@ -425,7 +442,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -473,16 +495,17 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -493,7 +516,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -524,13 +552,14 @@ mod request_move_bucket {
                 );
 
                 // Check bucket is stored by Dave
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_dave_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(&msp_dave_id, &bucket_id));
 
                 // Check pending bucket storages are cleared
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
+                    &msp_dave_id,
+                    bucket_id
+                ));
             });
         }
 
@@ -542,16 +571,17 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -562,7 +592,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -593,13 +628,17 @@ mod request_move_bucket {
                 );
 
                 // Check bucket is still stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Check pending bucket storages are cleared
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
+                    &msp_dave_id,
+                    bucket_id
+                ));
             });
         }
 
@@ -611,16 +650,17 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -631,7 +671,12 @@ mod request_move_bucket {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -646,7 +691,7 @@ mod request_move_bucket {
                 );
 
                 // Check move bucket request expires after MoveBucketRequestTtl
-                let move_bucket_request_ttl: u32 = <Test as Config>::MoveBucketRequestTtl::get() ;
+                let move_bucket_request_ttl: u32 = <Test as Config>::MoveBucketRequestTtl::get();
                 let move_bucket_request_ttl: BlockNumber = move_bucket_request_ttl.into();
                 let expiration = move_bucket_request_ttl + System::block_number();
 
@@ -654,7 +699,10 @@ mod request_move_bucket {
                 roll_to(expiration);
 
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(&msp_dave_id, bucket_id));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
+                    &msp_dave_id,
+                    bucket_id
+                ));
             });
         }
     }
@@ -704,18 +752,22 @@ mod bsp_add_data_server_for_move_bucket_request {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
                 let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(RuntimeOrigin::signed(bsp_account_id.clone()), 1000));
+                assert_ok!(bsp_sign_up(
+                    RuntimeOrigin::signed(bsp_account_id.clone()),
+                    1000
+                ));
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
@@ -725,7 +777,12 @@ mod bsp_add_data_server_for_move_bucket_request {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -744,16 +801,18 @@ mod bsp_add_data_server_for_move_bucket_request {
                     bucket_id,
                 ));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id.clone(),
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner }));
-                assert_eq!(DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(), Some(bsp_id));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata { requester: owner })
+                );
+                assert_eq!(
+                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
+                    Some(bsp_id)
+                );
 
                 assert_noop!(
                     FileSystem::bsp_add_data_server_for_move_bucket_request(
@@ -779,18 +838,22 @@ mod bsp_add_data_server_for_move_bucket_request {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
                 let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(RuntimeOrigin::signed(bsp_account_id.clone()), 1000));
+                assert_ok!(bsp_sign_up(
+                    RuntimeOrigin::signed(bsp_account_id.clone()),
+                    1000
+                ));
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -801,7 +864,12 @@ mod bsp_add_data_server_for_move_bucket_request {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
@@ -821,24 +889,22 @@ mod bsp_add_data_server_for_move_bucket_request {
                     bucket_id,
                 ));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner }));
-                assert_eq!(DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(), Some(bsp_id));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata { requester: owner })
+                );
+                assert_eq!(
+                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
+                    Some(bsp_id)
+                );
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
-                    Event::DataServerRegisteredForMoveBucket {
-                        bsp_id,
-                        bucket_id,
-                    }
-                    .into(),
+                    Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id }.into(),
                 );
             });
         }
@@ -859,7 +925,7 @@ mod update_bucket_privacy_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -886,7 +952,7 @@ mod update_bucket_privacy_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -899,7 +965,8 @@ mod update_bucket_privacy_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -920,6 +987,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -958,7 +1026,7 @@ mod update_bucket_privacy_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -971,7 +1039,8 @@ mod update_bucket_privacy_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -992,6 +1061,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -1057,7 +1127,7 @@ mod update_bucket_privacy_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1070,7 +1140,8 @@ mod update_bucket_privacy_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -1091,6 +1162,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -1164,7 +1236,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1192,7 +1264,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1205,7 +1277,8 @@ mod create_and_associate_collection_with_bucket_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1269,7 +1342,7 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from([0u8; 32].to_vec()).unwrap();
                 let bucket_id = H256::from_slice(&name);
@@ -1302,10 +1375,10 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_id, value_prop_id);
 
                 assert_noop!(
                     FileSystem::issue_storage_request(
@@ -1335,16 +1408,17 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
-                assert!(
-                    <<Test as crate::Config>::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_charlie_id, &bucket_id)
-                );
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::request_move_bucket(
@@ -1355,7 +1429,12 @@ mod request_storage {
 
                 let pending_move_bucket =
                     PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(pending_move_bucket, Some(MoveBucketRequestMetadata { requester: owner.clone() }));
+                assert_eq!(
+                    pending_move_bucket,
+                    Some(MoveBucketRequestMetadata {
+                        requester: owner.clone()
+                    })
+                );
 
                 assert_noop!(
                     FileSystem::issue_storage_request(
@@ -1389,10 +1468,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1415,7 +1499,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1462,10 +1546,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1488,7 +1577,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1526,7 +1615,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1572,10 +1661,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
@@ -1606,10 +1700,15 @@ mod request_storage {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let size = 4;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1632,7 +1731,7 @@ mod request_storage {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -1661,18 +1760,15 @@ mod request_storage {
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
                 let expiration_block = System::block_number() + storage_request_ttl;
 
-                // Assert that the next starting block to clean up is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
-
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
-                    FileSystem::next_available_storage_request_expiration_block(),
+                    file_system::NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     expiration_block
                 );
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
                     vec![file_key]
                 );
 
@@ -1680,7 +1776,7 @@ mod request_storage {
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
                     vec![]
                 );
             });
@@ -1698,10 +1794,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -1738,7 +1839,10 @@ mod request_storage {
 
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    )
+                    .len(),
                     max_expired_items_in_block as usize
                 );
 
@@ -1747,7 +1851,9 @@ mod request_storage {
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    ),
                     vec![]
                 );
             });
@@ -1765,10 +1871,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Append storage request expiration to the list at `StorageRequestTtl`
                 let max_storage_request_expiry: u32 =
@@ -1808,12 +1919,12 @@ mod request_storage {
                 let expected_expiration_block_number: BlockNumberFor<Test> =
                     expected_expiration_block_number.into();
 
-                // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
-
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    )
+                    .len(),
                     max_storage_request_expiry as usize
                 );
 
@@ -1823,27 +1934,28 @@ mod request_storage {
                 assert_eq!(used_weight, Weight::zero());
 
                 // Assert that the storage request expirations storage is at max capacity
-                // TODO: Fix this test...
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    )
+                    .len(),
                     max_storage_request_expiry as usize
                 );
-
-                // Assert that the `NextExpirationInsertionBlockNumber` storage did not update
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
                 // Go to block number after which the storage request expirations should be removed
                 roll_to(expected_expiration_block_number + 1);
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expected_expiration_block_number),
+                    file_system::StorageRequestExpirations::<Test>::get(
+                        expected_expiration_block_number
+                    ),
                     vec![]
                 );
 
                 // Assert that the `NextExpirationInsertionBlockNumber` storage is set to the next block number
                 assert_eq!(
-                    FileSystem::next_starting_block_to_clean_up(),
+                    file_system::NextStartingBlockToCleanUp::<Test>::get(),
                     System::block_number() + 1
                 );
             });
@@ -1880,10 +1992,15 @@ mod revoke_storage_request {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1925,10 +2042,15 @@ mod revoke_storage_request {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1953,12 +2075,9 @@ mod revoke_storage_request {
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
                 let expiration_block = System::block_number() + storage_request_ttl;
 
-                // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
-                assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
-
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::storage_request_expirations(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
                     vec![file_key]
                 );
 
@@ -1980,20 +2099,21 @@ mod revoke_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account.clone(), name.clone(), msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
 
                 assert_ok!(FileSystem::issue_storage_request(
-            		owner.clone(),
-            		bucket_id,
-					location.clone(),
-					fingerprint,
-					4,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
@@ -2002,11 +2122,7 @@ mod revoke_storage_request {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2020,7 +2136,7 @@ mod revoke_storage_request {
 
                 // Check StorageRequestBsps storage for confirmed BSPs
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: false,
@@ -2048,10 +2164,11 @@ mod revoke_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account.clone(), name.clone(), msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2134,23 +2251,26 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                // Register the MSP.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold the file.
+                // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
+                // Compute the file key.
                 // Compute the file key.
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -2161,8 +2281,7 @@ mod msp_respond_storage_request {
                 );
 
                 // Dispatch the MSP accept request.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                RuntimeOrigin::signed(msp.clone()),
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(RuntimeOrigin::signed(msp.clone()),
                     bounded_vec![(
                         bucket_id,
                         MspStorageRequestResponse {
@@ -2178,12 +2297,13 @@ mod msp_respond_storage_request {
                             ),
                             reject: None,
                         }
-                    )],
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ));
+                    )]));
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
@@ -2219,27 +2339,25 @@ mod msp_respond_storage_request {
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
 				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
-                let first_size = 4;
-				let second_size = 8;
-                let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let size = 4;
+                let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				// Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                // Register the MSP.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold both files.
+                // Create the bucket that will hold both files.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-				// Compute the file key for the first file.
+                // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
                     first_location.clone(),
-                    first_size,
-                    first_fingerprint,
+                    size,
+                    fingerprint,
                 );
 
 				// Compute the file key for the second file.
@@ -2247,8 +2365,8 @@ mod msp_respond_storage_request {
 					owner_account_id.clone(),
 					bucket_id,
 					second_location.clone(),
-					second_size,
-					second_fingerprint,
+					size,
+					fingerprint,
 				);
 
                 // Dispatch a storage request for the first file.
@@ -2256,8 +2374,8 @@ mod msp_respond_storage_request {
 					owner_signed.clone(),
 					bucket_id,
 					first_location.clone(),
-					first_fingerprint,
-					first_size,
+					fingerprint,
+					size,
 					msp_id,
 					peer_ids.clone(),
 				));
@@ -2267,14 +2385,14 @@ mod msp_respond_storage_request {
 					owner_signed.clone(),
 					bucket_id,
 					second_location.clone(),
-					second_fingerprint,
-					second_size,
+					fingerprint,
+					size,
 					msp_id,
 					peer_ids.clone(),
 				));
 
                 // Dispatch the MSP accept request for the first file.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
 					RuntimeOrigin::signed(msp.clone()),
                     bounded_vec![(
                         bucket_id,
@@ -2296,18 +2414,22 @@ mod msp_respond_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
                 assert_eq!(
-                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(second_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
 				// Get the new root of the bucket.
                 let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
+                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
                     .unwrap();
 
                 // Assert that the correct event was deposited
@@ -2330,7 +2452,7 @@ mod msp_respond_storage_request {
                 // Assert that the MSP used capacity has been updated.
                 assert_eq!(
                     <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-                    first_size + second_size
+                    size * 2
                 );
             });
         }
@@ -2342,26 +2464,29 @@ mod msp_respond_storage_request {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let second_location =
+                    FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec())
+                        .unwrap();
                 let first_size = 4;
-				let second_size = 8;
+                let second_size = 8;
                 let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let second_fingerprint = H256::random();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				// Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                // Register the MSP.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold the first file.
+                // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id);
+                let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id, value_prop_id);
 
-				// Create the bucket that will hold the second file.
-				let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-				let second_bucket_id = create_bucket(&owner_account_id.clone(), second_name, msp_id);
+                // Create the bucket that will hold the second file.
+                let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
+                let second_bucket_id =
+                    create_bucket(&owner_account_id.clone(), second_name, msp_id, value_prop_id);
 
-				// Compute the file key for the first file.
+                // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     first_bucket_id,
@@ -2370,39 +2495,39 @@ mod msp_respond_storage_request {
                     first_fingerprint,
                 );
 
-				// Compute the file key for the second file.
-				let second_file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_size,
-					second_fingerprint,
-				);
+                // Compute the file key for the second file.
+                let second_file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_size,
+                    second_fingerprint,
+                );
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					first_bucket_id,
-					first_location.clone(),
-					first_fingerprint,
-					first_size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    first_bucket_id,
+                    first_location.clone(),
+                    first_fingerprint,
+                    first_size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				// Dispatch a storage request for the second file.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_fingerprint,
-					second_size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request for the second file.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_fingerprint,
+                    second_size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
 				// Dispatch the MSP accept request for the second file.
-				assert_ok!(FileSystem::msp_respond_storage_requests(
+				assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
 					RuntimeOrigin::signed(msp.clone()),
 					bounded_vec![(
                         first_bucket_id,
@@ -2437,13 +2562,15 @@ mod msp_respond_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
 				// Assert that the storage was updated
 				assert_eq!(
-					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
 					Some((msp_id, true))
 				);
 
@@ -2490,32 +2617,38 @@ mod msp_respond_storage_request {
             new_test_ext().execute_with(|| {
                 let first_owner_account_id = Keyring::Alice.to_account_id();
                 let first_owner_signed = RuntimeOrigin::signed(first_owner_account_id.clone());
-				let second_owner_account_id = Keyring::Bob.to_account_id();
-				let second_owner_signed = RuntimeOrigin::signed(second_owner_account_id.clone());
+                let second_owner_account_id = Keyring::Bob.to_account_id();
+                let second_owner_signed = RuntimeOrigin::signed(second_owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let second_location =
+                    FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec())
+                        .unwrap();
                 let first_size = 4;
-				let second_size = 8;
+                let second_size = 8;
                 let first_fingerprint = H256::zero();
-				let second_fingerprint =  H256::random();
+                let second_fingerprint = H256::random();
                 let first_peer_id = BoundedVec::try_from(vec![1]).unwrap();
-                let first_peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![first_peer_id]).unwrap();
-				let second_peer_id = BoundedVec::try_from(vec![2]).unwrap();
-				let second_peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![second_peer_id]).unwrap();
+                let first_peer_ids: PeerIds<Test> =
+                    BoundedVec::try_from(vec![first_peer_id]).unwrap();
+                let second_peer_id = BoundedVec::try_from(vec![2]).unwrap();
+                let second_peer_ids: PeerIds<Test> =
+                    BoundedVec::try_from(vec![second_peer_id]).unwrap();
 
-				// Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                // Register the MSP.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-				// Create the bucket that will hold the first file.
+                // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id = create_bucket(&first_owner_account_id.clone(), first_name, msp_id);
+                let first_bucket_id =
+                    create_bucket(&first_owner_account_id.clone(), first_name, msp_id, value_prop_id);
 
-				// Create the bucket that will hold the second file.
-				let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-				let second_bucket_id = create_bucket(&second_owner_account_id.clone(), second_name, msp_id);
+                // Create the bucket that will hold the second file.
+                let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
+                let second_bucket_id =
+                    create_bucket(&second_owner_account_id.clone(), second_name, msp_id, value_prop_id);
 
-				// Compute the file key for the first file.
+                // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
                     first_owner_account_id.clone(),
                     first_bucket_id,
@@ -2524,39 +2657,39 @@ mod msp_respond_storage_request {
                     first_fingerprint,
                 );
 
-				// Compute the file key for the second file.
-				let second_file_key = FileSystem::compute_file_key(
-					second_owner_account_id.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_size,
-					second_fingerprint,
-				);
+                // Compute the file key for the second file.
+                let second_file_key = FileSystem::compute_file_key(
+                    second_owner_account_id.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_size,
+                    second_fingerprint,
+                );
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
-					first_owner_signed.clone(),
-					first_bucket_id,
-					first_location.clone(),
-					first_fingerprint,
-					first_size,
-					msp_id,
-					first_peer_ids.clone(),
-				));
+                    first_owner_signed.clone(),
+                    first_bucket_id,
+                    first_location.clone(),
+                    first_fingerprint,
+                    first_size,
+                    msp_id,
+                    first_peer_ids.clone(),
+                ));
 
-				// Dispatch a storage request for the second file.
-				assert_ok!(FileSystem::issue_storage_request(
-					second_owner_signed.clone(),
-					second_bucket_id,
-					second_location.clone(),
-					second_fingerprint,
-					second_size,
-					msp_id,
-					second_peer_ids.clone(),
-				));
+                // Dispatch a storage request for the second file.
+                assert_ok!(FileSystem::issue_storage_request(
+                    second_owner_signed.clone(),
+                    second_bucket_id,
+                    second_location.clone(),
+                    second_fingerprint,
+                    second_size,
+                    msp_id,
+                    second_peer_ids.clone(),
+                ));
 
                 // Dispatch the MSP accept request for the second file.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
 					RuntimeOrigin::signed(msp.clone()),
 					bounded_vec![(
                         first_bucket_id,
@@ -2595,13 +2728,17 @@ mod msp_respond_storage_request {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(first_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(second_file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(second_file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
@@ -2637,11 +2774,11 @@ mod msp_respond_storage_request {
                     }.into(),
                 );
 
-				// Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size + second_size
-				);
+                // Assert that the MSP used capacity has been updated.
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size + second_size
+                );
             });
         }
 
@@ -2658,11 +2795,11 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Set replication target to 1
                 ReplicationTarget::<Test>::put(1);
@@ -2713,7 +2850,7 @@ mod msp_respond_storage_request {
                 ));
 
                 // Dispatch the MSP accept request.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
                     bounded_vec![(
                         bucket_id,
@@ -2758,8 +2895,260 @@ mod msp_respond_storage_request {
                 );
 
                 // Storage request should be removed
-                assert!(FileSystem::storage_requests(file_key).is_none());
-                assert!(FileSystem::storage_request_buckets(bucket_id, file_key).is_none());
+                assert!(file_system::StorageRequests::<Test>::get(file_key).is_none());
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(bucket_id, file_key)
+                        .is_none()
+                );
+            });
+        }
+
+        struct StorageRequestParams {
+            owner_account_id: AccountId32,
+            bucket_name: Vec<u8>,
+            location: Vec<u8>,
+            size: u64,
+            fingerprint: H256,
+            peer_ids: PeerIds<Test>,
+        }
+
+        fn generate_storage_requests(
+            params_list: Vec<StorageRequestParams>,
+            msp_id: ProviderIdFor<Test>,
+            value_prop_id: ValuePropId<Test>,
+        ) -> Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> {
+            let mut results = Vec::new();
+
+            for params in params_list {
+                // Create bucket if not already created
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &params.owner_account_id.clone().try_into().unwrap(),
+                    params.bucket_name.clone().try_into().unwrap(),
+                );
+
+                if !<Test as crate::Config>::Providers::bucket_exists(&bucket_id) {
+                    create_bucket(
+                        &params.owner_account_id.clone(),
+                        params.bucket_name.clone().try_into().unwrap(),
+                        msp_id,
+                        value_prop_id,
+                    );
+                }
+
+                // Compute file key
+                let file_key = FileSystem::compute_file_key(
+                    params.owner_account_id.clone(),
+                    bucket_id,
+                    FileLocation::<Test>::try_from(params.location.clone()).unwrap(),
+                    params.size,
+                    params.fingerprint,
+                );
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(params.owner_account_id.clone()),
+                    bucket_id,
+                    FileLocation::<Test>::try_from(params.location).unwrap(),
+                    params.fingerprint,
+                    params.size,
+                    msp_id,
+                    params.peer_ids.clone(),
+                ));
+
+                results.push((bucket_id, file_key, params.owner_account_id.clone()));
+            }
+
+            results
+        }
+
+        fn generate_msp_responses_and_results(
+            storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)>,
+            msp_id: ProviderIdFor<Test>,
+        ) -> (
+            FileKeyResponsesInput<Test>,
+            MspRespondStorageRequestsResult<Test>,
+        ) {
+            let mut responses: BTreeMap<BucketIdFor<Test>, MspStorageRequestResponse<Test>> =
+                BTreeMap::new();
+            let mut batch_responses: Vec<BatchResponses<Test>> = Vec::new();
+
+            for (bucket_id, file_key, owner_account_id) in storage_requests {
+                let response: &mut MspStorageRequestResponse<Test> = responses
+                    .entry(bucket_id)
+                    .or_insert_with(|| MspStorageRequestResponse {
+                        accept: None,
+                        reject: None,
+                    });
+
+                if file_key.as_ref()[0] % 2 == 0 {
+                    if let Some(accept) = &mut response.accept {
+                        accept
+                            .file_keys_and_proofs
+                            .try_push((
+                                file_key,
+                                CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            ))
+                            .unwrap();
+                    } else {
+                        response.accept = Some(AcceptedStorageRequestParameters {
+                            file_keys_and_proofs: bounded_vec![(
+                                file_key,
+                                CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            )],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        });
+                    }
+
+                    if let Some(BatchResponses::Accepted(ref mut accepted)) = batch_responses.iter_mut().find(|br| matches!(br, BatchResponses::Accepted(a) if a.bucket_id == bucket_id)) {
+                        accepted.file_keys.try_push(file_key).unwrap();
+                    } else {
+                        batch_responses.push(BatchResponses::Accepted(MspAcceptedBatchStorageRequests {
+                            file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                            bucket_id,
+                            new_bucket_root: H256::zero(),
+                            owner: owner_account_id,
+                        }));
+                    }
+                } else {
+                    // Rejected response
+                    let reject_reason = RejectedStorageRequestReason::InternalError;
+
+                    if let Some(reject) = &mut response.reject {
+                        reject.try_push((file_key, reject_reason.clone())).unwrap();
+                    } else {
+                        response.reject = Some(bounded_vec![(file_key, reject_reason.clone())]);
+                    }
+
+                    if let Some(BatchResponses::Rejected(ref mut rejected)) = batch_responses.iter_mut().find(|br| matches!(br, BatchResponses::Rejected(r) if r.bucket_id == bucket_id)) {
+                        rejected.file_keys.try_push((file_key, reject_reason)).unwrap();
+                    } else {
+                        batch_responses.push(BatchResponses::Rejected(MspRejectedBatchStorageRequests {
+                            file_keys: BoundedVec::try_from(vec![(file_key, reject_reason)]).unwrap(),
+                            bucket_id,
+                            owner: owner_account_id,
+                        }));
+                    }
+                }
+            }
+
+            let responses: FileKeyResponsesInput<Test> = responses
+                .into_iter()
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("Should not exceed MaxBatchConfirmStorageRequests");
+
+            let results = MspRespondStorageRequestsResult {
+                msp_id,
+                responses: BoundedVec::try_from(batch_responses).unwrap(),
+            };
+
+            println!("Generated results: {:?}", results);
+
+            (responses, results)
+        }
+
+        #[test]
+        fn msp_respond_storage_request_accepts_and_rejects_failed_mixed_responses() {
+            new_test_ext().execute_with(|| {
+                // Create accounts
+                let msp_account_id = Keyring::Charlie.to_account_id();
+
+                // Register the MSP.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp_account_id);
+
+                let first_bucket = b"first bucket".to_vec();
+                let second_bucket = b"second bucket".to_vec();
+                let size = 4;
+                let fingerprint = H256::zero();
+
+                // Define storage request parameters
+                let storage_request_params = vec![
+                    StorageRequestParams {
+                        owner_account_id: Keyring::Alice.to_account_id(),
+                        bucket_name: first_bucket,
+                        location: b"location".to_vec(),
+                        size,
+                        fingerprint,
+                        peer_ids: BoundedVec::try_from(
+                            vec![BoundedVec::try_from(vec![1]).unwrap()],
+                        )
+                        .unwrap(),
+                    },
+                    StorageRequestParams {
+                        owner_account_id: Keyring::Bob.to_account_id(),
+                        bucket_name: second_bucket.clone(),
+                        location: b"location2".to_vec(),
+                        size,
+                        fingerprint,
+                        peer_ids: BoundedVec::try_from(
+                            vec![BoundedVec::try_from(vec![2]).unwrap()],
+                        )
+                        .unwrap(),
+                    },
+                    StorageRequestParams {
+                        owner_account_id: Keyring::Bob.to_account_id(),
+                        bucket_name: second_bucket,
+                        location: b"location3".to_vec(),
+                        size,
+                        fingerprint,
+                        peer_ids: BoundedVec::try_from(
+                            vec![BoundedVec::try_from(vec![2]).unwrap()],
+                        )
+                        .unwrap(),
+                    },
+                ];
+
+                // Generate storage requests
+                let storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> =
+                    generate_storage_requests(storage_request_params, msp_id, value_prop_id);
+
+                let (responses, expected_results) =
+                    generate_msp_responses_and_results(storage_requests, msp_id);
+
+                // Use `responses` to call the extrinsic
+                FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp_account_id),
+                    responses,
+                )
+                .unwrap();
+
+                let expected_results = MspRespondStorageRequestsResult {
+                    msp_id,
+                    responses: {
+                        let updated_responses: Vec<_> = expected_results
+                            .responses
+                            .into_iter()
+                            .map(|batch_response| match batch_response {
+                                BatchResponses::Accepted(mut accepted) => {
+                                    accepted.new_bucket_root =
+                                        <Test as crate::Config>::Providers::get_root_bucket(
+                                            &accepted.bucket_id,
+                                        )
+                                        .expect("Root bucket should exist");
+                                    BatchResponses::Accepted(accepted)
+                                }
+                                br => br,
+                            })
+                            .collect();
+
+                        BoundedVec::try_from(updated_responses)
+                            .expect("Number of responses should not exceed the bound")
+                    },
+                };
+
+                System::assert_last_event(
+                    Event::MspRespondedToStorageRequests {
+                        results: expected_results,
+                    }
+                    .into(),
+                );
             });
         }
 
@@ -3014,16 +3403,17 @@ mod msp_respond_storage_request {
             new_test_ext().execute_with(|| {
                 let msp = Keyring::Charlie.to_account_id();
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // create bucket
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = H256::zero();
 
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -3077,10 +3467,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3105,7 +3496,7 @@ mod msp_respond_storage_request {
                 let not_msp_signed = RuntimeOrigin::signed(not_msp.clone());
 
                 assert_noop!(
-                    FileSystem::msp_respond_storage_requests(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
                         not_msp_signed.clone(),
                         bounded_vec![(
                             bucket_id,
@@ -3145,10 +3536,11 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3173,7 +3565,7 @@ mod msp_respond_storage_request {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 assert_noop!(
-                    FileSystem::msp_respond_storage_requests(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
                         bsp_signed.clone(),
                         bounded_vec![(
                             bucket_id,
@@ -3210,10 +3602,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3242,7 +3635,7 @@ mod msp_respond_storage_request {
                     },
                 );
 
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -3298,11 +3691,16 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
+                let (expected_msp_id, value_prop_id) = add_msp_to_provider_storage(&expected_msp);
                 let _caller_msp_id = add_msp_to_provider_storage(&caller_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, expected_msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name,
+                    expected_msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3325,7 +3723,7 @@ mod msp_respond_storage_request {
 
                 // Try to accept storing a file with a MSP that is not the one assigned to the file.
                 assert_noop!(
-                    FileSystem::msp_respond_storage_requests(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
                         caller_msp_signed.clone(),
                         bounded_vec![(
                             bucket_id,
@@ -3363,10 +3761,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3388,7 +3787,7 @@ mod msp_respond_storage_request {
                 );
 
                 // Accept storing the file.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -3410,7 +3809,7 @@ mod msp_respond_storage_request {
                 ));
 
                 // Try to accept storing the file again.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -3465,11 +3864,12 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
-                let other_msp_id = add_msp_to_provider_storage(&other_msp);
+                let (expected_msp_id, _) = add_msp_to_provider_storage(&expected_msp);
+                let (other_msp_id, value_prop_id) = add_msp_to_provider_storage(&other_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, other_msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, other_msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3502,7 +3902,7 @@ mod msp_respond_storage_request {
 
                 // Try to accept storing a file with a MSP that is not the owner of the bucket ID
                 assert_noop!(
-                    FileSystem::msp_respond_storage_requests(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
                         expected_msp_signed.clone(),
                         bounded_vec![(
                             bucket_id,
@@ -3539,10 +3939,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3575,7 +3976,7 @@ mod msp_respond_storage_request {
                 );
 
                 // Try to accept storing a file with a MSP that does not have enough available capacity
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -3629,10 +4030,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3654,7 +4056,7 @@ mod msp_respond_storage_request {
                 );
 
                 // Try to accept storing a file with a non-inclusion proof that includes the file key
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -3719,10 +4121,11 @@ mod bsp_volunteer {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3791,10 +4194,11 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3844,10 +4248,11 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3887,6 +4292,80 @@ mod bsp_volunteer {
         }
 
         #[test]
+        fn bsp_volunteer_above_threshold_high_fail_even_with_spamming() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                // Get BSP ID.
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Compute the file key to volunteer for.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Set a somewhat high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(40)
+                ));
+
+                // Calculate how many ticks until this BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
+                let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                let current_block = System::block_number();
+
+                // Advance by the number of ticks until this BSP can volunteer for the file.
+                // In the process, this BSP will spam the chain to prevent others from volunteering and confirming.
+                roll_to_spammed(current_block + ticks_to_advance);
+
+                // Dispatch BSP volunteer.
+                assert_noop!(
+                    FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
+                    Error::<Test>::AboveThreshold
+                );
+            });
+        }
+
+        #[test]
         fn bsp_volunteer_with_insufficient_capacity() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
@@ -3900,40 +4379,33 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					origin,
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					4,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    origin,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id.clone(),
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
-                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
-                    bsp_id,
-                    |bsp| {
-                        assert!(bsp.is_some());
-                        if let Some(bsp) = bsp {
-                            bsp.capacity = 0;
-                        }
-                    },
-                );
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
+                    assert!(bsp.is_some());
+                    if let Some(bsp) = bsp {
+                        bsp.capacity = 0;
+                    }
+                });
 
                 let file_key = FileSystem::compute_file_key(
                     owner.clone(),
@@ -3965,27 +4437,26 @@ mod bsp_volunteer {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = StorageData::<Test>::try_from(4).unwrap();
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					origin,
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					4,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    origin,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -3998,18 +4469,14 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
                 // Assert that the RequestStorageBsps has the correct value
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: false,
@@ -4028,7 +4495,101 @@ mod bsp_volunteer {
                         owner,
                         size,
                     }
-                        .into(),
+                    .into(),
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_volunteer_succeeds_after_waiting_enough_blocks_without_spam() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                // Get BSP ID.
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Compute the file key to volunteer for.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Set a somewhat high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(40)
+                ));
+
+                // Calculate how many ticks until this BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
+                let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                let current_block = System::block_number();
+
+                // Advance by the number of ticks until this BSP can volunteer for the file.
+                roll_to(current_block + ticks_to_advance);
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Assert that the RequestStorageBsps has the correct value
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: false,
+                        _phantom: Default::default()
+                    }
+                );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::AcceptedBspVolunteer {
+                        bsp_id,
+                        bucket_id,
+                        location,
+                        fingerprint,
+                        multiaddresses: create_sp_multiaddresses(),
+                        owner: owner_account_id,
+                        size,
+                    }
+                    .into(),
                 );
             });
         }
@@ -4055,10 +4616,11 @@ mod bsp_confirm {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4151,10 +4713,11 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4215,10 +4778,11 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4240,7 +4804,7 @@ mod bsp_confirm {
                 );
 
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
                     bounded_vec![(
                         bucket_id,
@@ -4263,7 +4827,9 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key).unwrap().msp,
+                    file_system::StorageRequests::<Test>::get(file_key)
+                        .unwrap()
+                        .msp,
                     Some((msp_id, true))
                 );
 
@@ -4337,14 +4903,12 @@ mod bsp_confirm {
                 let storage_amount: StorageData<Test> = 100;
                 let size = 4;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                    bsp_account_id.clone(),
-                ).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Force BSP to pass all threshold checks when volunteering.
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -4357,11 +4921,13 @@ mod bsp_confirm {
 
                 // Issue 5 storage requests and volunteer for each
                 for i in 0..5 {
-                    let location = FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
+                    let location =
+                        FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
                     let fingerprint = H256::repeat_byte(i as u8);
 
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
-                    let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                    let bucket_id =
+                        create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                     // Issue storage request
                     assert_ok!(FileSystem::issue_storage_request(
@@ -4400,12 +4966,18 @@ mod bsp_confirm {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 };
 
-                let file_keys_and_proofs: BoundedVec<_, <Test as crate::Config>::MaxBatchConfirmStorageRequests> = file_keys
+                let file_keys_and_proofs: BoundedVec<
+                    _,
+                    <Test as crate::Config>::MaxBatchConfirmStorageRequests,
+                > = file_keys
                     .into_iter()
                     .map(|file_key| {
-                        (file_key, CompactProof {
-                            encoded_nodes: vec![file_key.as_ref().to_vec()],
-                        })
+                        (
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![file_key.as_ref().to_vec()],
+                            },
+                        )
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -4444,21 +5016,21 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4471,18 +5043,13 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id.clone(),
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -4490,16 +5057,18 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4518,7 +5087,7 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4534,11 +5103,7 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-                        bsp_id,
-                    )
-                        .unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -4548,7 +5113,7 @@ mod bsp_confirm {
                         file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         new_root,
                     }
-                        .into(),
+                    .into(),
                 );
 
                 // Assert that the proving cycle was initialised for this BSP.
@@ -4562,7 +5127,7 @@ mod bsp_confirm {
                         who: bsp_account_id,
                         bsp_id,
                     }
-                        .into(),
+                    .into(),
                 );
 
 				// Assert that the payment stream between the BSP and the user has been created
@@ -4585,10 +5150,10 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4613,7 +5178,7 @@ mod bsp_confirm {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                    Providers::get_provider_id(
                         bsp_account_id.clone(),
                     )
                         .unwrap();
@@ -4621,9 +5186,8 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -4640,7 +5204,7 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4659,7 +5223,7 @@ mod bsp_confirm {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4668,7 +5232,7 @@ mod bsp_confirm {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
+                    Providers::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -4743,7 +5307,7 @@ mod bsp_confirm {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: current_block,
                         owner: owner_account_id.clone(),
@@ -4762,7 +5326,7 @@ mod bsp_confirm {
 
 				// Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4771,7 +5335,7 @@ mod bsp_confirm {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
+                    Providers::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -4813,10 +5377,11 @@ mod bsp_stop_storing {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4867,27 +5432,27 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4900,11 +5465,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -4914,16 +5475,19 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -4933,7 +5497,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -4959,20 +5523,22 @@ mod bsp_stop_storing {
                 );
 
                 // Dispatch BSP stop storing.
-                assert_noop!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				), Error::<Test>::InvalidFileKeyMetadata);
-
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::InvalidFileKeyMetadata
+                );
             });
         }
 
@@ -4986,27 +5552,27 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5019,11 +5585,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5033,16 +5595,19 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -5052,7 +5617,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5079,37 +5644,39 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
-				// Check that the request now exists.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Check that the request now exists.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
-				// Try sending the stop storing request again.
-                assert_noop!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				), Error::<Test>::PendingStopStoringRequestAlreadyExists);
-
+                // Try sending the stop storing request again.
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::PendingStopStoringRequestAlreadyExists
+                );
             });
         }
 
@@ -5123,27 +5690,27 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5156,11 +5723,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5170,16 +5733,19 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -5189,7 +5755,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5216,25 +5782,25 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5251,8 +5817,8 @@ mod bsp_stop_storing {
                     })
                 );
 
-				// Assert that the request was added to the pending stop storing requests.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the request was added to the pending stop storing requests.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -5262,20 +5828,23 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
 
-				// Dispatch BSP confirm stop storing.
-				assert_noop!(FileSystem::bsp_confirm_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				), Error::<Test>::MinWaitForStopStoringNotReached);
+                // Dispatch BSP confirm stop storing.
+                assert_noop!(
+                    FileSystem::bsp_confirm_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::MinWaitForStopStoringNotReached
+                );
 
-				// Assert that the pending stop storing request is still there.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the pending stop storing request is still there.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
             });
         }
     }
@@ -5293,27 +5862,27 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5326,11 +5895,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5340,16 +5905,19 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -5359,7 +5927,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5386,25 +5954,25 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5421,8 +5989,8 @@ mod bsp_stop_storing {
                     })
                 );
 
-				// Assert that the request was added to the pending stop storing requests.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the request was added to the pending stop storing requests.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -5432,7 +6000,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5447,27 +6015,27 @@ mod bsp_stop_storing {
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
-                // TODO: right now we are bypassing the volunteer assignment threshold
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5480,11 +6048,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5494,16 +6058,19 @@ mod bsp_stop_storing {
                     bsp_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    },BoundedVec::try_from(vec![(file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            })]).unwrap()
-                    ,
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -5513,7 +6080,7 @@ mod bsp_stop_storing {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5540,25 +6107,25 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5575,8 +6142,8 @@ mod bsp_stop_storing {
                     })
                 );
 
-				// Assert that the request was added to the pending stop storing requests.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
+                // Assert that the request was added to the pending stop storing requests.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_some());
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -5586,39 +6153,37 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
 
-				// Advance enough blocks to allow the BSP to confirm the stop storing request.
-				roll_to(frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get());
+                // Advance enough blocks to allow the BSP to confirm the stop storing request.
+                roll_to(
+                    frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
+                );
 
-				// Dispatch BSP confirm stop storing.
-				assert_ok!(FileSystem::bsp_confirm_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                // Dispatch BSP confirm stop storing.
+                assert_ok!(FileSystem::bsp_confirm_stop_storing(
+                    bsp_signed.clone(),
+                    file_key,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
-				// Assert that the pending stop storing request was removed.
-				assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+                // Assert that the pending stop storing request was removed.
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
 
-				// Assert that the correct event was deposited.
-				let new_root =
-					<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-						bsp_id,
-					)
-						.unwrap();
+                // Assert that the correct event was deposited.
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
-				System::assert_last_event(
-					Event::BspConfirmStoppedStoring {
-						bsp_id,
-						file_key,
-						new_root,
-					}
-						.into(),
-				);
+                System::assert_last_event(
+                    Event::BspConfirmStoppedStoring {
+                        bsp_id,
+                        file_key,
+                        new_root,
+                    }
+                    .into(),
+                );
             });
         }
 
@@ -5635,21 +6200,22 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-            		owner.clone(),
-            		bucket_id,
-            		location.clone(),
-            		fingerprint,
-            		size,
-            		msp_id,
-            		Default::default(),
-        		));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    Default::default(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5662,11 +6228,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
@@ -5677,10 +6239,13 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(file_key,
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    })]).unwrap()
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap()
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5693,25 +6258,25 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					H256::zero(),
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    H256::zero(),
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the RequestStorageBsps has the correct value
-                assert!(FileSystem::storage_request_bsps(file_key, bsp_id).is_none());
+                assert!(file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id).is_none());
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5736,7 +6301,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5754,30 +6319,27 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					Default::default(),
-				));
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    Default::default(),
+                ));
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5788,31 +6350,29 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
-            		&bsp_id, size,
-        		));
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 let current_bsps_required: <Test as Config>::ReplicationTargetType =
                     ReplicationTarget::<Test>::get();
 
                 // Assert that the storage request bsps_required was incremented
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -5837,7 +6397,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5852,22 +6412,20 @@ mod bsp_stop_storing {
                 let size = 4;
                 let fingerprint = H256::zero();
 
-                let msp_id = add_msp_to_provider_storage(&Keyring::Charlie.to_account_id());
+                let (msp_id, value_prop_id) =
+                    add_msp_to_provider_storage(&Keyring::Charlie.to_account_id());
 
                 let bucket_id = create_bucket(
                     &owner_account_id,
                     BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
                     msp_id,
+                    value_prop_id,
                 );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5878,28 +6436,26 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
-            		&bsp_id, size,
-        		));
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
-					bsp_signed.clone(),
-					file_key,
-					bucket_id,
-					location.clone(),
-					owner_account_id.clone(),
-					fingerprint,
-					size,
-					false,
-					CompactProof {
-						encoded_nodes: vec![file_key.as_ref().to_vec()],
-					},
-				));
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
                 // Assert that the storage request was created with one bsps_required
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 5,
                         owner: owner_account_id.clone(),
@@ -5924,7 +6480,7 @@ mod bsp_stop_storing {
                         owner: owner_account_id,
                         location,
                     }
-                        .into(),
+                    .into(),
                 );
             });
         }
@@ -5960,7 +6516,7 @@ mod set_global_parameters_tests {
 
                 assert_noop!(
                     FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0)),
-                    Error::<Test>::BlockRangeToMaximumThresholdCannotBeZero
+                    Error::<Test>::TickRangeToMaximumThresholdCannotBeZero
                 );
             });
         }
@@ -5983,7 +6539,7 @@ mod set_global_parameters_tests {
 
                 // Assert that the global parameters were set correctly
                 assert_eq!(ReplicationTarget::<Test>::get(), 3);
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
     }
@@ -6006,13 +6562,18 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let _ = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 let other_user = Keyring::Bob.to_account_id();
-                let bucket_id = create_bucket(&other_user.clone(), name, msp_id);
+                let bucket_id = create_bucket(&other_user.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6053,10 +6614,15 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
                 for i in 0..<Test as crate::Config>::MaxUserPendingDeletionRequests::get() {
@@ -6113,10 +6679,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6139,7 +6705,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -6167,7 +6733,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was not removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -6189,10 +6755,11 @@ mod delete_file_and_pending_deletions_tests {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6233,10 +6800,11 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6294,10 +6862,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6332,7 +6900,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -6347,7 +6915,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::file_deletion_request_expirations(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
                     vec![(
                         owner_account_id.clone(),
                         file_key
@@ -6359,13 +6927,13 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Item expiration should be removed
                 assert_eq!(
-                    FileSystem::file_deletion_request_expirations(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
                     vec![]
                 );
 
                 // Asser that the pending file deletion request was removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
                 );
 
@@ -6387,10 +6955,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6413,7 +6981,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -6453,7 +7021,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
                 );
             });
@@ -6470,10 +7038,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6496,7 +7064,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
@@ -6538,7 +7106,7 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
-                    FileSystem::pending_file_deletion_requests(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
                 );
             });
@@ -6551,7 +7119,7 @@ mod compute_threshold {
     mod success {
         use super::*;
         #[test]
-        fn query_earliest_file_volunteer_block() {
+        fn query_earliest_file_volunteer_tick() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
@@ -6563,10 +7131,15 @@ mod compute_threshold {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6594,13 +7167,10 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 assert!(frame_system::Pallet::<Test>::block_number() <= block_number);
             });
@@ -6619,10 +7189,15 @@ mod compute_threshold {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6650,43 +7225,56 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                let storage_request = FileSystem::storage_requests(file_key).unwrap();
+                let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
+                        .unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
+                assert!(
+                    threshold_to_succeed > 0
+                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                );
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
-                // BSP should be able to volunteer immediately for the storage request since the BlockRangeToMaximumThreshold is 1
+                // BSP should be able to volunteer immediately for the storage request since the TickRangeToMaximumThreshold is 1
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
 
-                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<Test> = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
+                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<
+                    Test,
+                > = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
 
                 // Simulate there being many BSPs in the network with high reputation weight
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1000u32.saturating_mul(starting_bsp_weight.into()));
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(
+                    1000u32.saturating_mul(starting_bsp_weight.into()),
+                );
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000)).unwrap();
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000))
+                    .unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1000000000);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1000000000);
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
+                        .unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
+                assert!(
+                    threshold_to_succeed > 0
+                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                );
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP can only volunteer after some number of blocks have passed.
                 assert!(block_number > frame_system::Pallet::<Test>::block_number());
@@ -6703,12 +7291,18 @@ mod compute_threshold {
                     }
                 });
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
+                        .unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
+                assert!(
+                    threshold_to_succeed > 0
+                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                );
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -6728,10 +7322,15 @@ mod compute_threshold {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6759,11 +7358,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -6779,14 +7374,16 @@ mod compute_threshold {
 
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
-                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
+                let (threshold_to_succeed, slope) =
+                    FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
 
                 assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+                let block_number =
+                    FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
@@ -6800,11 +7397,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
@@ -6825,16 +7418,12 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set BlockRangeToMaximumThreshold to one
+                // Set TickRangeToMaximumThreshold to one
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
-                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
@@ -6857,11 +7446,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
@@ -6869,7 +7454,7 @@ mod compute_threshold {
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 // Set max reputation weight
@@ -6894,37 +7479,29 @@ mod compute_threshold {
         }
 
         #[test]
-        fn bsp_with_heigher_weight_should_have_higher_slope() {
+        fn bsp_with_higher_weight_should_have_higher_slope() {
             new_test_ext().execute_with(|| {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set global_weight to 1
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
+                // Set global_weight to the sum of the two BSPs reputation weights
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
 
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
@@ -6932,21 +7509,22 @@ mod compute_threshold {
                 let (_threshold_to_succeed, slope_bsp_1) =
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
 
-
-                // Set BSP's reputation weight to max
-                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_charlie_id, |bsp| {
-                    match bsp {
+                // Set BSP's reputation weight to 10 (10 times higher than the other BSP)
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+                    &bsp_charlie_id,
+                    |bsp| match bsp {
                         Some(bsp) => {
-                            bsp.reputation_weight = u32::MAX;
+                            bsp.reputation_weight = 10;
                         }
                         None => {
                             panic!("BSP should exist");
                         }
-                    }
-                });
+                    },
+                );
 
                 let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at).unwrap();
+                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
+                        .unwrap();
 
                 // BSP with higher weight should have higher slope
                 assert!(slope_bsp_2 > slope_bsp_1);
@@ -6961,29 +7539,21 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-                        bsp_account_id,
-                    )
-                        .unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                // Set global_weight to 1
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
+                // Set global_weight to the sum of the weights of the BSPs
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
 
                 // Set ReplicationTarget to 2
                 ReplicationTarget::<Test>::set(2);
 
-                // Set BlockRangeToMaximumThreshold to a non-zero value
+                // Set TickRangeToMaximumThreshold to a non-zero value
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
@@ -6992,9 +7562,10 @@ mod compute_threshold {
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
 
                 let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at).unwrap();
+                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
+                        .unwrap();
 
-                // BSP with higher weight should have higher slope
+                // BSPs with equal weight should have equal slope
                 assert_eq!(slope_bsp_2, slope_bsp_1);
             });
         }
@@ -7005,6 +7576,8 @@ mod stop_storing_for_insolvent_user {
     use super::*;
 
     mod success {
+
+        use shp_traits::PaymentStreamsInterface;
 
         use super::*;
 
@@ -7023,10 +7596,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7050,18 +7624,13 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7080,7 +7649,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -7099,7 +7668,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -7115,11 +7684,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -7208,10 +7773,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 50;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7254,7 +7820,7 @@ mod stop_storing_for_insolvent_user {
                 ));
 
                 // Dispatch MSP confirm storing.
-                assert_ok!(FileSystem::msp_respond_storage_requests(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
                     bounded_vec![(
                         bucket_id,
@@ -7277,7 +7843,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -7328,10 +7894,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Get the new bucket root after deletion
                 let new_bucket_root_after_deletion =
-				<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(
-					&bucket_id,
-				)
-					.unwrap();
+                    Providers::get_root_bucket(&bucket_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -7358,185 +7921,179 @@ mod stop_storing_for_insolvent_user {
         #[test]
         fn stop_storing_for_insolvent_user_works_if_user_does_not_have_payment_stream_with_sp() {
             new_test_ext().execute_with(|| {
-            let owner_account_id = Keyring::Alice.to_account_id();
-            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-            let bsp_account_id = Keyring::Bob.to_account_id();
-            let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-            let msp = Keyring::Charlie.to_account_id();
-            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-            let size = 4;
-            let fingerprint = H256::zero();
-            let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-            let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-            let storage_amount: StorageData<Test> = 100;
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
 
-            let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-            // Dispatch storage request.
-            assert_ok!(FileSystem::issue_storage_request(
-                owner_signed.clone(),
-                bucket_id,
-                location.clone(),
-                fingerprint,
-                size,
-                msp_id,
-                peer_ids.clone(),
-            ));
-
-            // Sign up account as a Backup Storage Provider
-            assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-
-            let file_key = FileSystem::compute_file_key(
-                owner_account_id.clone(),
-                bucket_id,
-                location.clone(),
-                size,
-                fingerprint,
-            );
-
-            let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
-
-            // Dispatch BSP volunteer.
-            assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
-
-            // In this case, the tick number is going to be equal to the current block number
-            // minus one (on_poll hook not executed in first block)
-            let tick_when_confirming = System::block_number() - 1;
-
-            // Dispatch BSP confirm storing.
-            assert_ok!(FileSystem::bsp_confirm_storing(
-                bsp_signed.clone(),
-                CompactProof {
-                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                },
-                BoundedVec::try_from(vec![(
-                    file_key,
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    }
-                )])
-                .unwrap(),
-            ));
-
-            // Assert that the storage was updated
-            assert_eq!(
-                FileSystem::storage_requests(file_key),
-                Some(StorageRequestMetadata {
-                    requested_at: 1,
-                    owner: owner_account_id.clone(),
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
                     bucket_id,
-                    location: location.clone(),
+                    location.clone(),
                     fingerprint,
                     size,
-                    msp: Some((msp_id, false)),
-                    user_peer_ids: peer_ids.clone(),
-                    data_server_sps: BoundedVec::default(),
-                    bsps_required: ReplicationTarget::<Test>::get(),
-                    bsps_confirmed: 1,
-                    bsps_volunteered: 1,
-                })
-            );
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-            // Assert that the RequestStorageBsps was updated
-            assert_eq!(
-                FileSystem::storage_request_bsps(file_key, bsp_id)
-                    .expect("BSP should exist in storage"),
-                StorageRequestBspsMetadata::<Test> {
-                    confirmed: true,
-                    _phantom: Default::default()
-                }
-            );
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-            let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-            // Assert that the correct event was deposited
-            System::assert_last_event(
-                Event::BspConfirmedStoring {
-                    who: bsp_account_id.clone(),
-                    bsp_id,
-                    file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
-                    new_root,
-                }
-                .into(),
-            );
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
-            // Assert that the proving cycle was initialised for this BSP.
-            let last_tick_provider_submitted_proof =
-                LastTickProviderSubmittedAProofFor::<Test>::get(&bsp_id).unwrap();
-            assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-            // Assert that the correct event was deposited.
-            System::assert_has_event(
-                Event::BspChallengeCycleInitialised {
-                    who: bsp_account_id,
-                    bsp_id,
-                }
-                .into(),
-            );
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
-            // Assert that the capacity used by the BSP was updated
-            assert_eq!(
-                pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
-                    .expect("BSP should exist in storage")
-                    .capacity_used,
-                size
-            );
+                // Dispatch BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
+                ));
 
-            // Now that the BSP has confirmed storing, we can simulate the payment stream being deleted
-			// and the BSP stopping storing for the user. Note that we use Alice as a user for this test,
-			// which is NOT an insolvent user. This simulates the case where the user has correctly paid all
-			// its debt but a lagging SP has not updated its storage state yet.
+                // Assert that the storage was updated
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                    })
+                );
 
-			// Delete the payment stream between the user and the BSP.
-			assert_ok!(<<Test as crate::Config>::PaymentStreams as shp_traits::PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
-				&bsp_id,
-				&owner_account_id,
-			));
-			// Try to stop storing the user's file as the BSP.
-            assert_ok!(FileSystem::stop_storing_for_insolvent_user(
-                bsp_signed.clone(),
-                file_key,
-                bucket_id,
-                location.clone(),
-                owner_account_id.clone(),
-                fingerprint,
-                size,
-                CompactProof {
-                    encoded_nodes: vec![file_key.as_ref().to_vec()],
-                },
-            ));
+                // Assert that the RequestStorageBsps was updated
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: true,
+                        _phantom: Default::default()
+                    }
+                );
 
-            // Assert that the correct event was deposited
-            System::assert_last_event(
-                Event::SpStopStoringInsolventUser {
-                    sp_id: bsp_id,
+                let new_root = Providers::get_root(bsp_id).unwrap();
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::BspConfirmedStoring {
+                        who: bsp_account_id.clone(),
+                        bsp_id,
+                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        new_root,
+                    }
+                    .into(),
+                );
+
+                // Assert that the proving cycle was initialised for this BSP.
+                let last_tick_provider_submitted_proof =
+                    LastTickProviderSubmittedAProofFor::<Test>::get(&bsp_id).unwrap();
+                assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
+
+                // Assert that the correct event was deposited.
+                System::assert_has_event(
+                    Event::BspChallengeCycleInitialised {
+                        who: bsp_account_id,
+                        bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Assert that the capacity used by the BSP was updated
+                assert_eq!(
+                    pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
+                        .expect("BSP should exist in storage")
+                        .capacity_used,
+                    size
+                );
+
+                // Now that the BSP has confirmed storing, we can simulate the payment stream being deleted
+                // and the BSP stopping storing for the user. Note that we use Alice as a user for this test,
+                // which is NOT an insolvent user. This simulates the case where the user has correctly paid all
+                // its debt but a lagging SP has not updated its storage state yet.
+
+                // Delete the payment stream between the user and the BSP.
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                        &bsp_id,
+                        &owner_account_id,
+                    )
+                );
+                // Try to stop storing the user's file as the BSP.
+                assert_ok!(FileSystem::stop_storing_for_insolvent_user(
+                    bsp_signed.clone(),
                     file_key,
-                    owner: owner_account_id,
-                    location,
-                    new_root,
-                }
-                .into(),
-            );
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                ));
 
-            // Assert that the capacity used by the BSP was updated
-            assert_eq!(
-                pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
-                    .expect("BSP should exist in storage")
-                    .capacity_used,
-                0
-            );
-        });
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::SpStopStoringInsolventUser {
+                        sp_id: bsp_id,
+                        file_key,
+                        owner: owner_account_id,
+                        location,
+                        new_root,
+                    }
+                    .into(),
+                );
+
+                // Assert that the capacity used by the BSP was updated
+                assert_eq!(
+                    pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
+                        .expect("BSP should exist in storage")
+                        .capacity_used,
+                    0
+                );
+            });
         }
     }
 
@@ -7555,10 +8112,11 @@ mod stop_storing_for_insolvent_user {
                 let size = 4;
                 let fingerprint = H256::zero();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Try to stop storing for the insolvent user.
                 assert_noop!(
@@ -7594,10 +8152,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7621,18 +8180,13 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7651,7 +8205,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -7670,7 +8224,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -7686,11 +8240,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -7747,11 +8297,12 @@ mod stop_storing_for_insolvent_user {
                 let size = 4;
                 let fingerprint = H256::zero();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
                 add_msp_to_provider_storage(&another_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -7795,10 +8346,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7822,18 +8374,13 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id.clone(),
-				)
-					.unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                // In this case, the tick number is going to be equal to the current block number
-                // minus one (on_poll hook not executed in first block)
-                let tick_when_confirming = System::block_number() - 1;
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7852,7 +8399,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the storage was updated
                 assert_eq!(
-                    FileSystem::storage_requests(file_key),
+                    file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
                         requested_at: 1,
                         owner: owner_account_id.clone(),
@@ -7871,7 +8418,7 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the RequestStorageBsps was updated
                 assert_eq!(
-                    FileSystem::storage_request_bsps(file_key, bsp_id)
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
                         .expect("BSP should exist in storage"),
                     StorageRequestBspsMetadata::<Test> {
                         confirmed: true,
@@ -7887,11 +8434,7 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let new_root =
-				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
-					bsp_id,
-				)
-					.unwrap();
+                let new_root = Providers::get_root(bsp_id).unwrap();
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -7978,7 +8521,9 @@ fn create_sp_multiaddresses(
     multiaddresses
 }
 
-fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<Test> {
+fn add_msp_to_provider_storage(
+    msp: &sp_runtime::AccountId32,
+) -> (ProviderIdFor<Test>, ValuePropId<Test>) {
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
@@ -7986,14 +8531,10 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
-        value_prop: pallet_storage_providers::types::ValueProposition {
-            identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),
-            data_limit: 100,
-            protocols: BoundedVec::default(),
-        },
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         owner_account: msp.clone(),
         payment_account: msp.clone(),
+        sign_up_block: frame_system::Pallet::<Test>::block_number(),
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);
@@ -8002,13 +8543,22 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
         msp_hash,
     );
 
-    msp_hash
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
+    let value_prop_id = value_prop.derive_id();
+    pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
+        msp_hash,
+        value_prop_id,
+        ValueProposition::<Test>::new(1, bounded_vec![], 100),
+    );
+
+    (msp_hash, value_prop_id)
 }
 
 fn create_bucket(
     owner: &sp_runtime::AccountId32,
     name: BucketNameFor<Test>,
     msp_id: ProviderIdFor<Test>,
+    value_prop_id: ValuePropId<Test>,
 ) -> BucketIdFor<Test> {
     let bucket_id =
         <Test as crate::Config>::Providers::derive_bucket_id(&msp_id, &owner, name.clone());
@@ -8020,7 +8570,8 @@ fn create_bucket(
         origin,
         msp_id,
         name.clone(),
-        false
+        false,
+        value_prop_id
     ));
 
     // Assert bucket was created
@@ -8033,6 +8584,7 @@ fn create_bucket(
             private: false,
             read_access_group_id: None,
             size: 0,
+            value_prop_id
         })
     );
 

@@ -25,11 +25,13 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 
 pallet-nfts = { workspace = true }
+sp-keyring = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # Local
+shp-data-price-updater = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 
@@ -39,6 +41,7 @@ serde = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-payment-streams = { workspace = true }
+shp-constants = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }

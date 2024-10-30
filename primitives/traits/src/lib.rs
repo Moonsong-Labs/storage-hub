@@ -11,7 +11,10 @@ use frame_support::{
 use scale_info::{prelude::fmt::Debug, TypeInfo};
 use sp_core::Get;
 use sp_runtime::{
-    traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating},
+    traits::{
+        AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One,
+        Saturating, Zero,
+    },
     BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
@@ -27,6 +30,51 @@ impl<T> MaybeDebug for T {}
 
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
+
+pub trait NumericalParam:
+    Parameter
+    + Member
+    + MaybeSerializeDeserialize
+    + Debug
+    + Ord
+    + MaxEncodedLen
+    + Copy
+    + Default
+    + Zero
+    + One
+    + Saturating
+    + CheckedAdd
+    + CheckedMul
+    + CheckedDiv
+    + CheckedSub
+    + AtLeast32BitUnsigned
+    + HasCompact
+    + FullCodec
+{
+}
+
+// Automatically implement `NumericalParam` for any type that implements all the required traits
+impl<T> NumericalParam for T where
+    T: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy
+        + Default
+        + Zero
+        + One
+        + Saturating
+        + CheckedAdd
+        + CheckedMul
+        + CheckedDiv
+        + CheckedSub
+        + AtLeast32BitUnsigned
+        + HasCompact
+        + FullCodec
+{
+}
 
 /// A trait to read information about buckets registered in the system, such as their owner and
 /// the MSP ID of the MSP that's storing it, etc.
@@ -67,16 +115,7 @@ pub trait ReadBucketsInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact
-        + Into<u64>;
+    type StorageDataUnit: NumericalParam + Into<u64> + MaybeDisplay;
 
     /// Type of the root of the buckets.
     type MerkleHash: Parameter
@@ -182,16 +221,7 @@ pub trait MutateBucketsInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact
-        + Into<u64>;
+    type StorageDataUnit: NumericalParam + Into<u64> + MaybeDisplay;
 
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
@@ -199,6 +229,21 @@ pub trait MutateBucketsInterface {
     /// Type of the root and keys in the Merkle Patricia Forest of a
     /// registered Provider.
     type MerkleHash: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    type ValuePropId: Parameter
         + Member
         + MaybeSerializeDeserialize
         + Debug
@@ -232,6 +277,7 @@ pub trait MutateBucketsInterface {
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult;
 
     /// Change MSP of a bucket.
@@ -276,29 +322,10 @@ pub trait ReadStorageProvidersInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact
-        + Into<u64>;
+    type StorageDataUnit: NumericalParam + Into<u64> + MaybeDisplay;
 
     /// Type of the counter of the total number of registered Storage Providers.
-    type SpCount: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Ord
-        + AtLeast32BitUnsigned
-        + FullCodec
-        + Copy
-        + Default
-        + Debug
-        + scale_info::TypeInfo
-        + MaxEncodedLen;
+    type SpCount: NumericalParam + scale_info::TypeInfo;
 
     /// Type that represents a MultiAddress of a Storage Provider.
     type MultiAddress: Parameter
@@ -382,16 +409,7 @@ pub trait MutateStorageProvidersInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact
-        + Into<u64>;
+    type StorageDataUnit: NumericalParam + Into<u64>;
 
     /// Increase the used capacity of a Storage Provider (MSP or BSP). To be called when confirming
     /// that it's storing a new file.
@@ -470,6 +488,9 @@ pub trait ReadChallengeableProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Get the minimum stake for a registered challengeable Provider.
+    fn get_min_stake() -> <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance;
 }
 
 /// A trait to mutate the state of challengeable Providers, such as updating their root.
@@ -626,16 +647,7 @@ pub trait MutateProvidersInterface {
 /// its total used capacity.
 pub trait SystemMetricsInterface {
     /// Type of the unit provided by Providers
-    type ProvidedUnit: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact
-        + Into<u64>;
+    type ProvidedUnit: NumericalParam + Into<u64>;
 
     /// Get the total available capacity of units of the network.
     fn get_total_capacity() -> Self::ProvidedUnit;
@@ -679,6 +691,10 @@ pub trait ProofsDealerInterface {
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
     /// The type that represents the randomness output.
     type RandomnessOutput: Parameter + Member + Debug;
+    /// The numerical type used to represent ticks.
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time
+    type TickNumber: NumericalParam;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -758,6 +774,12 @@ pub trait ProofsDealerInterface {
     /// deadline for submitting a proof to the current tick + the Provider's period (based on its
     /// stake) + the challenges tick tolerance.
     fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
+
+    /// Get the current tick.
+    ///
+    /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
+    /// challenges and making sure that Providers respond to them in time.
+    fn get_current_tick() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -888,16 +910,7 @@ pub trait PaymentStreamsInterface {
         + PartialEq
         + Clone;
     /// The type of the units that the Provider provides to the User (for example, for storage could be terabytes)
-    type Units: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Saturating
-        + Copy
-        + MaxEncodedLen
-        + HasCompact
+    type Units: NumericalParam
         + Into<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 
     /// Create a new fixed-rate payment stream from a User to a Provider.
@@ -974,6 +987,23 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
+/// A trait to mutate the price per unit per tick.
+///
+/// This is used by the Payment Streams pallet to expose the function to update the price per unit per tick,
+/// which governs the amount to charge for dynamic-rate payment streams.
+pub trait MutatePricePerUnitPerTickInterface {
+    /// The type which represents a price per unit per tick.
+    type PricePerUnitPerTick: NumericalParam;
+
+    /// Get the price per unit per tick.
+    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick;
+
+    /// Update the price per unit per tick..
+    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick);
+}
+
+/// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof
+/// submitters in the last ticks.
 pub trait ProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter
@@ -992,7 +1022,49 @@ pub trait ProofSubmittersInterface {
         tick_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>>;
 
+    fn get_current_tick() -> Self::TickNumber;
+
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32>;
 
     fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId);
+}
+
+/// A trait to encode, decode and read information from file metadata.
+pub trait FileMetadataInterface {
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a file's metadata
+    type Metadata: Parameter + Member + MaybeSerializeDeserialize + Debug + Encode + Decode;
+    /// The type which represents the unit that we use to measure file size (e.g. bytes)
+    type StorageDataUnit: NumericalParam + Into<u64>;
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error>;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8>;
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit;
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error>;
+}
+
+/// A trait for implementing the formula to update the price of a unit of stored data.
+///
+/// This is used by the File System pallet, which requires some type to implement this trait,
+/// and uses such implementation to update the price of a unit of stored data on every
+/// `on_poll` hook execution.
+pub trait UpdateStoragePrice {
+    /// The numerical type which represents the price of a storage request.
+    type Price: NumericalParam;
+    /// The numerical type which represents units of storage data.
+    type StorageDataUnit: NumericalParam;
+
+    /// Update the price of a storage request.
+    ///
+    /// Takes into consideration, the total capacity of the network and the used capacity.
+    /// Returns the new price of the storage request, according to the chosen formula.
+    fn update_storage_price(
+        current_price: Self::Price,
+        used_capacity: Self::StorageDataUnit,
+        total_capacity: Self::StorageDataUnit,
+    ) -> Self::Price;
 }

@@ -2,7 +2,7 @@ import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord } from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -105,12 +105,17 @@ export class BspNetTestApi implements AsyncDisposable {
     return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
-  private async sendNewStorageRequest(source: string, location: string, bucketName: string) {
-    return Files.sendNewStorageRequest(this._api, source, location, bucketName);
+  private async sendNewStorageRequest(
+    source: string,
+    location: string,
+    bucketName: string,
+    valuePropId: HexString
+  ) {
+    return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
   }
 
-  private async createBucket(bucketName: string) {
-    return Files.createBucket(this._api, bucketName);
+  private async createBucket(bucketName: string, valuePropId?: HexString) {
+    return Files.createBucket(this._api, bucketName, valuePropId);
   }
 
   private assertEvent(module: string, method: string, events?: EventRecord[]) {
@@ -212,7 +217,11 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.timeout - Optional. The maximum time (in milliseconds) to wait for the log message to appear. Default 10s.
        * @returns A promise that resolves to the matching log message if found, or rejects if the timeout is reached.
        */
-      log: async (options: { searchString: string; containerName: string; timeout?: number }) => {
+      log: async (options: {
+        searchString: string;
+        containerName: string;
+        timeout?: number;
+      }) => {
         return Assertions.assertDockerLog(
           options.containerName,
           options.searchString,
@@ -234,13 +243,67 @@ export class BspNetTestApi implements AsyncDisposable {
       bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
 
       /**
+       * Waits for a BSP to submit to the tx pool the extrinsic to volunteer for a storage request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a BSP has volunteered.
+       */
+      bspVolunteerInTxPool: (expectedExts?: number) =>
+        Waits.waitForBspVolunteerWithoutSealing(this._api, expectedExts),
+
+      /**
        * Waits for a BSP to confirm storing a file.
+       *
+       * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
+       * Then seals a block and checks for the `BspConfirmedStoring` events.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts)
+      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
+
+      /**
+       * Waits for a MSP to respond to storage requests.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has responded to storage requests.
+       */
+      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
+
+      /**
+       * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
+       */
+      bspStoredInTxPool: (expectedExts?: number) =>
+        Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
+
+      /**
+       * Waits for a BSP to complete storing a file key.
+       * @param fileKey - Param to specify the file key to wait for.
+       * @returns A promise that resolves when a BSP has completed to store a file.
+       */
+      bspFileStorageComplete: (fileKey: H256 | string) =>
+        Waits.waitForBspFileStorageComplete(this._api, fileKey),
+
+      /**
+       * Waits for a BSP to complete deleting a file from its forest.
+       * @param fileKey - Param to specify the file key to wait for deletion.
+       * @returns A promise that resolves when a BSP has correctly deleted the file from its forest storage.
+       */
+      bspFileDeletionCompleted: (fileKey: H256 | string) =>
+        Waits.waitForBspFileDeletionComplete(this._api, fileKey),
+
+      /**
+       * Waits for a BSP to catch up to the tip of the chain
+       * @param bspBehindApi - The Api object of the BSP that is behind
+       * @returns A promise that resolves when a BSP has caught up to the tip of the chain
+       */
+      bspCatchUpToChainTip: (bspBehindApi: ApiPromise) =>
+        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi)
     };
 
+    /**
+     * File operations namespace
+     * Contains methods for interacting with StorageHub file system.
+     */
     const remappedFileNs = {
       /**
        * Creates a new bucket.
@@ -250,8 +313,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair) =>
-        Files.createBucket(this._api, bucketName, undefined, owner),
+      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString) =>
+        Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
 
       /**
        * Creates a new bucket and submits a new storage request.
@@ -267,9 +330,19 @@ export class BspNetTestApi implements AsyncDisposable {
         source: string,
         location: string,
         bucketName: string,
+        valuePropId?: HexString,
         msp_id?: HexString,
         owner?: KeyringPair
-      ) => Files.sendNewStorageRequest(this._api, source, location, bucketName, msp_id, owner)
+      ) =>
+        Files.sendNewStorageRequest(
+          this._api,
+          source,
+          location,
+          bucketName,
+          valuePropId,
+          msp_id,
+          owner
+        )
     };
 
     /**
@@ -308,15 +381,21 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       skipTo: (
         blockNumber: number,
-        options?: { waitBetweenBlocks?: number | boolean; waitForBspProofs?: string[] }
+        options?: {
+          waitBetweenBlocks?: number | boolean;
+          waitForBspProofs?: string[];
+          spam?: boolean;
+          verbose?: boolean;
+        }
       ) =>
         BspNetBlock.advanceToBlock(
           this._api,
           blockNumber,
           options?.waitBetweenBlocks,
-          options?.waitForBspProofs
+          options?.waitForBspProofs,
+          options?.spam,
+          options?.verbose
         ),
-
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.

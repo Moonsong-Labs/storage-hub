@@ -127,6 +127,9 @@ export interface MainStorageProviderId extends H256 {}
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
 
+/** @name Multiaddresses */
+export interface Multiaddresses extends Bytes {}
+
 /** @name ProviderId */
 export interface ProviderId extends H256 {}
 
@@ -140,8 +143,16 @@ export interface QueryAvailableStorageCapacityError extends Enum {
 /** @name QueryBspConfirmChunksToProveForFileError */
 export interface QueryBspConfirmChunksToProveForFileError extends Enum {
   readonly isStorageRequestNotFound: boolean;
+  readonly isConfirmChunks: boolean;
+  readonly asConfirmChunks: QueryConfirmChunksToProveForFileError;
   readonly isInternalError: boolean;
-  readonly type: "StorageRequestNotFound" | "InternalError";
+  readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
+}
+
+/** @name QueryConfirmChunksToProveForFileError */
+export interface QueryConfirmChunksToProveForFileError extends Enum {
+  readonly isChallengedChunkToChunkIdError: boolean;
+  readonly type: "ChallengedChunkToChunkIdError";
 }
 
 /** @name QueryEarliestChangeCapacityBlockError */
@@ -164,6 +175,29 @@ export interface QueryFileEarliestVolunteerBlockError extends Enum {
     | "ThresholdArithmeticError"
     | "StorageRequestNotFound"
     | "InternalError";
+}
+
+/** @name QueryMspConfirmChunksToProveForFileError */
+export interface QueryMspConfirmChunksToProveForFileError extends Enum {
+  readonly isStorageRequestNotFound: boolean;
+  readonly isConfirmChunks: boolean;
+  readonly asConfirmChunks: QueryConfirmChunksToProveForFileError;
+  readonly isInternalError: boolean;
+  readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
+}
+
+/** @name QueryMspIdOfBucketIdError */
+export interface QueryMspIdOfBucketIdError extends Enum {
+  readonly isBucketNotFound: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "BucketNotFound" | "InternalApiError";
+}
+
+/** @name QueryProviderMultiaddressesError */
+export interface QueryProviderMultiaddressesError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
 }
 
 /** @name QueryStorageProviderCapacityError */
@@ -203,5 +237,20 @@ export interface StorageProviderId extends Enum {
 
 /** @name TrieRemoveMutation */
 export interface TrieRemoveMutation extends Struct {}
+
+/** @name ValuePropId */
+export interface ValuePropId extends H256 {}
+
+/** @name ValueProposition */
+export interface ValueProposition extends Struct {
+  readonly price_per_unit_of_data_per_block: u64;
+  readonly bucket_data_limit: StorageDataUnit;
+}
+
+/** @name ValuePropositionWithId */
+export interface ValuePropositionWithId extends Struct {
+  readonly id: ValuePropId;
+  readonly value_prop: ValueProposition;
+}
 
 export type PHANTOM_STORAGEHUBCLIENT = "storagehubclient";

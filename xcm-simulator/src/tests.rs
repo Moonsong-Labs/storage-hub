@@ -1,23 +1,44 @@
-use frame_support::{assert_ok, traits::fungible::Inspect};
+use codec::Encode;
+use frame_support::{
+    assert_ok,
+    dispatch::GetDispatchInfo,
+    traits::{fungible::Inspect, OnFinalize, OnPoll},
+    BoundedVec,
+};
+use pallet_balances;
+use pallet_file_system;
+use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
+use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
+use sp_core::H256;
+use sp_runtime::bounded_vec;
+use sp_weights::WeightMeter;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 use xcm_simulator::TestExt;
 
-use crate::relay_chain::location_converter::LocationConverter;
-use crate::storagehub::configs::MaxBatchConfirmStorageRequests;
-use crate::system_chain;
 use crate::{
     constants::{ALICE, BOB, CENTS, INITIAL_BALANCE},
-    parachain, relay_chain, sh_sibling_account_id, storagehub, MockNet, MockParachain,
-    MockSystemChain, Relay, StorageHub, NON_SYS_PARA_ID,
+    parachain, relay_chain,
+    relay_chain::location_converter::LocationConverter,
+    sh_sibling_account_id, storagehub,
+    storagehub::configs::MaxBatchConfirmStorageRequests,
+    system_chain, MockNet, MockParachain, MockSystemChain, Relay, StorageHub, NON_SYS_PARA_ID,
 };
-use codec::Encode;
-use frame_support::dispatch::GetDispatchInfo;
-use frame_support::BoundedVec;
-use pallet_balances;
-use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
-use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
-use sp_core::H256;
+
+fn sh_run_to_block(n: u32) {
+    while storagehub::System::block_number() < n {
+        storagehub::System::set_block_number(storagehub::System::block_number() + 1);
+
+        // Trigger on_poll hook execution.
+        storagehub::ProofsDealer::on_poll(
+            storagehub::System::block_number(),
+            &mut WeightMeter::new(),
+        );
+
+        // Trigger on_finalize hook execution.
+        storagehub::ProofsDealer::on_finalize(storagehub::System::block_number());
+    }
+}
 
 mod relay_token {
     use crate::{child_account_id, SH_PARA_ID};
@@ -426,7 +447,7 @@ mod providers {
     use pallet_randomness::LatestOneEpochAgoRandomness;
     use sp_core::H256;
     use sp_runtime::BoundedVec;
-    use storagehub::configs::SpMinDeposit;
+    use storagehub::configs::{BspSignUpLockPeriod, SpMinDeposit};
 
     use crate::{
         sh_sibling_account_id, storagehub::configs::MinBlocksBetweenCapacityChanges,
@@ -911,6 +932,9 @@ mod providers {
             // And we check its current balance in StorageHub (after deposit)
             parachain_balance_after_deposit =
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID));
+
+            // Advance enough blocks to allow the parachain to sign off as BSP
+            sh_run_to_block(storagehub::System::block_number() + BspSignUpLockPeriod::get());
         });
 
         // The parachain signs off as a provider in StorageHub.
@@ -1085,7 +1109,7 @@ mod providers {
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
 
             // Advance enough blocks to allow the parachain to change its provided capacity
-            storagehub::System::set_block_number(
+            sh_run_to_block(
                 storagehub::System::block_number() + MinBlocksBetweenCapacityChanges::get(),
             );
         });
@@ -1148,7 +1172,6 @@ mod users {
     use pallet_file_system::types::MaxFilePathSize;
     use pallet_file_system::types::MaxNumberOfPeerIds;
     use pallet_file_system::types::MaxPeerIdSize;
-    use pallet_storage_providers::types::ValuePropId;
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
@@ -1172,12 +1195,9 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, bounded_vec![], 10);
+        let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
-            let value_prop: ValueProposition<storagehub::Runtime> = ValueProposition {
-                identifier: ValuePropId::<storagehub::Runtime>::default(),
-                data_limit: 10,
-                protocols: BoundedVec::new(),
-            };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
                 MaxMultiAddressAmount<storagehub::Runtime>,
@@ -1197,7 +1217,9 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                value_prop,
+                1,
+                bounded_vec![],
+                10,
                 ALICE
             ));
 
@@ -1223,6 +1245,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1319,10 +1342,14 @@ mod users {
         // We check that the storage request exists in StorageHub and volunteer Bob
         StorageHub::execute_with(|| {
             // Check that the storage request exists
-            assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
+            assert!(
+                pallet_file_system::StorageRequests::<storagehub::Runtime>::get(file_key.clone())
+                    .is_some()
+            );
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
+            // In the config we set to reach the maximum threshold after 1 block
+            sh_run_to_block(storagehub::System::block_number() + 1);
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1389,7 +1416,7 @@ mod users {
         // We check now that there's a pending file deletion request for this file
         StorageHub::execute_with(|| {
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     parachain_account_in_sh.clone()
                 )
                 .len(),
@@ -1401,7 +1428,7 @@ mod users {
             > = BoundedVec::new();
             file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     parachain_account_in_sh.clone()
                 ),
                 file_deletion_requests_vec
@@ -1427,12 +1454,9 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, bounded_vec![], 10);
+        let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
-            let value_prop: ValueProposition<storagehub::Runtime> = ValueProposition {
-                identifier: ValuePropId::<storagehub::Runtime>::default(),
-                data_limit: 10,
-                protocols: BoundedVec::new(),
-            };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
                 MaxMultiAddressAmount<storagehub::Runtime>,
@@ -1452,7 +1476,9 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                value_prop,
+                1,
+                bounded_vec![],
+                10,
                 ALICE
             ));
 
@@ -1573,6 +1599,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1692,10 +1719,14 @@ mod users {
         // We check that the storage request exists in StorageHub and volunteer Bob
         StorageHub::execute_with(|| {
             // Check that the storage request exists
-            assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
+            assert!(
+                pallet_file_system::StorageRequests::<storagehub::Runtime>::get(file_key.clone())
+                    .is_some()
+            );
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
+            // In the config we set to reach the maximum threshold after 1 block
+            sh_run_to_block(storagehub::System::block_number() + 1);
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1773,7 +1804,7 @@ mod users {
         // We check now that there's a pending file deletion request for this file
         StorageHub::execute_with(|| {
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     charlie_parachain_account_in_sh.clone()
                 )
                 .len(),
@@ -1785,7 +1816,7 @@ mod users {
             > = BoundedVec::new();
             file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
             assert_eq!(
-                storagehub::FileSystem::pending_file_deletion_requests(
+                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     charlie_parachain_account_in_sh.clone()
                 ),
                 file_deletion_requests_vec

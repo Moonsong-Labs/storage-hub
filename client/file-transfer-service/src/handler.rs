@@ -30,15 +30,16 @@ use std::{
 use codec::{Decode, Encode};
 use futures::prelude::*;
 use futures::stream::select;
-use libp2p_identity::PeerId;
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
+    service::traits::NetworkService,
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
+use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{DownloadRequestId, FileKey, FileKeyProof, ParachainNetworkService};
+use shc_common::types::{DownloadRequestId, FileKey, FileKeyProof};
 use shp_file_metadata::ChunkId;
 
 use crate::events::RemoteUploadRequest;
@@ -57,7 +58,7 @@ pub struct FileTransferService {
     /// Receiver for incoming requests.
     request_receiver: async_channel::Receiver<IncomingRequest>,
     /// Substrate network service that gives access to p2p operations.
-    network: Arc<ParachainNetworkService>,
+    network: Arc<dyn NetworkService>,
     /// Registry of (peer, file key) pairs for which we accept requests.
     peer_file_allow_list: HashSet<(PeerId, FileKey)>,
     /// Registry of peers by file key, used for cleanup.
@@ -101,7 +102,7 @@ impl Actor for FileTransferService {
 
                     let (tx, rx) = futures::channel::oneshot::channel();
                     self.network.start_request(
-                        peer_id,
+                        peer_id.into(),
                         self.protocol_name.clone(),
                         request_data,
                         None,
@@ -136,7 +137,7 @@ impl Actor for FileTransferService {
 
                     let (tx, rx) = futures::channel::oneshot::channel();
                     self.network.start_request(
-                        peer_id,
+                        peer_id.into(),
                         self.protocol_name.clone(),
                         request_data,
                         None,
@@ -218,7 +219,7 @@ impl Actor for FileTransferService {
                     multiaddress,
                     callback,
                 } => {
-                    self.network.add_known_address(peer_id, multiaddress);
+                    self.network.add_known_address(peer_id.into(), multiaddress);
                     // `add_known_address()` method doesn't return anything.
                     match callback.send(Ok(())) {
                         Ok(()) => {}
@@ -323,7 +324,8 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
                         pending_response,
                     } = request;
 
-                    self.actor.handle_request(peer, payload, pending_response);
+                    self.actor
+                        .handle_request(peer.into(), payload, pending_response);
                 }
                 None => {
                     warn!(target: LOG_TARGET, "FileTransferService event loop terminated.");
@@ -339,7 +341,7 @@ impl FileTransferService {
     pub fn new(
         protocol_name: ProtocolName,
         request_receiver: async_channel::Receiver<IncomingRequest>,
-        network: Arc<ParachainNetworkService>,
+        network: Arc<dyn NetworkService>,
     ) -> Self {
         Self {
             protocol_name,
@@ -432,7 +434,7 @@ impl FileTransferService {
                     // Send the response back.
                     pending_response.send(response).unwrap();
                 } else {
-                    error!(
+                    debug!(
                         target: LOG_TARGET,
                         "Received unexpected upload request from {} for file key {:?}",
                         peer,

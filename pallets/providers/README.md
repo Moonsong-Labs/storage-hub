@@ -196,7 +196,7 @@ The nature of this event is to allow the caller of the extrinsic to know that th
 ```rust
 MspRequestSignUpSuccess {
     who: T::AccountId,
-    multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+    multiaddresses: Multiaddresses<T>,
     capacity: StorageData<T>,
     value_prop: ValueProposition<T>,
 }
@@ -211,7 +211,7 @@ The nature of this event is to allow the newly registered Main Storage Provider 
 ```rust
 MspSignUpSuccess {
     who: T::AccountId,
-    multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+    multiaddresses: Multiaddresses<T>,
     capacity: StorageData<T>,
     value_prop: ValueProposition<T>,
 }
@@ -226,7 +226,7 @@ The nature of this event is to allow the caller of the extrinsic to know that th
 ```rust
 BspRequestSignUpSuccess {
     who: T::AccountId,
-    multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+    multiaddresses: Multiaddresses<T>,
     capacity: StorageData<T>,
 }
 ```
@@ -240,7 +240,7 @@ The nature of this event is to allow the newly registered Backup Storage Provide
 ```rust
 BspSignUpSuccess {
     who: T::AccountId,
-    multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+    multiaddresses: Multiaddresses<T>,
     capacity: StorageData<T>,
 }
 ```

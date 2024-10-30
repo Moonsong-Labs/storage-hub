@@ -1,10 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use log::warn;
+use log::{debug, warn};
 use serde_json::Number;
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
     QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
@@ -13,16 +13,15 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+};
+use shc_actors_framework::actor::ActorHandle;
+use shc_common::types::{
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses, ProviderId,
+    RandomnessOutput, StorageProviderId, TickNumber, TrieRemoveMutation,
 };
 use sp_api::ApiError;
 use sp_core::H256;
-
-use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProviderId,
-    RandomnessOutput, StorageProviderId, TrieRemoveMutation,
-};
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use super::{
@@ -56,11 +55,16 @@ pub enum BlockchainServiceCommand {
         block_number: BlockNumber,
         callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
     },
-    QueryFileEarliestVolunteerBlock {
+    WaitForTick {
+        tick_number: TickNumber,
+        callback:
+            tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), ApiError>>>,
+    },
+    QueryFileEarliestVolunteerTick {
         bsp_id: ProviderId,
         file_key: H256,
         callback:
-            tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>,
+            tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerTickError>>,
     },
     QueryEarliestChangeCapacityBlock {
         bsp_id: ProviderId,
@@ -84,6 +88,11 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
         >,
+    },
+    QueryProviderMultiaddresses {
+        provider_id: ProviderId,
+        callback:
+            tokio::sync::oneshot::Sender<Result<Multiaddresses, QueryProviderMultiaddressesError>>,
     },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
@@ -166,10 +175,17 @@ pub enum BlockchainServiceCommand {
         provider_id: ProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Option<Balance>>>,
     },
+    QuerySlashAmountPerMaxFileSize {
+        callback: tokio::sync::oneshot::Sender<Result<Balance>>,
+    },
     QueryMspIdOfBucketId {
         bucket_id: BucketId,
         callback:
             tokio::sync::oneshot::Sender<Result<MainStorageProviderId, QueryMspIdOfBucketIdError>>,
+    },
+    ReleaseForestRootWriteLock {
+        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
 }
 
@@ -196,12 +212,15 @@ pub trait BlockchainServiceInterface {
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
 
-    /// Query the earliest block number that a file was volunteered for storage.
-    async fn query_file_earliest_volunteer_block(
+    /// Wait for a tick number.
+    async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError>;
+
+    /// Query the earliest tick number that a file was volunteered for storage.
+    async fn query_file_earliest_volunteer_tick(
         &self,
         bsp_id: ProviderId,
         file_key: H256,
-    ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
+    ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError>;
 
     async fn query_earliest_change_capacity_block(
         &self,
@@ -224,6 +243,12 @@ pub trait BlockchainServiceInterface {
         msp_id: ProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
+
+    /// Query the MSP multiaddresses.
+    async fn query_provider_multiaddresses(
+        &self,
+        msp_id: ProviderId,
+    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
 
     /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
@@ -322,6 +347,8 @@ pub trait BlockchainServiceInterface {
         provider_id: ProviderId,
     ) -> Result<Option<Balance>>;
 
+    async fn query_slash_amount_per_max_file_size(&self) -> Result<Balance>;
+
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
 
@@ -338,6 +365,12 @@ pub trait BlockchainServiceInterface {
         &self,
         bucket_id: BucketId,
     ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError>;
+
+    /// Helper function to release the forest root write lock.
+    async fn release_forest_root_write_lock(
+        &self,
+        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> Result<()>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -399,14 +432,26 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         Ok(())
     }
 
-    async fn query_file_earliest_volunteer_block(
+    async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::WaitForTick {
+            tick_number,
+            callback,
+        };
+        self.send(message).await;
+        let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
+        rx.await.expect("Failed to wait for tick")
+    }
+
+    async fn query_file_earliest_volunteer_tick(
         &self,
         bsp_id: ProviderId,
         file_key: H256,
-    ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+    ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
-        let message = BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+        let message = BlockchainServiceCommand::QueryFileEarliestVolunteerTick {
             bsp_id,
             file_key,
             callback,
@@ -461,6 +506,19 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let message = BlockchainServiceCommand::QueryMspConfirmChunksToProveForFile {
             msp_id,
             file_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_provider_multiaddresses(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryProviderMultiaddresses {
+            provider_id,
             callback,
         };
         self.send(message).await;
@@ -671,6 +729,13 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
+    async fn query_slash_amount_per_max_file_size(&self) -> Result<Balance> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QuerySlashAmountPerMaxFileSize { callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
             match ev.event {
@@ -708,13 +773,24 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
         for retry_count in 0..=retry_strategy.max_retries {
             let tip = retry_strategy.compute_tip(retry_count);
+
+            debug!(target: LOG_TARGET, "Submitting transaction {:?} with tip {}", call, tip);
+
             let mut transaction = self
                 .send_extrinsic(call.clone(), Tip::from(tip as u128))
                 .await?
                 .with_timeout(retry_strategy.timeout);
 
-            if transaction.watch_for_success(&self).await.is_ok() {
-                return Ok(());
+            let result = transaction.watch_for_success(&self).await;
+
+            match result {
+                Ok(_) => {
+                    debug!(target: LOG_TARGET, "Transaction succeeded");
+                    return Ok(());
+                }
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
+                }
             }
 
             if let Some(ref should_retry) = retry_strategy.should_retry {
@@ -736,6 +812,19 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryMspIdOfBucketId {
             bucket_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn release_forest_root_write_lock(
+        &self,
+        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+    ) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::ReleaseForestRootWriteLock {
+            forest_root_write_tx,
             callback,
         };
         self.send(message).await;

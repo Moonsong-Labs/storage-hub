@@ -159,10 +159,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
-       * Block range to maximum threshold cannot be zero.
-       **/
-      BlockRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
-      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -189,7 +185,7 @@ declare module "@polkadot/api-base/types/errors" {
       /**
        * BSPs required for storage request cannot exceed the maximum allowed.
        **/
-      BspsRequiredExceedsMax: AugmentedError<ApiType>;
+      BspsRequiredExceedsTarget: AugmentedError<ApiType>;
       /**
        * Action not allowed while the bucket is being moved.
        **/
@@ -214,10 +210,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to verify proof: required to provide a proof of non-inclusion.
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
-      /**
-       * Failed to convert block number to threshold.
-       **/
-      FailedToConvertBlockNumber: AugmentedError<ApiType>;
       /**
        * Failed to decode threshold.
        **/
@@ -254,6 +246,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
+      /**
+       * Key already exists in mapping when it should not.
+       **/
+      InconsistentStateKeyAlreadyExists: AugmentedError<ApiType>;
       /**
        * SP does not have enough storage capacity to store the file.
        **/
@@ -383,6 +379,10 @@ declare module "@polkadot/api-base/types/errors" {
        * BSPs assignment threshold cannot be below asymptote.
        **/
       ThresholdBelowAsymptote: AugmentedError<ApiType>;
+      /**
+       * Tick range to maximum threshold cannot be zero.
+       **/
+      TickRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
       /**
        * Too many batch responses to process.
        **/
@@ -687,7 +687,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
-       * Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
+       * Error thrown when charging a payment stream would result in an overflow of the balance type
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
@@ -793,10 +793,6 @@ declare module "@polkadot/api-base/types/errors" {
        * The unlock operation cannot succeed because there are still consumers of the lock.
        **/
       InUse: AugmentedError<ApiType>;
-      /**
-       * Invalid non-concrete asset.
-       **/
-      InvalidAssetNotConcrete: AugmentedError<ApiType>;
       /**
        * Invalid asset, reserve chain could not be determined for it.
        **/
@@ -1059,6 +1055,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       RandomnessNotValidYet: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to sign off as a BSP but the sign off period has not passed yet.
+       **/
+      SignOffPeriodNotPassed: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to confirm a sign up that was not requested previously.
        **/
       SignUpNotRequested: AugmentedError<ApiType>;
@@ -1082,6 +1082,18 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
        **/
       StorageTooLow: AugmentedError<ApiType>;
+      /**
+       * Error thrown when value proposition under a given id already exists.
+       **/
+      ValuePropositionAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a value proposition is not available.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
+       * Error thrown when the value proposition id is not found.
+       **/
+      ValuePropositionNotFound: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -1182,6 +1194,14 @@ declare module "@polkadot/api-base/types/errors" {
        * Setting the queue config failed since one of its values was invalid.
        **/
       BadQueueConfig: AugmentedError<ApiType>;
+      /**
+       * The message is too big.
+       **/
+      TooBig: AugmentedError<ApiType>;
+      /**
+       * There are too many active outbound channels.
+       **/
+      TooManyActiveOutboundChannels: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

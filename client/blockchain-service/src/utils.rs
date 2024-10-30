@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use codec::{Decode, Encode};
+use codec::Encode;
 use cumulus_primitives_core::BlockT;
-use frame_support::{StorageHasher, Twox128};
-use lazy_static::lazy_static;
 use log::{debug, error, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
@@ -13,10 +11,15 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers::types::StorageProviderId;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{BlockBackend, HeaderBackend, StorageKey, StorageProvider};
+use sc_client_api::{BlockBackend, HeaderBackend};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
-use shc_common::types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE};
+use shc_common::{
+    blockchain_utils::get_events_at_block,
+    types::{
+        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProviderId, BCSV_KEY_TYPE,
+    },
+};
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
@@ -33,33 +36,20 @@ use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessConfirmStoringRequestData, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
         ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
         ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::{
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{EventsVec, Extrinsic, Tip},
+    types::{Extrinsic, Tip},
     BlockchainService,
 };
-
-lazy_static! {
-    // Would be cool to be able to do this...
-    // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
-
-    // Static and lazily initialised `events_storage_key`
-    static ref EVENTS_STORAGE_KEY: Vec<u8> = {
-        let key = [
-            Twox128::hash(b"System").to_vec(),
-            Twox128::hash(b"Events").to_vec(),
-        ]
-        .concat();
-        key
-    };
-}
 
 impl BlockchainService {
     /// Notify tasks waiting for a block number.
@@ -83,6 +73,39 @@ impl BlockchainService {
 
         for key in keys_to_remove {
             self.wait_for_block_request_by_number.remove(&key);
+        }
+    }
+
+    /// Notify tasks waiting for a tick number.
+    pub(crate) fn notify_tick_number(&mut self, block_hash: &H256) {
+        // Get the current tick number.
+        let tick_number = match self.client.runtime_api().get_current_tick(*block_hash) {
+            Ok(current_tick) => current_tick,
+            Err(_) => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query current tick from runtime in block hash {:?} and block number {:?}. This should not happen.", block_hash, self.client.info().best_number);
+                return;
+            }
+        };
+
+        let mut keys_to_remove = Vec::new();
+
+        for (tick_number, waiters) in self
+            .wait_for_tick_request_by_number
+            .range_mut(..=tick_number)
+        {
+            keys_to_remove.push(*tick_number);
+            for waiter in waiters.drain(..) {
+                match waiter.send(Ok(())) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        error!(target: LOG_TARGET, "Failed to notify task about tick number.");
+                    }
+                }
+            }
+        }
+
+        for key in keys_to_remove {
+            self.wait_for_tick_request_by_number.remove(&key);
         }
     }
 
@@ -220,6 +243,7 @@ impl BlockchainService {
             cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
                 storage_hub_runtime::Runtime,
             >::new(),
+            frame_metadata_hash_extension::CheckMetadataHash::new(false),
         );
 
         let raw_payload = SignedPayload::from_raw(
@@ -235,6 +259,7 @@ impl BlockchainService {
                 (),
                 (),
                 (),
+                None,
             ),
         );
 
@@ -252,7 +277,7 @@ impl BlockchainService {
             storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
                 storage_hub_runtime::AccountId,
             >>::into(caller_pub_key)),
-            polkadot_primitives::Signature::Sr25519(signature.clone()),
+            polkadot_primitives::Signature::Sr25519(signature),
             extra.clone(),
         )
     }
@@ -295,7 +320,7 @@ impl BlockchainService {
             .expect("Extrinsic not found in block. This shouldn't be possible if we're looking into a block for which we got confirmation that the extrinsic was included; qed");
 
         // Get the events from storage.
-        let events_in_block = self.get_events_storage_element(&block_hash)?;
+        let events_in_block = get_events_at_block(&self.client, &block_hash)?;
 
         // Filter the events for the extrinsic.
         // Each event record is composed of the `phase`, `event` and `topics` fields.
@@ -351,25 +376,6 @@ impl BlockchainService {
         }
 
         Ok(result)
-    }
-
-    /// Get the events storage element in a block.
-    pub(crate) fn get_events_storage_element(&self, block_hash: &H256) -> Result<EventsVec> {
-        // Get the events storage.
-        let raw_storage_opt = self
-            .client
-            .storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))
-            .expect("Failed to get Events storage element");
-
-        // Decode the events storage.
-        if let Some(raw_storage) = raw_storage_opt {
-            let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
-                .expect("Failed to decode Events storage element");
-
-            return Ok(block_events);
-        } else {
-            return Err(anyhow::anyhow!("Failed to get Events storage element"));
-        }
     }
 
     /// Check if the challenges tick is one that this provider has to submit a proof for,
@@ -497,6 +503,7 @@ impl BlockchainService {
         let mut next_event_data = None;
 
         // If we have a submit proof request, prioritise it.
+        // This is a BSP only operation, since MSPs don't have to submit proofs.
         while let Some(request) = self.pending_submit_proof_requests.pop_first() {
             // Check if the proof is still the next one to be submitted.
             let provider_id = request.provider_id;
@@ -530,6 +537,7 @@ impl BlockchainService {
         }
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+        // This is a BSP only operation, since MSPs don't have to confirm storing.
         if next_event_data.is_none() {
             let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
@@ -543,6 +551,7 @@ impl BlockchainService {
                     .pending_confirm_storing_request_deque()
                     .pop_front()
                 {
+                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
                     confirm_storing_requests.push(request);
                 } else {
                     break;
@@ -560,7 +569,36 @@ impl BlockchainService {
             }
         }
 
-        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending stop storing for insolvent user requests.
+        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
+        // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
+        if next_event_data.is_none() {
+            let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
+
+            // Batch multiple respond storing requests up to the runtime configured maximum.
+            let mut respond_storage_requests = Vec::new();
+            for _ in 0..max_batch_respond {
+                if let Some(request) = state_store_context
+                    .pending_msp_respond_storage_request_deque()
+                    .pop_front()
+                {
+                    respond_storage_requests.push(request);
+                } else {
+                    break;
+                }
+            }
+
+            // If we have at least 1 respond storing request, send the process event.
+            if respond_storage_requests.len() > 0 {
+                next_event_data = Some(
+                    ProcessMspRespondStoringRequestData {
+                        respond_storing_requests: respond_storage_requests,
+                    }
+                    .into(),
+                );
+            }
+        }
+
+        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
                 .pending_stop_storing_for_insolvent_user_request_deque()
@@ -584,12 +622,19 @@ impl BlockchainService {
 
         let data = data.into();
 
-        // If this is a confirm storing request or a stop storing for insolvent user request, we need to store it in the state store.
+        // If this is a confirm storing request, respond storage request, or a stop storing for insolvent user request, we need to store it in the state store.
         match &data {
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
                     .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
                     .write(data);
                 state_store_context.commit();
             }

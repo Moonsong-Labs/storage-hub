@@ -25,6 +25,7 @@ import {
   mspKey,
   shUser
 } from "../pjsKeyring";
+import { MILLIUNIT, UNIT } from "../constants";
 
 export type ShEntity = {
   port: number;
@@ -38,7 +39,7 @@ export class NetworkLauncher {
   constructor(
     private readonly type: NetworkType,
     private readonly config: NetLaunchConfig
-  ) {}
+  ) { }
 
   private selectComposeFile() {
     invariant(this.type, "Network type has not been set yet");
@@ -246,17 +247,67 @@ export class NetworkLauncher {
           who,
           ShConsts.DUMMY_MSP_ID,
           this.config.capacity || ShConsts.CAPACITY_512,
+          // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           [multiAddressMsp],
-          {
-            identifier: ShConsts.VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
-          },
+          1,
+          "Terms of Service...",
+          500,
           who
         )
       )
     );
     return this;
+  }
+
+  public async setupRuntimeParams(api: EnrichedBspApi) {
+    // Adjusting runtime parameters...
+    // The `set_parameter` extrinsic receives an object like this:
+    // {
+    //   RuntimeConfig: Enum {
+    //     SlashAmountPerMaxFileSize: [null, {VALUE_YOU_WANT}],
+    //     StakeToChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //     CheckpointChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //     MinChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //   }
+    // }
+    const slashAmountPerMaxFileSizeRuntimeParameter = {
+      RuntimeConfig: {
+        SlashAmountPerMaxFileSize: [null, 20n * MILLIUNIT]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(
+        api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter)
+      )
+    );
+    const stakeToChallengePeriodRuntimeParameter = {
+      RuntimeConfig: {
+        StakeToChallengePeriod: [null, 1000n * UNIT]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(
+        api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter)
+      )
+    );
+    const checkpointChallengePeriodRuntimeParameter = {
+      RuntimeConfig: {
+        CheckpointChallengePeriod: [null, 10]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(
+        api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter)
+      )
+    );
+    const minChallengePeriodRuntimeParameter = {
+      RuntimeConfig: {
+        MinChallengePeriod: [null, 5]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))
+    );
   }
 
   public async execDemoTransfer() {
@@ -354,6 +405,7 @@ export class NetworkLauncher {
 
     await launchedNetwork.setupGlobal(userApi);
     await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);
+    await launchedNetwork.setupRuntimeParams(userApi)
 
     if (launchedNetwork.type === "fullnet") {
       const mspContainerName = launchedNetwork.composeYaml.services["sh-msp"].container_name;

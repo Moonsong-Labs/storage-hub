@@ -1,21 +1,21 @@
 export const NODE_INFOS = {
   user: {
     containerName: "docker-sh-user-1",
-    port: 9977,
+    port: 9888,
     p2pPort: 30444,
     AddressId: "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
     expectedPeerId: "12D3KooWMvbhtYjbhgjoDzbnf71SFznJAKBBkSGYEUtnpES1y9tM"
   },
   bsp: {
     containerName: "docker-sh-bsp-1",
-    port: 9966,
+    port: 9666,
     p2pPort: 30350,
     AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
     expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
   },
   msp: {
     containerName: "docker-sh-msp-1",
-    port: 9988,
+    port: 9777,
     p2pPort: 30555,
     AddressId: "5E1rPv1M2mheg6pM57QqU7TZ6eCwbVpiYfyYkrugpBdEzDiU",
     nodeKey: "0x12b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314",
@@ -93,3 +93,10 @@ export const CAPACITY = {
 
 export const U32_MAX = (BigInt(1) << BigInt(32)) - BigInt(1);
 export const MAX_STORAGE_CAPACITY = CAPACITY[1024] * 4n - 1n;
+
+export const REMARK_WEIGHT_REF_TIME = 127_121_340;
+export const REMARK_WEIGHT_PROOF_SIZE = 142;
+export const TRANSFER_WEIGHT_REF_TIME = 297_297_000;
+export const TRANSFER_WEIGHT_PROOF_SIZE = 308;
+
+export const JUMP_CAPACITY_BSP = 1073741824;

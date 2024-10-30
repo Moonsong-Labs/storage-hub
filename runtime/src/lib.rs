@@ -1,18 +1,19 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-// `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
+// `frame_support::runtime` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-mod configs;
+pub mod apis;
+pub mod configs;
+mod genesis_config_presets;
 mod weights;
 
-use shp_file_metadata::ChunkId;
+extern crate alloc;
+
 use smallvec::smallvec;
-use sp_api::impl_runtime_apis;
-use sp_core::H256;
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
@@ -20,55 +21,23 @@ use sp_runtime::{
 };
 
 use sp_std::prelude::*;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-use frame_support::genesis_builder_helper::{build_config, create_default_config};
-use frame_support::{
-    construct_runtime,
-    weights::{
-        constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient,
-        WeightToFeeCoefficients, WeightToFeePolynomial,
-    },
+use frame_support::weights::{
+    constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient, WeightToFeeCoefficients,
+    WeightToFeePolynomial,
 };
 pub use parachains_common::BlockNumber;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
-use sp_runtime::{
-    traits::Block as BlockT,
-    transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, ExtrinsicInclusionMode,
-};
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
 use sp_std::prelude::Vec;
-
-use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
-    QueryMspConfirmChunksToProveForFileError,
-};
-use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
-use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
-use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError,
-    GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
-};
-use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId, ProviderId,
-    StorageProviderId,
-};
-use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryStorageProviderCapacityError,
-};
-use shp_traits::TrieRemoveMutation;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
 
-pub use crate::configs::{StorageDataUnit, StorageProofsMerkleTrieLayout};
+pub use crate::configs::{xcm_config, StorageDataUnit, StorageProofsMerkleTrieLayout};
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -112,6 +81,7 @@ pub type SignedExtra = (
     frame_system::CheckWeight<Runtime>,
     pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
     cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<Runtime>,
+    frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
@@ -189,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,
-    apis: RUNTIME_API_VERSIONS,
+    apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,
     state_version: 1,
 };
@@ -211,6 +181,8 @@ pub const DAYS: BlockNumber = HOURS * 24;
 pub const UNIT: Balance = 1_000_000_000_000;
 pub const MILLIUNIT: Balance = 1_000_000_000;
 pub const MICROUNIT: Balance = 1_000_000;
+pub const NANOUNIT: Balance = 1_000;
+pub const PICOUNIT: Balance = 1;
 
 /// The existential deposit. Set to 1/10 of the Connected Relay Chain.
 pub const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
@@ -238,56 +210,85 @@ const BLOCK_PROCESSING_VELOCITY: u32 = 1;
 /// Relay chain slot duration, in milliseconds.
 const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
 
-/// The version information used to identify this runtime when compiled natively.
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-    NativeVersion {
-        runtime_version: VERSION,
-        can_author_with: Default::default(),
-    }
-}
-
 // Create the runtime by composing the FRAME pallets that were previously configured.
-construct_runtime!(
-    pub enum Runtime {
-        // System support stuff.
-        System: frame_system = 0,
-        ParachainSystem: cumulus_pallet_parachain_system = 1,
-        Timestamp: pallet_timestamp = 2,
-        ParachainInfo: parachain_info = 3,
+#[frame_support::runtime]
+mod runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Runtime;
 
-        // Monetary stuff.
-        Balances: pallet_balances = 10,
-        TransactionPayment: pallet_transaction_payment = 11,
+    // System support stuff
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type ParachainSystem = cumulus_pallet_parachain_system;
+    #[runtime::pallet_index(2)]
+    pub type Timestamp = pallet_timestamp;
+    #[runtime::pallet_index(3)]
+    pub type ParachainInfo = parachain_info;
 
-        // Governance
-        Sudo: pallet_sudo = 15,
+    // Monetary stuff
+    #[runtime::pallet_index(10)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(11)]
+    pub type TransactionPayment = pallet_transaction_payment;
 
-        // Collator support. The order of these 4 are important and shall not change.
-        Authorship: pallet_authorship = 20,
-        CollatorSelection: pallet_collator_selection = 21,
-        Session: pallet_session = 22,
-        Aura: pallet_aura = 23,
-        AuraExt: cumulus_pallet_aura_ext = 24,
+    // Governance
+    #[runtime::pallet_index(15)]
+    pub type Sudo = pallet_sudo;
 
-        // XCM helpers.
-        XcmpQueue: cumulus_pallet_xcmp_queue = 30,
-        PolkadotXcm: pallet_xcm = 31,
-        CumulusXcm: cumulus_pallet_xcm = 32,
-        MessageQueue: pallet_message_queue = 33,
+    // Collator support. The order of these 4 are important and shall not change.
+    #[runtime::pallet_index(20)]
+    pub type Authorship = pallet_authorship;
+    #[runtime::pallet_index(21)]
+    pub type CollatorSelection = pallet_collator_selection;
+    #[runtime::pallet_index(22)]
+    pub type Session = pallet_session;
+    #[runtime::pallet_index(23)]
+    pub type Aura = pallet_aura;
+    #[runtime::pallet_index(24)]
+    pub type AuraExt = cumulus_pallet_aura_ext;
 
-        // Storage Hub
-        Providers: pallet_storage_providers = 40,
-        FileSystem: pallet_file_system = 41,
-        ProofsDealer: pallet_proofs_dealer = 42,
-        Randomness: pallet_randomness = 43,
-        PaymentStreams: pallet_payment_streams = 44,
-        BucketNfts: pallet_bucket_nfts = 45,
+    // XCM helpers
+    #[runtime::pallet_index(30)]
+    pub type XcmpQueue = cumulus_pallet_xcmp_queue;
+    #[runtime::pallet_index(31)]
+    pub type PolkadotXcm = pallet_xcm;
+    #[runtime::pallet_index(32)]
+    pub type CumulusXcm = cumulus_pallet_xcm;
+    #[runtime::pallet_index(33)]
+    pub type MessageQueue = pallet_message_queue;
 
-        // Miscellaneous
-        Nfts: pallet_nfts = 50,
-    }
-);
+    // Storage Hub
+    #[runtime::pallet_index(40)]
+    pub type Providers = pallet_storage_providers;
+    #[runtime::pallet_index(41)]
+    pub type FileSystem = pallet_file_system;
+    #[runtime::pallet_index(42)]
+    pub type ProofsDealer = pallet_proofs_dealer;
+    #[runtime::pallet_index(43)]
+    pub type Randomness = pallet_randomness;
+    #[runtime::pallet_index(44)]
+    pub type PaymentStreams = pallet_payment_streams;
+    #[runtime::pallet_index(45)]
+    pub type BucketNfts = pallet_bucket_nfts;
+
+    // Miscellaneous
+    #[runtime::pallet_index(50)]
+    pub type Nfts = pallet_nfts;
+    #[runtime::pallet_index(51)]
+    pub type Parameters = pallet_parameters;
+}
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benches {
@@ -301,339 +302,10 @@ mod benches {
         [pallet_collator_selection, CollatorSelection]
         [cumulus_pallet_parachain_system, ParachainSystem]
         [cumulus_pallet_xcmp_queue, XcmpQueue]
+        [nfts, Nfts]
+        [pallet_parameters, Parameters]
+        [pallet_proofs_dealer, ProofsDealer]
     );
-}
-
-// TODO: move this to an `apis` module.
-impl_runtime_apis! {
-    /// Allows the collator client to query its runtime to determine whether it should author a block
-    impl cumulus_primitives_aura::AuraUnincludedSegmentApi<Block> for Runtime {
-        fn can_build_upon(
-            included_hash: <Block as BlockT>::Hash,
-            slot: cumulus_primitives_aura::Slot,
-        ) -> bool {
-            configs::ConsensusHook::can_build_upon(included_hash, slot)
-        }
-    }
-
-    impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
-        fn slot_duration() -> sp_consensus_aura::SlotDuration {
-            sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
-        }
-
-        fn authorities() -> Vec<AuraId> {
-            Aura::authorities().into_inner()
-        }
-    }
-
-    impl sp_api::Core<Block> for Runtime {
-        fn version() -> RuntimeVersion {
-            VERSION
-        }
-
-        fn execute_block(block: Block) {
-            Executive::execute_block(block)
-        }
-
-        fn initialize_block(header: &<Block as BlockT>::Header) -> ExtrinsicInclusionMode {
-            Executive::initialize_block(header)
-        }
-    }
-
-    impl sp_api::Metadata<Block> for Runtime {
-        fn metadata() -> OpaqueMetadata {
-            OpaqueMetadata::new(Runtime::metadata().into())
-        }
-
-        fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
-            Runtime::metadata_at_version(version)
-        }
-
-        fn metadata_versions() -> sp_std::vec::Vec<u32> {
-            Runtime::metadata_versions()
-        }
-    }
-
-    impl sp_block_builder::BlockBuilder<Block> for Runtime {
-        fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
-            Executive::apply_extrinsic(extrinsic)
-        }
-
-        fn finalize_block() -> <Block as BlockT>::Header {
-            Executive::finalize_block()
-        }
-
-        fn inherent_extrinsics(data: sp_inherents::InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
-            data.create_extrinsics()
-        }
-
-        fn check_inherents(
-            block: Block,
-            data: sp_inherents::InherentData,
-        ) -> sp_inherents::CheckInherentsResult {
-            data.check_extrinsics(&block)
-        }
-    }
-
-    impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
-        fn validate_transaction(
-            source: TransactionSource,
-            tx: <Block as BlockT>::Extrinsic,
-            block_hash: <Block as BlockT>::Hash,
-        ) -> TransactionValidity {
-            Executive::validate_transaction(source, tx, block_hash)
-        }
-    }
-
-    impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
-        fn offchain_worker(header: &<Block as BlockT>::Header) {
-            Executive::offchain_worker(header)
-        }
-    }
-
-    impl sp_session::SessionKeys<Block> for Runtime {
-        fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
-            SessionKeys::generate(seed)
-        }
-
-        fn decode_session_keys(
-            encoded: Vec<u8>,
-        ) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
-            SessionKeys::decode_into_raw_public_keys(&encoded)
-        }
-    }
-
-    impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
-        fn account_nonce(account: AccountId) -> Nonce {
-            System::account_nonce(account)
-        }
-    }
-
-    impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<Block, Balance> for Runtime {
-        fn query_info(
-            uxt: <Block as BlockT>::Extrinsic,
-            len: u32,
-        ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<Balance> {
-            TransactionPayment::query_info(uxt, len)
-        }
-        fn query_fee_details(
-            uxt: <Block as BlockT>::Extrinsic,
-            len: u32,
-        ) -> pallet_transaction_payment::FeeDetails<Balance> {
-            TransactionPayment::query_fee_details(uxt, len)
-        }
-        fn query_weight_to_fee(weight: Weight) -> Balance {
-            TransactionPayment::weight_to_fee(weight)
-        }
-        fn query_length_to_fee(length: u32) -> Balance {
-            TransactionPayment::length_to_fee(length)
-        }
-    }
-
-    impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentCallApi<Block, Balance, RuntimeCall>
-        for Runtime
-    {
-        fn query_call_info(
-            call: RuntimeCall,
-            len: u32,
-        ) -> pallet_transaction_payment::RuntimeDispatchInfo<Balance> {
-            TransactionPayment::query_call_info(call, len)
-        }
-        fn query_call_fee_details(
-            call: RuntimeCall,
-            len: u32,
-        ) -> pallet_transaction_payment::FeeDetails<Balance> {
-            TransactionPayment::query_call_fee_details(call, len)
-        }
-        fn query_weight_to_fee(weight: Weight) -> Balance {
-            TransactionPayment::weight_to_fee(weight)
-        }
-        fn query_length_to_fee(length: u32) -> Balance {
-            TransactionPayment::length_to_fee(length)
-        }
-    }
-
-    impl cumulus_primitives_core::CollectCollationInfo<Block> for Runtime {
-        fn collect_collation_info(header: &<Block as BlockT>::Header) -> cumulus_primitives_core::CollationInfo {
-            ParachainSystem::collect_collation_info(header)
-        }
-    }
-
-    #[cfg(feature = "try-runtime")]
-    impl frame_try_runtime::TryRuntime<Block> for Runtime {
-        fn on_runtime_upgrade(checks: frame_try_runtime::UpgradeCheckSelect) -> (Weight, Weight) {
-            let weight = Executive::try_runtime_upgrade(checks).unwrap();
-            (weight, configs::RuntimeBlockWeights::get().max_block)
-        }
-
-        fn execute_block(
-            block: Block,
-            state_root_check: bool,
-            signature_check: bool,
-            select: frame_try_runtime::TryStateSelect,
-        ) -> Weight {
-            // NOTE: intentional unwrap: we don't want to propagate the error backwards, and want to
-            // have a backtrace here.
-            Executive::try_execute_block(block, state_root_check, signature_check, select).unwrap()
-        }
-    }
-
-    #[cfg(feature = "runtime-benchmarks")]
-    impl frame_benchmarking::Benchmark<Block> for Runtime {
-        fn benchmark_metadata(extra: bool) -> (
-            Vec<frame_benchmarking::BenchmarkList>,
-            Vec<frame_support::traits::StorageInfo>,
-        ) {
-            use frame_benchmarking::{Benchmarking, BenchmarkList};
-            use frame_support::traits::StorageInfoTrait;
-            use frame_system_benchmarking::Pallet as SystemBench;
-            use cumulus_pallet_session_benchmarking::Pallet as SessionBench;
-
-            let mut list = Vec::<BenchmarkList>::new();
-            list_benchmarks!(list, extra);
-
-            let storage_info = AllPalletsWithSystem::storage_info();
-            (list, storage_info)
-        }
-
-        fn dispatch_benchmark(
-            config: frame_benchmarking::BenchmarkConfig
-        ) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
-            use frame_benchmarking::{BenchmarkError, Benchmarking, BenchmarkBatch};
-
-            use frame_system_benchmarking::Pallet as SystemBench;
-            impl frame_system_benchmarking::Config for Runtime {
-                fn setup_set_code_requirements(code: &sp_std::vec::Vec<u8>) -> Result<(), BenchmarkError> {
-                    ParachainSystem::initialize_for_set_code_benchmark(code.len() as u32);
-                    Ok(())
-                }
-
-                fn verify_set_code() {
-                    System::assert_last_event(cumulus_pallet_parachain_system::Event::<Runtime>::ValidationFunctionStored.into());
-                }
-            }
-
-            use cumulus_pallet_session_benchmarking::Pallet as SessionBench;
-            impl cumulus_pallet_session_benchmarking::Config for Runtime {}
-
-            use frame_support::traits::WhitelistedStorageKeys;
-            let whitelist = AllPalletsWithSystem::whitelisted_storage_keys();
-
-            let mut batches = Vec::<BenchmarkBatch>::new();
-            let params = (&config, &whitelist);
-            add_benchmarks!(params, batches);
-
-            if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
-            Ok(batches)
-        }
-    }
-
-    impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
-        fn create_default_config() -> Vec<u8> {
-            create_default_config::<RuntimeGenesisConfig>()
-        }
-
-        fn build_config(config: Vec<u8>) -> sp_genesis_builder::Result {
-            build_config::<RuntimeGenesisConfig>(config)
-        }
-    }
-
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
-        fn query_earliest_file_volunteer_block(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
-            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
-        }
-
-        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
-            FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
-        }
-
-        fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
-            FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
-        }
-    }
-
-    impl pallet_payment_streams_runtime_api::PaymentStreamsApi<Block, ProviderIdFor<Runtime>, Balance, AccountId> for Runtime {
-        fn get_users_with_debt_over_threshold(provider_id: &ProviderIdFor<Runtime>, threshold: Balance) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError> {
-            PaymentStreams::get_users_with_debt_over_threshold(provider_id, threshold)
-        }
-        fn get_users_of_payment_streams_of_provider(provider_id: &ProviderIdFor<Runtime>) -> Vec<AccountId> {
-            PaymentStreams::get_users_of_payment_streams_of_provider(provider_id)
-        }
-    }
-
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
-        fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
-            ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
-        }
-
-        fn get_last_checkpoint_challenge_tick() -> BlockNumber {
-            ProofsDealer::get_last_checkpoint_challenge_tick()
-        }
-
-        fn get_checkpoint_challenges(
-            tick: BlockNumber
-        ) -> Result<Vec<(KeyFor<Runtime>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
-            ProofsDealer::get_checkpoint_challenges(tick)
-        }
-
-        fn get_challenge_seed(tick: BlockNumber) -> Result<RandomnessOutputFor<Runtime>, GetChallengeSeedError> {
-            ProofsDealer::get_challenge_seed(tick)
-        }
-
-        fn get_challenge_period(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetChallengePeriodError> {
-            ProofsDealer::get_challenge_period(provider_id)
-        }
-
-        fn get_checkpoint_challenge_period() -> BlockNumber {
-            ProofsDealer::get_checkpoint_challenge_period()
-        }
-
-        fn get_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>, count: u32) -> Vec<KeyFor<Runtime>> {
-            ProofsDealer::get_challenges_from_seed(seed, provider_id, count)
-        }
-
-        fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
-            ProofsDealer::get_forest_challenges_from_seed(seed, provider_id)
-        }
-
-        fn get_current_tick() -> BlockNumber {
-            ProofsDealer::get_current_tick()
-        }
-
-        fn get_next_deadline_tick(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
-            ProofsDealer::get_next_deadline_tick(provider_id)
-        }
-    }
-
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit, Balance, BucketId<Runtime>> for Runtime {
-        fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
-            Providers::get_bsp_info(bsp_id)
-        }
-
-        fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
-            Providers::get_storage_provider_id(who)
-        }
-
-        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderId<Runtime>, QueryMspIdOfBucketIdError> {
-            Providers::query_msp_id_of_bucket_id(bucket_id)
-        }
-
-        fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit, QueryStorageProviderCapacityError> {
-            Providers::query_storage_provider_capacity(provider_id)
-        }
-
-        fn query_available_storage_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError> {
-            Providers::query_available_storage_capacity(provider_id)
-        }
-
-        fn query_earliest_change_capacity_block(provider_id: &BackupStorageProviderId<Runtime>) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError> {
-            Providers::query_earliest_change_capacity_block(provider_id)
-        }
-
-        fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
-            Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
-        }
-    }
 }
 
 cumulus_pallet_parachain_system::register_validate_block! {

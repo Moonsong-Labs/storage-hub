@@ -541,8 +541,8 @@ describeBspNet(
           : bspTwoNextChallengeTick;
       const secondBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
-          ? bspTwoNextChallengeTick + bspTwoChallengePeriod
-          : dummyBspNextChallengeTick + dummyBspChallengePeriod;
+          ? bspTwoNextChallengeTick
+          : dummyBspNextChallengeTick;
 
       // Advance to first next challenge block.
       await userApi.advanceToBlock(firstBlockToAdvance, {
@@ -657,6 +657,8 @@ describeBspNet(
         "The root should have been updated on chain"
       );
 
+      // Wait for BSP to update his local forest root.
+      await sleep(500);
       // Check that the runtime root matches the forest root of the BSP.
       const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
       strictEqual(

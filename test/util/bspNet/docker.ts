@@ -60,7 +60,7 @@ export const addBspContainer = async (options?: {
   invariant(bspNum > 0, "No existing BSP containers");
 
   const p2pPort = 30350 + bspNum;
-  const rpcPort = 9977 + bspNum * 7;
+  const rpcPort = 9888 + bspNum * 7;
   const containerName = options?.name || `docker-sh-bsp-${bspNum + 1}`;
   // get bootnode from docker args
 
@@ -246,7 +246,7 @@ export const waitForLog = async (options: {
 
         docker.modem.demuxStream(stream, stdout, stderr);
 
-        let timeoutHandle: NodeJS.Timeout | undefined;
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
         const cleanup = () => {
           (stream as Readable).destroy();

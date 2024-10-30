@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
+use frame_system::EventRecord;
 use sc_executor::WasmExecutor;
-use sc_network::NetworkService;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
@@ -11,7 +11,7 @@ use sp_core::Hasher;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
-use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
+use storage_hub_runtime::{apis::RuntimeApi, opaque::Block, Runtime};
 use trie_db::TrieLayout;
 
 /// The hash type of trie node keys
@@ -29,18 +29,24 @@ pub type FileMetadata =
     shp_file_metadata::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
 pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
+pub type MaxBatchMspRespondStorageRequests =
+    pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
+pub type MaxUsersToCharge = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
 pub type MspStorageRequestResponse = pallet_file_system::types::MspStorageRequestResponse<Runtime>;
 pub type AcceptedStorageRequestParameters =
     pallet_file_system::types::AcceptedStorageRequestParameters<Runtime>;
 pub type RejectedStorageRequestReason = pallet_file_system::types::RejectedStorageRequestReason;
+pub type BatchResponses = pallet_file_system::types::BatchResponses<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
 pub type MainStorageProviderId = pallet_storage_providers::types::ProviderId<Runtime>;
 pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
@@ -52,25 +58,32 @@ pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofF
 pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
 pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
+pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
+pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
+/// Type alias for the events vector.
+///
+/// The events vector is a storage element in the FRAME system pallet, which stores all the events
+/// that have occurred in a block. This is syntactic sugar to make the code more readable.
+pub type StorageHubEventsVec = Vec<
+    Box<
+        EventRecord<
+            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
+            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        >,
+    >,
+>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-);
+type HostFunctions = cumulus_client_service::ParachainHostFunctions;
 
 #[cfg(feature = "runtime-benchmarks")]
 type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
+    cumulus_client_service::ParachainHostFunctions,
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
 pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
-pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");

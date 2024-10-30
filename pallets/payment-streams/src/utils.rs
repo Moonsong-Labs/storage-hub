@@ -2,7 +2,7 @@ use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
     traits::{CheckedAdd, CheckedMul, CheckedSub, Zero},
-    ArithmeticError, DispatchError,
+    ArithmeticError, BoundedVec, DispatchError,
 };
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, Mutate, MutateHold},
@@ -12,8 +12,8 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_traits::{
-    PaymentStreamsInterface, ProofSubmittersInterface, ReadProvidersInterface,
-    ReadUserSolvencyInterface, SystemMetricsInterface,
+    MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
 };
 use sp_runtime::{
     traits::{Convert, One},
@@ -184,13 +184,18 @@ where
         );
 
         // Charge the payment stream with the old rate before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before the payment stream could be updated
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
@@ -233,44 +238,46 @@ where
             Error::<T>::PaymentStreamNotFound
         );
 
-        // TODO: What do we do when a user is flagged as without funds? Does the provider assume the loss and we remove the payment stream?
-        // Check that the user is not flagged as without funds
-        ensure!(
-            !UsersWithoutFunds::<T>::contains_key(user_account),
-            Error::<T>::UserWithoutFunds
-        );
-
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
-        // Release the deposit of this payment stream to the User
-        let deposit = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?
-            .user_deposit;
-        T::NativeBalance::release(
-            &HoldReason::PaymentStreamDeposit.into(),
-            &user_account,
-            deposit,
-            Precision::Exact,
-        )?;
+        // The payment stream may have been deleted when charged if the user was out of funds.
+        // If that's not the case, we clear it here.
+        if FixedRatePaymentStreams::<T>::get(provider_id, user_account).is_some() {
+            // Release the deposit of this payment stream to the User
+            let deposit = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
+                .ok_or(Error::<T>::PaymentStreamNotFound)?
+                .user_deposit;
+            T::NativeBalance::release(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                deposit,
+                Precision::Exact,
+            )?;
 
-        // Remove the payment stream from the FixedRatePaymentStreams mapping
-        FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
+            // Remove the payment stream from the FixedRatePaymentStreams mapping
+            FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
 
-        // Decrease the user's payment streams count
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        user_payment_streams_count = user_payment_streams_count
-            .checked_sub(1)
-            .ok_or(ArithmeticError::Underflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+            // Decrease the user's payment streams count
+            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+            user_payment_streams_count = user_payment_streams_count
+                .checked_sub(1)
+                .ok_or(ArithmeticError::Underflow)?;
+            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        }
 
         Ok(())
     }
@@ -417,13 +424,18 @@ where
         );
 
         // Charge the payment stream with the old amount before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before the payment stream could be updated
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
@@ -470,44 +482,46 @@ where
             Error::<T>::PaymentStreamNotFound
         );
 
-        // TODO: What do we do when a user is flagged as without funds? Does the provider assume the loss and we remove the payment stream?
-        // Check that the user is not flagged as without funds
-        ensure!(
-            !UsersWithoutFunds::<T>::contains_key(user_account),
-            Error::<T>::UserWithoutFunds
-        );
-
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
+        let (amount_charged, last_tick_charged) =
+            Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
+            let charged_at_tick = Self::get_current_tick();
+
             // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
+                last_tick_charged,
+                charged_at_tick,
             });
         }
 
-        // Release the deposit of this payment stream to the User
-        let deposit = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?
-            .user_deposit;
-        T::NativeBalance::release(
-            &HoldReason::PaymentStreamDeposit.into(),
-            &user_account,
-            deposit,
-            Precision::Exact,
-        )?;
+        // The payment stream may have been deleted when charged if the user was out of funds.
+        // If that's not the case, we clear it here.
+        if DynamicRatePaymentStreams::<T>::get(provider_id, user_account).is_some() {
+            // Release the deposit of this payment stream to the User
+            let deposit = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
+                .ok_or(Error::<T>::PaymentStreamNotFound)?
+                .user_deposit;
+            T::NativeBalance::release(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                deposit,
+                Precision::Exact,
+            )?;
 
-        // Remove the payment stream from the DynamicRatePaymentStreams mapping
-        DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
+            // Remove the payment stream from the DynamicRatePaymentStreams mapping
+            DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
 
-        // Decrease the user's payment streams count
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        user_payment_streams_count = user_payment_streams_count
-            .checked_sub(1)
-            .ok_or(ArithmeticError::Underflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+            // Decrease the user's payment streams count
+            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+            user_payment_streams_count = user_payment_streams_count
+                .checked_sub(1)
+                .ok_or(ArithmeticError::Underflow)?;
+            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        }
 
         Ok(())
     }
@@ -518,11 +532,10 @@ where
     /// the last charged tick of this payment stream.  As such, the last charged tick can't ever be greater than the last chargeable tick, and if they are equal then no charge is made.
     /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_tick)`. In this case,
     /// the price index at the last charged tick can't ever be greater than the price index at the last chargeable tick, and if they are equal then no charge is made.
-    /// TODO: Maybe add a way to pass an array of users to charge them all at once?
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
-    ) -> Result<BalanceOf<T>, DispatchError> {
+    ) -> Result<(BalanceOf<T>, BlockNumberFor<T>), DispatchError> {
         // Check that the given ID belongs to an actual Provider
         ensure!(
             <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
@@ -551,6 +564,10 @@ where
         // Initiate the variable that will hold the total amount that has been charged
         let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
+        // Get the last chargeable info for this provider
+        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
+
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
             // Check if the user is flagged as without funds to execute the correct charging logic
@@ -566,8 +583,6 @@ where
                 None => {
                     // If the user hasn't been flagged as without funds, charge the payment stream
                     // Calculate the time passed between the last chargeable tick and the last charged tick
-                    let last_chargeable_tick =
-                        LastChargeableInfo::<T>::get(provider_id).last_chargeable_tick;
                     if let Some(time_passed) = last_chargeable_tick
                         .checked_sub(&fixed_rate_payment_stream.last_charged_tick)
                     {
@@ -709,8 +724,8 @@ where
                     // Calculate the difference between the last charged price index and the price index at the last chargeable tick
                     // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
 
-                    let price_index_at_last_chargeable_tick =
-                        LastChargeableInfo::<T>::get(provider_id).price_index;
+                    let price_index_at_last_chargeable_tick = last_chargeable_info.price_index;
+
                     if let Some(price_index_difference) = price_index_at_last_chargeable_tick
                         .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
                     {
@@ -833,7 +848,36 @@ where
             }
         }
 
-        Ok(total_amount_charged)
+        Ok((total_amount_charged, last_chargeable_tick))
+    }
+
+    /// This function holds the logic that checks, for each User in the `user_accounts` array, if they have any
+    /// payment streams with the given Provider and, if so, charges them.
+    pub fn do_charge_multiple_users_payment_streams(
+        provider_id: &ProviderIdFor<T>,
+        user_accounts: &BoundedVec<T::AccountId, T::MaxUsersToCharge>,
+    ) -> DispatchResult {
+        // Get the current tick
+        let current_tick = Self::get_current_tick();
+
+        // For each User in the array, charge their payment stream with the given Provider
+        // and emit a PaymentStreamCharged event if the User had to pay.
+        for user_account in user_accounts.iter() {
+            let (amount_charged, last_tick_charged) =
+                Self::do_charge_payment_streams(provider_id, user_account)?;
+
+            if amount_charged > Zero::zero() {
+                Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                    user_account: user_account.clone(),
+                    provider_id: provider_id.clone(),
+                    amount: amount_charged,
+                    last_tick_charged,
+                    charged_at_tick: current_tick,
+                });
+            }
+        }
+
+        Ok(())
     }
 
     /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider
@@ -969,25 +1013,47 @@ where
         Ok(())
     }
 
-    /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
+    /// This function gets the Providers that submitted a valid proof in the last tick using the `ProofSubmittersInterface`,
     /// and updates the last chargeable tick and last chargeable price index of those Providers.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
-        weight: &mut frame_support::weights::WeightMeter,
+        weight: &mut sp_weights::WeightMeter,
     ) {
-        // Get last tick's number
-        let n = n.saturating_sub(One::one());
-        // Get the Providers that submitted a valid proof in the last tick, if there are any
-        let proof_submitters =
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&n);
+        // Get the previous tick from the Providers Proof Submitters pallet.
+        let submitters_prev_tick =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
+                .saturating_sub(One::one());
         weight.consume(T::DbWeight::get().reads(1));
 
-        // If there are any proof submitters in the last tick
+        // Check if we already registered this tick from the Providers Proof Submitters pallet.
+        let last_submitters_tick_registered = LastSubmittersTickRegistered::<T>::get();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // If we already registered this tick from the Providers Proof Submitters pallet, we don't need to do anything.
+        if submitters_prev_tick <= last_submitters_tick_registered {
+            return;
+        }
+
+        // Update the last submitters tick registered.
+        LastSubmittersTickRegistered::<T>::set(submitters_prev_tick);
+        weight.consume(T::DbWeight::get().writes(1));
+
+        // Get the Providers that submitted a valid proof in the last tick from the Providers Proof Submitters pallet,
+        // if there's any
+        let proof_submitters =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&submitters_prev_tick);
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // If there are any proof submitters in the last tick...
         if let Some(proof_submitters) = proof_submitters {
             // Update all Providers
             // Iterate through the proof submitters and update their last chargeable tick and last chargeable price index
             for provider_id in proof_submitters {
-                // Update the last chargeable tick and last chargeable price index of the Provider
+                // Update the last chargeable tick and last chargeable price index of the Provider.
+                // The last chargeable tick is set to the current tick of THIS PALLET. That means, if the tick from
+                // the Providers Proof Submitters pallet is stalled for some time, and this pallet continues to increment
+                // its tick, when the Providers Proof Submitters pallet continues to increment its tick, this pallet will
+                // allow Providers to charge for the time that the Providers Proof Submitters pallet has been stalled.
                 let accumulated_price_index = AccumulatedPriceIndex::<T>::get();
                 LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
                     provider_info.last_chargeable_tick = n;
@@ -1002,14 +1068,13 @@ where
             }
 
             // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
-            // needed weight in the block for this, such as what `on_initialize` does.
+            // TODO: needed weight in the block for this, such as what `on_initialize` does.
+            // TODO: Solve when benchmarking.
         }
     }
 
     /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
-    pub fn do_update_current_price_per_unit_per_tick(
-        weight: &mut frame_support::weights::WeightMeter,
-    ) {
+    pub fn do_update_current_price_per_unit_per_tick(weight: &mut sp_weights::WeightMeter) {
         // Get the total used capacity of the network
         let _total_used_capacity =
             <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
@@ -1028,7 +1093,7 @@ where
         weight.consume(T::DbWeight::get().writes(1));
     }
 
-    pub fn do_update_price_index(weight: &mut frame_support::weights::WeightMeter) {
+    pub fn do_update_price_index(weight: &mut sp_weights::WeightMeter) {
         // Get the current price
         let current_price = CurrentPricePerUnitPerTick::<T>::get();
         weight.consume(T::DbWeight::get().reads(1));
@@ -1355,6 +1420,18 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
 
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
         UsersWithoutFunds::<T>::contains_key(user_account)
+    }
+}
+
+impl<T: pallet::Config> MutatePricePerUnitPerTickInterface for pallet::Pallet<T> {
+    type PricePerUnitPerTick = BalanceOf<T>;
+
+    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick {
+        CurrentPricePerUnitPerTick::<T>::get()
+    }
+
+    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick) {
+        CurrentPricePerUnitPerTick::<T>::put(price_index);
     }
 }
 

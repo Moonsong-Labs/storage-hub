@@ -32,14 +32,16 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
-  PalletStorageProvidersValueProposition,
   ShpFileKeyVerifierFileKeyProof,
   SpRuntimeMultiSignature,
   SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
+  StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV4Location,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
   StorageHubRuntimeSessionKeys,
   XcmV3WeightLimit,
+  XcmVersionedAssetId,
   XcmVersionedAssets,
   XcmVersionedLocation,
   XcmVersionedXcm
@@ -53,6 +55,22 @@ export type __SubmittableExtrinsicFunction<ApiType extends ApiTypes> =
 declare module "@polkadot/api-base/types/submittable" {
   interface AugmentedSubmittables<ApiType extends ApiTypes> {
     balances: {
+      /**
+       * Burn the specified liquid free balance from the origin account.
+       *
+       * If the origin's account ends up below the existential deposit as a result
+       * of the burn and `keep_alive` is false, the account will be reaped.
+       *
+       * Unlike sending funds to a _burn_ address, which merely makes the funds inaccessible,
+       * this `burn` operation will reduce total issuance by the amount _burned_.
+       **/
+      burn: AugmentedSubmittable<
+        (
+          value: Compact<u128> | AnyNumber | Uint8Array,
+          keepAlive: bool | boolean | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [Compact<u128>, bool]
+      >;
       /**
        * Adjust the total issuance in a saturating way.
        *
@@ -227,7 +245,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This will waive the transaction fee if at least all but 10% of the accounts needed to
        * be upgraded. (We let some not have to be upgraded just in order to allow for the
-       * possibililty of churn).
+       * possibility of churn).
        **/
       upgradeAccounts: AugmentedSubmittable<
         (
@@ -500,9 +518,10 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
-          private: bool | boolean | Uint8Array
+          private: bool | boolean | Uint8Array,
+          valuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool]
+        [H256, Bytes, bool, H256]
       >;
       deleteFile: AugmentedSubmittable<
         (
@@ -548,14 +567,17 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256, PalletFileSystemBucketMoveRequestResponse]
       >;
       /**
-       * Used by a MSP to confirm storing a file that was assigned to it.
+       * Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
        *
-       * The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
-       * in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
-       * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
+       * This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
+       * accepted, rejected or have failed to be processed in the results of the event emitted.
+       *
+       * The MSP has to provide a file proof for all the file keys that are being accepted and a non-inclusion proof for the file keys
+       * in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
+       * the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
        * wasn't storing it before.
        **/
-      mspRespondStorageRequests: AugmentedSubmittable<
+      mspRespondStorageRequestsMultipleBuckets: AugmentedSubmittable<
         (
           fileKeyResponsesInput:
             | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
@@ -597,7 +619,7 @@ declare module "@polkadot/api-base/types/submittable" {
       setGlobalParameters: AugmentedSubmittable<
         (
           replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
-          blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
+          tickRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
         [Option<u32>, Option<u32>]
       >;
@@ -1824,38 +1846,6 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     parachainSystem: {
       /**
-       * Authorize an upgrade to a given `code_hash` for the runtime. The runtime can be supplied
-       * later.
-       *
-       * The `check_version` parameter sets a boolean flag for whether or not the runtime's spec
-       * version and name should be verified on upgrade. Since the authorization only has a hash,
-       * it cannot actually perform the verification.
-       *
-       * This call requires Root origin.
-       **/
-      authorizeUpgrade: AugmentedSubmittable<
-        (
-          codeHash: H256 | string | Uint8Array,
-          checkVersion: bool | boolean | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, bool]
-      >;
-      /**
-       * Provide the preimage (runtime binary) `code` for an upgrade that has been authorized.
-       *
-       * If the authorization required a version check, this call will ensure the spec name
-       * remains unchanged and that the spec version has increased.
-       *
-       * Note that this function will not apply the new `code`, but only attempt to schedule the
-       * upgrade with the Relay Chain.
-       *
-       * All origins are allowed.
-       **/
-      enactAuthorizedUpgrade: AugmentedSubmittable<
-        (code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [Bytes]
-      >;
-      /**
        * Set the current validation data.
        *
        * This should be invoked exactly once per block. It will panic at the finalization
@@ -1890,7 +1880,67 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       [key: string]: SubmittableExtrinsicFunction<ApiType>;
     };
+    parameters: {
+      /**
+       * Set the value of a parameter.
+       *
+       * The dispatch origin of this call must be `AdminOrigin` for the given `key`. Values be
+       * deleted by setting them to `None`.
+       **/
+      setParameter: AugmentedSubmittable<
+        (
+          keyValue:
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters
+            | { RuntimeConfig: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters]
+      >;
+      /**
+       * Generic tx
+       **/
+      [key: string]: SubmittableExtrinsicFunction<ApiType>;
+    };
     paymentStreams: {
+      /**
+       * Dispatchable extrinsic that allows Providers to charge multiple User's payment streams.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the Provider that has at least one type of payment stream with each of the Users.
+       *
+       * Parameters:
+       * - `user_accounts`: The array of User Account IDs that have payment streams with the Provider.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the array of Users is not bigger than the maximum allowed.
+       * 3. Execute a for loop for each User in the array of User Account IDs, in which it:
+       * a. Checks that a payment stream between the signer (Provider) and the User exists
+       * b. If there is a fixed-rate payment stream:
+       * 1. Get the rate of the payment stream
+       * 2. Get the difference between the last charged tick number and the last chargeable tick number of the stream
+       * 3. Calculate the amount to charge doing `rate * difference`
+       * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+       * 5. Update the last charged tick number of the payment stream
+       * c. If there is a dynamic-rate payment stream:
+       * 1. Get the amount provided by the Provider
+       * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
+       * 3. Calculate the amount to charge doing `amount_provided * difference`
+       * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+       * 5. Update the price index when the stream was last charged of the payment stream
+       *
+       * Emits a `PaymentStreamCharged` per User that had to pay and a `UsersCharged` event when successful.
+       *
+       * Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
+       * will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
+       **/
+      chargeMultipleUsersPaymentStreams: AugmentedSubmittable<
+        (
+          userAccounts: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]
+        ) => SubmittableExtrinsic<ApiType>,
+        [Vec<AccountId32>]
+      >;
       /**
        * Dispatchable extrinsic that allows Providers to charge a payment stream from a User.
        *
@@ -2274,7 +2324,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Fee payment on the destination side is made from the asset in the `assets` vector of
        * index `fee_asset_item`, up to enough to pay for `weight_limit` of weight. If more weight
-       * is needed than `weight_limit`, then the operation will fail and the assets send may be
+       * is needed than `weight_limit`, then the operation will fail and the sent assets may be
        * at risk.
        *
        * - `origin`: Must be capable of withdrawing the `assets` and executing XCM.
@@ -2327,7 +2377,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Fee payment on the destination side is made from the asset in the `assets` vector of
        * index `fee_asset_item`, up to enough to pay for `weight_limit` of weight. If more weight
-       * is needed than `weight_limit`, then the operation will fail and the assets send may be
+       * is needed than `weight_limit`, then the operation will fail and the sent assets may be
        * at risk.
        *
        * - `origin`: Must be capable of withdrawing the `assets` and executing XCM.
@@ -2501,7 +2551,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * Fee payment on the destination side is made from the asset in the `assets` vector of
        * index `fee_asset_item` (hence referred to as `fees`), up to enough to pay for
        * `weight_limit` of weight. If more weight is needed than `weight_limit`, then the
-       * operation will fail and the assets sent may be at risk.
+       * operation will fail and the sent assets may be at risk.
        *
        * `assets` (excluding `fees`) must have same reserve location or otherwise be teleportable
        * to `dest`, no limitations imposed on `fees`.
@@ -2563,6 +2613,113 @@ declare module "@polkadot/api-base/types/submittable" {
         [XcmVersionedLocation, XcmVersionedLocation, XcmVersionedAssets, u32, XcmV3WeightLimit]
       >;
       /**
+       * Transfer assets from the local chain to the destination chain using explicit transfer
+       * types for assets and fees.
+       *
+       * `assets` must have same reserve location or may be teleportable to `dest`. Caller must
+       * provide the `assets_transfer_type` to be used for `assets`:
+       * - `TransferType::LocalReserve`: transfer assets to sovereign account of destination
+       * chain and forward a notification XCM to `dest` to mint and deposit reserve-based
+       * assets to `beneficiary`.
+       * - `TransferType::DestinationReserve`: burn local assets and forward a notification to
+       * `dest` chain to withdraw the reserve assets from this chain's sovereign account and
+       * deposit them to `beneficiary`.
+       * - `TransferType::RemoteReserve(reserve)`: burn local assets, forward XCM to `reserve`
+       * chain to move reserves from this chain's SA to `dest` chain's SA, and forward another
+       * XCM to `dest` to mint and deposit reserve-based assets to `beneficiary`. Typically
+       * the remote `reserve` is Asset Hub.
+       * - `TransferType::Teleport`: burn local assets and forward XCM to `dest` chain to
+       * mint/teleport assets and deposit them to `beneficiary`.
+       *
+       * On the destination chain, as well as any intermediary hops, `BuyExecution` is used to
+       * buy execution using transferred `assets` identified by `remote_fees_id`.
+       * Make sure enough of the specified `remote_fees_id` asset is included in the given list
+       * of `assets`. `remote_fees_id` should be enough to pay for `weight_limit`. If more weight
+       * is needed than `weight_limit`, then the operation will fail and the sent assets may be
+       * at risk.
+       *
+       * `remote_fees_id` may use different transfer type than rest of `assets` and can be
+       * specified through `fees_transfer_type`.
+       *
+       * The caller needs to specify what should happen to the transferred assets once they reach
+       * the `dest` chain. This is done through the `custom_xcm_on_dest` parameter, which
+       * contains the instructions to execute on `dest` as a final step.
+       * This is usually as simple as:
+       * `Xcm(vec![DepositAsset { assets: Wild(AllCounted(assets.len())), beneficiary }])`,
+       * but could be something more exotic like sending the `assets` even further.
+       *
+       * - `origin`: Must be capable of withdrawing the `assets` and executing XCM.
+       * - `dest`: Destination context for the assets. Will typically be `[Parent,
+       * Parachain(..)]` to send from parachain to parachain, or `[Parachain(..)]` to send from
+       * relay to parachain, or `(parents: 2, (GlobalConsensus(..), ..))` to send from
+       * parachain across a bridge to another ecosystem destination.
+       * - `assets`: The assets to be withdrawn. This should include the assets used to pay the
+       * fee on the `dest` (and possibly reserve) chains.
+       * - `assets_transfer_type`: The XCM `TransferType` used to transfer the `assets`.
+       * - `remote_fees_id`: One of the included `assets` to be used to pay fees.
+       * - `fees_transfer_type`: The XCM `TransferType` used to transfer the `fees` assets.
+       * - `custom_xcm_on_dest`: The XCM to be executed on `dest` chain as the last step of the
+       * transfer, which also determines what happens to the assets on the destination chain.
+       * - `weight_limit`: The remote-side weight limit, if any, for the XCM fee purchase.
+       **/
+      transferAssetsUsingTypeAndThen: AugmentedSubmittable<
+        (
+          dest:
+            | XcmVersionedLocation
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
+          assets:
+            | XcmVersionedAssets
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
+          assetsTransferType:
+            | StagingXcmExecutorAssetTransferTransferType
+            | { Teleport: any }
+            | { LocalReserve: any }
+            | { DestinationReserve: any }
+            | { RemoteReserve: any }
+            | string
+            | Uint8Array,
+          remoteFeesId: XcmVersionedAssetId | { V3: any } | { V4: any } | string | Uint8Array,
+          feesTransferType:
+            | StagingXcmExecutorAssetTransferTransferType
+            | { Teleport: any }
+            | { LocalReserve: any }
+            | { DestinationReserve: any }
+            | { RemoteReserve: any }
+            | string
+            | Uint8Array,
+          customXcmOnDest:
+            | XcmVersionedXcm
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
+          weightLimit:
+            | XcmV3WeightLimit
+            | { Unlimited: any }
+            | { Limited: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [
+          XcmVersionedLocation,
+          XcmVersionedAssets,
+          StagingXcmExecutorAssetTransferTransferType,
+          XcmVersionedAssetId,
+          StagingXcmExecutorAssetTransferTransferType,
+          XcmVersionedXcm,
+          XcmV3WeightLimit
+        ]
+      >;
+      /**
        * Generic tx
        **/
       [key: string]: SubmittableExtrinsicFunction<ApiType>;
@@ -2573,10 +2730,8 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This function allows anyone to add a new challenge to the `ChallengesQueue`.
        * The challenge will be dispatched in the coming blocks.
-       * Regular users are charged a small fee for submitting a challenge, which
-       * goes to the Treasury. Unless the one calling is a registered Provider.
-       *
-       * TODO: Consider checking also if there was a request to change MSP.
+       * Users are charged a small fee for submitting a challenge, which
+       * goes to the Treasury.
        **/
       challenge: AugmentedSubmittable<
         (key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
@@ -2595,6 +2750,15 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
+       * Set the [`ChallengesTickerPaused`] to `true` or `false`.
+       *
+       * Only callable by sudo.
+       **/
+      setPaused: AugmentedSubmittable<
+        (paused: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [bool]
+      >;
+      /**
        * For a Provider to submit a proof.
        *
        * Checks that `provider` is a registered Provider. If none
@@ -2603,7 +2767,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * Validates that the proof corresponds to a challenge that was made in the past,
        * by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
        * Provider should have submitted a proof is calculated based on the last tick they
-       * submitted a proof for (`LastTickProviderSubmittedProofFor`), and the proving period for
+       * submitted a proof for ([`LastTickProviderSubmittedAProofFor`]), and the proving period for
        * that Provider, which is a function of their stake.
        * This extrinsic also checks that there hasn't been a checkpoint challenge round
        * in between the last time the Provider submitted a proof for and the tick
@@ -2611,7 +2775,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * subject to slashing.
        *
        * If valid:
-       * - Pushes forward the Provider in the `ChallengeTickToChallengedProviders` StorageMap a number
+       * - Pushes forward the Provider in the [`TickToProvidersDeadlines`] StorageMap a number
        * of ticks corresponding to the stake of the Provider.
        * - Registers this tick as the last tick in which the Provider submitted a proof.
        *
@@ -2640,27 +2804,15 @@ declare module "@polkadot/api-base/types/submittable" {
        * The dispatch origin for this call must be Signed.
        * The origin must be the account that wants to add a value proposition.
        *
-       * Parameters:
-       * - `new_value_prop`: The value proposition that the MSP wants to add to its service.
-       *
-       * This extrinsic will perform the following checks and logic:
-       * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that the signer is registered as a MSP
-       * 3. Check that the MSP has not reached the maximum amount of value propositions
-       * 4. Check that the value proposition is valid (size and any other relevant checks)
-       * 5. Update the MSPs storage to add the value proposition (with its identifier)
-       *
        * Emits `ValuePropAdded` event when successful.
        **/
       addValueProp: AugmentedSubmittable<
         (
-          newValueProp:
-            | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
-            | string
-            | Uint8Array
+          pricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          bucketDataLimit: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [PalletStorageProvidersValueProposition]
+        [u128, Bytes, u64]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Backup Storage Provider.
@@ -2818,14 +2970,22 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
-            | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
-            | string
-            | Uint8Array,
+          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [AccountId32, H256, u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
+      >;
+      /**
+       * Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
+       *
+       * This operation cannot be reversed. You can only add new value propositions.
+       * This will not affect existing buckets which are using this value proposition.
+       **/
+      makeValuePropUnavailable: AugmentedSubmittable<
+        (valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
@@ -2909,14 +3069,12 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
-            | PalletStorageProvidersValueProposition
-            | { identifier?: any; dataLimit?: any; protocols?: any }
-            | string
-            | Uint8Array,
+          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
       >;
       /**
        * Dispatchable extrinsic to slash a _slashable_ Storage Provider.

@@ -4,11 +4,13 @@ import { describeBspNet, registerToxic, type EnrichedBspApi } from "../../../uti
 describeBspNet(
   "BSP: Missing Chunks",
   { initialised: false, networkConfig: "noisy" },
-  ({ before, it, createUserApi }) => {
+  ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
+      bspApi = await createBspApi();
     });
 
     it("bsp volunteers but doesn't receive chunks", async () => {
@@ -29,16 +31,11 @@ describeBspNet(
         }
       });
 
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true
-      });
-
-      await userApi.block.seal();
+      // Wait for the BSP to submit the volunteer extrinsic
+      await userApi.wait.bspVolunteer();
 
       // Example of how to assert on a log message
-      await userApi.assert.log({
+      await bspApi.assert.log({
         searchString: "Received remote upload request for file FileKey(",
         containerName: "docker-sh-bsp-1"
       });

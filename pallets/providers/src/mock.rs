@@ -1,26 +1,26 @@
 use crate as pallet_storage_providers;
-use codec::Encode;
+use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    derive_impl, parameter_types,
     traits::{Everything, Randomness},
-    weights::constants::RocksDbWeight,
+    weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
-use frame_system as system;
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::SlashableProviders;
+use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
+    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, SaturatedConversion,
+    BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::BTreeSet;
-use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -32,16 +32,33 @@ const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
 
 // Configure a mock runtime to test the pallet.
-construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system,
-        Balances: pallet_balances,
-        StorageProviders: pallet_storage_providers,
-        ProofsDealer: pallet_proofs_dealer,
-        PaymentStreams: pallet_payment_streams,
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type StorageProviders = crate;
+    #[runtime::pallet_index(3)]
+    pub type ProofsDealer = pallet_proofs_dealer;
+    #[runtime::pallet_index(4)]
+    pub type PaymentStreams = pallet_payment_streams;
+}
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -51,7 +68,7 @@ parameter_types! {
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -93,7 +110,6 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
@@ -104,6 +120,7 @@ impl Get<AccountId> for TreasuryAccount {
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersPallet = StorageProviders;
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
@@ -115,15 +132,18 @@ impl pallet_proofs_dealer::Config for Test {
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
-    type ChallengeHistoryLength = ConstU64<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU64<10>;
+    type ChallengeHistoryLength = ConstU64<30>;
+    type ChallengesQueueLength = ConstU32<25>;
+    type CheckpointChallengePeriod = ConstU64<20>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
     type MinChallengePeriod = ConstU64<4>;
-    type ChallengeTicksTolerance = ConstU64<20>;
+    type ChallengeTicksTolerance = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -133,6 +153,21 @@ pub struct SaturatingBalanceToBlockNumber;
 impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
     fn convert(block_number: Balance) -> BlockNumberFor<Test> {
         block_number.saturated_into()
+    }
+}
+
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        Weight::from_parts(10_000, 0)
+            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        Perbill::from_percent(50)
     }
 }
 
@@ -204,6 +239,7 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -219,16 +255,16 @@ impl crate::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type FileMetadataManager = MockFileMetadataManager;
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type PaymentStreams = PaymentStreams;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -243,6 +279,8 @@ impl crate::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -250,6 +288,37 @@ pub struct DefaultMerkleRoot<T>(PhantomData<T>);
 impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     fn get() -> HasherOutT<T> {
         sp_trie::empty_trie_root::<T>()
+    }
+}
+
+pub struct MockFileMetadataManager;
+impl FileMetadataInterface for MockFileMetadataManager {
+    type AccountId = AccountId;
+    type Metadata = FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
     }
 }
 
@@ -300,6 +369,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         Some(set)
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
         SlashableProviders::<Test>::get(provider_id)
     }
@@ -311,20 +384,22 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
 
 // Build genesis storage according to the mock runtime.
 pub fn _new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::<Test>::default()
+    frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap()
         .into()
 }
 
 pub mod accounts {
-    pub const ALICE: (u64, u128) = (0, 5_000_000);
-    pub const BOB: (u64, u128) = (1, 10_000_000);
-    pub const CHARLIE: (u64, u128) = (2, 20_000_000);
-    pub const DAVID: (u64, u128) = (3, 30_000_000);
-    pub const EVE: (u64, u128) = (4, 400_000_000);
-    pub const FERDIE: (u64, u128) = (5, 5_000_000_000);
-    pub const GEORGE: (u64, u128) = (6, 600_000_000_000);
+    use super::UNITS;
+
+    pub const ALICE: (u64, u128) = (0, 5_000_000 * UNITS);
+    pub const BOB: (u64, u128) = (1, 10_000_000 * UNITS);
+    pub const CHARLIE: (u64, u128) = (2, 20_000_000 * UNITS);
+    pub const DAVID: (u64, u128) = (3, 30_000_000 * UNITS);
+    pub const EVE: (u64, u128) = (4, 400_000_000 * UNITS);
+    pub const FERDIE: (u64, u128) = (5, 5_000_000_000 * UNITS);
+    pub const GEORGE: (u64, u128) = (6, 600_000_000_000 * UNITS);
 }
 
 // Externalities builder with predefined balances for accounts and starting at block number 1

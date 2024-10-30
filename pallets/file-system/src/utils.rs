@@ -20,8 +20,8 @@ use sp_std::{
 };
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
-    QueryMspConfirmChunksToProveForFileError,
+    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
@@ -31,22 +31,23 @@ use shp_traits::{
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
-use crate::types::AcceptedStorageRequestParameters;
+use crate::types::{AcceptedStorageRequestParameters, ValuePropId};
 use crate::{
     pallet,
     types::{
         BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrProviderId, ExpirationItem, FileKeyHasher,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
         FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
         MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
         MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
     },
-    BlockRangeToMaximumThreshold, BucketsWithStorageRequests, DataServersForMoveBucket, Error,
-    Event, Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
+    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
+    TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -98,63 +99,65 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// Compute the block number at which the BSP is eligible to volunteer for a storage request.
-    pub fn query_earliest_file_volunteer_block(
+    /// Compute the tick number at which the BSP is eligible to volunteer for a storage request.
+    pub fn query_earliest_file_volunteer_tick(
         bsp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
-    ) -> Result<BlockNumberFor<T>, QueryFileEarliestVolunteerBlockError>
+    ) -> Result<TickNumber<T>, QueryFileEarliestVolunteerTickError>
     where
         T: frame_system::Config,
     {
-        // Get the block number at which the storage request was created.
-        let (storage_request_block, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
+        // Get the tick number at which the storage request was created.
+        let (storage_request_tick, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
             Some(storage_request) => (storage_request.requested_at, storage_request.fingerprint),
             None => {
-                return Err(QueryFileEarliestVolunteerBlockError::StorageRequestNotFound);
+                return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
             }
         };
 
         // Get the threshold needed for the BSP to be able to volunteer for the storage request.
         let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
 
-        // Compute the block number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_block_number(bsp_id, bsp_threshold, storage_request_block)
-            .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)
+        // Compute the tick number at which the BSP should send the volunteer request.
+        Self::compute_volunteer_tick_number(bsp_id, bsp_threshold, storage_request_tick)
+            .map_err(|_| QueryFileEarliestVolunteerTickError::ThresholdArithmeticError)
     }
 
-    fn compute_volunteer_block_number(
+    fn compute_volunteer_tick_number(
         bsp_id: ProviderIdFor<T>,
         bsp_threshold: T::ThresholdType,
-        storage_request_block: BlockNumberFor<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError>
+        storage_request_tick: TickNumber<T>,
+    ) -> Result<TickNumber<T>, DispatchError>
     where
         T: frame_system::Config,
     {
         // Compute the threshold to succeed and the slope of the bsp.
         let (to_succeed, slope) =
-            Self::compute_threshold_to_succeed(&bsp_id, storage_request_block)?;
+            Self::compute_threshold_to_succeed(&bsp_id, storage_request_tick)?;
 
         let threshold_diff = match bsp_threshold.checked_sub(&to_succeed) {
             Some(diff) => diff,
             None => {
                 // The BSP's threshold is less than the current threshold.
-                return Ok(<frame_system::Pallet<T>>::block_number());
+                let current_tick =
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                return Ok(current_tick);
             }
         };
 
-        // Calculate the number of blocks required to be below the threshold.
-        let blocks_to_wait = match threshold_diff.checked_div(&slope) {
-            Some(blocks) => blocks,
+        // Calculate the number of ticks required to be below the threshold.
+        let ticks_to_wait = match threshold_diff.checked_div(&slope) {
+            Some(ticks) => ticks,
             None => {
                 return Err(Error::<T>::ThresholdArithmeticError.into());
             }
         };
 
-        // Compute the block number at which the BSP should send the volunteer request.
-        let volunteer_block_number = storage_request_block
-            .saturating_add(T::ThresholdTypeToBlockNumber::convert(blocks_to_wait));
+        // Compute the tick number at which the BSP should send the volunteer request.
+        let volunteer_tick_number = storage_request_tick
+            .saturating_add(T::ThresholdTypeToTickNumber::convert(ticks_to_wait));
 
-        Ok(volunteer_block_number)
+        Ok(volunteer_tick_number)
     }
 
     pub fn query_bsp_confirm_chunks_to_prove_for_file(
@@ -169,9 +172,34 @@ where
             }
         };
 
+        Self::query_confirm_chunks_to_prove_for_file(bsp_id, storage_request_metadata, file_key)
+            .map_err(|e| QueryBspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    pub fn query_msp_confirm_chunks_to_prove_for_file(
+        msp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
+        // Get the storage request metadata.
+        let storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
+            Some(storage_request) => storage_request,
+            None => {
+                return Err(QueryMspConfirmChunksToProveForFileError::StorageRequestNotFound);
+            }
+        };
+
+        Self::query_confirm_chunks_to_prove_for_file(msp_id, storage_request_metadata, file_key)
+            .map_err(|e| QueryMspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    fn query_confirm_chunks_to_prove_for_file(
+        provider_id: ProviderIdFor<T>,
+        storage_request_metadata: StorageRequestMetadata<T>,
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ChunkId>, QueryConfirmChunksToProveForFileError> {
         // Generate the list of chunks to prove.
         let challenges = Self::generate_chunk_challenges_on_sp_confirm(
-            bsp_id,
+            provider_id,
             file_key,
             &storage_request_metadata,
         );
@@ -182,11 +210,10 @@ where
             .iter()
             .map(|challenge| {
                 let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-                let challenged_chunk: ChunkId = ChunkId::new(
-                    challenged_chunk
-                        .try_into()
-                        .map_err(|_| QueryBspConfirmChunksToProveForFileError::InternalError)?,
-                );
+                let challenged_chunk: ChunkId =
+                    ChunkId::new(challenged_chunk.try_into().map_err(|_| {
+                        QueryConfirmChunksToProveForFileError::ChallengedChunkToChunkIdError
+                    })?);
 
                 Ok(challenged_chunk)
             })
@@ -261,6 +288,7 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // TODO: Hold user funds for the bucket creation.
 
@@ -286,6 +314,7 @@ where
             bucket_id,
             private,
             maybe_collection_id.clone(),
+            value_prop_id,
         )?;
 
         Ok((bucket_id, maybe_collection_id))
@@ -533,7 +562,6 @@ where
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
-        // TODO: Return error if the file is already stored and overwrite is false.
 
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
@@ -576,12 +604,14 @@ where
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
-            return Err(Error::<T>::BspsRequiredExceedsMax)?;
+        if bsps_required > ReplicationTarget::<T>::get().into() {
+            return Err(Error::<T>::BspsRequiredExceedsTarget)?;
         }
 
+        let current_tick =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
         let storage_request_metadata = StorageRequestMetadata::<T> {
-            requested_at: <frame_system::Pallet<T>>::block_number(),
+            requested_at: current_tick,
             owner: sender.clone(),
             bucket_id,
             location: location.clone(),
@@ -621,6 +651,16 @@ where
         Ok(file_key)
     }
 
+    /// Accepts or rejects batches of storage requests assumed to be grouped by bucket.
+    ///
+    /// This is using a best-effort strategy to process as many file keys as possible, returning
+    /// the ones that were accepted, rejected, or failed to be processed.
+    ///
+    /// File keys that are not part of the bucket they belong to will be skipped (failed).
+    ///
+    /// All file keys will be processed (unless there are duplicates, they are simply skipped) and any errors
+    /// while processing them will be marked as a failed key and continue processing the rest. It is up to the
+    /// caller to verify the final result and apply only the file keys that have been successfully accepted.
     pub(crate) fn do_msp_respond_storage_request(
         sender: T::AccountId,
         file_key_responses_input: FileKeyResponsesInput<T>,
@@ -665,18 +705,14 @@ where
             if let Some(accepted_file_keys) = file_key_responses.accept {
                 // Call do_msp_accept_storage_request, which returns the new_bucket_root
                 let (new_bucket_root, accepted_file_keys, failed_file_keys) =
-                    Self::do_msp_accept_storage_request(
-                        msp_id.clone(),
-                        bucket_id.clone(),
-                        accepted_file_keys,
-                    )?;
+                    Self::do_msp_accept_storage_request(msp_id, bucket_id, accepted_file_keys)?;
 
                 // Create batch responses
                 if !accepted_file_keys.is_empty() {
                     let accepted_batch = MspAcceptedBatchStorageRequests {
                         file_keys: accepted_file_keys,
-                        bucket_id: bucket_id.clone(),
-                        new_bucket_root: new_bucket_root.clone(),
+                        bucket_id,
+                        new_bucket_root,
                         owner: owner.clone(),
                     };
 
@@ -712,7 +748,7 @@ where
                     };
 
                     if let Err(e) = Self::cleanup_storage_request(
-                        EitherAccountIdOrProviderId::ProviderId(msp_id),
+                        EitherAccountIdOrMspId::MspId(msp_id),
                         file_key.0,
                         &storage_request_metadata,
                     ) {
@@ -730,7 +766,7 @@ where
                 if !rejected.is_empty() {
                     let rejected_batch = MspRejectedBatchStorageRequests {
                         file_keys: rejected,
-                        bucket_id: bucket_id.clone(),
+                        bucket_id,
                         owner: owner.clone(),
                     };
 
@@ -743,7 +779,7 @@ where
             if !failed.is_empty() {
                 let failed_batch = MspFailedBatchStorageRequests {
                     file_keys: failed,
-                    bucket_id: bucket_id.clone(),
+                    bucket_id,
                     owner: owner.clone(),
                 };
 
@@ -762,6 +798,16 @@ where
         Ok(result)
     }
 
+    /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
+    ///
+    /// There should be a single non-inclusion forest proof for all file keys, and finally there should
+    /// be a list of file key(s) with a key proof for each of them.
+    ///
+    /// The implementation follows this sequence:
+    /// 1. Verify the non-inclusion proof.
+    /// 2. For each file key: Record a successful acceptance or a failure. Any failed operation while processing a file key
+    /// will not result in the function failing, but the file key will be marked as failed and the function will continue processing the rest.
+    /// 3. Apply the delta with all the keys that were successfully accepted to the root of the bucket.
     fn do_msp_accept_storage_request(
         msp_id: ProviderIdFor<T>,
         bucket_id: BucketIdFor<T>,
@@ -807,11 +853,16 @@ where
         > = BoundedVec::default();
 
         for (file_key, key_proof) in accepted_file_keys.file_keys_and_proofs {
+            // Skip any duplicates.
+            if accepted_file_keys_and_metadata.contains_key(&file_key) {
+                continue;
+            }
+
             let mut storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
                 Some(metadata) => metadata,
                 None => {
                     failed_file_keys
-                        .try_push((file_key.clone(), Error::<T>::StorageRequestNotFound.into()))
+                        .try_push((file_key, Error::<T>::StorageRequestNotFound.into()))
                         .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                     continue;
                 }
@@ -820,20 +871,14 @@ where
             // Ensure that the file key IS NOT part of the bucket's forest.
             if proven_keys.contains(&file_key) {
                 failed_file_keys
-                    .try_push((
-                        file_key.clone(),
-                        Error::<T>::ExpectedNonInclusionProof.into(),
-                    ))
+                    .try_push((file_key, Error::<T>::ExpectedNonInclusionProof.into()))
                     .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                 continue;
             }
 
             if storage_request_metadata.bucket_id != bucket_id {
                 failed_file_keys
-                    .try_push((
-                        file_key.clone(),
-                        Error::<T>::InvalidBucketIdFileKeyPair.into(),
-                    ))
+                    .try_push((file_key, Error::<T>::InvalidBucketIdFileKeyPair.into()))
                     .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                 continue;
             }
@@ -844,7 +889,7 @@ where
                 &storage_request_metadata.bucket_id,
             ) {
                 failed_file_keys
-                    .try_push((file_key.clone(), Error::<T>::MspNotStoringBucket.into()))
+                    .try_push((file_key, Error::<T>::MspNotStoringBucket.into()))
                     .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                 continue;
             }
@@ -854,21 +899,21 @@ where
                 Some((request_msp_id, confirm_status)) => {
                     if request_msp_id != msp_id {
                         failed_file_keys
-                            .try_push((file_key.clone(), Error::<T>::NotSelectedMsp.into()))
+                            .try_push((file_key, Error::<T>::NotSelectedMsp.into()))
                             .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                         continue;
                     }
 
                     if confirm_status {
                         failed_file_keys
-                            .try_push((file_key.clone(), Error::<T>::MspAlreadyConfirmed.into()))
+                            .try_push((file_key, Error::<T>::MspAlreadyConfirmed.into()))
                             .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                         continue;
                     }
                 }
                 None => {
                     failed_file_keys
-                        .try_push((file_key.clone(), Error::<T>::RequestWithoutMsp.into()))
+                        .try_push((file_key, Error::<T>::RequestWithoutMsp.into()))
                         .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                     continue;
                 }
@@ -879,10 +924,7 @@ where
                 < storage_request_metadata.size
             {
                 failed_file_keys
-                    .try_push((
-                        file_key.clone(),
-                        Error::<T>::InsufficientAvailableCapacity.into(),
-                    ))
+                    .try_push((file_key, Error::<T>::InsufficientAvailableCapacity.into()))
                     .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                 continue;
             }
@@ -890,14 +932,6 @@ where
             // Get the file metadata to insert into the bucket under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
-
-            // Skip any duplicates.
-            if accepted_file_keys_and_metadata
-                .insert(file_key, encoded_trie_value)
-                .is_some()
-            {
-                continue;
-            }
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
@@ -912,7 +946,7 @@ where
                 &key_proof,
             ) {
                 failed_file_keys
-                    .try_push((file_key.clone(), e))
+                    .try_push((file_key, e))
                     .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                 continue;
             }
@@ -923,23 +957,22 @@ where
                 storage_request_metadata.size,
             ) {
                 failed_file_keys
-                    .try_push((file_key.clone(), e))
+                    .try_push((file_key, e))
                     .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
                 continue;
             }
 
             // Increase the used capacity of the MSP
-            if let Err(e) =
+            // This should not fail since we checked that the MSP has enough available capacity to store the file.
+            expect_or_err!(
                 <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
                     &msp_id,
                     storage_request_metadata.size,
-                )
-            {
-                failed_file_keys
-                    .try_push((file_key.clone(), e))
-                    .map_err(|_| Error::<T>::TooManyStorageRequestResponses)?;
-                continue;
-            }
+                ),
+                "Failed to increase capacity used for MSP",
+                Error::<T>::TooManyStorageRequestResponses,
+                result
+            );
 
             // Check if all BSPs have confirmed storing the file.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
@@ -971,6 +1004,16 @@ where
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
             }
+
+            // This should not fail since we checked that the key is not already in the map.
+            expect_or_err!(
+                accepted_file_keys_and_metadata
+                    .insert(file_key, encoded_trie_value)
+                    .is_none(),
+                "Failed to insert file key and metadata into accepted_file_keys_and_metadata",
+                Error::<T>::InconsistentStateKeyAlreadyExists,
+                bool
+            );
         }
 
         // Get the current root of the bucket where the file will be stored.
@@ -1018,8 +1061,10 @@ where
     /// less than the [globally computed threshold](BspsAssignmentThreshold). As the number of BSPs signed up increases, the threshold decreases, meaning there is a
     /// lower chance of a BSP being eligible to volunteer for a storage request.
     ///
-    /// Though, as the storage request remains open, the threshold increases over time based on the number of blocks since the storage request was issued. This is to
+    /// Though, as the storage request remains open, the threshold increases over time based on the number of ticks since the storage request was issued. This is to
     /// ensure that the storage request is fulfilled by opening up the opportunity for more BSPs to volunteer.
+    ///
+    /// For more information on what "ticks" are, see the [Proofs Dealer pallet](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/proofs-dealer/README.md).
     pub(crate) fn do_bsp_volunteer(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
@@ -1318,7 +1363,7 @@ where
             }
         }
 
-        // Check if this is the first file added to the BSP's Forest. If so, initialise last block proven by this BSP.
+        // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
         let old_root = expect_or_err!(
             <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
             "Failed to get root for BSP, when it was already checked to be a BSP",
@@ -1390,7 +1435,7 @@ where
         );
 
         Self::cleanup_storage_request(
-            EitherAccountIdOrProviderId::AccountId(sender),
+            EitherAccountIdOrMspId::AccountId(sender),
             file_key,
             &storage_request_metadata,
         )?;
@@ -1403,7 +1448,7 @@ where
     ///
     /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
     fn cleanup_storage_request(
-        revoker: EitherAccountIdOrProviderId<T>,
+        revoker: EitherAccountIdOrMspId<T>,
         file_key: MerkleHash<T>,
         storage_request_metadata: &StorageRequestMetadata<T>,
     ) -> DispatchResult {
@@ -1729,6 +1774,18 @@ where
             // Update root of the BSP.
             <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
 
+            // Delete payment stream between this BSP and this user (also charge it for all the owed funds
+            // of all files that were stored by this BSP).
+            if <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
+                &sp_id, &owner,
+            )
+            .is_some()
+            {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                    &sp_id, &owner,
+                )?;
+            }
+
             new_root
         } else {
             // If the Provider is a MSP, the proof is verified against the Bucket's root.
@@ -1774,6 +1831,18 @@ where
             <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
                 bucket_id, new_root,
             )?;
+
+            // Delete payment stream between this MSP and this user (also charge it for all the owed funds
+            // of all files that were stored by this MSP).
+            if <T::PaymentStreams as PaymentStreamsInterface>::get_fixed_rate_payment_stream_info(
+                &sp_id, &owner,
+            )
+            .is_some()
+            {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                    &sp_id, &owner,
+                )?;
+            }
 
             new_root
         };
@@ -1873,7 +1942,7 @@ where
 
                 // Emit event.
                 Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                    issuer: EitherAccountIdOrProviderId::<T>::AccountId(sender.clone()),
+                    issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
                     file_key,
                 });
 
@@ -1938,7 +2007,7 @@ where
 
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrProviderId::<T>::ProviderId(msp_id),
+                issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
                 file_key,
             });
         }
@@ -2026,7 +2095,7 @@ where
     /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
     pub fn compute_threshold_to_succeed(
         bsp_id: &ProviderIdFor<T>,
-        requested_at: BlockNumberFor<T>,
+        requested_at: TickNumber<T>,
     ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
         let maximum_threshold = T::ThresholdType::max_value();
 
@@ -2069,20 +2138,17 @@ where
         let threshold_weighted_starting_point =
             bsp_weight.saturating_mul(threshold_global_starting_point);
 
+        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a tick range.
         let base_slope = maximum_threshold
             .saturating_sub(threshold_global_starting_point)
-            .checked_div(&T::ThresholdTypeToBlockNumber::convert_back(
-                BlockRangeToMaximumThreshold::<T>::get(),
+            .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
+                TickRangeToMaximumThreshold::<T>::get(),
             ))
             .unwrap_or(T::ThresholdType::one());
 
-        let threshold_slope = base_slope.saturating_add(
-            base_slope
-                .checked_mul(&bsp_weight)
-                .unwrap_or(maximum_threshold)
-                .checked_div(&global_weight)
-                .unwrap_or(T::ThresholdType::one()),
-        );
+        let threshold_slope = base_slope
+            .checked_mul(&bsp_weight)
+            .unwrap_or(maximum_threshold);
 
         // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
         let threshold_slope = if threshold_slope.is_zero() {
@@ -2091,15 +2157,16 @@ where
             threshold_slope
         };
 
-        let current_block_number = <frame_system::Pallet<T>>::block_number();
+        let current_tick_number =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-        // Get number of blocks since the storage request was issued.
-        let blocks_since_requested = current_block_number.saturating_sub(requested_at);
-        let blocks_since_requested =
-            T::ThresholdTypeToBlockNumber::convert_back(blocks_since_requested);
+        // Get number of ticks since the storage request was issued.
+        let ticks_since_requested = current_tick_number.saturating_sub(requested_at);
+        let ticks_since_requested =
+            T::ThresholdTypeToTickNumber::convert_back(ticks_since_requested);
 
         let to_succeed = threshold_weighted_starting_point
-            .saturating_add(threshold_slope.saturating_mul(blocks_since_requested));
+            .saturating_add(threshold_slope.saturating_mul(ticks_since_requested));
 
         Ok((to_succeed, threshold_slope))
     }
@@ -2109,19 +2176,41 @@ mod hooks {
     use crate::{
         pallet,
         types::MerkleHash,
-        utils::{BucketIdFor, EitherAccountIdOrProviderId, ProviderIdFor},
+        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
         DataServersForMoveBucket, Event, FileDeletionRequestExpirations,
         NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests,
         ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
-    use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
     use shp_traits::TrieRemoveMutation;
-    use sp_runtime::traits::{Get, One, Zero};
-    use sp_runtime::Saturating;
+    use sp_runtime::{
+        traits::{Get, One, Zero},
+        Saturating,
+    };
+    use sp_weights::Weight;
 
     impl<T: pallet::Config> Pallet<T> {
+        pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
+            let current_data_price_per_unit =
+                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::get_price_per_unit_per_tick();
+            weight.consume(T::DbWeight::get().reads(1));
+
+            let new_data_price_per_unit =
+                <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
+                    current_data_price_per_unit,
+                    <T::Providers as shp_traits::SystemMetricsInterface>::get_total_used_capacity(),
+                    <T::Providers as shp_traits::SystemMetricsInterface>::get_total_capacity(),
+                );
+
+            if new_data_price_per_unit != current_data_price_per_unit {
+                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::set_price_per_unit_per_tick(
+                    new_data_price_per_unit,
+                );
+                weight.consume(T::DbWeight::get().writes(1));
+            }
+        }
+
         pub(crate) fn do_on_idle(
             current_block: BlockNumberFor<T>,
             mut remaining_weight: &mut Weight,
@@ -2276,7 +2365,7 @@ mod hooks {
             });
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrProviderId::<T>::AccountId(user),
+                issuer: EitherAccountIdOrMspId::<T>::AccountId(user),
                 file_key,
             });
 

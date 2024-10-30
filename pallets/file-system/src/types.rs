@@ -2,14 +2,14 @@ use core::cmp::max;
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-    traits::{nonfungibles_v2::Inspect as NonFungiblesInspect, Currency, Get},
+    traits::{fungible::Inspect, nonfungibles_v2::Inspect as NonFungiblesInspect, Get},
     BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
-use shp_traits::ReadProvidersInterface;
+use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError};
 use sp_std::fmt::Debug;
 
@@ -23,11 +23,11 @@ use crate::{
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMetadata<T: Config> {
-    /// Block number at which the storage request was made.
+    /// Tick number at which the storage request was made.
     ///
     /// Used primarily for tracking the age of the request which is useful for
     /// cleaning up old requests.
-    pub requested_at: BlockNumberFor<T>,
+    pub requested_at: TickNumber<T>,
 
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
@@ -99,7 +99,16 @@ impl<T: Config> StorageRequestMetadata<T> {
     }
 }
 
-/// Possible MSP responses to a storage request.
+/// Possible MSP responses to a storage request.  
+///  
+/// Contains two lists: one for accepted storage requests and one for rejected  
+/// storage requests, and either of them can be `None` if there are no accepted/rejected  
+/// storage requests.  
+///  
+/// Accepted storage requests come bundled into a [`AcceptedStorageRequestParameters`].  
+/// Rejected storage requests are represented by a list of tuples, where the first element  
+/// is the rejected file key and the second element is the reason for rejection as a  
+/// [`RejectedStorageRequestReason`].
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MspStorageRequestResponse<T: Config> {
@@ -124,6 +133,13 @@ impl<T: Config> Debug for MspStorageRequestResponse<T> {
     }
 }
 
+/// A bundle of file keys that have been accepted by an MSP, alongside the proofs required to  
+/// add these file keys into the corresponding bucket.  
+///  
+/// This struct includes a list of file keys and their corresponding key proofs (i.e. the  
+/// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to  
+/// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,  
+/// and add them now. One single non-inclusion forest proof for all the file keys is sufficient.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct AcceptedStorageRequestParameters<T: Config> {
@@ -136,12 +152,15 @@ pub struct AcceptedStorageRequestParameters<T: Config> {
 pub enum RejectedStorageRequestReason {
     ReachedMaximumCapacity,
     ReceivedInvalidProof,
+    FileKeyAlreadyStored,
     InternalError,
 }
 
 /// Input for MSPs to respond to storage request(s).
 ///
-/// The input must be a list of (file_key, response) grouped by bucket id.
+/// The input is a list of ([BucketIdFor], [MspStorageRequestResponse]) elements,
+/// where the [MspStorageRequestResponse] contains the file keys that are accepted
+/// or rejected by the MSP.
 pub type FileKeyResponsesInput<T> = BoundedVec<
     (BucketIdFor<T>, MspStorageRequestResponse<T>),
     MaxBatchMspRespondStorageRequests<T>,
@@ -320,19 +339,19 @@ pub struct MoveBucketRequestMetadata<T: Config> {
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub enum EitherAccountIdOrProviderId<T: Config> {
+pub enum EitherAccountIdOrMspId<T: Config> {
     AccountId(T::AccountId),
-    ProviderId(ProviderIdFor<T>),
+    MspId(ProviderIdFor<T>),
 }
 
-impl<T: Config> Debug for EitherAccountIdOrProviderId<T> {
+impl<T: Config> Debug for EitherAccountIdOrMspId<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            EitherAccountIdOrProviderId::AccountId(account_id) => {
+            EitherAccountIdOrMspId::AccountId(account_id) => {
                 write!(f, "AccountId({:?})", account_id)
             }
-            EitherAccountIdOrProviderId::ProviderId(provider_id) => {
-                write!(f, "ProviderId({:?})", provider_id)
+            EitherAccountIdOrMspId::MspId(provider_id) => {
+                write!(f, "MspId({:?})", provider_id)
             }
         }
     }
@@ -406,12 +425,15 @@ pub type MultiAddress<T> =
 pub type MaxMultiAddresses<T> =
     <<T as crate::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::MaxNumberOfMultiAddresses;
 
+/// Alias for the `ValuePropId` type used in the MutateBucketsInterface.
+pub type ValuePropId<T> = <<T as crate::Config>::Providers as MutateBucketsInterface>::ValuePropId;
+
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
 
 /// Alias for the `Balance` type used in the FileSystem pallet.
-type BalanceOf<T> =
-    <<T as crate::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+pub type BalanceOf<T> =
+    <<T as Config>::Currency as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// Alias for the `CollectionId` type used in the Nfts pallet.
 pub(super) type CollectionIdFor<T> = <<T as crate::Config>::Nfts as NonFungiblesInspect<
@@ -445,3 +467,7 @@ pub type FileDeletionRequestExpirationItem<T> =
 
 /// Alias for the `ThresholdType` used in the FileSystem pallet.
 pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
+
+/// Alias for the `TickNumber` used in the ProofsDealer pallet.
+pub type TickNumber<T> =
+    <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;

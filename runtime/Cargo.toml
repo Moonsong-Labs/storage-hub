@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
+docify = "0.2.8"
 
 [dependencies]
 codec = { workspace = true }
@@ -24,11 +25,15 @@ hex-literal = { workspace = true, optional = true }
 log = { workspace = true }
 smallvec = { workspace = true }
 scale-info = { workspace = true }
+serde_json = { features = [
+	"alloc",
+], workspace = true, default-features = false }
 
 # Local
 pallet-bucket-nfts = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
+pallet-parameters = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
@@ -38,6 +43,7 @@ pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 
 shp-constants = { workspace = true }
+shp-data-price-updater = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
@@ -47,6 +53,7 @@ shp-traits = { workspace = true }
 frame-support = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 frame-executive = { workspace = true }
+frame-metadata-hash-extension = { workspace = true }
 frame-system = { workspace = true }
 frame-system-benchmarking = { workspace = true, optional = true }
 frame-system-rpc-runtime-api = { workspace = true }
@@ -74,6 +81,7 @@ sp-std = { workspace = true }
 sp-transaction-pool = { workspace = true }
 sp-trie = { workspace = true }
 sp-version = { workspace = true }
+sp-weights = { workspace = true }
 
 # Polkadot
 pallet-xcm = { workspace = true }
@@ -82,6 +90,7 @@ polkadot-runtime-common = { workspace = true }
 xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
+xcm-runtime-apis = { workspace = true }
 
 # Cumulus
 cumulus-pallet-aura-ext = { workspace = true }
@@ -112,6 +121,7 @@ std = [
 	"cumulus-primitives-storage-weight-reclaim/std",
 	"frame-benchmarking?/std",
 	"frame-executive/std",
+	"frame-metadata-hash-extension/std",
 	"frame-support/std",
 	"frame-system-benchmarking?/std",
 	"frame-system-rpc-runtime-api/std",
@@ -127,6 +137,7 @@ std = [
 	"pallet-file-system-runtime-api/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
+	"pallet-parameters/std",
 	"pallet-payment-streams/std",
 	"pallet-payment-streams-runtime-api/std",
 	"pallet-proofs-dealer/std",
@@ -145,6 +156,7 @@ std = [
 	"polkadot-parachain-primitives/std",
 	"polkadot-runtime-common/std",
 	"scale-info/std",
+	"serde_json/std",
 	"shp-constants/std",
 	"shp-file-key-verifier/std",
 	"shp-file-metadata/std",
@@ -165,6 +177,7 @@ std = [
 	"substrate-wasm-builder",
 	"xcm-builder/std",
 	"xcm-executor/std",
+	"xcm-runtime-apis/std",
 	"xcm/std",
 ]
 
@@ -172,7 +185,6 @@ runtime-benchmarks = [
 	"cumulus-pallet-parachain-system/runtime-benchmarks",
 	"cumulus-pallet-session-benchmarking/runtime-benchmarks",
 	"cumulus-pallet-xcmp-queue/runtime-benchmarks",
-	"cumulus-primitives-aura/std",
 	"cumulus-primitives-core/runtime-benchmarks",
 	"cumulus-primitives-utility/runtime-benchmarks",
 	"frame-benchmarking/runtime-benchmarks",
@@ -186,6 +198,8 @@ runtime-benchmarks = [
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-message-queue/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
+	"pallet-parameters/runtime-benchmarks",
+	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-randomness/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
@@ -203,6 +217,7 @@ runtime-benchmarks = [
 	"sp-runtime/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
+	"xcm-runtime-apis/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -222,6 +237,7 @@ try-runtime = [
 	"pallet-file-system/try-runtime",
 	"pallet-message-queue/try-runtime",
 	"pallet-nfts/try-runtime",
+	"pallet-parameters/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-randomness/try-runtime",
 	"pallet-session/try-runtime",
@@ -240,4 +256,15 @@ try-runtime = [
 	"sp-runtime/try-runtime",
 ]
 
-experimental = ["pallet-aura/experimental"]
+# Enable the metadata hash generation.
+#
+# This is hidden behind a feature because it increases the compile time.
+# The wasm binary needs to be compiled twice, once to fetch the metadata,
+# generate the metadata hash and then a second time with the
+# `RUNTIME_METADATA_HASH` environment variable set for the `CheckMetadataHash`
+# extension.
+metadata-hash = ["substrate-wasm-builder/metadata-hash"]
+
+# A convenience feature for enabling things when doing a build
+# for an on-chain release.
+on-chain-release-build = ["metadata-hash"]

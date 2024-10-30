@@ -8,7 +8,7 @@ import "@polkadot/api-base/types/consts";
 import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
 import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
 import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
+import type { AccountId32, H256, Perbill } from "@polkadot/types/interfaces/runtime";
 import type {
   FrameSystemLimitsBlockLength,
   FrameSystemLimitsBlockWeights,
@@ -21,6 +21,19 @@ export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>
 
 declare module "@polkadot/api-base/types/consts" {
   interface AugmentedConsts<ApiType extends ApiTypes> {
+    aura: {
+      /**
+       * The slot duration Aura should run with, expressed in milliseconds.
+       * The effective value of this type should not change while the chain is running.
+       *
+       * For backwards compatibility either use [`MinimumPeriodTimesTwo`] or a const.
+       **/
+      slotDuration: u64 & AugmentedConst<ApiType>;
+      /**
+       * Generic const
+       **/
+      [key: string]: Codec;
+    };
     balances: {
       /**
        * The minimum amount required to keep an account open. MUST BE GREATER THAN ZERO!
@@ -40,10 +53,14 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The maximum number of locks that should exist on an account.
        * Not strictly enforced, but used for weight estimation.
+       *
+       * Use of locks is deprecated in favour of freezes. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       maxLocks: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum number of named reserves that can exist on an account.
+       *
+       * Use of reserves is deprecated in favour of holds. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       maxReserves: u32 & AugmentedConst<ApiType>;
       /**
@@ -57,7 +74,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests`.
+       * Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
        **/
       maxBatchMspRespondStorageRequests: u32 & AugmentedConst<ApiType>;
       /**
@@ -126,6 +143,14 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       heapSize: u32 & AugmentedConst<ApiType>;
       /**
+       * The maximum amount of weight (if any) to be used from remaining weight `on_idle` which
+       * should be provided to the message queue for servicing enqueued items `on_idle`.
+       * Useful for parachains to process messages at the same block they are received.
+       *
+       * If `None`, it will not call `ServiceQueues::service_queues` in `on_idle`.
+       **/
+      idleMaxServiceWeight: Option<SpWeightsWeightV2Weight> & AugmentedConst<ApiType>;
+      /**
        * The maximum number of stale pages (i.e. of overweight messages) allowed before culling
        * can happen. Once there are more stale pages than this, then historical pages may be
        * dropped, even if they contain unprocessed overweight messages.
@@ -133,10 +158,11 @@ declare module "@polkadot/api-base/types/consts" {
       maxStale: u32 & AugmentedConst<ApiType>;
       /**
        * The amount of weight (if any) which should be provided to the message queue for
-       * servicing enqueued items.
+       * servicing enqueued items `on_initialize`.
        *
        * This may be legitimately `None` in the case that you will call
-       * `ServiceQueues::service_queues` manually.
+       * `ServiceQueues::service_queues` manually or set [`Self::IdleMaxServiceWeight`] to have
+       * it run in `on_idle`.
        **/
       serviceWeight: Option<SpWeightsWeightV2Weight> & AugmentedConst<ApiType>;
       /**
@@ -219,6 +245,11 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
+       * The maximum amount of Users that a Provider can charge in a single extrinsic execution.
+       * This is used to prevent a Provider from charging too many Users in a single block, which could lead to a DoS attack.
+       **/
+      maxUsersToCharge: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
        * `NewStreamDeposit * rate` will be held as a deposit.
@@ -238,8 +269,28 @@ declare module "@polkadot/api-base/types/consts" {
     };
     proofsDealer: {
       /**
+       * The minimum unused weight that a block must have to be considered _not_ full.
+       *
+       * This is used as part of the criteria for checking if the network is presumably under a spam attack.
+       * For example, this can be set to the benchmarked weight of a `submit_proof` extrinsic, which would
+       * mean that a block is not considered full if a `submit_proof` extrinsic could have still fit in it.
+       **/
+      blockFullnessHeadroom: SpWeightsWeightV2Weight & AugmentedConst<ApiType>;
+      /**
+       * The period of blocks for which the block fullness is checked.
+       *
+       * This is the amount of blocks from the past, for which the block fullness has been checked
+       * and is stored. Blocks older than `current_block` - [`Config::BlockFullnessPeriod`] are
+       * cleared from storage.
+       *
+       * This constant should be equal or smaller than the [`Config::ChallengeTicksTolerance`] constant,
+       * if the goal is to prevent spamming attacks that would prevent honest Providers from submitting
+       * their proofs in time.
+       **/
+      blockFullnessPeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of ticks that challenges history is kept for.
-       * After this many ticks, challenges are removed from `TickToChallengesSeed` StorageMap.
+       * After this many ticks, challenges are removed from [`TickToChallengesSeed`] StorageMap.
        * A "tick" is usually one block, but some blocks may be skipped due to migrations.
        **/
       challengeHistoryLength: u32 & AugmentedConst<ApiType>;
@@ -293,6 +344,18 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       minChallengePeriod: u32 & AugmentedConst<ApiType>;
       /**
+       * The minimum ratio (or percentage if you will) of blocks that must be considered _not_ full,
+       * from the total number of [`Config::BlockFullnessPeriod`] blocks taken into account.
+       *
+       * If less than this percentage of blocks are not full, the networks is considered to be presumably
+       * under a spam attack.
+       * This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
+       * if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+       * blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
+       * that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+       **/
+      minNotFullBlocksRatio: Perbill & AugmentedConst<ApiType>;
+      /**
        * The number of random challenges that are generated per block, using the random seed
        * generated for that block.
        **/
@@ -323,6 +386,14 @@ declare module "@polkadot/api-base/types/consts" {
     };
     providers: {
       /**
+       * The amount of blocks that a BSP must wait before being able to sign off, after being signed up.
+       *
+       * This is to prevent BSPs from signing up and off too quickly, thus making it harder for an attacker
+       * to suddenly have a large portion of the total number of BSPs. The reason for this, is that the
+       * attacker would have to lock up a large amount of funds for this period of time.
+       **/
+      bspSignUpLockPeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The amount that an account has to deposit to create a bucket.
        **/
       bucketDeposit: u128 & AugmentedConst<ApiType>;
@@ -346,6 +417,7 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of Buckets that a MSP can have.
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
+      maxCommitmentSize: u32 & AugmentedConst<ApiType>;
       /**
        * The estimated maximum size of an unknown file.
        *
@@ -477,6 +549,17 @@ declare module "@polkadot/api-base/types/consts" {
     };
     xcmpQueue: {
       /**
+       * Maximal number of outbound XCMP channels that can have messages queued at the same time.
+       *
+       * If this is reached, then no further messages can be sent to channels that do not yet
+       * have a message queued. This should be set to the expected maximum of outbound channels
+       * which is determined by [`Self::ChannelInfo`]. It is important to set this large enough,
+       * since otherwise the congestion control protocol will not work as intended and messages
+       * may be dropped. This value increases the PoV and should therefore not be picked too
+       * high. Governance needs to pay attention to not open more channels than this value.
+       **/
+      maxActiveOutboundChannels: u32 & AugmentedConst<ApiType>;
+      /**
        * The maximum number of inbound XCMP channels that can be suspended simultaneously.
        *
        * Any further channel suspensions will fail and messages may get dropped without further
@@ -484,6 +567,14 @@ declare module "@polkadot/api-base/types/consts" {
        * [`InboundXcmpSuspended`] still applies at that scale.
        **/
       maxInboundSuspended: u32 & AugmentedConst<ApiType>;
+      /**
+       * The maximal page size for HRMP message pages.
+       *
+       * A lower limit can be set dynamically, but this is the hard-limit for the PoV worst case
+       * benchmarking. The limit for the size of a message is slightly below this, since some
+       * overhead is incurred for encoding the format.
+       **/
+      maxPageSize: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

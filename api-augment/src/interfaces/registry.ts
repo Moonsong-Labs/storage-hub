@@ -26,6 +26,8 @@ import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
   CumulusPrimitivesParachainInherentParachainInherentData,
   CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim,
+  FrameMetadataHashExtensionCheckMetadataHash,
+  FrameMetadataHashExtensionMode,
   FrameSupportDispatchDispatchClass,
   FrameSupportDispatchDispatchInfo,
   FrameSupportDispatchPays,
@@ -34,6 +36,7 @@ import type {
   FrameSupportDispatchPerDispatchClassWeightsPerClass,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  FrameSupportTokensMiscIdAmount,
   FrameSystemAccountInfo,
   FrameSystemCall,
   FrameSystemCodeUpgradeAuthorization,
@@ -57,7 +60,6 @@ import type {
   PalletBalancesCall,
   PalletBalancesError,
   PalletBalancesEvent,
-  PalletBalancesIdAmount,
   PalletBalancesReasons,
   PalletBalancesReserveData,
   PalletBucketNftsCall,
@@ -71,7 +73,7 @@ import type {
   PalletFileSystemBatchResponses,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
-  PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemMoveBucketRequestMetadata,
@@ -118,6 +120,8 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceDirection,
   PalletNftsPriceWithDirection,
+  PalletParametersCall,
+  PalletParametersEvent,
   PalletPaymentStreamsCall,
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsError,
@@ -142,8 +146,12 @@ import type {
   PalletStorageProvidersEvent,
   PalletStorageProvidersHoldReason,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersMainStorageProviderSignUpRequest,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersSignUpRequestSpParams,
+  PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   PalletSudoCall,
   PalletSudoError,
   PalletSudoEvent,
@@ -160,12 +168,12 @@ import type {
   PolkadotCorePrimitivesInboundDownwardMessage,
   PolkadotCorePrimitivesInboundHrmpMessage,
   PolkadotCorePrimitivesOutboundHrmpMessage,
-  PolkadotPrimitivesV6AbridgedHostConfiguration,
-  PolkadotPrimitivesV6AbridgedHrmpChannel,
-  PolkadotPrimitivesV6AsyncBackingAsyncBackingParams,
-  PolkadotPrimitivesV6PersistedValidationData,
-  PolkadotPrimitivesV6UpgradeGoAhead,
-  PolkadotPrimitivesV6UpgradeRestriction,
+  PolkadotPrimitivesV8AbridgedHostConfiguration,
+  PolkadotPrimitivesV8AbridgedHrmpChannel,
+  PolkadotPrimitivesV8AsyncBackingAsyncBackingParams,
+  PolkadotPrimitivesV8PersistedValidationData,
+  PolkadotPrimitivesV8UpgradeGoAhead,
+  PolkadotPrimitivesV8UpgradeRestriction,
   ShpFileKeyVerifierFileKeyProof,
   ShpFileMetadataFileMetadata,
   ShpFileMetadataFingerprint,
@@ -173,10 +181,6 @@ import type {
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
-  SpCoreEcdsaSignature,
-  SpCoreEd25519Signature,
-  SpCoreSr25519Public,
-  SpCoreSr25519Signature,
   SpRuntimeDigest,
   SpRuntimeDigestDigestItem,
   SpRuntimeDispatchError,
@@ -190,6 +194,7 @@ import type {
   SpWeightsRuntimeDbWeight,
   SpWeightsWeightV2Weight,
   StagingParachainInfoCall,
+  StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV3MultiLocation,
   StagingXcmV4Asset,
   StagingXcmV4AssetAssetFilter,
@@ -209,6 +214,23 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntime,
   StorageHubRuntimeRuntimeHoldReason,
   StorageHubRuntimeSessionKeys,
@@ -248,6 +270,7 @@ import type {
   XcmV3MultiassetMultiAssets,
   XcmV3MultiassetWildFungibility,
   XcmV3MultiassetWildMultiAsset,
+  XcmV3OriginKind,
   XcmV3PalletInfo,
   XcmV3QueryResponseInfo,
   XcmV3Response,
@@ -283,6 +306,8 @@ declare module "@polkadot/types/types/registry" {
     CumulusPrimitivesCoreAggregateMessageOrigin: CumulusPrimitivesCoreAggregateMessageOrigin;
     CumulusPrimitivesParachainInherentParachainInherentData: CumulusPrimitivesParachainInherentParachainInherentData;
     CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim;
+    FrameMetadataHashExtensionCheckMetadataHash: FrameMetadataHashExtensionCheckMetadataHash;
+    FrameMetadataHashExtensionMode: FrameMetadataHashExtensionMode;
     FrameSupportDispatchDispatchClass: FrameSupportDispatchDispatchClass;
     FrameSupportDispatchDispatchInfo: FrameSupportDispatchDispatchInfo;
     FrameSupportDispatchPays: FrameSupportDispatchPays;
@@ -291,6 +316,7 @@ declare module "@polkadot/types/types/registry" {
     FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
     FrameSupportMessagesProcessMessageError: FrameSupportMessagesProcessMessageError;
     FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
+    FrameSupportTokensMiscIdAmount: FrameSupportTokensMiscIdAmount;
     FrameSystemAccountInfo: FrameSystemAccountInfo;
     FrameSystemCall: FrameSystemCall;
     FrameSystemCodeUpgradeAuthorization: FrameSystemCodeUpgradeAuthorization;
@@ -314,7 +340,6 @@ declare module "@polkadot/types/types/registry" {
     PalletBalancesCall: PalletBalancesCall;
     PalletBalancesError: PalletBalancesError;
     PalletBalancesEvent: PalletBalancesEvent;
-    PalletBalancesIdAmount: PalletBalancesIdAmount;
     PalletBalancesReasons: PalletBalancesReasons;
     PalletBalancesReserveData: PalletBalancesReserveData;
     PalletBucketNftsCall: PalletBucketNftsCall;
@@ -328,7 +353,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemBatchResponses: PalletFileSystemBatchResponses;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
-    PalletFileSystemEitherAccountIdOrProviderId: PalletFileSystemEitherAccountIdOrProviderId;
+    PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
@@ -375,6 +400,8 @@ declare module "@polkadot/types/types/registry" {
     PalletNftsPreSignedMint: PalletNftsPreSignedMint;
     PalletNftsPriceDirection: PalletNftsPriceDirection;
     PalletNftsPriceWithDirection: PalletNftsPriceWithDirection;
+    PalletParametersCall: PalletParametersCall;
+    PalletParametersEvent: PalletParametersEvent;
     PalletPaymentStreamsCall: PalletPaymentStreamsCall;
     PalletPaymentStreamsDynamicRatePaymentStream: PalletPaymentStreamsDynamicRatePaymentStream;
     PalletPaymentStreamsError: PalletPaymentStreamsError;
@@ -399,8 +426,12 @@ declare module "@polkadot/types/types/registry" {
     PalletStorageProvidersEvent: PalletStorageProvidersEvent;
     PalletStorageProvidersHoldReason: PalletStorageProvidersHoldReason;
     PalletStorageProvidersMainStorageProvider: PalletStorageProvidersMainStorageProvider;
-    PalletStorageProvidersStorageProvider: PalletStorageProvidersStorageProvider;
+    PalletStorageProvidersMainStorageProviderSignUpRequest: PalletStorageProvidersMainStorageProviderSignUpRequest;
+    PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
+    PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
+    PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
     PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
+    PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
     PalletSudoCall: PalletSudoCall;
     PalletSudoError: PalletSudoError;
     PalletSudoEvent: PalletSudoEvent;
@@ -417,12 +448,12 @@ declare module "@polkadot/types/types/registry" {
     PolkadotCorePrimitivesInboundDownwardMessage: PolkadotCorePrimitivesInboundDownwardMessage;
     PolkadotCorePrimitivesInboundHrmpMessage: PolkadotCorePrimitivesInboundHrmpMessage;
     PolkadotCorePrimitivesOutboundHrmpMessage: PolkadotCorePrimitivesOutboundHrmpMessage;
-    PolkadotPrimitivesV6AbridgedHostConfiguration: PolkadotPrimitivesV6AbridgedHostConfiguration;
-    PolkadotPrimitivesV6AbridgedHrmpChannel: PolkadotPrimitivesV6AbridgedHrmpChannel;
-    PolkadotPrimitivesV6AsyncBackingAsyncBackingParams: PolkadotPrimitivesV6AsyncBackingAsyncBackingParams;
-    PolkadotPrimitivesV6PersistedValidationData: PolkadotPrimitivesV6PersistedValidationData;
-    PolkadotPrimitivesV6UpgradeGoAhead: PolkadotPrimitivesV6UpgradeGoAhead;
-    PolkadotPrimitivesV6UpgradeRestriction: PolkadotPrimitivesV6UpgradeRestriction;
+    PolkadotPrimitivesV8AbridgedHostConfiguration: PolkadotPrimitivesV8AbridgedHostConfiguration;
+    PolkadotPrimitivesV8AbridgedHrmpChannel: PolkadotPrimitivesV8AbridgedHrmpChannel;
+    PolkadotPrimitivesV8AsyncBackingAsyncBackingParams: PolkadotPrimitivesV8AsyncBackingAsyncBackingParams;
+    PolkadotPrimitivesV8PersistedValidationData: PolkadotPrimitivesV8PersistedValidationData;
+    PolkadotPrimitivesV8UpgradeGoAhead: PolkadotPrimitivesV8UpgradeGoAhead;
+    PolkadotPrimitivesV8UpgradeRestriction: PolkadotPrimitivesV8UpgradeRestriction;
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
     ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
     ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
@@ -430,10 +461,6 @@ declare module "@polkadot/types/types/registry" {
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;
     SpCoreCryptoKeyTypeId: SpCoreCryptoKeyTypeId;
-    SpCoreEcdsaSignature: SpCoreEcdsaSignature;
-    SpCoreEd25519Signature: SpCoreEd25519Signature;
-    SpCoreSr25519Public: SpCoreSr25519Public;
-    SpCoreSr25519Signature: SpCoreSr25519Signature;
     SpRuntimeDigest: SpRuntimeDigest;
     SpRuntimeDigestDigestItem: SpRuntimeDigestDigestItem;
     SpRuntimeDispatchError: SpRuntimeDispatchError;
@@ -447,6 +474,7 @@ declare module "@polkadot/types/types/registry" {
     SpWeightsRuntimeDbWeight: SpWeightsRuntimeDbWeight;
     SpWeightsWeightV2Weight: SpWeightsWeightV2Weight;
     StagingParachainInfoCall: StagingParachainInfoCall;
+    StagingXcmExecutorAssetTransferTransferType: StagingXcmExecutorAssetTransferTransferType;
     StagingXcmV3MultiLocation: StagingXcmV3MultiLocation;
     StagingXcmV4Asset: StagingXcmV4Asset;
     StagingXcmV4AssetAssetFilter: StagingXcmV4AssetAssetFilter;
@@ -466,6 +494,23 @@ declare module "@polkadot/types/types/registry" {
     StagingXcmV4Response: StagingXcmV4Response;
     StagingXcmV4TraitsOutcome: StagingXcmV4TraitsOutcome;
     StagingXcmV4Xcm: StagingXcmV4Xcm;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters: StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+    StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue;
     StorageHubRuntimeRuntime: StorageHubRuntimeRuntime;
     StorageHubRuntimeRuntimeHoldReason: StorageHubRuntimeRuntimeHoldReason;
     StorageHubRuntimeSessionKeys: StorageHubRuntimeSessionKeys;
@@ -505,6 +550,7 @@ declare module "@polkadot/types/types/registry" {
     XcmV3MultiassetMultiAssets: XcmV3MultiassetMultiAssets;
     XcmV3MultiassetWildFungibility: XcmV3MultiassetWildFungibility;
     XcmV3MultiassetWildMultiAsset: XcmV3MultiassetWildMultiAsset;
+    XcmV3OriginKind: XcmV3OriginKind;
     XcmV3PalletInfo: XcmV3PalletInfo;
     XcmV3QueryResponseInfo: XcmV3QueryResponseInfo;
     XcmV3Response: XcmV3Response;

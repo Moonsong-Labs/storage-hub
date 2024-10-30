@@ -1276,17 +1276,25 @@ import type {
   IncompleteFileStatus,
   MainStorageProviderId,
   MerklePatriciaRoot,
+  Multiaddresses,
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryConfirmChunksToProveForFileError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryMspConfirmChunksToProveForFileError,
+  QueryMspIdOfBucketIdError,
+  QueryProviderMultiaddressesError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   SaveFileToDisk,
   StorageDataUnit,
   StorageProviderId,
-  TrieRemoveMutation
+  TrieRemoveMutation,
+  ValuePropId,
+  ValueProposition,
+  ValuePropositionWithId
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 declare module "@polkadot/types/types/registry" {
@@ -1936,6 +1944,7 @@ declare module "@polkadot/types/types/registry" {
     MoreAttestations: MoreAttestations;
     MortalEra: MortalEra;
     MultiAddress: MultiAddress;
+    Multiaddresses: Multiaddresses;
     MultiAsset: MultiAsset;
     MultiAssetFilter: MultiAssetFilter;
     MultiAssetFilterV1: MultiAssetFilterV1;
@@ -2094,9 +2103,13 @@ declare module "@polkadot/types/types/registry" {
     PvfPrepTimeoutKind: PvfPrepTimeoutKind;
     QueryAvailableStorageCapacityError: QueryAvailableStorageCapacityError;
     QueryBspConfirmChunksToProveForFileError: QueryBspConfirmChunksToProveForFileError;
+    QueryConfirmChunksToProveForFileError: QueryConfirmChunksToProveForFileError;
     QueryEarliestChangeCapacityBlockError: QueryEarliestChangeCapacityBlockError;
     QueryFileEarliestVolunteerBlockError: QueryFileEarliestVolunteerBlockError;
     QueryId: QueryId;
+    QueryMspConfirmChunksToProveForFileError: QueryMspConfirmChunksToProveForFileError;
+    QueryMspIdOfBucketIdError: QueryMspIdOfBucketIdError;
+    QueryProviderMultiaddressesError: QueryProviderMultiaddressesError;
     QueryStatus: QueryStatus;
     QueryStorageProviderCapacityError: QueryStorageProviderCapacityError;
     QueueConfigData: QueueConfigData;
@@ -2428,6 +2441,9 @@ declare module "@polkadot/types/types/registry" {
     ValidDisputeStatementKind: ValidDisputeStatementKind;
     ValidityAttestation: ValidityAttestation;
     ValidTransaction: ValidTransaction;
+    ValuePropId: ValuePropId;
+    ValueProposition: ValueProposition;
+    ValuePropositionWithId: ValuePropositionWithId;
     VecInboundHrmpMessage: VecInboundHrmpMessage;
     VersionedMultiAsset: VersionedMultiAsset;
     VersionedMultiAssets: VersionedMultiAssets;

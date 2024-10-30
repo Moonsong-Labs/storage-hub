@@ -11,8 +11,8 @@
 pub mod types;
 mod utils;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// TODO #[cfg(feature = "runtime-benchmarks")]
+// TODO mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -20,12 +20,11 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-use frame_system::pallet_prelude::BlockNumberFor;
 pub use pallet::*;
 pub use scale_info::Type;
 use types::{
     BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
-    MainStorageProviderId, MerklePatriciaRoot, StorageDataUnit, StorageProvider,
+    MainStorageProviderId, MerklePatriciaRoot, SignUpRequest, StorageDataUnit,
 };
 
 #[frame_support::pallet]
@@ -45,7 +44,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{PaymentStreamsInterface, ProofSubmittersInterface};
+    use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
     use sp_runtime::traits::{Bounded, CheckedDiv};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -63,6 +62,12 @@ pub mod pallet {
             AccountId = Self::AccountId,
             ProviderId = HashId<Self>,
             Units = Self::StorageDataUnit,
+        >;
+
+        /// Trait that allows the pallet to manage generic file metadatas
+        type FileMetadataManager: FileMetadataInterface<
+            AccountId = Self::AccountId,
+            StorageDataUnit = Self::StorageDataUnit,
         >;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
@@ -92,11 +97,7 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact
             + Into<BalanceOf<Self>>
-            + Into<u64>
-            // Note: this is the same as just making it a u64, but since we need to interact with the FileMetadata type which is a u64,
-            // we kinda have no clean way to achieve this (at least, not one that comes to mind).
-            // TODO: Remove this and create a FileMetadata trait that implements `decode`, `encode`, `file_key` and `get_size`.
-            + From<u64>;
+            + Into<u64>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -113,22 +114,6 @@ pub mod pallet {
 
         /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
         type MerklePatriciaRoot: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
-
-        /// The type of the identifier of the value proposition of a MSP (probably a hash of that value proposition)
-        type ValuePropId: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug
@@ -193,8 +178,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxFileSize: Get<StorageDataUnit<Self>>;
 
-        // TODO: Change these next constants to a more generic type
-
         /// The maximum size of a multiaddress.
         #[pallet::constant]
         type MaxMultiAddressSize: Get<u32>;
@@ -238,6 +221,17 @@ pub mod pallet {
         /// Starting reputation weight for a newly registered BSP.
         #[pallet::constant]
         type StartingReputationWeight: Get<Self::ReputationWeightType>;
+
+        /// The amount of blocks that a BSP must wait before being able to sign off, after being signed up.
+        ///
+        /// This is to prevent BSPs from signing up and off too quickly, thus making it harder for an attacker
+        /// to suddenly have a large portion of the total number of BSPs. The reason for this, is that the
+        /// attacker would have to lock up a large amount of funds for this period of time.
+        #[pallet::constant]
+        type BspSignUpLockPeriod: Get<BlockNumberFor<Self>>;
+
+        #[pallet::constant]
+        type MaxCommitmentSize: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -257,7 +251,7 @@ pub mod pallet {
     /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up) and [cancel_sign_up](crate::dispatchables::cancel_sign_up), which remove an existing entry from the map.
     #[pallet::storage]
     pub type SignUpRequests<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, (StorageProvider<T>, BlockNumberFor<T>)>;
+        StorageMap<_, Blake2_128Concat, T::AccountId, SignUpRequest<T>>;
 
     /// The mapping from an AccountId to a MainStorageProviderId.
     ///
@@ -279,7 +273,6 @@ pub mod pallet {
     /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
     /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
     /// - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-    /// - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
     #[pallet::storage]
     pub type MainStorageProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, MainStorageProviderId<T>, MainStorageProvider<T>>;
@@ -378,6 +371,21 @@ pub mod pallet {
     #[pallet::storage]
     pub type GlobalBspsReputationWeight<T> = StorageValue<_, ReputationWeightType<T>, ValueQuery>;
 
+    /// Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+    ///
+    /// These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+    /// limit of data that can be stored in the bucket.
+    #[pallet::storage]
+    pub type MainStorageProviderIdsToValuePropositions<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        MainStorageProviderId<T>,
+        Blake2_128Concat,
+        HashId<T>,
+        ValueProposition<T>,
+        OptionQuery,
+    >;
+
     // Events & Errors:
 
     /// The events that can be emitted by this pallet
@@ -388,25 +396,25 @@ pub mod pallet {
         /// that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.
         MspRequestSignUpSuccess {
             who: T::AccountId,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
-            value_prop: ValueProposition<T>,
         },
 
         /// Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            msp_id: MainStorageProviderId<T>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
-            value_prop: ValueProposition<T>,
+            value_prop: ValuePropositionWithId<T>,
         },
 
         /// Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
         /// that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
         BspRequestSignUpSuccess {
             who: T::AccountId,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
         },
 
@@ -414,7 +422,8 @@ pub mod pallet {
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            bsp_id: BackupStorageProviderId<T>,
+            multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
         },
 
@@ -424,16 +433,23 @@ pub mod pallet {
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
         /// that MSP's account id.
-        MspSignOffSuccess { who: T::AccountId },
+        MspSignOffSuccess {
+            who: T::AccountId,
+            msp_id: MainStorageProviderId<T>,
+        },
 
         /// Event emitted when a Backup Storage Provider has signed off successfully. Provides information about
         /// that BSP's account id.
-        BspSignOffSuccess { who: T::AccountId },
+        BspSignOffSuccess {
+            who: T::AccountId,
+            bsp_id: BackupStorageProviderId<T>,
+        },
 
         /// Event emitted when a SP has changed its capacity successfully. Provides information about
         /// that SP's account id, its old total data that could store, and the new total data.
         CapacityChanged {
             who: T::AccountId,
+            provider_id: StorageProviderId<T>,
             old_capacity: StorageDataUnit<T>,
             new_capacity: StorageDataUnit<T>,
             next_block_when_change_allowed: BlockNumberFor<T>,
@@ -443,6 +459,19 @@ pub mod pallet {
         Slashed {
             provider_id: HashId<T>,
             amount_slashed: BalanceOf<T>,
+        },
+
+        /// Event emitted when an MSP adds a new value proposition.
+        ValuePropAdded {
+            msp_id: MainStorageProviderId<T>,
+            value_prop_id: ValuePropId<T>,
+            value_prop: ValueProposition<T>,
+        },
+
+        /// Event emitted when an MSP's value proposition is made unavailable.
+        ValuePropUnavailable {
+            msp_id: MainStorageProviderId<T>,
+            value_prop_id: ValuePropId<T>,
         },
     }
 
@@ -472,6 +501,8 @@ pub mod pallet {
         // Sign off errors:
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
         StorageStillInUse,
+        /// Error thrown when a user tries to sign off as a BSP but the sign off period has not passed yet.
+        SignOffPeriodNotPassed,
 
         // Randomness errors:
         /// Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
@@ -508,6 +539,12 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when the value proposition id is not found.
+        ValuePropositionNotFound,
+        /// Error thrown when value proposition under a given id already exists.
+        ValuePropositionAlreadyExists,
+        /// Error thrown when a value proposition is not available.
+        ValuePropositionNotAvailable,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -532,10 +569,6 @@ pub mod pallet {
         #[cfg(test)]
         AnotherUnrelatedHold,
     }
-
-    /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
@@ -571,8 +604,10 @@ pub mod pallet {
         pub fn request_msp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            value_prop: ValueProposition<T>,
+            multiaddresses: Multiaddresses<T>,
+            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            commitment: Commitment<T>,
+            value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -584,21 +619,27 @@ pub mod pallet {
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&msp_info)?;
+            Self::do_request_msp_sign_up(MainStorageProviderSignUpRequest {
+                msp_info,
+                value_prop: ValueProposition::<T>::new(
+                    value_prop_price_per_unit_of_data_per_block,
+                    commitment,
+                    value_prop_max_data_limit,
+                ),
+            })?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
-                value_prop,
             });
 
             // Return a successful DispatchResultWithPostInfo
@@ -633,7 +674,7 @@ pub mod pallet {
         pub fn request_bsp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -649,6 +690,7 @@ pub mod pallet {
                 owner_account: who.clone(),
                 payment_account,
                 reputation_weight: T::StartingReputationWeight::get(),
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new BSP (if possible), updating storage
@@ -756,10 +798,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_msp_sign_off(&who)?;
+            let msp_id = Self::do_msp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspSignOffSuccess { who });
+            Self::deposit_event(Event::<T>::MspSignOffSuccess { who, msp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -787,10 +829,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_bsp_sign_off(&who)?;
+            let bsp_id = Self::do_bsp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspSignOffSuccess { who });
+            Self::deposit_event(Event::<T>::BspSignOffSuccess { who, bsp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -830,11 +872,12 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            let old_capacity = Self::do_change_capacity(&who, new_capacity)?;
+            let (provider_id, old_capacity) = Self::do_change_capacity(&who, new_capacity)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::CapacityChanged {
                 who,
+                provider_id,
                 old_capacity,
                 new_capacity,
                 next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
@@ -850,24 +893,57 @@ pub mod pallet {
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the account that wants to add a value proposition.
         ///
-        /// Parameters:
-        /// - `new_value_prop`: The value proposition that the MSP wants to add to its service.
-        ///
-        /// This extrinsic will perform the following checks and logic:
-        /// 1. Check that the extrinsic was signed and get the signer.
-        /// 2. Check that the signer is registered as a MSP
-        /// 3. Check that the MSP has not reached the maximum amount of value propositions
-        /// 4. Check that the value proposition is valid (size and any other relevant checks)
-        /// 5. Update the MSPs storage to add the value proposition (with its identifier)
-        ///
         /// Emits `ValuePropAdded` event when successful.
         #[pallet::call_index(7)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
-            _origin: OriginFor<T>,
-            _new_value_prop: ValueProposition<T>,
+            origin: OriginFor<T>,
+            price_per_unit_of_data_per_block: BalanceOf<T>,
+            commitment: Commitment<T>,
+            bucket_data_limit: StorageDataUnit<T>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: implement this
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            let (msp_id, value_prop) = Self::do_add_value_prop(
+                &who,
+                price_per_unit_of_data_per_block,
+                commitment,
+                bucket_data_limit,
+            )?;
+
+            // Emit event
+            Self::deposit_event(Event::<T>::ValuePropAdded {
+                msp_id,
+                value_prop_id: value_prop.derive_id(),
+                value_prop,
+            });
+
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
+        ///
+        /// This operation cannot be reversed. You can only add new value propositions.
+        /// This will not affect existing buckets which are using this value proposition.
+        #[pallet::call_index(8)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn make_value_prop_unavailable(
+            origin: OriginFor<T>,
+            value_prop_id: ValuePropId<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            let msp_id = Self::do_make_value_prop_unavailable(&who, value_prop_id)?;
+
+            // Emit event
+            Self::deposit_event(Event::<T>::ValuePropUnavailable {
+                msp_id,
+                value_prop_id,
+            });
 
             Ok(().into())
         }
@@ -894,15 +970,17 @@ pub mod pallet {
         /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
         ///
         /// Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
-        #[pallet::call_index(8)]
+        #[pallet::call_index(9)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_msp_sign_up(
             origin: OriginFor<T>,
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            value_prop: ValueProposition<T>,
+            multiaddresses: Multiaddresses<T>,
+            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            commitment: Commitment<T>,
+            value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
@@ -914,28 +992,36 @@ pub mod pallet {
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
+            };
+
+            let sign_up_request = MainStorageProviderSignUpRequest {
+                msp_info,
+                value_prop: ValueProposition::<T>::new(
+                    value_prop_price_per_unit_of_data_per_block,
+                    commitment,
+                    value_prop_max_data_limit,
+                ),
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&msp_info)?;
+            Self::do_request_msp_sign_up(sign_up_request.clone())?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
                 who: who.clone(),
                 multiaddresses,
                 capacity,
-                value_prop,
             });
 
             // Confirm the sign up of the account as a Main Storage Provider with the given ID
             Self::do_msp_sign_up(
                 &who,
                 msp_id,
-                &msp_info,
+                sign_up_request,
                 frame_system::Pallet::<T>::block_number(),
             )?;
 
@@ -962,14 +1048,14 @@ pub mod pallet {
         /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
         ///
         /// Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_bsp_sign_up(
             origin: OriginFor<T>,
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: Multiaddresses<T>,
             payment_account: T::AccountId,
             weight: Option<ReputationWeightType<T>>,
         ) -> DispatchResultWithPostInfo {
@@ -986,6 +1072,7 @@ pub mod pallet {
                 owner_account: who.clone(),
                 payment_account,
                 reputation_weight: weight.unwrap_or(T::StartingReputationWeight::get()),
+                sign_up_block: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new BSP (if possible), updating storage
@@ -1014,7 +1101,7 @@ pub mod pallet {
         ///
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
-        #[pallet::call_index(10)]
+        #[pallet::call_index(11)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn slash(origin: OriginFor<T>, provider_id: HashId<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
@@ -1028,9 +1115,7 @@ pub mod pallet {
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
     /// A helper function to get the information of a sign up request of a user.
-    pub fn get_sign_up_request(
-        who: &T::AccountId,
-    ) -> Result<(StorageProvider<T>, BlockNumberFor<T>), Error<T>> {
+    pub fn get_sign_up_request(who: &T::AccountId) -> Result<SignUpRequest<T>, Error<T>> {
         SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)
     }
 

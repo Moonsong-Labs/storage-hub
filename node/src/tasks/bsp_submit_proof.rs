@@ -219,7 +219,13 @@ where
             },
         );
 
-        let max_tip = <storage_hub_runtime::Runtime as pallet_storage_providers::Config>::SlashAmountPerMaxFileSize::get()
+        // We consider that the maximum tip we're willing to pay for the submission of the proof is
+        // equal to the amount that this BSP would be slashed for, if the proof cannot be submitted.
+        let max_tip = self
+            .storage_hub_handler
+            .blockchain
+            .query_slash_amount_per_max_file_size()
+            .await?
             .saturating_mul(event.data.forest_challenges.len() as u128)
             .saturating_mul(2u32.into());
 
@@ -289,16 +295,11 @@ where
             self.check_provider_root(event.data.provider_id).await?;
         }
 
-        // Release the forest root write "lock".
-        let forest_root_write_result = forest_root_write_tx.send(());
-        if forest_root_write_result.is_err() {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
-            ));
-        }
-
-        Ok(())
+        // Release the forest root write "lock" and finish the task.
+        self.storage_hub_handler
+            .blockchain
+            .release_forest_root_write_lock(forest_root_write_tx)
+            .await
     }
 }
 

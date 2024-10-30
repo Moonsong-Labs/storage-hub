@@ -101,15 +101,15 @@ pub trait StorageHubClientApi {
         file_path: String,
     ) -> RpcResult<SaveFileToDisk>;
 
+    /// Get the root hash of a forest.
+    ///
+    /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
+    /// In the case of an MSP node, the forest key is a bucket id.
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, forest_key: Option<String>) -> RpcResult<H256>;
+    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<H256>;
 
     #[method(name = "isFileInForest")]
-    async fn is_file_in_forest(
-        &self,
-        forest_key: Option<String>,
-        file_key: H256,
-    ) -> RpcResult<bool>;
+    async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool>;
 
     #[method(name = "isFileInFileStorage")]
     async fn is_file_in_file_storage(
@@ -120,7 +120,7 @@ pub trait StorageHubClientApi {
     #[method(name = "getFileMetadata")]
     async fn get_file_metadata(
         &self,
-        forest_key: Option<String>,
+        forest_key: Option<H256>,
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>>;
 
@@ -129,7 +129,7 @@ pub trait StorageHubClientApi {
     #[method(name = "generateForestProof")]
     async fn generate_forest_proof(
         &self,
-        forest_key: Option<String>,
+        forest_key: Option<H256>,
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>>;
 
@@ -300,8 +300,8 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self, forest_key: Option<String>) -> RpcResult<H256> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<H256> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
 
         let fs = self
             .forest_storage_handler
@@ -312,15 +312,12 @@ where
             })?;
 
         let read_fs = fs.read().await;
+
         Ok(read_fs.root())
     }
 
-    async fn is_file_in_forest(
-        &self,
-        forest_key: Option<String>,
-        file_key: H256,
-    ) -> RpcResult<bool> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+    async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool> {
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
 
         let fs = self
             .forest_storage_handler
@@ -378,10 +375,10 @@ where
     // metadata from this method until that's fixed.
     async fn get_file_metadata(
         &self,
-        forest_key: Option<String>,
+        forest_key: Option<H256>,
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
 
         let fs = self
             .forest_storage_handler
@@ -399,10 +396,10 @@ where
 
     async fn generate_forest_proof(
         &self,
-        forest_key: Option<String>,
+        forest_key: Option<H256>,
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default());
+        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
 
         let fs = self
             .forest_storage_handler

@@ -26,13 +26,15 @@ import type {
   FrameSupportDispatchDispatchInfo,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
-  PalletFileSystemEitherAccountIdOrProviderId,
+  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemMspRespondStorageRequestsResult,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
+  PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -41,6 +43,8 @@ import type {
   StagingXcmV4Response,
   StagingXcmV4TraitsOutcome,
   StagingXcmV4Xcm,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   XcmV3TraitsError,
   XcmVersionedAssets,
   XcmVersionedLocation
@@ -507,7 +511,8 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
-          private: bool
+          private: bool,
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -516,6 +521,7 @@ declare module "@polkadot/api-base/types/events" {
           name: Bytes;
           collectionId: Option<u32>;
           private: bool;
+          valuePropId: H256;
         }
       >;
       /**
@@ -555,8 +561,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       PriorityChallengeForFileDeletionQueued: AugmentedEvent<
         ApiType,
-        [issuer: PalletFileSystemEitherAccountIdOrProviderId, fileKey: H256],
-        { issuer: PalletFileSystemEitherAccountIdOrProviderId; fileKey: H256 }
+        [issuer: PalletFileSystemEitherAccountIdOrMspId, fileKey: H256],
+        { issuer: PalletFileSystemEitherAccountIdOrMspId; fileKey: H256 }
       >;
       /**
        * Notifies that a proof has been submitted for a pending file deletion request.
@@ -1086,6 +1092,30 @@ declare module "@polkadot/api-base/types/events" {
        **/
       [key: string]: AugmentedEvent<ApiType>;
     };
+    parameters: {
+      /**
+       * A Parameter was set.
+       *
+       * Is also emitted when the value was not changed.
+       **/
+      Updated: AugmentedEvent<
+        ApiType,
+        [
+          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>,
+          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>
+        ],
+        {
+          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+        }
+      >;
+      /**
+       * Generic event
+       **/
+      [key: string]: AugmentedEvent<ApiType>;
+    };
     paymentStreams: {
       /**
        * Event emitted when a dynamic-rate payment stream is created. Provides information about the User and Provider of the stream
@@ -1150,17 +1180,38 @@ declare module "@polkadot/api-base/types/events" {
       >;
       /**
        * Event emitted when a payment is charged. Provides information about the user that was charged,
-       * the Provider that received the funds, and the amount that was charged.
+       * the Provider that received the funds, the tick up to which it was charged and the amount that was charged.
        **/
       PaymentStreamCharged: AugmentedEvent<
         ApiType,
-        [userAccount: AccountId32, providerId: H256, amount: u128],
-        { userAccount: AccountId32; providerId: H256; amount: u128 }
+        [
+          userAccount: AccountId32,
+          providerId: H256,
+          amount: u128,
+          lastTickCharged: u32,
+          chargedAtTick: u32
+        ],
+        {
+          userAccount: AccountId32;
+          providerId: H256;
+          amount: u128;
+          lastTickCharged: u32;
+          chargedAtTick: u32;
+        }
       >;
       /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
        **/
       UserPaidDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      /**
+       * Event emitted when multiple payment streams have been charged from a Provider. Provides information about
+       * the charged users, the Provider that received the funds and the tick when the charge happened.
+       **/
+      UsersCharged: AugmentedEvent<
+        ApiType,
+        [userAccounts: Vec<AccountId32>, providerId: H256, chargedAtTick: u32],
+        { userAccounts: Vec<AccountId32>; providerId: H256; chargedAtTick: u32 }
+      >;
       /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
        * correctly paid all their outstanding debt and can now contract new services again.
@@ -1451,6 +1502,10 @@ declare module "@polkadot/api-base/types/events" {
     };
     proofsDealer: {
       /**
+       * The [`ChallengesTicker`] has been paused or unpaused.
+       **/
+      ChallengesTickerSet: AugmentedEvent<ApiType, [paused: bool], { paused: bool }>;
+      /**
        * A set of mutations has been applied to the Forest.
        **/
       MutationsApplied: AugmentedEvent<
@@ -1523,8 +1578,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofAccepted: AugmentedEvent<
         ApiType,
-        [provider: H256, proof: PalletProofsDealerProof],
-        { provider: H256; proof: PalletProofsDealerProof }
+        [provider: H256, proof: PalletProofsDealerProof, lastTickProven: u32],
+        { provider: H256; proof: PalletProofsDealerProof; lastTickProven: u32 }
       >;
       /**
        * A provider was marked as slashable and their challenge deadline was forcefully pushed.
@@ -1553,15 +1608,19 @@ declare module "@polkadot/api-base/types/events" {
        * Event emitted when a Backup Storage Provider has signed off successfully. Provides information about
        * that BSP's account id.
        **/
-      BspSignOffSuccess: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      BspSignOffSuccess: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bspId: H256],
+        { who: AccountId32; bspId: H256 }
+      >;
       /**
        * Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
        * that BSP's account id, the total data it can store according to its stake, and its multiaddress.
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
-        { who: AccountId32; multiaddresses: Vec<Bytes>; capacity: u64 }
+        [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
+        { who: AccountId32; bspId: H256; multiaddresses: Vec<Bytes>; capacity: u64 }
       >;
       /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about
@@ -1569,8 +1628,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       CapacityChanged: AugmentedEvent<
         ApiType,
-        [who: AccountId32, oldCapacity: u64, newCapacity: u64, nextBlockWhenChangeAllowed: u32],
-        { who: AccountId32; oldCapacity: u64; newCapacity: u64; nextBlockWhenChangeAllowed: u32 }
+        [
+          who: AccountId32,
+          providerId: PalletStorageProvidersStorageProviderId,
+          oldCapacity: u64,
+          newCapacity: u64,
+          nextBlockWhenChangeAllowed: u32
+        ],
+        {
+          who: AccountId32;
+          providerId: PalletStorageProvidersStorageProviderId;
+          oldCapacity: u64;
+          newCapacity: u64;
+          nextBlockWhenChangeAllowed: u32;
+        }
       >;
       /**
        * Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
@@ -1578,24 +1649,18 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MspRequestSignUpSuccess: AugmentedEvent<
         ApiType,
-        [
-          who: AccountId32,
-          multiaddresses: Vec<Bytes>,
-          capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
-        ],
-        {
-          who: AccountId32;
-          multiaddresses: Vec<Bytes>;
-          capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
-        }
+        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
+        { who: AccountId32; multiaddresses: Vec<Bytes>; capacity: u64 }
       >;
       /**
        * Event emitted when a Main Storage Provider has signed off successfully. Provides information about
        * that MSP's account id.
        **/
-      MspSignOffSuccess: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      MspSignOffSuccess: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, mspId: H256],
+        { who: AccountId32; mspId: H256 }
+      >;
       /**
        * Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
        * that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
@@ -1604,15 +1669,17 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
+          mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
+          valueProp: PalletStorageProvidersValuePropositionWithId
         ],
         {
           who: AccountId32;
+          mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
+          valueProp: PalletStorageProvidersValuePropositionWithId;
         }
       >;
       /**
@@ -1627,6 +1694,22 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [providerId: H256, amountSlashed: u128],
         { providerId: H256; amountSlashed: u128 }
+      >;
+      /**
+       * Event emitted when an MSP adds a new value proposition.
+       **/
+      ValuePropAdded: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256, valueProp: PalletStorageProvidersValueProposition],
+        { mspId: H256; valuePropId: H256; valueProp: PalletStorageProvidersValueProposition }
+      >;
+      /**
+       * Event emitted when an MSP's value proposition is made unavailable.
+       **/
+      ValuePropUnavailable: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256],
+        { mspId: H256; valuePropId: H256 }
       >;
       /**
        * Generic event

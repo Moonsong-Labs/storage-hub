@@ -1,6 +1,13 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import { describeBspNet, fetchEventData, ShConsts, type EnrichedBspApi } from "../../../util";
+import {
+  bob,
+  describeBspNet,
+  fetchEventData,
+  ShConsts,
+  sleep,
+  type EnrichedBspApi
+} from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -27,27 +34,42 @@ describeBspNet(
       await bspThreeApi.disconnect();
     });
 
-    it("BSP correctly charges payment stream", async () => {
-      // Make sure the payment stream between the user and the DUMMY_BSP_ID actually exists
+    it("BSP correctly charges multiple payment streams", async () => {
+      // Create a new payment stream between Bob and the DUMMY_BSP_ID
+      const createBobPaymentStreamResult = await userApi.sealBlock(
+        userApi.tx.sudo.sudo(
+          userApi.tx.paymentStreams.createDynamicRatePaymentStream(
+            ShConsts.DUMMY_BSP_ID,
+            bob.address,
+            10
+          )
+        )
+      );
+      const { extSuccess } = createBobPaymentStreamResult;
+      strictEqual(extSuccess, true, "Extrinsic should be successful");
+
+      // Make sure the payment streams between the users and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
           ShConsts.DUMMY_BSP_ID
         );
-      // Check if the first element of the returned vector is the user
-      assert(paymentStreamExistsResult[0].toString() === userAddress);
-      assert(paymentStreamExistsResult.length === 1);
+      // Check that the returned vector mapped to strings has the user and Bob
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(userAddress));
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(bob.address));
+      assert(paymentStreamExistsResult.length === 2);
 
       // Seal one more block.
       await userApi.sealBlock();
 
-      // Check if the user owes the provider.
+      // Check if both the user and Bob owes the provider.
       let usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
         ShConsts.DUMMY_BSP_ID,
         0
       );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Seal one more block with the pending extrinsics.
       await userApi.sealBlock();
@@ -140,16 +162,23 @@ describeBspNet(
         ShConsts.DUMMY_BSP_ID
       );
 
-      // Check the info of the payment stream between the user and the DUMMY_BSP_ID
+      // Check the info of the payment streams between the users and the DUMMY_BSP_ID
       const paymentStreamInfo = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
         ShConsts.DUMMY_BSP_ID,
         userAddress
       );
+      const bobPaymentStreamInfo = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
+        ShConsts.DUMMY_BSP_ID,
+        bob.address
+      );
 
-      // Check that the last chargeable price index of the dummy BSP is greater than the last charged price index of the payment stream
-      // so that the payment stream can be charged by the BSP
+      // Check that the last chargeable price index of the dummy BSP is greater than the last charged price index of the payment streams
+      // so that the payment streams can be charged by the BSP
       assert(
         paymentStreamInfo.unwrap().priceIndexWhenLastCharged.lt(lastChargeableInfo.priceIndex)
+      );
+      assert(
+        bobPaymentStreamInfo.unwrap().priceIndexWhenLastCharged.lt(lastChargeableInfo.priceIndex)
       );
 
       // Check that the user now owes the provider.
@@ -158,13 +187,14 @@ describeBspNet(
         1
       );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Check that the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
-        method: "chargePaymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3
@@ -173,19 +203,34 @@ describeBspNet(
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
 
-      // Assert that event for the BSP charging its payment stream was emitted
-      await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
+      // Assert that event for the BSP charging its users with payment streams was emitted
+      await userApi.assert.eventPresent("paymentStreams", "UsersCharged");
+
+      // Assert that the event for the DUMMY_BSP has both users charged
+      const usersChargedEvents = await userApi.assert.eventMany("paymentStreams", "UsersCharged");
+      strictEqual(usersChargedEvents.length, 3, "There should be three users charged event");
+      const dummyBspEvent = usersChargedEvents.find(
+        (event) => event.event.data[1].toString() === ShConsts.DUMMY_BSP_ID.toString()
+      );
+      assert(dummyBspEvent, "There should be an event for the DUMMY_BSP_ID");
+      const usersChargedBlob =
+        userApi.events.paymentStreams.UsersCharged.is(dummyBspEvent.event) &&
+        dummyBspEvent.event.data;
+      assert(usersChargedBlob, "Event doesn't match Type");
+      assert(dummyBspEvent.event.data[0].map((x) => x.toString()).includes(userAddress));
+      assert(dummyBspEvent.event.data[0].map((x) => x.toString()).includes(bob.address));
     });
 
     it("Correctly updates payment stream on-chain to make user insolvent", async () => {
-      // Make sure the payment stream between the user and the DUMMY_BSP_ID actually exists
+      // Make sure the payment streams between the users and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
           ShConsts.DUMMY_BSP_ID
         );
-      // Check if the first element of the returned vector is the user
-      assert(paymentStreamExistsResult[0].toString() === userAddress);
-      assert(paymentStreamExistsResult.length === 1);
+      // Check that the returned vector mapped to strings has the user and Bob
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(userAddress));
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(bob.address));
+      assert(paymentStreamExistsResult.length === 2);
 
       // Check the payment stream info between the user and the DUMMY_BSP_ID
       const paymentStreamInfoBeforeDeletion =
@@ -194,13 +239,28 @@ describeBspNet(
           userAddress
         );
 
-      // Add extra files to the user's storage with the DUMMY_BSP_ID
-      await userApi.file.newStorageRequest("res/cloud.jpg", "test/cloud.jpg", "bucket-1");
-      await userApi.wait.bspVolunteer();
-      await userApi.wait.bspStored();
-      await userApi.file.newStorageRequest("res/adolphus.jpg", "test/adolphus.jpg", "bucket-3");
-      await userApi.wait.bspVolunteer();
-      await userApi.wait.bspStored();
+      // Add extra files to the user's storage with the three BSPs, waiting for them to be confirmed
+      const cloudFileMetadata = await userApi.file.newStorageRequest(
+        "res/cloud.jpg",
+        "test/cloud.jpg",
+        "bucket-1"
+      );
+      await userApi.wait.bspVolunteer(3);
+      await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
+      await bspTwoApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
+      await bspThreeApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
+      await userApi.wait.bspStored(3);
+
+      const adolphusFileMetadata = await userApi.file.newStorageRequest(
+        "res/adolphus.jpg",
+        "test/adolphus.jpg",
+        "bucket-3"
+      );
+      await userApi.wait.bspVolunteer(3);
+      await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspTwoApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspThreeApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
+      await userApi.wait.bspStored(3);
 
       // Check the payment stream info after adding the new files
       const paymentStreamInfoAfterAddingFiles =
@@ -225,8 +285,9 @@ describeBspNet(
         0
       );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Seal one more block with the pending extrinsics.
       await userApi.sealBlock();
@@ -391,13 +452,14 @@ describeBspNet(
           1
         );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Check that the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
-        method: "chargePaymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3
@@ -405,6 +467,7 @@ describeBspNet(
 
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
+      await sleep(500);
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
@@ -522,7 +585,7 @@ describeBspNet(
       // Check that the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
-        method: "chargePaymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3
@@ -537,6 +600,7 @@ describeBspNet(
       // Check if the "UserWithoutFunds" event was emitted. If it wasn't, advance until
       // the next challenge period and check again
       if (!blockResult.events?.find((event) => event.event.method === "UserWithoutFunds")) {
+        console.log("UserWithoutFunds event not found. Advancing to next challenge period.");
         // Calculate the next challenge tick for the DUMMY_BSP_ID.
         // We first get the last tick for which the BSP submitted a proof.
         const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
@@ -578,7 +642,7 @@ describeBspNet(
         // Check that the three Providers have tried to charge the user
         // since the user has a payment stream with each of them
         await userApi.assert.extrinsicPresent({
-          method: "chargePaymentStreams",
+          method: "chargeMultipleUsersPaymentStreams",
           module: "paymentStreams",
           checkTxPool: true,
           assertLength: 3
@@ -602,15 +666,79 @@ describeBspNet(
     it("BSP correctly deletes all files from an insolvent user", async () => {
       // We execute this loop three times since that's the amount of files the user has stored with the BSPs
       for (let i = 0; i < 3; i++) {
+        console.log("Removing file from insolvent user, loop: ", i + 1);
         // Check that the three Providers are trying to delete the files of the user
-        await userApi.assert.extrinsicPresent({
-          method: "stopStoringForInsolventUser",
-          module: "fileSystem",
-          checkTxPool: true,
-          assertLength: 3
-        });
+        await userApi.assert
+          .extrinsicPresent({
+            method: "stopStoringForInsolventUser",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 3,
+            timeout: 10000
+          })
+          // TODO: Remove this. This handling of the assertion is to debug race conditions if they appear.
+          .then(
+            async (result) => {
+              // console.log("Extrinsics present: ", result);
+              // We check for each BSP which file key it's deleting and print it
+              const txPool = await userApi.rpc.author.pendingExtrinsics();
+              const stopStoringForInsolventUserExts = result.map((match) => txPool[match.extIndex]);
+              for (let i = 0; i < stopStoringForInsolventUserExts.length; i++) {
+                const sender = stopStoringForInsolventUserExts[i].signer.toString();
+                const bspIdSender = (
+                  await userApi.query.providers.accountIdToBackupStorageProviderId(sender)
+                ).toString();
+                const fileKey = stopStoringForInsolventUserExts[i].args[0].toString();
+                console.log("BSP ", bspIdSender, " is deleting file with key: ", fileKey);
+              }
+            },
+            async (error) => {
+              console.log("Extrinsics not present: ", error);
+              // We check for each BSP if it has already deleted all files, which shouldn't happen
+              // We do this by checking the capacity of each BSP to make sure it's not 0, by using the
+              // runtime API to check its total capacity and comparing it to its available capacity
+              const bspOneAvailableCapacity =
+                await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
+                  ShConsts.DUMMY_BSP_ID
+                );
+              const bspOneTotalCapacity =
+                await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+                  ShConsts.DUMMY_BSP_ID
+                );
+              console.log(
+                "BSP One total - available capacity: ",
+                bspOneTotalCapacity.toNumber() - bspOneAvailableCapacity.toNumber()
+              );
 
-        // Seal a block to allow BSPs to delete the files of the user
+              const bspTwoAvailableCapacity =
+                await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
+                  ShConsts.BSP_TWO_ID
+                );
+              const bspTwoTotalCapacity =
+                await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+                  ShConsts.BSP_TWO_ID
+                );
+              console.log(
+                "BSP Two total - available capacity: ",
+                bspTwoTotalCapacity.toNumber() - bspTwoAvailableCapacity.toNumber()
+              );
+
+              const bspThreeAvailableCapacity =
+                await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
+                  ShConsts.BSP_THREE_ID
+                );
+              const bspThreeTotalCapacity =
+                await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+                  ShConsts.BSP_THREE_ID
+                );
+              console.log(
+                "BSP Three total - available capacity: ",
+                bspThreeTotalCapacity.toNumber() - bspThreeAvailableCapacity.toNumber()
+              );
+            }
+          );
+
+        // Seal a block with the `stopStoringForInsolventUser` extrinsics.
         await userApi.sealBlock();
 
         // Assert that event for the BSP deleting the files of the user was emitted
@@ -630,38 +758,16 @@ describeBspNet(
             userApi.events.fileSystem.SpStopStoringInsolventUser.is(event.event) &&
             event.event.data;
           assert(stopStoringInsolventUserBlob, "Event doesn't match Type");
+          // Wait for BSPs to process the successful `stopStoringForInsolventUser` extrinsics.
+          // i.e. wait for them to update the local forest root.
           if (stopStoringInsolventUserBlob.spId.toString() === ShConsts.DUMMY_BSP_ID) {
-            assert(
-              (
-                await bspApi.rpc.storagehubclient.isFileInForest(
-                  null,
-                  stopStoringInsolventUserBlob.fileKey
-                )
-              ).isFalse
-            );
+            await bspApi.wait.bspFileDeletionCompleted(stopStoringInsolventUserBlob.fileKey);
           } else if (stopStoringInsolventUserBlob.spId.toString() === ShConsts.BSP_TWO_ID) {
-            assert(
-              (
-                await bspTwoApi.rpc.storagehubclient.isFileInForest(
-                  null,
-                  stopStoringInsolventUserBlob.fileKey
-                )
-              ).isFalse
-            );
+            await bspTwoApi.wait.bspFileDeletionCompleted(stopStoringInsolventUserBlob.fileKey);
           } else if (stopStoringInsolventUserBlob.spId.toString() === ShConsts.BSP_THREE_ID) {
-            assert(
-              (
-                await bspThreeApi.rpc.storagehubclient.isFileInForest(
-                  null,
-                  stopStoringInsolventUserBlob.fileKey
-                )
-              ).isFalse
-            );
+            await bspThreeApi.wait.bspFileDeletionCompleted(stopStoringInsolventUserBlob.fileKey);
           }
         }
-
-        // Seal a block to allow BSPs to delete the files of the user
-        await userApi.sealBlock();
       }
 
       // After deleting all the files, the user should have no payment streams with any provider

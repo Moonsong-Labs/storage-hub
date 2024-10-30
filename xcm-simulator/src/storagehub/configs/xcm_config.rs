@@ -1,7 +1,6 @@
-use crate::storagehub::MsgQueue;
 use crate::storagehub::{
-    AccountId, AllPalletsWithSystem, Balances, ParachainInfo, PolkadotXcm, Runtime, RuntimeCall,
-    RuntimeEvent, RuntimeOrigin, WeightToFee,
+    AccountId, AllPalletsWithSystem, Balances, MsgQueue, ParachainInfo, PolkadotXcm, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeOrigin, WeightToFee,
 };
 use frame_support::{
     parameter_types,
@@ -15,13 +14,14 @@ use polkadot_parachain_primitives::primitives::Sibling;
 use polkadot_runtime_common::impls::ToAuthor;
 use xcm::latest::prelude::*;
 use xcm_builder::{
-    AccountId32Aliases, AllowExplicitUnpaidExecutionFrom, AllowKnownQueryResponses,
-    AllowSubscriptionsFrom, AllowTopLevelPaidExecutionFrom, DenyReserveTransferToRelayChain,
-    DenyThenTry, DescribeAllTerminal, DescribeFamily, EnsureXcmOrigin, FixedWeightBounds,
-    FrameTransactionalProcessor, FungibleAdapter, HashedDescription, IsConcrete, ParentAsSuperuser,
-    ParentIsPreset, RelayChainAsNative, SiblingParachainAsNative, SiblingParachainConvertsVia,
-    SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit,
-    TrailingSetTopicAsId, UsingComponents, WithComputedOrigin,
+    AccountId32Aliases, AllowExplicitUnpaidExecutionFrom, AllowHrmpNotificationsFromRelayChain,
+    AllowKnownQueryResponses, AllowSubscriptionsFrom, AllowTopLevelPaidExecutionFrom,
+    DenyReserveTransferToRelayChain, DenyThenTry, DescribeAllTerminal, DescribeFamily,
+    EnsureXcmOrigin, FixedWeightBounds, FrameTransactionalProcessor, FungibleAdapter,
+    HashedDescription, IsConcrete, ParentAsSuperuser, ParentIsPreset, RelayChainAsNative,
+    SiblingParachainAsNative, SiblingParachainConvertsVia, SignedAccountId32AsNative,
+    SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit, TrailingSetTopicAsId,
+    UsingComponents, WithComputedOrigin,
 };
 use xcm_executor::XcmExecutor;
 
@@ -139,6 +139,8 @@ pub type Barrier = TrailingSetTopicAsId<
                     AllowExplicitUnpaidExecutionFrom<ParentOrParentsExecutivePlurality>,
                     // Subscriptions for version tracking are OK.
                     AllowSubscriptionsFrom<ParentRelayOrSiblingParachains>,
+                    // HRMP notifications from the relay chain are OK.
+                    AllowHrmpNotificationsFromRelayChain,
                 ),
                 UniversalLocation,
                 ConstU32<8>,
@@ -182,6 +184,10 @@ impl xcm_executor::Config for XcmConfig {
     type SafeCallFilter = Everything;
     type Aliasers = Nothing;
     type TransactionalProcessor = FrameTransactionalProcessor;
+    type HrmpNewChannelOpenRequestHandler = ();
+    type HrmpChannelAcceptedHandler = ();
+    type HrmpChannelClosingHandler = ();
+    type XcmRecorder = ();
 }
 
 /// Converts a local signed origin into an XCM location.

@@ -55,6 +55,8 @@ where
 
         // Check if the iterator has at least one leaf.
         if trie_de_iter.next().is_none() {
+            // If there are no leaves, and still we reached this point, it is because this is a proof of an empty forest.
+            // In this case, we return an empty set of proven keys, meaning that this is a valid proof of having an empty forest.
             return Ok(BTreeSet::new());
         }
 
@@ -252,7 +254,7 @@ where
                 (key, TrieMutation::Add(mutation)) => {
                     trie.insert(key.as_ref(), &mutation.value)
                         .map_err(|_| "Failed to insert key into trie.")?;
-                    mutated_keys_and_values.push((key.clone(), Some(mutation.value.clone())));
+                    mutated_keys_and_values.push((*key, Some(mutation.value.clone())));
                 }
                 (key, TrieMutation::Remove(_)) => {
                     let node_value = trie
@@ -273,7 +275,7 @@ where
                     } else {
                         None
                     };
-                    mutated_keys_and_values.push((key.clone(), previous_value));
+                    mutated_keys_and_values.push((*key, previous_value));
                 }
             }
         }

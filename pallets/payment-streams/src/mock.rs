@@ -1,13 +1,14 @@
 use crate as pallet_payment_streams;
+use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl,
+    derive_impl,
     pallet_prelude::Get,
     parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
-use frame_system as system;
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
 use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -18,7 +19,6 @@ use sp_runtime::{
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
-use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -51,16 +51,33 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
 }
 
 // Configure a mock runtime to test the pallet.
-construct_runtime!(
-    pub enum Test
-    {
-        System: frame_system,
-        Balances: pallet_balances,
-        StorageProviders: pallet_storage_providers,
-        PaymentStreams: pallet_payment_streams,
-        Nfts: pallet_nfts
-    }
-);
+#[frame_support::runtime]
+mod test_runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+    #[runtime::pallet_index(1)]
+    pub type Balances = pallet_balances;
+    #[runtime::pallet_index(2)]
+    pub type StorageProviders = pallet_storage_providers;
+    #[runtime::pallet_index(3)]
+    pub type PaymentStreams = crate;
+    #[runtime::pallet_index(4)]
+    pub type Nfts = pallet_nfts;
+}
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
@@ -68,7 +85,7 @@ parameter_types! {
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -121,7 +138,6 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
-// TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
@@ -129,16 +145,47 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
+pub struct MockFileMetadataManager;
+impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
+    type AccountId = AccountId;
+    type Metadata = shp_file_metadata::FileMetadata<
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StorageDataUnit = u64;
+
+    fn encode(metadata: &Self::Metadata) -> Vec<u8> {
+        metadata.encode()
+    }
+
+    fn decode(data: &[u8]) -> Result<Self::Metadata, codec::Error> {
+        <shp_file_metadata::FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > as Decode>::decode(&mut &data[..])
+    }
+
+    fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
+        metadata.file_size
+    }
+
+    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
+        Self::AccountId::decode(&mut metadata.owner.as_slice())
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
+    type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageUnit;
     type PaymentStreams = PaymentStreams;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
@@ -158,6 +205,8 @@ impl pallet_storage_providers::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 parameter_types! {
@@ -223,6 +272,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         Some(set)
     }
 
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+
     fn get_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) -> Option<u32> {
         None
     }
@@ -240,11 +293,12 @@ impl crate::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 
 // Build genesis storage according to the mock runtime.
 pub fn _new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::<Test>::default()
+    frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap()
         .into()

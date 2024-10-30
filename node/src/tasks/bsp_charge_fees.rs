@@ -13,8 +13,8 @@ use shc_blockchain_service::{
     },
     types::StopStoringForInsolventUserRequest,
 };
-use shc_common::types::ProviderId;
-use sp_core::H256;
+use shc_common::types::{MaxUsersToCharge, ProviderId};
+use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
 
 use shc_forest_manager::traits::ForestStorage;
@@ -96,13 +96,15 @@ where
                 )
             })?;
 
-        // Calls the `charge_payment_streams` extrinsic for each user in the list to be charged.
+        // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
+        // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        for user in users_with_debt {
-            trace!(target: LOG_TARGET, "Charging user {:?}", user);
-
+        let user_chunk_size: u32 = MaxUsersToCharge::get();
+        for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
             let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_payment_streams { user_account: user },
+                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+                    user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
+                },
             );
 
             let charging_result = self
@@ -346,16 +348,11 @@ where
             }
         }
 
-        // Release the forest root write "lock".
-        let forest_root_write_result = forest_root_write_tx.send(());
-        if forest_root_write_result.is_err() {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock."
-            ));
-        }
-
-        Ok(())
+        // Release the forest root write "lock" and finish the task.
+        self.storage_hub_handler
+            .blockchain
+            .release_forest_root_write_lock(forest_root_write_tx)
+            .await
     }
 }
 
