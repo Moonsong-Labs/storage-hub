@@ -1333,7 +1333,7 @@ where
         // Add the user to the UsersWithoutFunds mapping and emit the UserWithoutFunds event. If the user has no remaining
         // payment streams, emit the UserPaidDebts event as well.
         // Note: once a user is flagged as without funds, it is considered insolvent by the system and every Provider
-        // will be incentivized to stop providing services to that user.
+        // will be incentivised to stop providing services to that user.
         // To be unflagged, the user will have to pay its remaining debt and wait the cooldown period, after which it will
         // need to execute the `clear_insolvent_flag` extrinsic. If it hasn't paid its debt by then, the extrinsic will
         // pay it for the user using the payment streams' deposits.

@@ -292,7 +292,7 @@ impl crate::Config for Test {
     type ChallengesQueueLength = ConstU32<25>;
     type CheckpointChallengePeriod = ConstU64<20>;
     type ChallengesFee = ConstU128<1_000_000>;
-    type Treasury = ConstU64<181222>;
+    type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
     type MinChallengePeriod = ConstU64<4>;

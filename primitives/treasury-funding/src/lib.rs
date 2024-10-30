@@ -83,7 +83,12 @@ where
 /// where:
 /// * `x` is the system utilisation rate, i.e. fraction of the total storage being provided in the system
 /// that is currently being used.
-/// * `d` is the falloff or `decay_rate`. A co-efficient dictating the strength of the global incentivization to get the `ideal_system_utilisation`.
+/// * `d` is the falloff or `decay_rate`. A co-efficient dictating the strength of the global incentivisation to get the `ideal_system_utilisation`. A higher number results in less
+/// typical funds to the treasury at the cost of greater volatility for providers, since the treasury cut will be more sensitive to changes in the system utilisation rate.
+/// `d` then should be bigger than 0.01, as if the falloff is smaller than 1%, the treasury cut will get to its maximum value with a really small change in the system utilisation rate over the ideal,
+/// as the exponential that calculates the adjustment will be really close to 1.
+/// `d` should also be smaller than `(1 - x_ideal) / 3`, as if the falloff is bigger than that, the maximum value of the exponential that calculates the adjustment will be always less than 90% even at 100% utilisation,
+/// making it so the treasury cut will max out at barely over 90% of the maximum treasury cut instead of the full 100%.
 /// * `x_ideal` is the ideal system utilisation rate.
 ///
 /// The parameters utilized in the calculation are provided by the configuration trait `LinearThenPowerOfTwoTreasuryCutCalculatorConfig`.
@@ -172,8 +177,11 @@ where
 /// * `ideal_system_utilisation`: The fraction of total storage being provided in the system that should
 /// be being actively used. Known as `x_ideal` in the literature. Must be between 0 and 1.
 /// * `falloff`: Known as `decay_rate` in the literature. A co-efficient dictating the strength of
-///   the global incentivization to get the `ideal_system_utilisation`. A higher number results in less typical
+///   the global incentivisation to get the `ideal_system_utilisation`. A higher number results in less typical
 ///   funds to the treasury at the cost of greater volatility for providers. Must be more than 0.01.
+///
+/// The calculations done here are heavily based on Polkadot's inflation model, which can be found in [Polkadot's
+/// documentation](https://wiki.polkadot.network/docs/learn-inflation).
 pub fn compute_adjustment_over_minimum_cut<P: PerThing>(
     system_utilisation: P,
     ideal_system_utilisation: P,

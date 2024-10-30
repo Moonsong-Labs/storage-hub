@@ -98,7 +98,7 @@ pub mod pallet {
         #[pallet::constant]
         type UserWithoutFundsCooldown: Get<BlockNumberFor<Self>>;
 
-        /// The treasury account of the runtime
+        /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
         type TreasuryAccount: Get<Self::AccountId>;
 
