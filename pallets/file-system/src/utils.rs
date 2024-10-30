@@ -222,44 +222,6 @@ where
         Ok(chunks_to_prove)
     }
 
-    pub fn query_msp_confirm_chunks_to_prove_for_file(
-        msp_id: ProviderIdFor<T>,
-        file_key: MerkleHash<T>,
-    ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
-        // Get the storage request metadata.
-        let storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
-            Some(storage_request) => storage_request,
-            None => {
-                return Err(QueryMspConfirmChunksToProveForFileError::StorageRequestNotFound);
-            }
-        };
-
-        // Generate the list of chunks to prove.
-        let challenges = Self::generate_chunk_challenges_on_sp_confirm(
-            msp_id,
-            file_key,
-            &storage_request_metadata,
-        );
-
-        let chunks = storage_request_metadata.to_file_metadata().chunks_count();
-
-        let chunks_to_prove = challenges
-            .iter()
-            .map(|challenge| {
-                let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-                let challenged_chunk: ChunkId = ChunkId::new(
-                    challenged_chunk
-                        .try_into()
-                        .map_err(|_| QueryMspConfirmChunksToProveForFileError::InternalError)?,
-                );
-
-                Ok(challenged_chunk)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(chunks_to_prove)
-    }
-
     fn generate_chunk_challenges_on_sp_confirm(
         sp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,

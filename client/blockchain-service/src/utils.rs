@@ -31,8 +31,6 @@ use storage_hub_runtime::{Runtime, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
-use crate::events::ProcessMspRespondStoringRequest;
-use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
