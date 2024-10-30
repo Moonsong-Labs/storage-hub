@@ -78,10 +78,10 @@ mod create_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = false;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 assert_noop!(
-                    FileSystem::create_bucket(origin, msp_id, name.clone(), private),
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
                     pallet_storage_providers::Error::<Test>::NotEnoughBalance
                 );
             });
@@ -1506,7 +1506,7 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
                 let balance_to_mint: crate::types::BalanceOf<Test> =
@@ -1520,7 +1520,12 @@ mod request_storage {
                 )
                 .unwrap();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_without_funds.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_without_funds.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
