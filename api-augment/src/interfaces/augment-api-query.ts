@@ -61,7 +61,8 @@ import type {
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
   PalletXcmRemoteLockedFungibleRecord,
@@ -1005,7 +1006,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to store and manage dynamic-rate payment streams between Users and Providers.
        *
        * This storage is updated in:
-       * - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which adds a new entry to the map.
+       * - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which adds a new entry to the map.
        * - [delete_dynamic_rate_payment_stream](crate::dispatchables::delete_dynamic_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_dynamic_rate_payment_stream](crate::dispatchables::update_dynamic_rate_payment_stream), which updates the entry's `amount_provided`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `price_index_when_last_charged`.
@@ -1025,7 +1026,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to store and manage fixed-rate payment streams between Users and Providers.
        *
        * This storage is updated in:
-       * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which adds a new entry to the map.
+       * - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which adds a new entry to the map.
        * - [delete_fixed_rate_payment_stream](crate::dispatchables::delete_fixed_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_fixed_rate_payment_stream](crate::dispatchables::update_fixed_rate_payment_stream), which updates the entry's `rate`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_tick`.
@@ -1081,8 +1082,8 @@ declare module "@polkadot/api-base/types/storage" {
        * that a user has and it is also useful to check if a user has registered to the network.
        *
        * This storage is updated in:
-       * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
-       * - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+       * - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+       * - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
        * - [remove_fixed_rate_payment_stream](crate::dispatchables::remove_fixed_rate_payment_stream), which removes one from this storage and releases the deposit.
        * - [remove_dynamic_rate_payment_stream](crate::dispatchables::remove_dynamic_rate_payment_stream), which removes one from this storage and releases the deposit.
        **/
@@ -1538,6 +1539,21 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+       *
+       * These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+       * limit of data that can be stored in the bucket.
+       **/
+      mainStorageProviderIdsToValuePropositions: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersValueProposition>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * The mapping from a MainStorageProviderId to a MainStorageProvider.
        *
        * This is used to get a Main Storage Provider's metadata.
@@ -1547,7 +1563,6 @@ declare module "@polkadot/api-base/types/storage" {
        * - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
        * - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
        * - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-       * - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
        **/
       mainStorageProviders: AugmentedQuery<
         ApiType,
@@ -1584,7 +1599,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg: AccountId32 | string | Uint8Array
-        ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProvider, u32]>>>,
+        ) => Observable<Option<PalletStorageProvidersSignUpRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;

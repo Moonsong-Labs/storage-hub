@@ -31,7 +31,13 @@ describeMspNet(
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
       const bucketName = "nothingmuch-3";
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+
+      const valuePropId = valueProps[0].id;
+
+      const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
@@ -61,7 +67,7 @@ describeMspNet(
         );
       }
 
-      await userApi.sealBlock(txs, shUser, false);
+      await userApi.sealBlock(txs, shUser);
 
       // Allow time for the MSP to receive and store the file from the user
       await sleep(3000);

@@ -1,6 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
 import {
+  bob,
   describeBspNet,
   fetchEventData,
   ShConsts,
@@ -33,27 +34,42 @@ describeBspNet(
       await bspThreeApi.disconnect();
     });
 
-    it("BSP correctly charges payment stream", async () => {
-      // Make sure the payment stream between the user and the DUMMY_BSP_ID actually exists
+    it("BSP correctly charges multiple payment streams", async () => {
+      // Create a new payment stream between Bob and the DUMMY_BSP_ID
+      const createBobPaymentStreamResult = await userApi.sealBlock(
+        userApi.tx.sudo.sudo(
+          userApi.tx.paymentStreams.createDynamicRatePaymentStream(
+            ShConsts.DUMMY_BSP_ID,
+            bob.address,
+            10
+          )
+        )
+      );
+      const { extSuccess } = createBobPaymentStreamResult;
+      strictEqual(extSuccess, true, "Extrinsic should be successful");
+
+      // Make sure the payment streams between the users and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
           ShConsts.DUMMY_BSP_ID
         );
-      // Check if the first element of the returned vector is the user
-      assert(paymentStreamExistsResult[0].toString() === userAddress);
-      assert(paymentStreamExistsResult.length === 1);
+      // Check that the returned vector mapped to strings has the user and Bob
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(userAddress));
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(bob.address));
+      assert(paymentStreamExistsResult.length === 2);
 
       // Seal one more block.
       await userApi.sealBlock();
 
-      // Check if the user owes the provider.
+      // Check if both the user and Bob owes the provider.
       let usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
         ShConsts.DUMMY_BSP_ID,
         0
       );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Seal one more block with the pending extrinsics.
       await userApi.sealBlock();
@@ -146,16 +162,23 @@ describeBspNet(
         ShConsts.DUMMY_BSP_ID
       );
 
-      // Check the info of the payment stream between the user and the DUMMY_BSP_ID
+      // Check the info of the payment streams between the users and the DUMMY_BSP_ID
       const paymentStreamInfo = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
         ShConsts.DUMMY_BSP_ID,
         userAddress
       );
+      const bobPaymentStreamInfo = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
+        ShConsts.DUMMY_BSP_ID,
+        bob.address
+      );
 
-      // Check that the last chargeable price index of the dummy BSP is greater than the last charged price index of the payment stream
-      // so that the payment stream can be charged by the BSP
+      // Check that the last chargeable price index of the dummy BSP is greater than the last charged price index of the payment streams
+      // so that the payment streams can be charged by the BSP
       assert(
         paymentStreamInfo.unwrap().priceIndexWhenLastCharged.lt(lastChargeableInfo.priceIndex)
+      );
+      assert(
+        bobPaymentStreamInfo.unwrap().priceIndexWhenLastCharged.lt(lastChargeableInfo.priceIndex)
       );
 
       // Check that the user now owes the provider.
@@ -164,13 +187,14 @@ describeBspNet(
         1
       );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Check that the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
-        method: "chargePaymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3
@@ -179,19 +203,34 @@ describeBspNet(
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
 
-      // Assert that event for the BSP charging its payment stream was emitted
-      await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
+      // Assert that event for the BSP charging its users with payment streams was emitted
+      await userApi.assert.eventPresent("paymentStreams", "UsersCharged");
+
+      // Assert that the event for the DUMMY_BSP has both users charged
+      const usersChargedEvents = await userApi.assert.eventMany("paymentStreams", "UsersCharged");
+      strictEqual(usersChargedEvents.length, 3, "There should be three users charged event");
+      const dummyBspEvent = usersChargedEvents.find(
+        (event) => event.event.data[1].toString() === ShConsts.DUMMY_BSP_ID.toString()
+      );
+      assert(dummyBspEvent, "There should be an event for the DUMMY_BSP_ID");
+      const usersChargedBlob =
+        userApi.events.paymentStreams.UsersCharged.is(dummyBspEvent.event) &&
+        dummyBspEvent.event.data;
+      assert(usersChargedBlob, "Event doesn't match Type");
+      assert(dummyBspEvent.event.data[0].map((x) => x.toString()).includes(userAddress));
+      assert(dummyBspEvent.event.data[0].map((x) => x.toString()).includes(bob.address));
     });
 
     it("Correctly updates payment stream on-chain to make user insolvent", async () => {
-      // Make sure the payment stream between the user and the DUMMY_BSP_ID actually exists
+      // Make sure the payment streams between the users and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
           ShConsts.DUMMY_BSP_ID
         );
-      // Check if the first element of the returned vector is the user
-      assert(paymentStreamExistsResult[0].toString() === userAddress);
-      assert(paymentStreamExistsResult.length === 1);
+      // Check that the returned vector mapped to strings has the user and Bob
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(userAddress));
+      assert(paymentStreamExistsResult.map((x) => x.toString()).includes(bob.address));
+      assert(paymentStreamExistsResult.length === 2);
 
       // Check the payment stream info between the user and the DUMMY_BSP_ID
       const paymentStreamInfoBeforeDeletion =
@@ -246,8 +285,9 @@ describeBspNet(
         0
       );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Seal one more block with the pending extrinsics.
       await userApi.sealBlock();
@@ -412,13 +452,14 @@ describeBspNet(
           1
         );
       assert(usersWithDebtResult.isOk);
-      assert(usersWithDebtResult.asOk.length === 1);
-      assert(usersWithDebtResult.asOk[0].toString() === userAddress);
+      assert(usersWithDebtResult.asOk.length === 2);
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
+      assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Check that the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
-        method: "chargePaymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3
@@ -544,7 +585,7 @@ describeBspNet(
       // Check that the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
       await userApi.assert.extrinsicPresent({
-        method: "chargePaymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3
@@ -601,7 +642,7 @@ describeBspNet(
         // Check that the three Providers have tried to charge the user
         // since the user has a payment stream with each of them
         await userApi.assert.extrinsicPresent({
-          method: "chargePaymentStreams",
+          method: "chargeMultipleUsersPaymentStreams",
           module: "paymentStreams",
           checkTxPool: true,
           assertLength: 3

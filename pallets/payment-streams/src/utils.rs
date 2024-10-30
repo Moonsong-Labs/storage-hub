@@ -2,7 +2,7 @@ use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
     traits::{CheckedAdd, CheckedMul, CheckedSub, Zero},
-    ArithmeticError, DispatchError,
+    ArithmeticError, BoundedVec, DispatchError,
 };
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, Mutate, MutateHold},
@@ -532,7 +532,6 @@ where
     /// the last charged tick of this payment stream.  As such, the last charged tick can't ever be greater than the last chargeable tick, and if they are equal then no charge is made.
     /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_tick)`. In this case,
     /// the price index at the last charged tick can't ever be greater than the price index at the last chargeable tick, and if they are equal then no charge is made.
-    /// TODO: Add a way to pass an array of users to charge them all at once?
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
@@ -850,6 +849,35 @@ where
         }
 
         Ok((total_amount_charged, last_chargeable_tick))
+    }
+
+    /// This function holds the logic that checks, for each User in the `user_accounts` array, if they have any
+    /// payment streams with the given Provider and, if so, charges them.
+    pub fn do_charge_multiple_users_payment_streams(
+        provider_id: &ProviderIdFor<T>,
+        user_accounts: &BoundedVec<T::AccountId, T::MaxUsersToCharge>,
+    ) -> DispatchResult {
+        // Get the current tick
+        let current_tick = Self::get_current_tick();
+
+        // For each User in the array, charge their payment stream with the given Provider
+        // and emit a PaymentStreamCharged event if the User had to pay.
+        for user_account in user_accounts.iter() {
+            let (amount_charged, last_tick_charged) =
+                Self::do_charge_payment_streams(provider_id, user_account)?;
+
+            if amount_charged > Zero::zero() {
+                Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                    user_account: user_account.clone(),
+                    provider_id: provider_id.clone(),
+                    amount: amount_charged,
+                    last_tick_charged,
+                    charged_at_tick: current_tick,
+                });
+            }
+        }
+
+        Ok(())
     }
 
     /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider

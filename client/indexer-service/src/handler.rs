@@ -185,6 +185,7 @@ impl IndexerService {
                 name,
                 collection_id,
                 private,
+                value_prop_id: _,
             } => {
                 let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
                 Bucket::create(
@@ -295,6 +296,7 @@ impl IndexerService {
                 )
                 .await?;
             }
+            pallet_payment_streams::Event::UsersCharged { .. } => {}
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
             pallet_payment_streams::Event::UserPaidDebts { .. } => {}
@@ -454,6 +456,8 @@ impl IndexerService {
 
                 Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
             }
+            pallet_storage_providers::Event::ValuePropAdded { .. } => {}
+            pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())
