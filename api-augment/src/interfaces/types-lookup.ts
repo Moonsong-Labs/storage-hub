@@ -1857,6 +1857,16 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly amountSlashed: u128;
     } & Struct;
+    readonly isMultiAddressAdded: boolean;
+    readonly asMultiAddressAdded: {
+      readonly providerId: H256;
+      readonly newMultiaddress: Bytes;
+    } & Struct;
+    readonly isMultiAddressRemoved: boolean;
+    readonly asMultiAddressRemoved: {
+      readonly providerId: H256;
+      readonly removedMultiaddress: Bytes;
+    } & Struct;
     readonly isValuePropAdded: boolean;
     readonly asValuePropAdded: {
       readonly mspId: H256;
@@ -1878,6 +1888,8 @@ declare module "@polkadot/types/lookup" {
       | "BspSignOffSuccess"
       | "CapacityChanged"
       | "Slashed"
+      | "MultiAddressAdded"
+      | "MultiAddressRemoved"
       | "ValuePropAdded"
       | "ValuePropUnavailable";
   }
@@ -4145,6 +4157,14 @@ declare module "@polkadot/types/lookup" {
     readonly asMakeValuePropUnavailable: {
       readonly valuePropId: H256;
     } & Struct;
+    readonly isAddMultiaddress: boolean;
+    readonly asAddMultiaddress: {
+      readonly newMultiaddress: Bytes;
+    } & Struct;
+    readonly isRemoveMultiaddress: boolean;
+    readonly asRemoveMultiaddress: {
+      readonly multiaddress: Bytes;
+    } & Struct;
     readonly isForceMspSignUp: boolean;
     readonly asForceMspSignUp: {
       readonly who: AccountId32;
@@ -4179,6 +4199,8 @@ declare module "@polkadot/types/lookup" {
       | "ChangeCapacity"
       | "AddValueProp"
       | "MakeValuePropUnavailable"
+      | "AddMultiaddress"
+      | "RemoveMultiaddress"
       | "ForceMspSignUp"
       | "ForceBspSignUp"
       | "Slash";
@@ -5269,6 +5291,10 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketAlreadyExists: boolean;
     readonly isAppendBucketToMspFailed: boolean;
     readonly isProviderNotSlashable: boolean;
+    readonly isMultiAddressesMaxAmountReached: boolean;
+    readonly isMultiAddressNotFound: boolean;
+    readonly isMultiAddressAlreadyExists: boolean;
+    readonly isLastMultiAddressCantBeRemoved: boolean;
     readonly isValuePropositionNotFound: boolean;
     readonly isValuePropositionAlreadyExists: boolean;
     readonly isValuePropositionNotAvailable: boolean;
@@ -5301,6 +5327,10 @@ declare module "@polkadot/types/lookup" {
       | "BucketAlreadyExists"
       | "AppendBucketToMspFailed"
       | "ProviderNotSlashable"
+      | "MultiAddressesMaxAmountReached"
+      | "MultiAddressNotFound"
+      | "MultiAddressAlreadyExists"
+      | "LastMultiAddressCantBeRemoved"
       | "ValuePropositionNotFound"
       | "ValuePropositionAlreadyExists"
       | "ValuePropositionNotAvailable"
