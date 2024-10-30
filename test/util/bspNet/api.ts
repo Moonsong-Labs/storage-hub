@@ -9,6 +9,7 @@ import { assertEventPresent } from "../asserts";
 import { createBucket, sendNewStorageRequest } from "./fileHelpers";
 import type { BspNetApi } from "./types";
 import { advanceToBlock, sealBlock } from "./block";
+import type { HexString } from "@polkadot/util/types";
 
 /**
  * DEPRECATED: Use BspNetTestApi.create() instead
@@ -42,10 +43,15 @@ export const createApiObject = async (
     ) =>
       advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
 
-    sendNewStorageRequest: async (source: string, location: string, bucketName: string) =>
-      sendNewStorageRequest(baseApi, source, location, bucketName),
+    sendNewStorageRequest: async (
+      source: string,
+      location: string,
+      bucketName: string,
+      valuePropId?: HexString
+    ) => sendNewStorageRequest(baseApi, source, location, bucketName, valuePropId),
 
-    createBucket: async (bucketName: string) => createBucket(baseApi, bucketName),
+    createBucket: async (bucketName: string, valuePropId?: HexString) =>
+      createBucket(baseApi, bucketName, valuePropId),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>
       assertEventPresent(baseApi, module, method, events)

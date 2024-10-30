@@ -8,17 +8,53 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
 use sp_runtime::BoundedVec;
 
-/// Structure that has the possible value propositions that a Main Storage Provider can offer (and the runtime is aware of)
+pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
+
+pub type ValuePropId<T> = HashId<T>;
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct ValuePropositionWithId<T: Config> {
+    pub id: ValuePropId<T>,
+    pub value_prop: ValueProposition<T>,
+}
+
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
-    pub identifier: ValuePropId<T>,
-    pub data_limit: StorageDataUnit<T>,
-    pub protocols: BoundedVec<Protocols<T>, MaxProtocols<T>>,
-    // todo!("add relevant fields here")
+    pub price_per_unit_of_data_per_block: BalanceOf<T>,
+    pub commitment: Commitment<T>,
+    /// Maximum [`StorageDataUnit`]s that can be stored in a bucket.
+    pub bucket_data_limit: StorageDataUnit<T>,
+    /// Newly created buckets can only specify available value propositions.
+    /// Any existing bucket with an unavailable value proposition are not affected.
+    pub available: bool,
 }
 
-pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
+impl<T: Config> ValueProposition<T> {
+    pub fn new(
+        price_per_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Self {
+        Self {
+            price_per_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+            available: true,
+        }
+    }
+
+    /// Produce the ID of the ValueProposition not including the `available` field.
+    pub fn derive_id(&self) -> HashId<T> {
+        let mut concat = self.price_per_unit_of_data_per_block.encode();
+        concat.extend_from_slice(&self.commitment.encode());
+        concat.extend_from_slice(&self.bucket_data_limit.encode());
+        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
+    }
+}
+
+pub type Commitment<T> = BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize>;
 
 /// Structure that represents a Main Storage Provider. It holds the buckets that the MSP has, the total data that the MSP is able to store,
 /// the amount of data that it is storing, and its libp2p multiaddresses.
@@ -28,7 +64,6 @@ pub struct MainStorageProvider<T: Config> {
     pub capacity: StorageDataUnit<T>,
     pub capacity_used: StorageDataUnit<T>,
     pub multiaddresses: Multiaddresses<T>,
-    pub value_prop: ValueProposition<T>,
     pub last_capacity_change: BlockNumberFor<T>,
     pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
@@ -62,15 +97,30 @@ pub struct Bucket<T: Config> {
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     pub size: StorageDataUnit<T>,
+    pub value_prop_id: HashId<T>,
 }
 
-/// Enum that represents a Storage Provider. It holds either a BackupStorageProvider or a MainStorageProvider,
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct SignUpRequest<T: Config> {
+    pub sp_sign_up_request: SignUpRequestSpParams<T>,
+    pub at: BlockNumberFor<T>,
+}
+
+/// Enum that represents a Storage Provider sign up request parameters. It holds either a BackupStorageProvider or a MainStorageProvider,
 /// allowing to operate generically with both types.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub enum StorageProvider<T: Config> {
+pub enum SignUpRequestSpParams<T: Config> {
     BackupStorageProvider(BackupStorageProvider<T>),
-    MainStorageProvider(MainStorageProvider<T>),
+    MainStorageProvider(MainStorageProviderSignUpRequest<T>),
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct MainStorageProviderSignUpRequest<T: Config> {
+    pub msp_info: MainStorageProvider<T>,
+    pub value_prop: ValueProposition<T>,
 }
 
 /// Enum that represents a Storage Provider ID. It holds either a BackupStorageProviderId or a MainStorageProviderId,
@@ -118,9 +168,6 @@ pub type StorageDataUnit<T> = <T as crate::Config>::StorageDataUnit;
 /// Its maximum size is defined in the runtime configuration, as MaxProtocols.
 pub type MaxProtocols<T> = <T as crate::Config>::MaxProtocols;
 pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type for protocols")
-
-/// ValuePropId is the type that identifies the different Main Storage Provider value propositions, to allow tiered solutions
-pub type ValuePropId<T> = <T as crate::Config>::ValuePropId;
 
 /// Type alias for the `ReputationWeightType` type used in the Storage Providers pallet.
 pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;

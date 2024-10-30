@@ -61,7 +61,8 @@ import type {
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
   PalletXcmRemoteLockedFungibleRecord,
@@ -1541,6 +1542,21 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
+       * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+       *
+       * These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+       * limit of data that can be stored in the bucket.
+       **/
+      mainStorageProviderIdsToValuePropositions: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersValueProposition>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * The mapping from a MainStorageProviderId to a MainStorageProvider.
        *
        * This is used to get a Main Storage Provider's metadata.
@@ -1550,7 +1566,6 @@ declare module "@polkadot/api-base/types/storage" {
        * - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
        * - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
        * - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-       * - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
        **/
       mainStorageProviders: AugmentedQuery<
         ApiType,
@@ -1587,7 +1602,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg: AccountId32 | string | Uint8Array
-        ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProvider, u32]>>>,
+        ) => Observable<Option<PalletStorageProvidersSignUpRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;

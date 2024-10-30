@@ -179,7 +179,6 @@ impl pallet_storage_providers::Config for Test {
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
@@ -199,6 +198,7 @@ impl pallet_storage_providers::Config for Test {
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

@@ -105,12 +105,17 @@ export class BspNetTestApi implements AsyncDisposable {
     return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
-  private async sendNewStorageRequest(source: string, location: string, bucketName: string) {
-    return Files.sendNewStorageRequest(this._api, source, location, bucketName);
+  private async sendNewStorageRequest(
+    source: string,
+    location: string,
+    bucketName: string,
+    valuePropId: HexString
+  ) {
+    return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
   }
 
-  private async createBucket(bucketName: string) {
-    return Files.createBucket(this._api, bucketName);
+  private async createBucket(bucketName: string, valuePropId?: HexString) {
+    return Files.createBucket(this._api, bucketName, valuePropId);
   }
 
   private assertEvent(module: string, method: string, events?: EventRecord[]) {
@@ -308,8 +313,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair) =>
-        Files.createBucket(this._api, bucketName, undefined, owner),
+      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString) =>
+        Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
 
       /**
        * Creates a new bucket and submits a new storage request.
@@ -325,9 +330,19 @@ export class BspNetTestApi implements AsyncDisposable {
         source: string,
         location: string,
         bucketName: string,
+        valuePropId?: HexString,
         msp_id?: HexString,
         owner?: KeyringPair
-      ) => Files.sendNewStorageRequest(this._api, source, location, bucketName, msp_id, owner)
+      ) =>
+        Files.sendNewStorageRequest(
+          this._api,
+          source,
+          location,
+          bucketName,
+          valuePropId,
+          msp_id,
+          owner
+        )
     };
 
     /**
