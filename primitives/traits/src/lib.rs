@@ -1061,7 +1061,7 @@ pub trait TreasuryCutCalculator {
     /// The numerical type which represents the balance type of the runtime.
     type Balance: NumericalParam;
     /// Type of the unit provided by Providers
-    type ProvidedUnit: NumericalParam + Into<u64>;
+    type ProvidedUnit: NumericalParam;
 
     /// Calculate the percentage of charged funds by a Provider that should go to the treasury.
     ///

@@ -40,7 +40,7 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
-    AccountId32, DispatchError, Perbill, Perquintill, SaturatedConversion,
+    AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
@@ -511,7 +511,7 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
     }
 }
 
-impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perquintill> for Runtime {
+impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
     type Balance = Balance;
     type ProvidedUnit = StorageDataUnit;
     type IdealUtilisationRate =
@@ -531,7 +531,7 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
-    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perquintill>;
+    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perbill>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
 }
