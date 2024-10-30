@@ -133,10 +133,18 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
     const updatedCompose = stringify(composeYaml);
 
     if (bspNetConfig.noisy) {
-      await compose.upOne("toxiproxy", { cwd: cwd, configAsString: updatedCompose, log: true });
+      await compose.upOne("toxiproxy", {
+        cwd: cwd,
+        configAsString: updatedCompose,
+        log: true
+      });
     }
 
-    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: updatedCompose, log: true });
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
 
     const bspIp = await getContainerIp(
       bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
@@ -256,11 +264,9 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig, verbose = fals
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           ["/ip4/127.0.0.1/tcp/30350/p2p/12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfA"],
-          {
-            identifier: ShConsts.VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
-          },
+          1,
+          "Terms of Service...",
+          500,
           alice.address
         )
       )
