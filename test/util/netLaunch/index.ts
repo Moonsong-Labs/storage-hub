@@ -34,6 +34,7 @@ export type ShEntity = {
 
 export class NetworkLauncher {
   private composeYaml?: any;
+  private composePath?: string;
   private entities?: ShEntity[];
 
   constructor(
@@ -81,6 +82,7 @@ export class NetworkLauncher {
       }
     }
     this.composeYaml = composeYaml;
+    this.composePath = composeFilePath;
     return this;
   }
 
@@ -120,16 +122,17 @@ export class NetworkLauncher {
       "Compose file has not been selected yet, run selectComposeFile() first"
     );
     const cwd = path.resolve(process.cwd(), "..", "docker");
-    const composeContents = stringify(this.composeYaml);
     if (this.config.noisy) {
       await compose.upOne("toxiproxy", {
         cwd: cwd,
-        configAsString: composeContents,
+        config: this.composePath,
         log: true
       });
     }
 
-    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: composeContents, log: true });
+    console.log(this.composePath);
+
+    await compose.upOne("sh-bsp", { cwd: cwd, config: this.composePath, log: true });
 
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
@@ -153,7 +156,7 @@ export class NetworkLauncher {
     if (this.type === "fullnet") {
       await compose.upOne("sh-msp", {
         cwd: cwd,
-        configAsString: composeContents,
+        config: this.composePath,
         log: true,
         env: {
           ...process.env,
@@ -166,7 +169,7 @@ export class NetworkLauncher {
 
     await compose.upOne("sh-user", {
       cwd: cwd,
-      configAsString: composeContents,
+      config: this.composePath,
       log: true,
       env: {
         ...process.env,
@@ -224,16 +227,11 @@ export class NetworkLauncher {
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(shUser.address, amount))
         .signAsync(alice, { nonce: 1 }),
-      api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, 1)).signAsync(alice, { nonce: 2 })
+      api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, 1)).signAsync(alice, { nonce: 2 }),
+      api.tx.sudo
+        .sudo(api.tx.balances.forceSetBalance(mspKey.address, amount))
+        .signAsync(alice, { nonce: 3 })
     ];
-
-    if (this.type === "fullnet") {
-      signedCalls.push(
-        api.tx.sudo
-          .sudo(api.tx.balances.forceSetBalance(mspKey.address, amount))
-          .signAsync(alice, { nonce: 3 })
-      );
-    }
 
     const sudoTxns = await Promise.all(signedCalls);
 
@@ -408,7 +406,9 @@ export class NetworkLauncher {
       const mspPeerId = await launchedNetwork.getPeerId("sh-msp");
       const multiAddressMsp = `/ip4/${mspId}/tcp/30350/p2p/${mspPeerId}`;
       await launchedNetwork.setupMsp(userApi, mspKey.address, multiAddressMsp);
-    } else {
+    }
+
+    if (launchedNetwork.type === "bspnet") {
       await launchedNetwork.setupMsp(userApi, mspKey.address, multiAddressBsp);
     }
 

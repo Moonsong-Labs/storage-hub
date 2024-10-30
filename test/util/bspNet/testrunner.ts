@@ -11,7 +11,6 @@ import type {
 } from "./types";
 import * as ShConsts from "./consts";
 import { NetworkLauncher } from "../netLaunch";
-import { runInitialisedFullNet, runSimpleFullNet } from "../fullNet/helpers";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -220,10 +219,12 @@ export const launchFullNetwork = async (
   }
 
   if (initialised) {
-    return await runInitialisedFullNet(config);
+    // return await runInitialisedFullNet(config);
+    return (await NetworkLauncher.create("fullnet", { ...config, initialised: true })) as any;
   }
 
-  await runSimpleFullNet(config);
+  // await runSimpleFullNet(config);
+  await NetworkLauncher.create("fullnet", config);
   return undefined;
 };
 
