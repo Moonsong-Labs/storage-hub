@@ -1032,7 +1032,7 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info_by_priviledge_provider(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info_with_privilege(&alice_msp_id);
 
                 // The payment stream should be updated with the correct last charged proof
                 assert_eq!(
@@ -1062,6 +1062,126 @@ mod fixed_rate_streams {
                         &bob,
                         rate
                     )
+                );
+
+                // Check the new free balance of Bob (after the new stream deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let bob_new_balance =
+                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Update the rate of the payment stream from Bob to Alice to 20 units per block
+                let new_rate: BalanceOf<Test> = 20;
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                        &alice_msp_id,
+                        &bob,
+                        new_rate
+                    )
+                );
+
+                // Check that Bob's deposit has also been updated
+                let bob_new_balance =
+                    bob_new_balance - (new_rate - rate) * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+                run_to_block(System::block_number() + 10);
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that Bob was charged 10 blocks at the 20 units/block rate
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_new_balance - 10 * new_rate
+                );
+                System::assert_has_event(
+                    Event::<Test>::PaymentStreamCharged {
+                        user_account: bob,
+                        provider_id: alice_msp_id,
+                        amount: 10 * new_rate,
+                        last_tick_charged: System::block_number(),
+                        charged_at_tick: System::block_number(),
+                    }
+                    .into(),
+                );
+
+                // Get the payment stream information
+                let payment_stream_info =
+                    PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
+                        .unwrap();
+
+                // Get Alice's last chargeable information
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+
+                // The payment stream should be updated with the correct last charged proof
+                assert_eq!(
+                    payment_stream_info.last_charged_tick,
+                    System::block_number()
+                );
+
+                // The payment stream should be updated with the correct rate
+                assert_eq!(payment_stream_info.rate, new_rate);
+
+                // The payment stream should be updated with the correct last valid proof
+                assert_eq!(
+                    alice_last_chargeable_info.last_chargeable_tick,
+                    System::block_number()
+                );
+            });
+        }
+
+        #[test]
+        fn charge_payment_streams_correctly_provider_not_privileged() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+                // Register Alice as a MSP with 100 units of data and get her MSP ID
+                register_account_as_msp(alice, 100);
+                let alice_msp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Create a payment stream from Bob to Alice of 10 units per block
+                let rate: BalanceOf<Test> = 10;
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &alice_msp_id,
+                        &bob,
+                        rate
+                    )
+                );
+
+                // remove it has priviledge provider
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
+                        &alice_msp_id,
+                    )
+                );
+
+                // We insert the last chargeable info instead
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
                 );
 
                 // Check the new free balance of Bob (after the new stream deposit)
