@@ -17,7 +17,7 @@ use frame_support::{
 };
 use shp_traits::{PaymentStreamsInterface, ReadProvidersInterface};
 use sp_core::H256;
-use sp_runtime::{traits::Convert, DispatchError};
+use sp_runtime::{bounded_vec, traits::Convert, DispatchError};
 
 // `payment-streams` types:
 type NativeBalance = <Test as crate::Config>::NativeBalance;
@@ -34,8 +34,6 @@ pub type SpMinCapacity = <Test as pallet_storage_providers::Config>::SpMinCapaci
 pub type MaxMultiAddressAmount<Test> =
     <Test as pallet_storage_providers::Config>::MaxMultiAddressAmount;
 use pallet_storage_providers::types::MultiAddress;
-pub type ValuePropId = <Test as pallet_storage_providers::Config>::ValuePropId;
-use pallet_storage_providers::types::ValueProposition;
 
 /// This module holds all tests for fixed-rate payment streams
 mod fixed_rate_streams {
@@ -5158,11 +5156,6 @@ fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>
             .try_into()
             .unwrap(),
     );
-    let value_prop: ValueProposition<Test> = ValueProposition {
-        identifier: ValuePropId::default(),
-        data_limit: 10,
-        protocols: BoundedVec::new(),
-    };
 
     // Get the deposit amount for the storage amount
     // The deposit for any amount of storage is be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
@@ -5180,7 +5173,9 @@ fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        value_prop,
+        1,
+        bounded_vec![],
+        10,
         account
     ));
 

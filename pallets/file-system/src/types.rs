@@ -9,7 +9,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
-use shp_traits::ReadProvidersInterface;
+use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError};
 use sp_std::fmt::Debug;
 
@@ -415,6 +415,9 @@ pub type MultiAddress<T> =
 /// Alias for the `MaxMultiAddresses` type used in the ReadProvidersInterface.
 pub type MaxMultiAddresses<T> =
     <<T as crate::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::MaxNumberOfMultiAddresses;
+
+/// Alias for the `ValuePropId` type used in the MutateBucketsInterface.
+pub type ValuePropId<T> = <<T as crate::Config>::Providers as MutateBucketsInterface>::ValuePropId;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
