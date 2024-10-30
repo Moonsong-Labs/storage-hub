@@ -1,5 +1,5 @@
 import "@storagehub/api-augment";
-import { v2 as compose } from "docker-compose";
+import * as compose from "docker-compose";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import path from "node:path";

@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
-import { v2 as compose } from "docker-compose";
+import * as compose from "docker-compose";
 import { parse, stringify } from "yaml";
 import invariant from "tiny-invariant";
 import {
@@ -39,7 +39,7 @@ export class NetworkLauncher {
   constructor(
     private readonly type: NetworkType,
     private readonly config: NetLaunchConfig
-  ) { }
+  ) {}
 
   private selectComposeFile() {
     invariant(this.type, "Network type has not been set yet");
@@ -276,9 +276,7 @@ export class NetworkLauncher {
       }
     };
     await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter)
-      )
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter))
     );
     const stakeToChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
@@ -286,9 +284,7 @@ export class NetworkLauncher {
       }
     };
     await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter)
-      )
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter))
     );
     const checkpointChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
@@ -296,9 +292,7 @@ export class NetworkLauncher {
       }
     };
     await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter)
-      )
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter))
     );
     const minChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
@@ -405,7 +399,7 @@ export class NetworkLauncher {
 
     await launchedNetwork.setupGlobal(userApi);
     await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);
-    await launchedNetwork.setupRuntimeParams(userApi)
+    await launchedNetwork.setupRuntimeParams(userApi);
 
     if (launchedNetwork.type === "fullnet") {
       const mspContainerName = launchedNetwork.composeYaml.services["sh-msp"].container_name;
