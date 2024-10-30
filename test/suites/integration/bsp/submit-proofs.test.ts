@@ -165,7 +165,7 @@ describeBspNet(
       );
     });
 
-    it("BSP stops storing last file", { skip: ""} , async () => {
+    it("BSP stops storing last file", async () => {
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileData.fileKey]
