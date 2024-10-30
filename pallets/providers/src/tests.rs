@@ -4426,7 +4426,8 @@ mod multiaddresses {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 let new_multiaddress: MultiAddress<Test> =
                     "/ip4/127.0.0.1/udp/1234/new/multiaddress"
@@ -4457,7 +4458,8 @@ mod multiaddresses {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 // Add the maximum amount of multiaddresses for Alice (we start at 1 since Alice already has a MultiAddress)
                 for i in 1..MaxMultiAddressAmount::<Test>::get() {
@@ -4520,7 +4522,8 @@ mod multiaddresses {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 // Add a new multiaddress to Alice
                 let new_multiaddress: MultiAddress<Test> =
@@ -4558,7 +4561,8 @@ mod multiaddresses {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 // Try to remove the only multiaddress of Alice
                 assert_noop!(
@@ -4590,7 +4594,8 @@ mod multiaddresses {
                         .try_into()
                         .unwrap();
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 // Add a multiaddress to Alice
                 assert_ok!(StorageProviders::add_multiaddress(
@@ -4612,7 +4617,8 @@ mod multiaddresses {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 // Add the maximum amount of multiaddresses for Alice (we start at 1 since Alice already has a MultiAddress)
                 for i in 1usize..<MaxMultiAddressAmount<Test> as Get<u32>>::get() as usize {
@@ -4644,7 +4650,8 @@ mod multiaddresses {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
 
                 // We first add a multiaddress to Alice
                 let new_multiaddress: MultiAddress<Test> =
