@@ -254,7 +254,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       newStreamDeposit: u32 & AugmentedConst<ApiType>;
       /**
-       * The treasury account of the runtime
+       * The treasury account of the runtime, where a fraction of each payment goes.
        **/
       treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
       /**
