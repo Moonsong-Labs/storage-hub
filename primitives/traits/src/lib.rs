@@ -243,6 +243,21 @@ pub trait MutateBucketsInterface {
         + MaxEncodedLen
         + FullCodec;
 
+    type ValuePropId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
     /// Update a bucket's privacy setting.
     fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult;
 
@@ -262,6 +277,7 @@ pub trait MutateBucketsInterface {
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult;
 
     /// Change MSP of a bucket.

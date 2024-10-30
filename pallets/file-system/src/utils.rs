@@ -24,7 +24,7 @@ use crate::{
         MaxBspsPerStorageRequest, MerkleHash, MoveBucketRequestMetadata, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequest, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber,
+        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, Pallet, PendingBucketsToMove,
     PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
@@ -242,6 +242,7 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // TODO: Hold user funds for the bucket creation.
 
@@ -267,6 +268,7 @@ where
             bucket_id,
             private,
             maybe_collection_id.clone(),
+            value_prop_id,
         )?;
 
         Ok((bucket_id, maybe_collection_id))

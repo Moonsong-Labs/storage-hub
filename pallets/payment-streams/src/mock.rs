@@ -186,7 +186,6 @@ impl pallet_storage_providers::Config for Test {
     type PaymentStreams = PaymentStreams;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
@@ -207,6 +206,7 @@ impl pallet_storage_providers::Config for Test {
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 parameter_types! {

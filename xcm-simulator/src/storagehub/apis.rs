@@ -11,7 +11,7 @@ use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::*;
 use pallet_storage_providers::types::{
     BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId,
-    Multiaddresses, ProviderId, StorageDataUnit, StorageProviderId,
+    Multiaddresses, ProviderId, StorageDataUnit, StorageProviderId, ValuePropositionWithId,
 };
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
@@ -392,7 +392,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>, Multiaddresses<Runtime>> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>, Multiaddresses<Runtime>, ValuePropositionWithId<Runtime>> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
@@ -427,6 +427,10 @@ impl_runtime_apis! {
 
         fn query_provider_multiaddresses(who: &ProviderId<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
             Providers::query_provider_multiaddresses(who)
+        }
+
+        fn query_value_propositions_for_msp(who: &ProviderId<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
+            Providers::query_value_propositions_for_msp(who)
         }
 
         fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
