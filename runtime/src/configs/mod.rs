@@ -546,8 +546,8 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 }
 
 parameter_types! {
-    pub const RandomChallengesPerBlock: u32 = 10;
-    pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const RandomChallengesPerBlock: u32 = 10; // If changing this, also change `TotalMaxChallengesPerBlock`
+    pub const MaxCustomChallengesPerBlock: u32 = 10; // If changing this, also change `TotalMaxChallengesPerBlock`
     pub const TotalMaxChallengesPerBlock: u32 = 10 + 10;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
