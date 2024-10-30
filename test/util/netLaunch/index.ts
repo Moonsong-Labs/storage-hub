@@ -34,7 +34,6 @@ export type ShEntity = {
 
 export class NetworkLauncher {
   private composeYaml?: any;
-  private composePath?: string;
   private entities?: ShEntity[];
 
   constructor(
@@ -82,7 +81,6 @@ export class NetworkLauncher {
       }
     }
     this.composeYaml = composeYaml;
-    this.composePath = composeFilePath;
     return this;
   }
 
@@ -122,17 +120,17 @@ export class NetworkLauncher {
       "Compose file has not been selected yet, run selectComposeFile() first"
     );
     const cwd = path.resolve(process.cwd(), "..", "docker");
+
+    const updatedCompose = stringify(this.composeYaml);
     if (this.config.noisy) {
       await compose.upOne("toxiproxy", {
         cwd: cwd,
-        config: this.composePath,
+        configAsString: updatedCompose,
         log: true
       });
     }
 
-    console.log(this.composePath);
-
-    await compose.upOne("sh-bsp", { cwd: cwd, config: this.composePath, log: true });
+    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: updatedCompose, log: true });
 
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
@@ -156,7 +154,7 @@ export class NetworkLauncher {
     if (this.type === "fullnet") {
       await compose.upOne("sh-msp", {
         cwd: cwd,
-        config: this.composePath,
+        configAsString: updatedCompose,
         log: true,
         env: {
           ...process.env,
@@ -169,7 +167,7 @@ export class NetworkLauncher {
 
     await compose.upOne("sh-user", {
       cwd: cwd,
-      config: this.composePath,
+      configAsString: updatedCompose,
       log: true,
       env: {
         ...process.env,
