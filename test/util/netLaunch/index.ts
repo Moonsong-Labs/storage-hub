@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import * as compose from "docker-compose";
-import { parse, stringify } from "yaml";
+import yaml from "yaml";
 import invariant from "tiny-invariant";
 import {
   addBsp,
@@ -66,7 +66,7 @@ export class NetworkLauncher {
 
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
-    const composeYaml = parse(composeFile);
+    const composeYaml = yaml.parse(composeFile);
     if (this.config.extrinsicRetryTimeout) {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
@@ -119,9 +119,10 @@ export class NetworkLauncher {
       this.composeYaml,
       "Compose file has not been selected yet, run selectComposeFile() first"
     );
-    const cwd = path.resolve(process.cwd(), "..", "docker");
 
-    const updatedCompose = stringify(this.composeYaml);
+    const cwd = path.resolve(process.cwd(), "..", "docker");
+    const updatedCompose = yaml.stringify(this.composeYaml, {});
+
     if (this.config.noisy) {
       await compose.upOne("toxiproxy", {
         cwd: cwd,
@@ -130,7 +131,11 @@ export class NetworkLauncher {
       });
     }
 
-    await compose.upOne("sh-bsp", { cwd: cwd, configAsString: updatedCompose, log: true });
+    await compose.upOne("sh-bsp", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true
+    });
 
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
