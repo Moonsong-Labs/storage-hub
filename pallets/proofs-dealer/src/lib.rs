@@ -31,7 +31,7 @@ pub mod pallet {
         ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
     };
     use sp_runtime::{
-        traits::{CheckedSub, Convert, Saturating},
+        traits::{CheckedSub, Convert, Saturating, Zero},
         Perbill,
     };
     use sp_std::vec::Vec;
@@ -375,6 +375,32 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn not_full_blocks_count)]
     pub type NotFullBlocksCount<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        /// The checkpoint challenges that will be registered for the first checkpoint challenge (i.e. tick 0).
+        pub initial_checkpoint_challenges:
+            BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            // Start with an empty vector of checkpoint challenges.
+            Self {
+                initial_checkpoint_challenges: Default::default(),
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            TickToCheckpointChallenges::<T>::insert(
+                &BlockNumberFor::<T>::zero(),
+                &self.initial_checkpoint_challenges,
+            );
+        }
+    }
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
