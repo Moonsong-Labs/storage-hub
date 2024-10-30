@@ -727,6 +727,104 @@ where
         Ok(old_capacity)
     }
 
+    /// This function holds the logic that checks if a user can add a new multiaddress to its storage
+    /// and, if so, updates the storage to reflect the new multiaddress and returns the provider id if successful
+    pub fn do_add_multiaddress(
+        who: &T::AccountId,
+        new_multiaddress: &MultiAddress<T>,
+    ) -> Result<HashId<T>, DispatchError> {
+        // Check that the account is a registered Provider and modify the Provider's storage accordingly
+        let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // If the provider is a MSP, add the new multiaddress to the MSP's storage,
+            // making sure the multiaddress did not exist previously
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+            ensure!(
+                !msp.multiaddresses.contains(new_multiaddress),
+                Error::<T>::MultiAddressAlreadyExists
+            );
+            msp.multiaddresses
+                .try_push(new_multiaddress.clone())
+                .map_err(|_| Error::<T>::MultiAddressesMaxAmountReached)?;
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+            msp_id
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // If the provider is a BSP, add the new multiaddress to the BSP's storage,
+            // making sure the multiaddress did not exist previously
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+            ensure!(
+                !bsp.multiaddresses.contains(new_multiaddress),
+                Error::<T>::MultiAddressAlreadyExists
+            );
+            bsp.multiaddresses
+                .try_push(new_multiaddress.clone())
+                .map_err(|_| Error::<T>::MultiAddressesMaxAmountReached)?;
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+            bsp_id
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(provider_id)
+    }
+
+    /// This function holds the logic that checks if a user can remove a multiaddress from its storage
+    /// and, if so, updates the storage to reflect the removal of the multiaddress and returns the provider id if successful
+    pub fn do_remove_multiaddress(
+        who: &T::AccountId,
+        multiaddress: &MultiAddress<T>,
+    ) -> Result<HashId<T>, DispatchError> {
+        // Check that the account is a registered Provider and modify the Provider's storage accordingly
+        let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // If the provider is a MSP, remove the multiaddress from the MSP's storage.
+            // but only if it's not the only multiaddress left
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+
+            ensure!(
+                msp.multiaddresses.len() > 1,
+                Error::<T>::LastMultiAddressCantBeRemoved
+            );
+
+            let multiaddress_index = msp
+                .multiaddresses
+                .iter()
+                .position(|addr| addr == multiaddress)
+                .ok_or(Error::<T>::MultiAddressNotFound)?;
+            msp.multiaddresses.remove(multiaddress_index);
+
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+
+            msp_id
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // If the provider is a BSP, remove the multiaddress from the BSP's storage.
+            // but only if it's not the only multiaddress left
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+
+            ensure!(
+                bsp.multiaddresses.len() > 1,
+                Error::<T>::LastMultiAddressCantBeRemoved
+            );
+
+            let multiaddress_index = bsp
+                .multiaddresses
+                .iter()
+                .position(|addr| addr == multiaddress)
+                .ok_or(Error::<T>::MultiAddressNotFound)?;
+            bsp.multiaddresses.remove(multiaddress_index);
+
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+
+            bsp_id
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(provider_id)
+    }
+
     /// Slash a Storage Provider.
     ///
     /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
@@ -918,6 +1016,8 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
         }
     }
 }
+
+/**************** Interface Implementations ****************/
 
 /// Implement the ReadBucketsInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {

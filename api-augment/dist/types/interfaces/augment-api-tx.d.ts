@@ -3356,6 +3356,28 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     providers: {
       /**
+       * Dispatchable extrinsic that allows BSPs and MSPs to add a new multiaddress to their account.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the account that wants to add a new multiaddress.
+       *
+       * Parameters:
+       * - `new_multiaddress`: The new multiaddress that the signer wants to add to its account.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the signer is registered as a MSP or BSP.
+       * 3. Check that the Provider has not reached the maximum amount of multiaddresses.
+       * 4. Check that the multiaddress is valid (size and any other relevant checks). TODO: Implement this.
+       * 5. Update the Provider's storage to add the multiaddress.
+       *
+       * Emits `MultiAddressAdded` event when successful.
+       **/
+      addMultiaddress: AugmentedSubmittable<
+        (newMultiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [Bytes]
+      >;
+      /**
        * Dispatchable extrinsic only callable by an MSP that allows it to add a value proposition to its service
        *
        * The dispatch origin for this call must be Signed.
@@ -3561,6 +3583,27 @@ declare module "@polkadot/api-base/types/submittable" {
        * Emits `MspSignOffSuccess` event when successful.
        **/
       mspSignOff: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
+       * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the account that wants to remove a multiaddress.
+       *
+       * Parameters:
+       * - `multiaddress`: The multiaddress that the signer wants to remove from its account.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the signer is registered as a MSP or BSP.
+       * 3. Check that the multiaddress exists in the Provider's account.
+       * 4. Update the Provider's storage to remove the multiaddress.
+       *
+       * Emits `MultiAddressRemoved` event when successful.
+       **/
+      removeMultiaddress: AugmentedSubmittable<
+        (multiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [Bytes]
+      >;
       /**
        * Dispatchable extrinsic that allows users to sign up as a Backup Storage Provider.
        *
