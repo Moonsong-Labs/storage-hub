@@ -230,6 +230,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<Multiaddresses, QueryProviderMultiaddressesError>"
+  },
+  query_value_propositions_for_msp: {
+    description: "Query the value propositions for a MSP.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "Vec<ValuePropositionWithId>"
   }
 };
 

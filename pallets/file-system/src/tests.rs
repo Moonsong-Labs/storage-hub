@@ -7,7 +7,7 @@ use crate::{
         MspFailedBatchStorageRequests, MspRejectedBatchStorageRequests,
         MspRespondStorageRequestsResult, MspStorageRequestResponse, PeerIds,
         PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl, ThresholdType,
+        StorageRequestMetadata, StorageRequestTtl, ThresholdType, ValuePropId,
     },
     Config, DataServersForMoveBucket, Error, Event, PendingBucketsToMove,
     PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
@@ -25,7 +25,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
-use pallet_storage_providers::types::Bucket;
+use pallet_storage_providers::types::{Bucket, ValueProposition};
 use shp_traits::{
     MutateStorageProvidersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadStorageProvidersInterface, TrieRemoveMutation,
@@ -44,6 +44,8 @@ mod create_bucket_tests {
     use super::*;
 
     mod failure {
+        use crate::types::ValuePropId;
+
         use super::*;
 
         #[test]
@@ -59,7 +61,8 @@ mod create_bucket_tests {
                         origin,
                         H256::from_slice(&msp.as_slice()),
                         name,
-                        true
+                        true,
+                        ValuePropId::<Test>::default()
                     ),
                     Error::<Test>::NotAMsp
                 );
@@ -102,7 +105,7 @@ mod create_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -115,7 +118,8 @@ mod create_bucket_tests {
                     origin,
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -151,6 +155,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -166,7 +171,7 @@ mod create_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = false;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -179,7 +184,8 @@ mod create_bucket_tests {
                     origin,
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -200,6 +206,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: None,
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -226,11 +233,11 @@ mod request_move_bucket {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -264,11 +271,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -297,10 +304,10 @@ mod request_move_bucket {
                 let origin = RuntimeOrigin::signed(owner.clone());
                 let msp_charlie = Keyring::Charlie.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_charlie_id, value_prop_id) = add_msp_to_provider_storage(&msp_charlie);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -323,12 +330,12 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_charlie_id, value_prop_id) = add_msp_to_provider_storage(&msp_charlie);
                 let msp_dave_id =
                     <<Test as frame_system::Config>::Hashing as Hasher>::hash(&msp_dave.as_slice());
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
@@ -346,11 +353,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
@@ -367,11 +374,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Issue storage request with a big file size
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -530,11 +537,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -606,11 +613,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -685,11 +692,11 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -792,11 +799,11 @@ mod bsp_add_data_server_for_move_bucket_request {
                     1000
                 ));
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -878,11 +885,11 @@ mod bsp_add_data_server_for_move_bucket_request {
                     1000
                 ));
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -960,7 +967,7 @@ mod update_bucket_privacy_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -987,7 +994,7 @@ mod update_bucket_privacy_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1000,7 +1007,8 @@ mod update_bucket_privacy_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1021,6 +1029,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -1059,7 +1068,7 @@ mod update_bucket_privacy_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1072,7 +1081,8 @@ mod update_bucket_privacy_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1093,6 +1103,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -1158,7 +1169,7 @@ mod update_bucket_privacy_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1171,7 +1182,8 @@ mod update_bucket_privacy_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -1192,6 +1204,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
+                        value_prop_id,
                     }
                     .into(),
                 );
@@ -1265,7 +1278,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1293,7 +1306,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let private = true;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
@@ -1306,7 +1319,8 @@ mod create_and_associate_collection_with_bucket_tests {
                     origin.clone(),
                     msp_id,
                     name.clone(),
-                    private
+                    private,
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1370,7 +1384,7 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from([0u8; 32].to_vec()).unwrap();
                 let bucket_id = H256::from_slice(&name);
@@ -1403,10 +1417,10 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_id, value_prop_id);
 
                 assert_noop!(
                     FileSystem::issue_storage_request(
@@ -1436,11 +1450,11 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_charlie_id = add_msp_to_provider_storage(&msp_charlie);
-                let msp_dave_id = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1554,10 +1568,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
@@ -1645,10 +1664,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1755,10 +1779,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
@@ -1789,10 +1818,15 @@ mod request_storage {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let size = 4;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1878,10 +1912,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -1950,10 +1989,15 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Append storage request expiration to the list at `StorageRequestTtl`
                 let max_storage_request_expiry: u32 =
@@ -2066,10 +2110,15 @@ mod revoke_storage_request {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2111,10 +2160,15 @@ mod revoke_storage_request {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2163,10 +2217,11 @@ mod revoke_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account.clone(), name.clone(), msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
 
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -2227,10 +2282,11 @@ mod revoke_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account.clone(), name.clone(), msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2314,12 +2370,12 @@ mod msp_respond_storage_request {
 
                 // Register the MSP.
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold the file.
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2407,11 +2463,11 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold both files.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -2537,16 +2593,16 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id);
+                let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id, value_prop_id);
 
                 // Create the bucket that will hold the second file.
                 let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
                 let second_bucket_id =
-                    create_bucket(&owner_account_id.clone(), second_name, msp_id);
+                    create_bucket(&owner_account_id.clone(), second_name, msp_id, value_prop_id);
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -2698,17 +2754,17 @@ mod msp_respond_storage_request {
                     BoundedVec::try_from(vec![second_peer_id]).unwrap();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
                 let first_bucket_id =
-                    create_bucket(&first_owner_account_id.clone(), first_name, msp_id);
+                    create_bucket(&first_owner_account_id.clone(), first_name, msp_id, value_prop_id);
 
                 // Create the bucket that will hold the second file.
                 let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
                 let second_bucket_id =
-                    create_bucket(&second_owner_account_id.clone(), second_name, msp_id);
+                    create_bucket(&second_owner_account_id.clone(), second_name, msp_id, value_prop_id);
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -2857,11 +2913,11 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Set replication target to 1
                 ReplicationTarget::<Test>::put(1);
@@ -2977,6 +3033,7 @@ mod msp_respond_storage_request {
         fn generate_storage_requests(
             params_list: Vec<StorageRequestParams>,
             msp_id: ProviderIdFor<Test>,
+            value_prop_id: ValuePropId<Test>,
         ) -> Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> {
             let mut results = Vec::new();
 
@@ -2993,6 +3050,7 @@ mod msp_respond_storage_request {
                         &params.owner_account_id.clone(),
                         params.bucket_name.clone().try_into().unwrap(),
                         msp_id,
+                        value_prop_id,
                     );
                 }
 
@@ -3121,7 +3179,7 @@ mod msp_respond_storage_request {
                 let msp_account_id = Keyring::Charlie.to_account_id();
 
                 // Register the MSP.
-                let msp_id = add_msp_to_provider_storage(&msp_account_id);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp_account_id);
 
                 let first_bucket = b"first bucket".to_vec();
                 let second_bucket = b"second bucket".to_vec();
@@ -3167,7 +3225,7 @@ mod msp_respond_storage_request {
 
                 // Generate storage requests
                 let storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> =
-                    generate_storage_requests(storage_request_params, msp_id);
+                    generate_storage_requests(storage_request_params, msp_id, value_prop_id);
 
                 let (responses, expected_results) =
                     generate_msp_responses_and_results(storage_requests, msp_id);
@@ -3221,12 +3279,13 @@ mod msp_respond_storage_request {
             new_test_ext().execute_with(|| {
                 let msp = Keyring::Charlie.to_account_id();
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // create bucket
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = H256::zero();
 
@@ -3284,10 +3343,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3352,10 +3412,11 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3417,10 +3478,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3505,11 +3567,16 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
+                let (expected_msp_id, value_prop_id) = add_msp_to_provider_storage(&expected_msp);
                 let _caller_msp_id = add_msp_to_provider_storage(&caller_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, expected_msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name,
+                    expected_msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3570,10 +3637,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3672,11 +3740,12 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
-                let other_msp_id = add_msp_to_provider_storage(&other_msp);
+                let (expected_msp_id, _) = add_msp_to_provider_storage(&expected_msp);
+                let (other_msp_id, value_prop_id) = add_msp_to_provider_storage(&other_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, other_msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, other_msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3746,10 +3815,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3836,10 +3906,11 @@ mod msp_respond_storage_request {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3926,10 +3997,11 @@ mod bsp_volunteer {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3998,10 +4070,11 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4051,10 +4124,11 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4109,10 +4183,11 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
@@ -4180,10 +4255,10 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4243,10 +4318,10 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4317,10 +4392,11 @@ mod bsp_volunteer {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
@@ -4416,10 +4492,11 @@ mod bsp_confirm {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4512,10 +4589,11 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4576,10 +4654,11 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4700,7 +4779,7 @@ mod bsp_confirm {
                 let storage_amount: StorageData<Test> = 100;
                 let size = 4;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4723,7 +4802,8 @@ mod bsp_confirm {
                     let fingerprint = H256::repeat_byte(i as u8);
 
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
-                    let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                    let bucket_id =
+                        create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                     // Issue storage request
                     assert_ok!(FileSystem::issue_storage_request(
@@ -4812,10 +4892,10 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4946,10 +5026,10 @@ mod bsp_confirm {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5173,10 +5253,11 @@ mod bsp_stop_storing {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5232,10 +5313,11 @@ mod bsp_stop_storing {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5351,10 +5433,11 @@ mod bsp_stop_storing {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5488,10 +5571,11 @@ mod bsp_stop_storing {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5659,10 +5743,11 @@ mod bsp_stop_storing {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5811,10 +5896,11 @@ mod bsp_stop_storing {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5990,10 +6076,11 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6108,10 +6195,11 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6200,12 +6288,14 @@ mod bsp_stop_storing {
                 let size = 4;
                 let fingerprint = H256::zero();
 
-                let msp_id = add_msp_to_provider_storage(&Keyring::Charlie.to_account_id());
+                let (msp_id, value_prop_id) =
+                    add_msp_to_provider_storage(&Keyring::Charlie.to_account_id());
 
                 let bucket_id = create_bucket(
                     &owner_account_id,
                     BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
                     msp_id,
+                    value_prop_id,
                 );
 
                 // Sign up account as a Backup Storage Provider
@@ -6348,13 +6438,18 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let _ = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 let other_user = Keyring::Bob.to_account_id();
-                let bucket_id = create_bucket(&other_user.clone(), name, msp_id);
+                let bucket_id = create_bucket(&other_user.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6395,10 +6490,15 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
                 for i in 0..<Test as file_system::Config>::MaxUserPendingDeletionRequests::get() {
@@ -6455,10 +6555,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6531,10 +6631,11 @@ mod delete_file_and_pending_deletions_tests {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6575,10 +6676,11 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6636,10 +6738,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6729,10 +6831,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6812,10 +6914,10 @@ mod delete_file_and_pending_deletions_tests {
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6905,10 +7007,15 @@ mod compute_threshold {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6958,10 +7065,15 @@ mod compute_threshold {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7086,10 +7198,15 @@ mod compute_threshold {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7355,10 +7472,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7531,10 +7649,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 50;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7690,10 +7809,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7868,10 +7988,11 @@ mod stop_storing_for_insolvent_user {
                 let size = 4;
                 let fingerprint = H256::zero();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Try to stop storing for the insolvent user.
                 assert_noop!(
@@ -7907,10 +8028,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -8051,11 +8173,12 @@ mod stop_storing_for_insolvent_user {
                 let size = 4;
                 let fingerprint = H256::zero();
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
                 add_msp_to_provider_storage(&another_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8099,10 +8222,11 @@ mod stop_storing_for_insolvent_user {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let storage_amount: StorageData<Test> = 100;
 
-                let msp_id = add_msp_to_provider_storage(&msp);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -8273,7 +8397,9 @@ fn create_sp_multiaddresses(
     multiaddresses
 }
 
-fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<Test> {
+fn add_msp_to_provider_storage(
+    msp: &sp_runtime::AccountId32,
+) -> (ProviderIdFor<Test>, ValuePropId<Test>) {
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
@@ -8281,11 +8407,6 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
-        value_prop: pallet_storage_providers::types::ValueProposition {
-            identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),
-            data_limit: 100,
-            protocols: BoundedVec::default(),
-        },
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         owner_account: msp.clone(),
         payment_account: msp.clone(),
@@ -8298,13 +8419,22 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
         msp_hash,
     );
 
-    msp_hash
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
+    let value_prop_id = value_prop.derive_id();
+    pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
+        msp_hash,
+        value_prop_id,
+        ValueProposition::<Test>::new(1, bounded_vec![], 100),
+    );
+
+    (msp_hash, value_prop_id)
 }
 
 fn create_bucket(
     owner: &sp_runtime::AccountId32,
     name: BucketNameFor<Test>,
     msp_id: ProviderIdFor<Test>,
+    value_prop_id: ValuePropId<Test>,
 ) -> BucketIdFor<Test> {
     let bucket_id =
         <Test as file_system::Config>::Providers::derive_bucket_id(&msp_id, &owner, name.clone());
@@ -8316,7 +8446,8 @@ fn create_bucket(
         origin,
         msp_id,
         name.clone(),
-        false
+        false,
+        value_prop_id
     ));
 
     // Assert bucket was created
@@ -8329,6 +8460,7 @@ fn create_bucket(
             private: false,
             read_access_group_id: None,
             size: 0,
+            value_prop_id
         })
     );
 
