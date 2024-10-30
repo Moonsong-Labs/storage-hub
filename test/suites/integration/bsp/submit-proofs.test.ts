@@ -171,19 +171,19 @@ describeBspNet(
         [fileData.fileKey]
       );
       // Build transaction for BSP-Three to stop storing the only file it has.
-      // await userApi.sealBlock(
-      //   bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-      //     fileData.fileKey,
-      //     fileData.bucketId,
-      //     fileData.location,
-      //     fileData.owner,
-      //     fileData.fingerprint,
-      //     fileData.fileSize,
-      //     false,
-      //     inclusionForestProof.toString()
-      //   ),
-      //   bspThreeKey
-      // );
+      await userApi.sealBlock(
+        bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+          fileData.fileKey,
+          fileData.bucketId,
+          fileData.location,
+          fileData.owner,
+          fileData.fingerprint,
+          fileData.fileSize,
+          false,
+          inclusionForestProof.toString()
+        ),
+        bspThreeKey
+      );
 
       // userApi.assert.fetchEventData(
       //   userApi.events.fileSystem.BspRequestedToStopStoring,
