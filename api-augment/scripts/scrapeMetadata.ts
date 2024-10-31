@@ -3,7 +3,7 @@ import { execSync, spawn } from "node:child_process";
 import path from "node:path";
 
 const fetchMetadata = async () => {
-  const maxRetries = 120;
+  const maxRetries = 60;
   const sleepTime = 500;
   const url = "http://localhost:9944";
   const payload = {
