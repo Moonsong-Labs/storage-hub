@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_utilization() {
+    fn test_zero_utilisation() {
         let current_price = 50u128;
         let used_capacity = 0u64;
         let total_capacity = 10000u64;
@@ -286,12 +286,12 @@ mod tests {
         assert_eq!(
             new_price,
             <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MinPrice::get(),
-            "Price should be at minimum for zero utilization"
+            "Price should be at minimum for zero utilisation"
         );
     }
 
     #[test]
-    fn test_full_utilization() {
+    fn test_full_utilisation() {
         let current_price = 50u128;
         let used_capacity = 10000u64;
         let total_capacity = 10000u64;
@@ -301,7 +301,7 @@ mod tests {
         assert_eq!(
             new_price,
             <MockConfig as MostlyStablePriceIndexUpdaterConfig>::MaxPrice::get(),
-            "Price should be at maximum for full utilization"
+            "Price should be at maximum for full utilisation"
         );
     }
 
@@ -400,7 +400,7 @@ mod tests {
 
         assert!(
             new_price_2 >= new_price_1,
-            "Price should increase more as utilization increases"
+            "Price should increase more as utilisation increases"
         );
 
         let used_capacity_1 = 9900u64;
@@ -413,7 +413,7 @@ mod tests {
 
         assert!(
             new_price_2 >= new_price_1,
-            "Price should increase more as utilization increases"
+            "Price should increase more as utilisation increases"
         );
     }
 
@@ -431,7 +431,7 @@ mod tests {
 
         assert!(
             new_price_2 <= new_price_1,
-            "Price should decrease more as utilization decreases"
+            "Price should decrease more as utilisation decreases"
         );
 
         let used_capacity_1 = 2000u64;
@@ -444,7 +444,7 @@ mod tests {
 
         assert!(
             new_price_2 <= new_price_1,
-            "Price should decrease more as utilization decreases"
+            "Price should decrease more as utilisation decreases"
         );
 
         let used_capacity_1 = 10000u64;
@@ -457,7 +457,7 @@ mod tests {
 
         assert!(
             new_price_2 <= new_price_1,
-            "Price should decrease more as utilization decreases"
+            "Price should decrease more as utilisation decreases"
         );
     }
 

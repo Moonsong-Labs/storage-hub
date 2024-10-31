@@ -11,6 +11,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
 use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface};
+use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
@@ -82,6 +83,7 @@ mod test_runtime {
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
+    pub const ExistentialDeposit: u128 = 1;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -115,7 +117,7 @@ impl pallet_balances::Config for Test {
     type Balance = Balance;
     type DustRemoval = ();
     type RuntimeEvent = RuntimeEvent;
-    type ExistentialDeposit = ConstU128<1>;
+    type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = ();
     type MaxLocks = ConstU32<10>;
@@ -141,7 +143,7 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
-        0
+        1000
     }
 }
 
@@ -293,6 +295,8 @@ impl crate::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
 }
 
@@ -321,6 +325,7 @@ impl ExtBuilder {
                 (5, 5_000_000_000),   // Ferdie = 5
                 (6, 600_000_000_000), // George = 6
                 (123, 5_000_000),     // Alice for `on_poll` testing = 123
+                (TreasuryAccount::get(), ExistentialDeposit::get()),
             ],
         }
         .assimilate_storage(&mut t)
