@@ -4374,6 +4374,301 @@ mod slash {
     }
 }
 
+mod multiaddresses {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn add_multiaddress_fails_when_provider_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                // Try to add a multiaddress to an account that is not registered as an MSP
+                assert_noop!(
+                    StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        new_multiaddress
+                    ),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn add_multiaddress_fails_if_multiaddress_already_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                // Add a multiaddress to Alice
+                assert_ok!(StorageProviders::add_multiaddress(
+                    RuntimeOrigin::signed(alice),
+                    new_multiaddress.clone()
+                ));
+
+                // Try to add the same multiaddress to Alice
+                assert_noop!(
+                    StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        new_multiaddress
+                    ),
+                    Error::<Test>::MultiAddressAlreadyExists
+                );
+            });
+        }
+
+        #[test]
+        fn add_multiaddress_fails_if_max_multiaddresses_reached() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                // Add the maximum amount of multiaddresses for Alice (we start at 1 since Alice already has a MultiAddress)
+                for i in 1..MaxMultiAddressAmount::<Test>::get() {
+                    let multiaddress: MultiAddress<Test> = format!(
+                        "/ip4/127.0.0.1/udp/1234/new/multiaddress/{}",
+                        i.to_string().as_str()
+                    )
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap();
+                    assert_ok!(StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        multiaddress
+                    ));
+                }
+
+                let multiaddress_over_limit: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                // Try to add another multiaddress for Alice
+                assert_noop!(
+                    StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        multiaddress_over_limit
+                    ),
+                    Error::<Test>::MultiAddressesMaxAmountReached
+                );
+            });
+        }
+
+        #[test]
+        fn remove_multiaddress_fails_when_provider_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                // Try to remove a multiaddress from an account that is not registered as an MSP
+                assert_noop!(
+                    StorageProviders::remove_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        new_multiaddress
+                    ),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn remove_multiaddress_fails_when_multiaddress_does_not_exist() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                // Add a new multiaddress to Alice
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+                assert_ok!(StorageProviders::add_multiaddress(
+                    RuntimeOrigin::signed(alice),
+                    new_multiaddress.clone()
+                ));
+
+                // Get a multiaddress that does not exist
+                let non_saved_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/no/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                // Try to remove a multiaddress that does not exist
+                assert_noop!(
+                    StorageProviders::remove_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        non_saved_multiaddress
+                    ),
+                    Error::<Test>::MultiAddressNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn remove_multiaddress_fails_if_multiaddress_is_the_last_one() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                // Try to remove the only multiaddress of Alice
+                assert_noop!(
+                    StorageProviders::remove_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        "/ip4/127.0.0.1/udp/1234"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .unwrap()
+                    ),
+                    Error::<Test>::LastMultiAddressCantBeRemoved
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn add_multiaddress() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                // Add a multiaddress to Alice
+                assert_ok!(StorageProviders::add_multiaddress(
+                    RuntimeOrigin::signed(alice),
+                    new_multiaddress.clone()
+                ));
+
+                // Check that the multiaddress was added to the MSP
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+                let msp_info = crate::MainStorageProviders::<Test>::get(&msp_id).unwrap();
+
+                assert_eq!(msp_info.multiaddresses.len(), 2);
+                assert_eq!(msp_info.multiaddresses[1], new_multiaddress);
+            });
+        }
+
+        #[test]
+        fn add_multiaddress_to_max_multiaddresses() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                // Add the maximum amount of multiaddresses for Alice (we start at 1 since Alice already has a MultiAddress)
+                for i in 1usize..<MaxMultiAddressAmount<Test> as Get<u32>>::get() as usize {
+                    let multiaddress: MultiAddress<Test> = format!(
+                        "/ip4/127.0.0.1/udp/1234/new/multiaddress/{}",
+                        i.to_string().as_str()
+                    )
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap();
+                    assert_ok!(StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        multiaddress.clone()
+                    ));
+
+                    let msp_id =
+                        crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+                    let msp_info = crate::MainStorageProviders::<Test>::get(&msp_id).unwrap();
+
+                    assert_eq!(msp_info.multiaddresses[i], multiaddress);
+                    assert_eq!(msp_info.multiaddresses.len(), i + 1);
+                }
+            });
+        }
+
+        #[test]
+        fn remove_multiaddress() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount);
+
+                // We first add a multiaddress to Alice
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                assert_ok!(StorageProviders::add_multiaddress(
+                    RuntimeOrigin::signed(alice),
+                    new_multiaddress.clone()
+                ));
+
+                // Check that the multiaddress was added to the MSP
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+                let msp_info = crate::MainStorageProviders::<Test>::get(&msp_id).unwrap();
+                assert_eq!(msp_info.multiaddresses.len(), 2);
+                assert_eq!(msp_info.multiaddresses[1], new_multiaddress);
+
+                // Remove the original multiaddress from Alice
+                let initial_multiaddress = msp_info.multiaddresses[0].clone();
+                assert_ok!(StorageProviders::remove_multiaddress(
+                    RuntimeOrigin::signed(alice),
+                    initial_multiaddress.clone()
+                ));
+
+                // Check that the multiaddress was removed from the MSP
+                let msp_info = crate::MainStorageProviders::<Test>::get(&msp_id).unwrap();
+                assert_eq!(msp_info.multiaddresses.len(), 1);
+                assert_eq!(msp_info.multiaddresses[0], new_multiaddress);
+            });
+        }
+    }
+}
+
 mod add_value_prop {
     use super::*;
     mod failure {

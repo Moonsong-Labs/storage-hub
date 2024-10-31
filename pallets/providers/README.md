@@ -35,7 +35,7 @@ BSPs play a crucial role in the system as a fallback option if the trust with th
 
 BSPs do not compete for user adoption as they do not offer distinctive services to one another and are not chosen by the user. Instead, they are assigned by the system, with considerations to ensure an even distribution of data.
 
-The remaining portion of the user's payment for storing a file, after the MSP's share, is evenly distributed among the assigned BSPs. This incentivizes BSPs to maintain the data they've committed to storing.
+The remaining portion of the user's payment for storing a file, after the MSP's share, is evenly distributed among the assigned BSPs. This incentivises BSPs to maintain the data they've committed to storing.
 
 ### Sign Up Process
 
@@ -79,7 +79,7 @@ Notes:
 
 ### cancel_sign_up
 
-The purpose of this extrinsic is to allow users to cancel their sign up request that they previously initiated. This allows users to recover the deposit that was held when they requested to sign up as a Storage Provider, and it is a way to incentivize storage debloat as users will want to delete the sign up requests that are not going to be confirmed. This extrinsic is only available for users that have a pending sign up request.
+The purpose of this extrinsic is to allow users to cancel their sign up request that they previously initiated. This allows users to recover the deposit that was held when they requested to sign up as a Storage Provider, and it is a way to incentivise storage debloat as users will want to delete the sign up requests that are not going to be confirmed. This extrinsic is only available for users that have a pending sign up request.
 
 ### msp_sign_off
 

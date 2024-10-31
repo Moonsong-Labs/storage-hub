@@ -16,7 +16,11 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
-    traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
+    traits::{
+        fungible::{InspectHold, Mutate},
+        nonfungibles_v2::Destroy,
+        Hooks, OriginTrait,
+    },
     weights::Weight,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -64,6 +68,24 @@ mod create_bucket_tests {
                 );
             });
         }
+
+        #[test]
+        fn create_bucket_user_without_enough_funds_for_deposit_fail() {
+            new_test_ext().execute_with(|| {
+                let owner_without_balance = Keyring::Ferdie.to_account_id();
+                let origin = RuntimeOrigin::signed(owner_without_balance.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = false;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                assert_noop!(
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
+                    pallet_storage_providers::Error::<Test>::NotEnoughBalance
+                );
+            });
+        }
     }
 
     mod success {
@@ -73,6 +95,11 @@ mod create_bucket_tests {
         fn create_private_bucket_success() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
+                let owner_initial_balance = <Test as Config>::Currency::free_balance(&owner);
+                let bucket_creation_deposit =
+                    <Test as pallet_storage_providers::Config>::BucketDeposit::get();
+                let nft_collection_deposit: crate::types::BalanceOf<Test> =
+                    <Test as pallet_nfts::Config>::CollectionDeposit::get();
                 let origin = RuntimeOrigin::signed(owner.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
@@ -80,7 +107,7 @@ mod create_bucket_tests {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -97,11 +124,26 @@ mod create_bucket_tests {
 
                 // Check if collection was created
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
                     .is_some()
+                );
+
+                // Check that the deposit was held from the owner's balance
+                assert_eq!(
+                    <Test as Config>::Currency::balance_on_hold(
+                        &RuntimeHoldReason::Providers(
+                            pallet_storage_providers::HoldReason::BucketDeposit
+                        ),
+                        &owner
+                    ),
+                    bucket_creation_deposit
+                );
+                assert_eq!(
+                    <Test as Config>::Currency::free_balance(&owner),
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit
                 );
 
                 // Assert that the correct event was deposited
@@ -134,7 +176,7 @@ mod create_bucket_tests {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -151,7 +193,7 @@ mod create_bucket_tests {
 
                 // Check that the bucket does not have a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -930,7 +972,7 @@ mod update_bucket_privacy_tests {
 
                 let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -957,7 +999,7 @@ mod update_bucket_privacy_tests {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -974,7 +1016,7 @@ mod update_bucket_privacy_tests {
 
                 // Check if collection was created
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1000,7 +1042,7 @@ mod update_bucket_privacy_tests {
 
                 // Check that the bucket still has a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1031,7 +1073,7 @@ mod update_bucket_privacy_tests {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -1048,7 +1090,7 @@ mod update_bucket_privacy_tests {
 
                 // Check if collection was created
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1078,7 +1120,7 @@ mod update_bucket_privacy_tests {
 
                 // Check that the bucket still has a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1101,7 +1143,7 @@ mod update_bucket_privacy_tests {
 
                 // Check that the bucket still has a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1132,7 +1174,7 @@ mod update_bucket_privacy_tests {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -1149,7 +1191,7 @@ mod update_bucket_privacy_tests {
 
                 // Check that the bucket does not have a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1179,7 +1221,7 @@ mod update_bucket_privacy_tests {
 
                 // Check that the bucket still has a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1187,7 +1229,7 @@ mod update_bucket_privacy_tests {
                 );
 
                 let collection_id =
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id,
                     )
                     .unwrap()
@@ -1203,7 +1245,7 @@ mod update_bucket_privacy_tests {
 
                 // Check that the bucket still has a corresponding collection
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1241,7 +1283,7 @@ mod create_and_associate_collection_with_bucket_tests {
 
                 let (msp_id, _) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -1269,7 +1311,7 @@ mod create_and_associate_collection_with_bucket_tests {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &owner,
                     name.clone(),
@@ -1286,7 +1328,7 @@ mod create_and_associate_collection_with_bucket_tests {
 
                 // Check if collection was created
                 assert!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1294,7 +1336,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 );
 
                 let collection_id =
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id,
                     )
                     .unwrap()
@@ -1306,7 +1348,7 @@ mod create_and_associate_collection_with_bucket_tests {
 
                 // Check if collection was associated with the bucket
                 assert_ne!(
-                    <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(
+                    <Test as file_system::Config>::Providers::get_read_access_group_id_of_bucket(
                         &bucket_id
                     )
                     .unwrap()
@@ -1453,6 +1495,67 @@ mod request_storage {
                 );
             });
         }
+
+        #[test]
+        fn request_storage_not_enough_balance_for_deposit_fails() {
+            new_test_ext().execute_with(|| {
+                let owner_without_funds = Keyring::Ferdie.to_account_id();
+                let user = RuntimeOrigin::signed(owner_without_funds.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
+                let balance_to_mint: crate::types::BalanceOf<Test> =
+                    <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
+                        crate::types::BalanceOf<Test>,
+                    >>::get()
+                    .saturating_add(<Test as pallet_balances::Config>::ExistentialDeposit::get());
+                <Test as file_system::Config>::Currency::mint_into(
+                    &owner_without_funds,
+                    balance_to_mint.into(),
+                )
+                .unwrap();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(
+                    &owner_without_funds.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_noop!(
+                    FileSystem::issue_storage_request(
+                        user.clone(),
+                        bucket_id,
+                        location.clone(),
+                        fingerprint,
+                        size,
+                        msp_id,
+                        peer_ids.clone(),
+                    ),
+                    Error::<Test>::CannotHoldDeposit
+                );
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_without_funds.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Assert that the storage was not updated
+                assert_eq!(file_system::StorageRequests::<Test>::get(file_key), None);
+            });
+        }
     }
 
     mod success {
@@ -1463,6 +1566,8 @@ mod request_storage {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let storage_request_deposit =
+                    <Test as file_system::Config>::StorageRequestCreationDeposit::get();
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
@@ -1480,6 +1585,9 @@ mod request_storage {
                     msp_id,
                     value_prop_id,
                 );
+
+                let owner_initial_balance =
+                    <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -1517,6 +1625,21 @@ mod request_storage {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
+                );
+
+                // Check that the deposit was held from the owner's balance
+                assert_eq!(
+                    <Test as Config>::Currency::balance_on_hold(
+                        &RuntimeHoldReason::FileSystem(
+                            file_system::HoldReason::StorageRequestCreationHold
+                        ),
+                        &owner_account_id
+                    ),
+                    storage_request_deposit
+                );
+                assert_eq!(
+                    <Test as Config>::Currency::free_balance(&owner_account_id),
+                    owner_initial_balance - storage_request_deposit
                 );
 
                 // Assert that the correct event was deposited
@@ -2312,7 +2435,7 @@ mod msp_respond_storage_request {
 
                 // Get the new root of the bucket.
                 let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
+                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
                         .unwrap();
 
                 // Assert that the correct event was deposited
@@ -2432,7 +2555,7 @@ mod msp_respond_storage_request {
 
 				// Get the new root of the bucket.
                 let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
                     .unwrap();
 
                 // Assert that the correct event was deposited
@@ -2577,10 +2700,10 @@ mod msp_respond_storage_request {
 					Some((msp_id, true))
 				);
 
-                let first_bucket_root = <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
+                let first_bucket_root = <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
                     .unwrap();
 				let second_bucket_root =
-					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
+					<<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
 					.unwrap();
 
                 // Assert that the correct event was deposited
@@ -2746,11 +2869,11 @@ mod msp_respond_storage_request {
                 );
 
                 let first_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
+                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
                     .unwrap();
 
                 let second_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
+                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
                     .unwrap();
 
                 // Check event
@@ -2878,7 +3001,7 @@ mod msp_respond_storage_request {
                 );
 
                 let new_bucket_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
+                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
                     .unwrap();
 
                 System::assert_last_event(
@@ -2924,13 +3047,13 @@ mod msp_respond_storage_request {
 
             for params in params_list {
                 // Create bucket if not already created
-                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
                     &msp_id,
                     &params.owner_account_id.clone().try_into().unwrap(),
                     params.bucket_name.clone().try_into().unwrap(),
                 );
 
-                if !<Test as crate::Config>::Providers::bucket_exists(&bucket_id) {
+                if !<Test as file_system::Config>::Providers::bucket_exists(&bucket_id) {
                     create_bucket(
                         &params.owner_account_id.clone(),
                         params.bucket_name.clone().try_into().unwrap(),
@@ -3131,7 +3254,7 @@ mod msp_respond_storage_request {
                             .map(|batch_response| match batch_response {
                                 BatchResponses::Accepted(mut accepted) => {
                                     accepted.new_bucket_root =
-                                        <Test as crate::Config>::Providers::get_root_bucket(
+                                        <Test as file_system::Config>::Providers::get_root_bucket(
                                             &accepted.bucket_id,
                                         )
                                         .expect("Root bucket should exist");
@@ -4728,7 +4851,7 @@ mod bsp_confirm {
 
                 let file_keys_and_proofs: BoundedVec<
                     _,
-                    <Test as crate::Config>::MaxBatchConfirmStorageRequests,
+                    <Test as file_system::Config>::MaxBatchConfirmStorageRequests,
                 > = file_keys
                     .into_iter()
                     .map(|file_key| {
@@ -4891,7 +5014,7 @@ mod bsp_confirm {
                 );
 
 				// Assert that the payment stream between the BSP and the user has been created
-				assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&bsp_id, &owner_account_id));
+				assert!(<<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&bsp_id, &owner_account_id));
             });
         }
 
@@ -5023,7 +5146,7 @@ mod bsp_confirm {
                 );
 
 				// Assert that the payment stream between the BSP and the user has been created and get its amount provided
-				let amount_provided_payment_stream = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner_account_id);
+				let amount_provided_payment_stream = <<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner_account_id);
 				assert!(amount_provided_payment_stream.is_some());
 				assert_eq!(amount_provided_payment_stream.unwrap(), size);
 
@@ -5112,7 +5235,7 @@ mod bsp_confirm {
                 );
 
 				// Assert that the payment stream between the BSP and the user has been correctly updated
-				let new_amount_provided_payment_stream = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner_account_id).unwrap();
+				let new_amount_provided_payment_stream = <<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner_account_id).unwrap();
 				assert_eq!(amount_provided_payment_stream.unwrap() + new_size, new_amount_provided_payment_stream);
             });
         }
@@ -6385,7 +6508,7 @@ mod delete_file_and_pending_deletions_tests {
                 );
 
                 // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
-                for i in 0..<Test as crate::Config>::MaxUserPendingDeletionRequests::get() {
+                for i in 0..<Test as file_system::Config>::MaxUserPendingDeletionRequests::get() {
                     let file_key = FileSystem::compute_file_key(
                         owner_account_id.clone(),
                         bucket_id,
@@ -6466,7 +6589,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
                         .unwrap()
@@ -6494,7 +6617,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was not removed from storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
                         .unwrap()
@@ -6661,7 +6784,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
                         .unwrap()
@@ -6694,7 +6817,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Asser that the pending file deletion request was removed from storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
                 );
 
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
@@ -6742,7 +6865,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
                         .unwrap()
@@ -6782,7 +6905,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
                 );
             });
         }
@@ -6825,7 +6948,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![(file_key, bucket_id)]
                     )
                         .unwrap()
@@ -6867,7 +6990,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
-                    BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
                 );
             });
         }
@@ -8443,7 +8566,7 @@ fn create_bucket(
     value_prop_id: ValuePropId<Test>,
 ) -> BucketIdFor<Test> {
     let bucket_id =
-        <Test as crate::Config>::Providers::derive_bucket_id(&msp_id, &owner, name.clone());
+        <Test as file_system::Config>::Providers::derive_bucket_id(&msp_id, &owner, name.clone());
 
     let origin = RuntimeOrigin::signed(owner.clone());
 

@@ -1691,6 +1691,22 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when a Provider has added a new MultiAddress to its account.
+       **/
+      MultiAddressAdded: AugmentedEvent<
+        ApiType,
+        [providerId: H256, newMultiaddress: Bytes],
+        { providerId: H256; newMultiaddress: Bytes }
+      >;
+      /**
+       * Event emitted when a Provider has removed a MultiAddress from its account.
+       **/
+      MultiAddressRemoved: AugmentedEvent<
+        ApiType,
+        [providerId: H256, removedMultiaddress: Bytes],
+        { providerId: H256; removedMultiaddress: Bytes }
+      >;
+      /**
        * Event emitted when a sign up request has been canceled successfully. Provides information about
        * the account id of the user that canceled the request.
        **/

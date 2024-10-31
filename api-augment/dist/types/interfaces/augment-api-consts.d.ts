@@ -117,6 +117,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * Deposit held from the User when creating a new storage request
+       **/
+      storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
@@ -249,6 +253,10 @@ declare module "@polkadot/api-base/types/consts" {
        * to be provided by the pallet using the `PaymentStreamsInterface` interface.
        **/
       newStreamDeposit: u32 & AugmentedConst<ApiType>;
+      /**
+       * The treasury account of the runtime, where a fraction of each payment goes.
+       **/
+      treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
       /**
        * The number of ticks that a user will have to wait after it has been flagged as without funds to be able to clear that flag
        * and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.

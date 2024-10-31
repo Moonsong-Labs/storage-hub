@@ -199,6 +199,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketNotFound: AugmentedError<ApiType>;
       /**
+       * Cannot hold the required deposit from the user
+       **/
+      CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
@@ -1019,9 +1023,25 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
       /**
+       * Error thrown when a Provider tries to remove the last MultiAddress from its account.
+       **/
+      LastMultiAddressCantBeRemoved: AugmentedError<ApiType>;
+      /**
        * Error thrown when changing the MSP of a bucket to the same assigned MSP.
        **/
       MspAlreadyAssignedToBucket: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
+       **/
+      MultiAddressAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
+       **/
+      MultiAddressesMaxAmountReached: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a Provider tries to delete a MultiAddress from its account but it does not have that MultiAddress.
+       **/
+      MultiAddressNotFound: AugmentedError<ApiType>;
       /**
        * Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
        **/
