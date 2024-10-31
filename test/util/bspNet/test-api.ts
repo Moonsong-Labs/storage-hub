@@ -258,7 +258,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspId?: string) => Waits.waitForBspStored(this._api, expectedExts, bspId),
+      bspStored: (expectedExts?: number, bspId?: string) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspId),
 
       /**
        * Waits for a MSP to respond to storage requests.

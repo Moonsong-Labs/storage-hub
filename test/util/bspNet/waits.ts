@@ -4,7 +4,6 @@ import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
 import type { H256 } from "@polkadot/types/interfaces";
-import type { Hash } from "crypto";
 
 /**
  * Waits for a BSP to volunteer for a storage request.
@@ -113,14 +112,17 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, bspId?: string) => { // TODO: add bsp ID to check if is not confirming storing
+export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, bspId?: string) => {
+  // TODO: add bsp ID to check if is not confirming storing
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
   const delay = 100;
 
-  if ( bspId && checkQuantity && checkQuantity > 1 ) {
+  if (bspId && checkQuantity && checkQuantity > 1) {
     // We do this because `bspConfirmStoring` cannot happened in the same block in which a BSP submit a proof.
-    throw new Error("Cannot use `waitForBspStored` with a bspId and an amount of extrinsec bigger than 1.")
+    throw new Error(
+      "Cannot use `waitForBspStored` with a bspId and an amount of extrinsec bigger than 1."
+    );
   }
 
   for (let i = 0; i < iterations + 1; i++) {
@@ -142,8 +144,7 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
       assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
       break;
     } catch {
-
-      if ( bspId ) {
+      if (bspId) {
         try {
           // In cases the bsp is submitting a proof at the same time is trying to confirmStoring
           await assertExtrinsicPresent(api, {

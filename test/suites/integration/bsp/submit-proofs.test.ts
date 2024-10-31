@@ -259,7 +259,7 @@ describeBspNet(
 
     it("Only one BSP confirms it", async () => {
       await userApi.wait.bspVolunteer(1);
-      await userApi.wait.bspStored(1, NODE_INFOS.bsp.AddressId );
+      await userApi.wait.bspStored(1, NODE_INFOS.bsp.AddressId);
     });
 
     it("BSP correctly responds to challenge with new forest root", async () => {
@@ -361,13 +361,12 @@ describeBspNet(
       const nextChallengeTick = lastTickBspTwoSubmittedProof + challengePeriod;
 
       const currentBlock = await userApi.rpc.chain.getBlock();
-      let currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const currentBlockNumber = currentBlock.block.header.number.toNumber();
 
-      if ( nextChallengeTick < currentBlockNumber ) {
+      if (nextChallengeTick < currentBlockNumber) {
         // Advance to the next challenge tick if needed
         await userApi.advanceToBlock(nextChallengeTick);
       }
-
 
       // Wait for tasks to execute and for the BSPs to submit proofs.
       await sleep(500);
