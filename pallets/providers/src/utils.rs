@@ -1000,14 +1000,14 @@ where
             .saturating_mul(2u32.into()))
     }
 
-    /// Adjust the fixed rate payment stream between a user and an MSP based on the `RateDelta`.
+    /// Adjust the fixed rate payment stream between a user and an MSP based on the [`RateDeltaParam`].
     ///
-    /// This function handles creating, updating, or deleting the fixed rate payment stream depending on the changes in bucket size or count.
+    /// Handles creating, updating, or deleting the fixed rate payment stream storage.
     fn compute_new_rate_delta(
         msp_id: &MainStorageProviderId<T>,
         bucket_id: &BucketId<T>,
         user_id: &T::AccountId,
-        delta: RateDelta<T>,
+        delta: RateDeltaParam<T>,
     ) -> Result<(), DispatchError> {
         let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
             &msp_id,
@@ -1016,7 +1016,7 @@ where
         .unwrap_or_default();
 
         match delta {
-            RateDelta::NewBucket => {
+            RateDeltaParam::NewBucket => {
                 let bucket: Bucket<T> =
                     Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
@@ -1055,7 +1055,7 @@ where
                     )?;
                 }
             }
-            RateDelta::RemoveBucket => {
+            RateDeltaParam::RemoveBucket => {
                 let bucket: Bucket<T> =
                     Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
@@ -1087,7 +1087,7 @@ where
                     )?;
                 }
             }
-            RateDelta::Increase(delta) => {
+            RateDeltaParam::Increase(delta) => {
                 let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
                 let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
@@ -1117,7 +1117,7 @@ where
                     &msp_id, &user_id, new_rate,
                 )?;
             }
-            RateDelta::Decrease(delta) => {
+            RateDeltaParam::Decrease(delta) => {
                 let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
                 let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
                     &msp_id,
@@ -1148,10 +1148,15 @@ where
     }
 }
 
-enum RateDelta<T: Config> {
+/// The delta applied to a fixed rate payment stream via [`Pallet::compute_new_rate_delta`].
+enum RateDeltaParam<T: Config> {
+    /// Variant should be used when a new bucket is associated to an MSP.
     NewBucket,
+    /// Variant should be used when a bucket is removed from an MSP.
     RemoveBucket,
+    /// Variant should be used when a bucket size has increased by some amount.
     Increase(StorageDataUnit<T>),
+    /// Variant should be used when a bucket size has decreased by some amount.
     Decrease(StorageDataUnit<T>),
 }
 
@@ -1330,7 +1335,12 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::insert(&bucket_id, &bucket);
         MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
-        Self::compute_new_rate_delta(&provider_id, &bucket_id, &user_id, RateDelta::NewBucket)?;
+        Self::compute_new_rate_delta(
+            &provider_id,
+            &bucket_id,
+            &user_id,
+            RateDeltaParam::NewBucket,
+        )?;
 
         Ok(())
     }
@@ -1348,7 +1358,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                     &msp_id,
                     bucket_id,
                     &bucket.user_id,
-                    RateDelta::RemoveBucket,
+                    RateDeltaParam::RemoveBucket,
                 )?;
             }
 
@@ -1359,7 +1369,12 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        Self::compute_new_rate_delta(new_msp, bucket_id, &bucket.user_id, RateDelta::NewBucket)?;
+        Self::compute_new_rate_delta(
+            new_msp,
+            bucket_id,
+            &bucket.user_id,
+            RateDeltaParam::NewBucket,
+        )?;
 
         Ok(())
     }
@@ -1380,7 +1395,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
 
-        Self::compute_new_rate_delta(&msp_id, bucket_id, &user_id, RateDelta::RemoveBucket)?;
+        Self::compute_new_rate_delta(&msp_id, bucket_id, &user_id, RateDeltaParam::RemoveBucket)?;
 
         Ok(())
     }
@@ -1406,7 +1421,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             &msp_id,
             &bucket_id,
             &bucket.user_id,
-            RateDelta::RemoveBucket,
+            RateDeltaParam::RemoveBucket,
         )?;
 
         Buckets::<T>::remove(&bucket_id);
@@ -1463,7 +1478,12 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             ))
         })?;
 
-        Self::compute_new_rate_delta(&msp_id, bucket_id, &user_id, RateDelta::Increase(delta))?;
+        Self::compute_new_rate_delta(
+            &msp_id,
+            bucket_id,
+            &user_id,
+            RateDeltaParam::Increase(delta),
+        )?;
 
         Ok(())
     }
@@ -1485,7 +1505,12 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             ))
         })?;
 
-        Self::compute_new_rate_delta(&msp_id, bucket_id, &user_id, RateDelta::Decrease(delta))?;
+        Self::compute_new_rate_delta(
+            &msp_id,
+            bucket_id,
+            &user_id,
+            RateDeltaParam::Decrease(delta),
+        )?;
 
         Ok(())
     }

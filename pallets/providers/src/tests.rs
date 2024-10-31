@@ -3898,11 +3898,29 @@ mod add_bucket {
                     value_prop_id
                 ));
 
+                // Check payment stream was added
+                assert!(
+                    <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
+                );
+
                 let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 assert_eq!(
                     NativeBalance::free_balance(&bucket_owner),
                     accounts::BOB.1 - <BucketDeposit as Get<u128>>::get() - new_stream_deposit as u128
                 );
+
+                let new_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                    &msp_id,
+                    &bucket_owner
+                ).unwrap_or_default();
+
+                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
+
+                // Check that the fixed rate payment stream increased by 10 zero size bucket rates
+                assert_eq!(zero_size_bucket_rate, new_rate);
 
                 assert_eq!(
                     NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
@@ -3929,15 +3947,6 @@ mod add_bucket {
                     }
                 );
 
-                let new_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
-                    &msp_id,
-                    &bucket_owner
-                ).unwrap_or_default();
-
-                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
-
-                // Check that the fixed rate payment stream increased by 10 zero size bucket rates
-                assert_eq!(zero_size_bucket_rate, new_rate);
             });
         }
 
@@ -4095,6 +4104,14 @@ mod remove_root_bucket {
                     crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
                         .is_none()
                 );
+
+                // Check payment stream was removed
+                assert!(
+                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
+                );
             });
         }
 
@@ -4169,6 +4186,14 @@ mod remove_root_bucket {
                     crate::MainStorageProviderIdsToBuckets::<Test>::iter_key_prefix(&msp_id)
                         .count(),
                     0
+                );
+
+                // Check that the payment streams was removed
+                assert!(
+                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
                 );
             });
         }
