@@ -118,6 +118,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * Deposit held from the User when creating a new storage request
+       **/
+      storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;

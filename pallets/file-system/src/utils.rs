@@ -2,7 +2,12 @@ use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
-    traits::{nonfungibles_v2::Create, Get},
+    traits::{
+        fungible::{InspectHold, MutateHold},
+        nonfungibles_v2::Create,
+        tokens::Precision,
+        Get,
+    },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
@@ -43,7 +48,7 @@ use crate::{
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
     },
-    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
+    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, HoldReason, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
     TickRangeToMaximumThreshold,
@@ -251,8 +256,6 @@ where
         private: bool,
         value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
-        // TODO: Hold user funds for the bucket creation.
-
         // Check if the MSP is indeed an MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
@@ -521,8 +524,6 @@ where
         bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
-        // TODO: Check user funds and lock them for the storage request.
-
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
 
@@ -537,6 +538,17 @@ where
         ensure!(
             !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
             Error::<T>::BucketIsBeingMoved
+        );
+
+        // Check if we can hold the storage request creation deposit from the user
+        let deposit = T::StorageRequestCreationDeposit::get();
+        ensure!(
+            T::Currency::can_hold(
+                &HoldReason::StorageRequestCreationHold.into(),
+                &sender,
+                deposit
+            ),
+            Error::<T>::CannotHoldDeposit
         );
 
         // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
@@ -598,6 +610,13 @@ where
             !<StorageRequests<T>>::contains_key(&file_key),
             Error::<T>::StorageRequestAlreadyRegistered
         );
+
+        // Hold the deposit from the user
+        T::Currency::hold(
+            &HoldReason::StorageRequestCreationHold.into(),
+            &sender,
+            deposit,
+        )?;
 
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
@@ -954,6 +973,14 @@ where
                     bool
                 );
 
+                // Return the storage request creation deposit to the user
+                T::Currency::release(
+                    &HoldReason::StorageRequestCreationHold.into(),
+                    &storage_request_metadata.owner,
+                    T::StorageRequestCreationDeposit::get(),
+                    Precision::BestEffort,
+                )?;
+
                 // Notify that the storage request has been fulfilled.
                 Self::deposit_event(Event::StorageRequestFulfilled { file_key });
             } else {
@@ -1305,6 +1332,14 @@ where
                     bool
                 );
 
+                // Return the storage request creation deposit to the user
+                T::Currency::release(
+                    &HoldReason::StorageRequestCreationHold.into(),
+                    &storage_request_metadata.owner,
+                    T::StorageRequestCreationDeposit::get(),
+                    Precision::BestEffort,
+                )?;
+
                 // Notify that the storage request has been fulfilled.
                 Self::deposit_event(Event::StorageRequestFulfilled {
                     file_key: file_key.0,
@@ -1439,6 +1474,14 @@ where
 
         // Remove storage request.
         <StorageRequests<T>>::remove(&file_key);
+
+        // Return the storage request creation deposit to the user
+        T::Currency::release(
+            &HoldReason::StorageRequestCreationHold.into(),
+            &storage_request_metadata.owner,
+            T::StorageRequestCreationDeposit::get(),
+            Precision::BestEffort,
+        )?;
 
         // A revoked storage request is not considered active anymore.
         <BucketsWithStorageRequests<T>>::remove(&storage_request_metadata.bucket_id, &file_key);

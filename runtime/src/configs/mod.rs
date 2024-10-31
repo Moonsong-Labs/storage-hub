@@ -624,6 +624,8 @@ type ThresholdType = u32;
 
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 10;
+    pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {
@@ -656,6 +658,7 @@ impl pallet_file_system::Config for Runtime {
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
@@ -671,6 +674,7 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
