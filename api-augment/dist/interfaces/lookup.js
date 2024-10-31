@@ -4251,6 +4251,10 @@ export default {
       "ValuePropositionNotFound",
       "ValuePropositionAlreadyExists",
       "ValuePropositionNotAvailable",
+      "FixedRatePaymentStreamNotFound",
+      "MspAlreadyAssignedToBucket",
+      "Overflow",
+      "BucketSizeExceedsLimit",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
       "PaymentStreamNotFound"

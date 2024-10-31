@@ -15,8 +15,8 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface,
+    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ReadBucketsInterface, ReadProvidersInterface,
 };
 use sp_runtime::bounded_vec;
 
@@ -3866,6 +3866,8 @@ mod add_bucket {
     }
 
     mod success {
+        use crate::Config;
+
         use super::*;
 
         #[test]
@@ -3896,9 +3898,10 @@ mod add_bucket {
                     value_prop_id
                 ));
 
+                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 assert_eq!(
                     NativeBalance::free_balance(&bucket_owner),
-                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get()
+                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get() - new_stream_deposit as u128
                 );
 
                 assert_eq!(
@@ -3908,7 +3911,7 @@ mod add_bucket {
 
                 assert!(
                     crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
-                        .is_some()
+                    .is_some()
                 );
 
                 let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
@@ -3925,11 +3928,21 @@ mod add_bucket {
                         value_prop_id
                     }
                 );
+
+                let new_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                    &msp_id,
+                    &bucket_owner
+                ).unwrap_or_default();
+
+                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
+
+                // Check that the fixed rate payment stream increased by 10 zero size bucket rates
+                assert_eq!(zero_size_bucket_rate, new_rate);
             });
         }
 
         #[test]
-        fn add_buckets_to_max_capacity() {
+        fn add_multiple_buckets() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -3939,6 +3952,13 @@ mod add_bucket {
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
+
+
+                let current_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                    &msp_id,
+                    &bucket_owner
+                )
+                .unwrap_or_default();
 
                 // Add the maximum amount of buckets for Alice
                 let num_buckets = 10;
@@ -3972,6 +3992,16 @@ mod add_bucket {
                         .collect::<Vec<_>>();
 
                 assert_eq!(buckets.len(), num_buckets);
+
+                let new_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                    &msp_id,
+                    &bucket_owner
+                ).unwrap_or_default();
+
+                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
+
+                // Check that the fixed rate payment stream increased by 10 zero size bucket rates
+                assert_eq!(current_rate + (num_buckets as u128 * zero_size_bucket_rate), new_rate);
             });
         }
     }

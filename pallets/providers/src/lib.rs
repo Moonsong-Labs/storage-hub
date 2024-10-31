@@ -228,6 +228,11 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxCommitmentSize: Get<u32>;
+
+        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base  
+        /// fee for a bucket that doesn't have any files yet)
+        #[pallet::constant]
+        type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
     }
 
     #[pallet::pallet]
@@ -545,6 +550,14 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a fixed payment stream is not found.
+        FixedRatePaymentStreamNotFound,
+        /// Error thrown when changing the MSP of a bucket to the same assigned MSP.
+        MspAlreadyAssignedToBucket,
+        /// Error thrown when an arithmetic operation results in an overflow.
+        Overflow,
+        /// Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+        BucketSizeExceedsLimit,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.

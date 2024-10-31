@@ -1003,9 +1003,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketNotFound: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+       **/
+      BucketSizeExceedsLimit: AugmentedError<ApiType>;
+      /**
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a fixed payment stream is not found.
+       **/
+      FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Error thrown when failing to decode the owner Account ID from the received metadata.
        **/
@@ -1018,6 +1026,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid.
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
+      /**
+       * Error thrown when changing the MSP of a bucket to the same assigned MSP.
+       **/
+      MspAlreadyAssignedToBucket: AugmentedError<ApiType>;
       /**
        * Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
        **/
@@ -1058,6 +1070,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when an arithmetic operation results in an overflow.
+       **/
+      Overflow: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to update a payment stream that does not exist.
        **/

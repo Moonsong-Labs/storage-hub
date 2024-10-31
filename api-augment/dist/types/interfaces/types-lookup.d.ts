@@ -5050,6 +5050,10 @@ declare module "@polkadot/types/lookup" {
     readonly isValuePropositionNotFound: boolean;
     readonly isValuePropositionAlreadyExists: boolean;
     readonly isValuePropositionNotAvailable: boolean;
+    readonly isFixedRatePaymentStreamNotFound: boolean;
+    readonly isMspAlreadyAssignedToBucket: boolean;
+    readonly isOverflow: boolean;
+    readonly isBucketSizeExceedsLimit: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
@@ -5083,6 +5087,10 @@ declare module "@polkadot/types/lookup" {
       | "ValuePropositionNotFound"
       | "ValuePropositionAlreadyExists"
       | "ValuePropositionNotAvailable"
+      | "FixedRatePaymentStreamNotFound"
+      | "MspAlreadyAssignedToBucket"
+      | "Overflow"
+      | "BucketSizeExceedsLimit"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
       | "PaymentStreamNotFound";

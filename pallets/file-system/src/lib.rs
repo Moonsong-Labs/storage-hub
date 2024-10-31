@@ -276,12 +276,6 @@ pub mod pallet {
         /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
         type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
-
-        /// 0-size bucket fixed rate payment stream.
-        #[pallet::constant]
-        type ZeroSizeBucketFixedRate: Get<
-            <<Self::PaymentStreams as shp_traits::PaymentStreamsInterface>::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance,
-        >;
     }
 
     #[pallet::pallet]

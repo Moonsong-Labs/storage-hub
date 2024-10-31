@@ -8311,10 +8311,6 @@ mod msp_stop_storing_bucket {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
-                // Check that the current rate is the equivalent to two zero size buckets.
-                assert_eq!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap(), zero_size_bucket_rate);
-
                 // Dispatch MSP stop storing bucket.
                 assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
 
@@ -8347,10 +8343,6 @@ mod msp_stop_storing_bucket {
 
                 let another_name = BoundedVec::try_from(b"another_bucket".to_vec()).unwrap();
                 create_bucket(&owner_account_id.clone(), another_name, msp_id, value_prop_id);
-
-                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
-                // Check that the current rate is the equivalent to two zero size buckets.
-                assert_eq!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap(), zero_size_bucket_rate * 2);
 
                 // Dispatch MSP stop storing bucket.
                 assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
@@ -8433,12 +8425,12 @@ fn add_msp_to_provider_storage(
         msp_hash,
     );
 
-    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10000);
     let value_prop_id = value_prop.derive_id();
     pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
         msp_hash,
         value_prop_id,
-        ValueProposition::<Test>::new(1, bounded_vec![], 100),
+        value_prop,
     );
 
     (msp_hash, value_prop_id)

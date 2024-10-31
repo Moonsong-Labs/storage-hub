@@ -304,6 +304,7 @@ impl pallet_storage_providers::Config for Test {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -480,7 +481,6 @@ impl crate::Config for Test {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
-    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 // If we ever require a better mock that doesn't just return true if it is Eve, change this.

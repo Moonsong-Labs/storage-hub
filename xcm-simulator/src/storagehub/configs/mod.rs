@@ -505,6 +505,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 parameter_types! {
@@ -699,7 +700,6 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
-    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

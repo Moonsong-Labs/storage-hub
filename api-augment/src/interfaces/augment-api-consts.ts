@@ -129,10 +129,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
-       * 0-size bucket fixed rate payment stream.
-       **/
-      zeroSizeBucketFixedRate: u128 & AugmentedConst<ApiType>;
-      /**
        * Generic const
        **/
       [key: string]: Codec;
@@ -463,6 +459,11 @@ declare module "@polkadot/api-base/types/consts" {
        * - The slashed funds are transferred.
        **/
       treasury: AccountId32 & AugmentedConst<ApiType>;
+      /**
+       * 0-size bucket fixed rate payment stream (i.e. the amount charged as a base
+       * fee for a bucket that doesn't have any files yet)
+       **/
+      zeroSizeBucketFixedRate: u128 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

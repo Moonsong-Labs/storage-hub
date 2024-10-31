@@ -31,18 +31,18 @@ use shp_traits::{
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
-use crate::types::{AcceptedStorageRequestParameters, ValuePropId};
 use crate::{
     pallet,
     types::{
-        BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
-        FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
-        MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
-        MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
-        ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
+        AcceptedStorageRequestParameters, BatchResponses, BucketIdFor, BucketMoveRequestResponse,
+        BucketNameFor, CollectionConfigFor, CollectionIdFor, EitherAccountIdOrMspId,
+        ExpirationItem, FileKeyHasher, FileKeyResponsesInput, FileLocation, Fingerprint,
+        ForestProof, KeyProof, MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest,
+        MerkleHash, MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests,
+        MspFailedBatchStorageRequests, MspRejectedBatchStorageRequests,
+        MspRespondStorageRequestsResult, MultiAddresses, PeerIds, ProviderIdFor,
+        RejectedStorageRequestReason, ReplicationTargetType, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
@@ -277,32 +277,6 @@ where
             value_prop_id,
         )?;
 
-        if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
-            &msp_id, &sender,
-        ) {
-            let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
-                    &msp_id,
-                    &sender,
-                )
-                .ok_or(Error::<T>::FixedRatePaymentStreamNotFound)?;
-
-            // Add 0-size bucket rate to the current rate.
-            <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                &msp_id,
-                &sender,
-                current_rate
-                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
-                    .ok_or(Error::<T>::FixedRatePaymentStreamNotFound)?,
-            )?;
-        } else {
-            // Create a payment stream between the MSP and the user with a 0-size bucket rate.
-            <T::PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                &msp_id,
-                &sender,
-                T::ZeroSizeBucketFixedRate::get(),
-            )?;
-        }
-
         Ok((bucket_id, maybe_collection_id))
     }
 
@@ -397,18 +371,8 @@ where
 
         let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
 
-        // A bucket should have an MSP still part of the bucket data when the user initiated a move bucket request.
-        // When an MSP
+        // Update the previous MSP's capacity used.
         if let Some(msp_id) = previous_msp_id {
-            let bucket_owner =
-                <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
-
-            // Charge user and delete the payment stream between previous msp and user.
-            <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
-                &msp_id,
-                &bucket_owner,
-            )?;
-
             // Decrease the used capacity of the previous MSP.
             <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
                 &msp_id,
@@ -818,29 +782,6 @@ where
         );
 
         let bucket_owner = <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
-
-        let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
-            &msp_id,
-            &bucket_owner,
-        )
-        .ok_or(Error::<T>::FixedRatePaymentStreamNotFound)?;
-
-        // TODO: Calculate rate based on value proposition
-        let rate_from_bucket = current_rate.saturating_sub(1u32.into());
-
-        // If the new rate is lower than the 0-size bucket rate, then delete the payment stream since we can assume there is no more buckets being stored.
-        if rate_from_bucket < T::ZeroSizeBucketFixedRate::get() {
-            <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
-                &msp_id,
-                &bucket_owner,
-            )?;
-        } else {
-            <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                &msp_id,
-                &bucket_owner,
-                current_rate.saturating_sub(rate_from_bucket.into()),
-            )?;
-        }
 
         // Decrease the used capacity of the MSP.
         let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
