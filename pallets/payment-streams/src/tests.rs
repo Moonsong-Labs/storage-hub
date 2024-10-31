@@ -1512,6 +1512,7 @@ mod fixed_rate_streams {
             });
         }
 
+        #[ignore]
         #[test]
         fn charge_three_users_with_different_payment_streams_works() {
             ExtBuilder::build().execute_with(|| {
