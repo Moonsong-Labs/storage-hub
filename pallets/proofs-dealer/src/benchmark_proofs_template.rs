@@ -12,8 +12,11 @@
 //! 
 //! Only the `multi-files-benchmarking.test.ts` test should run, and it should automatically regenerate this file.
 
+#![rustfmt::skip]
+
 use sp_std::vec;
 
+#[rustfmt::skip]
 fn fetch_proof(number_of_challenges: u32) -> Vec<Vec<u8>> {
     match number_of_challenges {
         {{proofs}}
@@ -24,6 +27,7 @@ fn fetch_proof(number_of_challenges: u32) -> Vec<Vec<u8>> {
     }
 }
 
+#[rustfmt::skip]
 fn fetch_challenges(number_of_challenges: u32) -> Vec<Vec<u8>> {
     match number_of_challenges {
         {{challenges}}
