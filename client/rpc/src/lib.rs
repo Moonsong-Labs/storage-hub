@@ -453,6 +453,7 @@ where
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>> {
         // TODO: Get provider ID itself.
+        // TODO: Generate challenges from seed.
 
         // Generate the Forest proof in a closure to drop the read lock on the Forest Storage.
         let proven_file_keys = {
