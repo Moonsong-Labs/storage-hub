@@ -134,7 +134,14 @@ export class NetworkLauncher {
       {}
     );
     const updatedCompose = yaml.stringify(
-      { services: remappedYamlContents },
+      {
+        services: remappedYamlContents,
+        networks: {
+          default: {
+            name: "docker_default"
+          }
+        }
+      },
       {
         collectionStyle: "flow",
         defaultStringType: "QUOTE_DOUBLE",
