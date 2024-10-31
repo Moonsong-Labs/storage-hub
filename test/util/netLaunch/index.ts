@@ -264,6 +264,11 @@ export class NetworkLauncher {
     return this;
   }
 
+  public async stopNetwork() {
+    const services = Object.keys(this.composeYaml.services);
+    console.log(services);
+  }
+
   private getPort(serviceName: string) {
     invariant(
       this.composeYaml,

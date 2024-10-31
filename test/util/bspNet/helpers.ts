@@ -124,7 +124,15 @@ export const closeSimpleBspNet = async () => {
     container.Names.some((name) => name.includes("toxiproxy"))
   );
 
-  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
+  const promises = existingNodes.map(async (node) => {
+    const container = docker.getContainer(node.Id);
+
+    if (node.State === "running") {
+      await container.stop();
+    }
+
+    await container.remove();
+  });
 
   if (toxiproxyContainer && toxiproxyContainer.State === "running") {
     console.log("Stopping toxiproxy container");
