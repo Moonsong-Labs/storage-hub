@@ -8,11 +8,11 @@ import {
   ShConsts,
   bspThreeKey
 } from "../../../util";
-import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
+import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard", only: true },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -165,7 +165,7 @@ describeBspNet(
       );
     });
 
-    it("BSP stops storing last file", { skip: "" }, async () => {
+    it("BSP stops storing last file", async () => {
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileData.fileKey]
@@ -185,10 +185,10 @@ describeBspNet(
         bspThreeKey
       );
 
-      // userApi.assert.fetchEventData(
-      //   userApi.events.fileSystem.BspRequestedToStopStoring,
-      //   await userApi.query.system.events()
-      // );
+      userApi.assert.fetchEventData(
+        userApi.events.fileSystem.BspRequestedToStopStoring,
+        await userApi.query.system.events()
+      );
     });
 
     it(
@@ -259,7 +259,7 @@ describeBspNet(
 
     it("Only one BSP confirms it", async () => {
       await userApi.wait.bspVolunteer(1);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored(1, NODE_INFOS.bsp.AddressId );
     });
 
     it("BSP correctly responds to challenge with new forest root", async () => {

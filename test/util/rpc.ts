@@ -1,7 +1,7 @@
 import invariant from "tiny-invariant";
 
 export const sendCustomRpc = async (url: string, method: string, params = [], verbose = false) => {
-  const maxRetries = 60;
+  const maxRetries = 120;
   const sleepTime = 500;
 
   const payload = {
