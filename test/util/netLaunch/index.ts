@@ -133,22 +133,35 @@ export class NetworkLauncher {
       (acc, curr) => ({ ...acc, [curr.node]: curr.spec }),
       {}
     );
-    const updatedCompose = yaml.stringify(
-      {
-        services: remappedYamlContents,
+
+    let composeContents = {
+      services: remappedYamlContents
+    };
+
+    if (this.config.noisy) {
+      composeContents = Object.assign(composeContents, {
+        networks: {
+          "storage-hub-network": { driver: "bridge" }
+        }
+      });
+    }
+
+    if (!this.config.noisy) {
+      composeContents = Object.assign(composeContents, {
         networks: {
           default: {
             name: "docker_default"
           }
         }
-      },
-      {
-        collectionStyle: "flow",
-        defaultStringType: "QUOTE_DOUBLE",
-        doubleQuotedAsJSON: true,
-        flowCollectionPadding: true
-      }
-    );
+      });
+    }
+
+    const updatedCompose = yaml.stringify(composeContents, {
+      collectionStyle: "flow",
+      defaultStringType: "QUOTE_DOUBLE",
+      doubleQuotedAsJSON: true,
+      flowCollectionPadding: true
+    });
     fs.mkdirSync(path.join(cwd, "tmp"), { recursive: true });
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
     fs.writeFileSync(tmpFile.name, updatedCompose);
