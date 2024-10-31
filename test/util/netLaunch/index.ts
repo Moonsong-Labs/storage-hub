@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import tmp from "tmp";
 import * as compose from "docker-compose";
 import yaml from "yaml";
 import invariant from "tiny-invariant";
@@ -114,26 +115,54 @@ export class NetworkLauncher {
     return this;
   }
 
-  private async startNetwork() {
+  private remapComposeYaml() {
     invariant(
       this.composeYaml,
       "Compose file has not been selected yet, run selectComposeFile() first"
     );
 
     const cwd = path.resolve(process.cwd(), "..", "docker");
-    const updatedCompose = yaml.stringify(this.composeYaml, {});
+    const entries = Object.entries(this.composeYaml.services).map(([key, value]: any) => {
+      const remappedValue = {
+        ...value,
+        volumes: value.volumes.map((volume: any) => volume.replace("./", `${cwd}/`))
+      };
+      return { node: key, spec: remappedValue };
+    });
+    const remappedYamlContents = entries.reduce(
+      (acc, curr) => ({ ...acc, [curr.node]: curr.spec }),
+      {}
+    );
+    const updatedCompose = yaml.stringify(
+      { services: remappedYamlContents },
+      {
+        collectionStyle: "flow",
+        defaultStringType: "QUOTE_DOUBLE",
+        doubleQuotedAsJSON: true,
+        flowCollectionPadding: true
+      }
+    );
+    fs.mkdirSync(path.join(cwd, "tmp"), { recursive: true });
+    const tmpFile = tmp.fileSync({ postfix: ".yml" });
+    fs.writeFileSync(tmpFile.name, updatedCompose);
+    return tmpFile.name;
+  }
+
+  private async startNetwork() {
+    const cwd = path.resolve(process.cwd(), "..", "docker");
+    const tmpFile = this.remapComposeYaml();
 
     if (this.config.noisy) {
       await compose.upOne("toxiproxy", {
         cwd: cwd,
-        configAsString: updatedCompose,
+        config: tmpFile,
         log: true
       });
     }
 
     await compose.upOne("sh-bsp", {
       cwd: cwd,
-      configAsString: updatedCompose,
+      config: tmpFile,
       log: true
     });
 
@@ -159,7 +188,7 @@ export class NetworkLauncher {
     if (this.type === "fullnet") {
       await compose.upOne("sh-msp", {
         cwd: cwd,
-        configAsString: updatedCompose,
+        config: tmpFile,
         log: true,
         env: {
           ...process.env,
@@ -172,7 +201,7 @@ export class NetworkLauncher {
 
     await compose.upOne("sh-user", {
       cwd: cwd,
-      configAsString: updatedCompose,
+      config: tmpFile,
       log: true,
       env: {
         ...process.env,

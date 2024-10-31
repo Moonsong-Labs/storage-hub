@@ -60,6 +60,7 @@
     "@reporters/github": "1.7.0",
     "@storagehub/api-augment": "workspace:*",
     "@storagehub/types-bundle": "workspace:*",
+    "@types/tmp": "^0.2.6",
     "@zombienet/cli": "1.3.109",
     "@zombienet/utils": "0.0.25",
     "docker-compose": "1.1.0",
@@ -69,6 +70,7 @@
     "json-bigint": "^1.0.0",
     "testcontainers": "10.13.0",
     "tiny-invariant": "^1.3.3",
+    "tmp": "0.2.3",
     "tsx": "4.19.0",
     "yaml": "2.5.1"
   },
