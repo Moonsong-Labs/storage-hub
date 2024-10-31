@@ -205,9 +205,14 @@ pub mod pallet {
         /// The currency mechanism, used for paying for reserves.
         type Currency: Inspect<Self::AccountId>
             + Mutate<Self::AccountId>
+            + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
+            + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
             + hold::Balanced<Self::AccountId>
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
+
+        /// The overarching hold reason
+        type RuntimeHoldReason: From<HoldReason>;
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
@@ -276,6 +281,10 @@ pub mod pallet {
         /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
         type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
+
+        /// Deposit held from the User when creating a new storage request
+        #[pallet::constant]
+        type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
     }
 
     #[pallet::pallet]
@@ -744,7 +753,21 @@ pub mod pallet {
         InvalidBucketIdFileKeyPair,
         /// Key already exists in mapping when it should not.
         InconsistentStateKeyAlreadyExists,
-        FailedFileKey(u8),
+        /// Cannot hold the required deposit from the user
+        CannotHoldDeposit,
+    }
+
+    /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
+    ///
+    /// This allows us to hold tokens and be able to identify in the future that those held tokens were
+    /// held because of this pallet
+    #[pallet::composite_enum]
+    pub enum HoldReason {
+        /// Deposit that a user has to pay to create a new storage request
+        StorageRequestCreationHold,
+        // Only for testing, another unrelated hold reason
+        #[cfg(test)]
+        AnotherUnrelatedHold,
     }
 
     #[pallet::call]

@@ -142,6 +142,8 @@ pub(crate) type ThresholdType = u32;
 
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 1;
+    pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
 pub struct MockProofsDealer;
@@ -239,6 +241,7 @@ impl pallet_file_system::Config for Test {
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBspsPerStorageRequest = ConstU32<5>;
@@ -255,6 +258,7 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
 }
 
 pub struct MockUserSolvency;

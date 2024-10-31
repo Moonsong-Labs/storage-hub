@@ -13,13 +13,21 @@ export const NODE_INFOS = {
     AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
     expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
   },
-  msp: {
+  msp1: {
     containerName: "docker-sh-msp-1",
     port: 9777,
     p2pPort: 30555,
     AddressId: "5E1rPv1M2mheg6pM57QqU7TZ6eCwbVpiYfyYkrugpBdEzDiU",
     nodeKey: "0x12b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314",
     expectedPeerId: "12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
+  },
+  msp2: {
+    containerName: "docker-sh-msp-2",
+    port: 9778,
+    p2pPort: 30556,
+    AddressId: "5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR",
+    nodeKey: "0x02f4357ef99adc6aef1013285e1bdbdca3d295c92508c6ed4d5ad5bca703a101",
+    expectedPeerId: "12D3KooWAFJGBhD5NxgcGatAdzs1Zuh6XWqTzKr6S4BdQbTuZRzo"
   },
   collator: {
     containerName: "docker-sh-collator-1",
@@ -72,6 +80,7 @@ export const TEST_ARTEFACTS = {
 } as const;
 
 export const DUMMY_MSP_ID = "0x0000000000000000000000000000000000000000000000000000000000000300";
+export const DUMMY_MSP_ID_2 = "0x0000000000000000000000000000000000000000000000000000000000000301";
 export const VALUE_PROP = "0x0000000000000000000000000000000000000000000000000000000000000770";
 
 export const DUMMY_BSP_ID = TEST_ARTEFACTS["res/whatsup.jpg"].fingerprint;

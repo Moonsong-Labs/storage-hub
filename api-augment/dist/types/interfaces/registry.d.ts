@@ -69,6 +69,7 @@ import type {
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemFileKeyWithProof,
+  PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
@@ -345,6 +346,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
+    PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
