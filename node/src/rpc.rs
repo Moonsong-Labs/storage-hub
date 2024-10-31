@@ -7,22 +7,24 @@
 
 use std::sync::Arc;
 
+use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use sc_transaction_pool_api::TransactionPool;
+use shc_common::types::{
+    BlockNumber, ForestLeaf, ProviderId, RandomnessOutput, TrieRemoveMutation,
+};
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_rpc::StorageHubClientApiServer;
-use shc_rpc::StorageHubClientRpc;
-use shc_rpc::StorageHubClientRpcConfig;
+use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
+use sp_api::ProvideRuntimeApi;
+use sp_block_builder::BlockBuilder;
+use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 use crate::tasks::FileStorageT;
-use sc_transaction_pool_api::TransactionPool;
-use sp_api::ProvideRuntimeApi;
-use sp_block_builder::BlockBuilder;
-use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
@@ -53,6 +55,14 @@ where
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: BlockBuilder<Block>,
+    C::Api: ProofsDealerRuntimeApi<
+        Block,
+        ProviderId,
+        BlockNumber,
+        ForestLeaf,
+        RandomnessOutput,
+        TrieRemoveMutation,
+    >,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -69,10 +79,10 @@ where
     } = deps;
 
     io.merge(System::new(client.clone(), pool).into_rpc())?;
-    io.merge(TransactionPayment::new(client).into_rpc())?;
+    io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
     if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
-        io.merge(StorageHubClientRpc::new(storage_hub_client_config).into_rpc())?;
+        io.merge(StorageHubClientRpc::new(client, storage_hub_client_config).into_rpc())?;
     }
 
     if let Some(command_sink) = command_sink {

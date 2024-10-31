@@ -100,6 +100,25 @@ export const rpcDefinitions = {
       ],
       type: "Vec<u8>"
     },
+    generateProof: {
+      description:
+        "Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest, alongside their key proofs.",
+      params: [
+        {
+          name: "provider_id",
+          type: "H256"
+        },
+        {
+          name: "seed",
+          type: "H256"
+        },
+        {
+          name: "challenged_file_keys",
+          type: "Vec<H256>"
+        }
+      ],
+      type: "Vec<u8>"
+    },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [

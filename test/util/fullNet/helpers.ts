@@ -4,7 +4,7 @@ import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import * as util from "node:util";
-import { bspKey, mspKey, shUser } from "../pjsKeyring";
+import { bspKey, mspKey, mspTwoKey, shUser } from "../pjsKeyring";
 import { showContainers } from "../bspNet/docker";
 import type { BspNetConfig, Initialised } from "../bspNet/types";
 import * as ShConsts from "../bspNet/consts.ts";
@@ -94,7 +94,8 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
-    console.log(`SH MSP id: ${mspKey.address}`);
+    console.log(`SH MSP-1 id: ${mspKey.address}`);
+    console.log(`SH MSP-2 id: ${mspTwoKey.address}`);
 
     let file = "local-dev-full-compose.yml";
     if (bspNetConfig.rocksdb) {
@@ -109,7 +110,10 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${bspNetConfig.extrinsicRetryTimeout}`
       );
-      composeYaml.services["sh-msp"].command.push(
+      composeYaml.services["sh-msp-1"].command.push(
+        `--extrinsic-retry-timeout=${bspNetConfig.extrinsicRetryTimeout}`
+      );
+      composeYaml.services["sh-msp-2"].command.push(
         `--extrinsic-retry-timeout=${bspNetConfig.extrinsicRetryTimeout}`
       );
       composeYaml.services["sh-user"].command.push(
@@ -125,18 +129,8 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
         configAsString: updatedCompose,
         log: true
       });
-      await compose.upOne("toxiproxy", {
-        cwd: cwd,
-        configAsString: updatedCompose,
-        log: true
-      });
     }
 
-    await compose.upOne("sh-bsp", {
-      cwd: cwd,
-      configAsString: updatedCompose,
-      log: true
-    });
     await compose.upOne("sh-bsp", {
       cwd: cwd,
       configAsString: updatedCompose,
@@ -162,27 +156,50 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
     process.env.BSP_IP = bspIp;
     process.env.BSP_PEER_ID = bspPeerId;
 
-    await compose.upOne("sh-msp", {
+    await compose.upOne("sh-msp-1", {
       cwd: cwd,
       configAsString: updatedCompose,
       log: true,
       env: {
         ...process.env,
-        NODE_KEY: ShConsts.NODE_INFOS.msp.nodeKey,
+        NODE_KEY: ShConsts.NODE_INFOS.msp1.nodeKey,
         BSP_IP: bspIp,
         BSP_PEER_ID: bspPeerId,
         MSP_ID: ShConsts.DUMMY_MSP_ID
       }
     });
 
-    const mspId = await getContainerIp(
-      bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.msp.containerName
+    await compose.upOne("sh-msp-2", {
+      cwd: cwd,
+      configAsString: updatedCompose,
+      log: true,
+      env: {
+        ...process.env,
+        NODE_KEY: ShConsts.NODE_INFOS.msp2.nodeKey,
+        BSP_IP: bspIp,
+        BSP_PEER_ID: bspPeerId,
+        MSP_ID: ShConsts.DUMMY_MSP_ID_2
+      }
+    });
+
+    const mspId1 = await getContainerIp(
+      bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.msp1.containerName
+    );
+    const mspId2 = await getContainerIp(
+      bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.msp2.containerName
     );
 
-    const mspPeerId = await getContainerPeerId(`http://127.0.0.1:${ShConsts.NODE_INFOS.msp.port}`);
-    console.log(`sh-msp Peer ID: ${mspPeerId}`);
+    const mspPeerId1 = await getContainerPeerId(
+      `http://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`
+    );
+    console.log(`sh-msp-1 Peer ID: ${mspPeerId1}`);
+    const mspPeerId2 = await getContainerPeerId(
+      `http://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`
+    );
+    console.log(`sh-msp-2 Peer ID: ${mspPeerId2}`);
 
-    const multiAddressMsp = `/ip4/${mspId}/tcp/30350/p2p/${mspPeerId}`;
+    const multiAddressMsp1 = `/ip4/${mspId1}/tcp/30350/p2p/${mspPeerId1}`;
+    const multiAddressMsp2 = `/ip4/${mspId2}/tcp/30350/p2p/${mspPeerId2}`;
 
     await compose.upOne("sh-user", {
       cwd: cwd,
@@ -214,6 +231,9 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(mspKey.address, amount))
     );
     await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(mspTwoKey.address, amount))
+    );
+    await userApi.sealBlock(
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
@@ -236,13 +256,26 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
           mspKey.address,
           ShConsts.DUMMY_MSP_ID,
           bspNetConfig.capacity || ShConsts.CAPACITY_512,
-          [multiAddressMsp],
-          {
-            identifier: ShConsts.VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
-          },
+          [multiAddressMsp1],
+          1,
+          "Terms of Service...",
+          500,
           mspKey.address
+        )
+      )
+    );
+
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(
+        userApi.tx.providers.forceMspSignUp(
+          mspTwoKey.address,
+          ShConsts.DUMMY_MSP_ID_2,
+          bspNetConfig.capacity || ShConsts.CAPACITY_512,
+          [multiAddressMsp2],
+          1,
+          "Terms of Service...",
+          500,
+          mspTwoKey.address
         )
       )
     );

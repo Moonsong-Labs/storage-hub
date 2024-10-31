@@ -9,6 +9,8 @@ mod mock;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
+pub mod benchmark_proofs;
+#[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
 pub mod types;

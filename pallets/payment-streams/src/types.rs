@@ -65,3 +65,6 @@ pub type UnitsProvidedFor<T> = <T as Config>::Units;
 /// Syntactic sugar for the ProviderId type used in the proofs pallet.
 pub type ProviderIdFor<T> =
     <<T as crate::Config>::ProvidersPallet as ReadProvidersInterface>::ProviderId;
+
+/// Syntactic sugar for the maximum amount of Users a Provider can charge in a batch.
+pub type MaxUsersToChargeFor<T> = <T as Config>::MaxUsersToCharge;
