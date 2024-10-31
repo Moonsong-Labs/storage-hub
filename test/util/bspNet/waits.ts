@@ -143,22 +143,23 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
       break;
     } catch {
 
-      console.log(bspId);
-
       if ( bspId ) {
         try {
           // In cases the bsp is submitting a proof at the same time is trying to confirmStoring
-          const matches = await assertExtrinsicPresent(api, {
+          await assertExtrinsicPresent(api, {
             module: "proofsDealer",
             method: "submitProof",
             checkTxPool: true,
             timeout: 100
           });
 
-          console.log(matches)
+          // if we have found one we go one block forward
+          const { events } = await sealBlock(api);
+          assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 
-        } catch {
           continue;
+        } catch {
+          // Nothing here
         }
       }
 

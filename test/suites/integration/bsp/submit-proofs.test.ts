@@ -359,8 +359,15 @@ describeBspNet(
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
       const nextChallengeTick = lastTickBspTwoSubmittedProof + challengePeriod;
-      // Finally, advance to the next challenge tick.
-      await userApi.advanceToBlock(nextChallengeTick);
+
+      const currentBlock = await userApi.rpc.chain.getBlock();
+      let currentBlockNumber = currentBlock.block.header.number.toNumber();
+
+      if ( nextChallengeTick < currentBlockNumber ) {
+        // Advance to the next challenge tick if needed
+        await userApi.advanceToBlock(nextChallengeTick);
+      }
+
 
       // Wait for tasks to execute and for the BSPs to submit proofs.
       await sleep(500);
