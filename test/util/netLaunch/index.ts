@@ -23,7 +23,9 @@ import {
   bspThreeSeed,
   bspTwoKey,
   bspTwoSeed,
+  mspDownKey,
   mspKey,
+  mspTwoKey,
   shUser
 } from "../pjsKeyring";
 import { MILLIUNIT, UNIT } from "../constants";
@@ -206,17 +208,46 @@ export class NetworkLauncher {
     process.env.BSP_PEER_ID = bspPeerId;
 
     if (this.type === "fullnet") {
-      await compose.upOne("sh-msp", {
-        cwd: cwd,
-        config: tmpFile,
-        log: true,
-        env: {
-          ...process.env,
-          NODE_KEY: ShConsts.NODE_INFOS.msp1.nodeKey,
-          BSP_IP: bspIp,
-          BSP_PEER_ID: bspPeerId
-        }
-      });
+      const mspServices = Object.keys(this.composeYaml.services).filter((service) =>
+        service.includes("sh-msp")
+      );
+
+      for (const mspService of mspServices) {
+        const nodeKey =
+          mspService === "sh-msp-1"
+            ? ShConsts.NODE_INFOS.msp1.nodeKey
+            : mspService === "sh-msp-2"
+              ? ShConsts.NODE_INFOS.msp2.nodeKey
+              : undefined;
+        invariant(
+          nodeKey,
+          `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
+        );
+
+        const mspId =
+          mspService === "sh-msp-1"
+            ? ShConsts.DUMMY_MSP_ID
+            : mspService === "sh-msp-2"
+              ? ShConsts.DUMMY_MSP_ID_2
+              : undefined;
+        invariant(
+          mspId,
+          `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
+        );
+
+        await compose.upOne(mspService, {
+          cwd: cwd,
+          config: tmpFile,
+          log: true,
+          env: {
+            ...process.env,
+            NODE_KEY: nodeKey,
+            BSP_IP: bspIp,
+            BSP_PEER_ID: bspPeerId,
+            MSP_ID: mspId
+          }
+        });
+      }
     }
 
     await compose.upOne("sh-user", {
@@ -282,7 +313,13 @@ export class NetworkLauncher {
       api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, 1)).signAsync(alice, { nonce: 2 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(mspKey.address, amount))
-        .signAsync(alice, { nonce: 3 })
+        .signAsync(alice, { nonce: 3 }),
+      api.tx.sudo
+        .sudo(api.tx.balances.forceSetBalance(mspTwoKey.address, amount))
+        .signAsync(alice, { nonce: 4 }),
+      api.tx.sudo
+        .sudo(api.tx.balances.forceSetBalance(mspDownKey.address, amount))
+        .signAsync(alice, { nonce: 5 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
@@ -290,12 +327,12 @@ export class NetworkLauncher {
     return api.sealBlock(sudoTxns);
   }
 
-  public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string) {
+  public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
     await api.sealBlock(
       api.tx.sudo.sudo(
         api.tx.providers.forceMspSignUp(
           who,
-          ShConsts.DUMMY_MSP_ID,
+          mspId ?? ShConsts.DUMMY_MSP_ID,
           this.config.capacity || ShConsts.CAPACITY_512,
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           [multiAddressMsp],
@@ -452,12 +489,41 @@ export class NetworkLauncher {
     await launchedNetwork.setupRuntimeParams(userApi);
 
     if (launchedNetwork.type === "fullnet") {
-      const mspContainerName = launchedNetwork.composeYaml.services["sh-msp"].container_name;
-      invariant(mspContainerName, "MSP container name not found in compose file");
-      const mspId = await getContainerIp(mspContainerName);
-      const mspPeerId = await launchedNetwork.getPeerId("sh-msp");
-      const multiAddressMsp = `/ip4/${mspId}/tcp/30350/p2p/${mspPeerId}`;
-      await launchedNetwork.setupMsp(userApi, mspKey.address, multiAddressMsp);
+      const mspServices = Object.keys(launchedNetwork.composeYaml.services).filter((service) =>
+        service.includes("sh-msp")
+      );
+      for (const service of mspServices) {
+        const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
+        invariant(mspContainerName, "MSP container name not found in compose file");
+        const mspIp = await getContainerIp(mspContainerName);
+        const mspPeerId = await launchedNetwork.getPeerId(service);
+        const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
+
+        // TODO: As we add more MSPs make this more dynamic
+        const mspAddress =
+          service === "sh-msp-1"
+            ? mspKey.address
+            : service === "sh-msp-2"
+              ? mspTwoKey.address
+              : undefined;
+        invariant(
+          mspAddress,
+          `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
+        );
+
+        const mspId =
+          service === "sh-msp-1"
+            ? ShConsts.DUMMY_MSP_ID
+            : service === "sh-msp-2"
+              ? ShConsts.DUMMY_MSP_ID_2
+              : undefined;
+        invariant(
+          mspId,
+          `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
+        );
+        console.log(`Adding msp ${service} with address ${multiAddressMsp} and id ${mspId}`);
+        await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
+      }
     }
 
     if (launchedNetwork.type === "bspnet") {
