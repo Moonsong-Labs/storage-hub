@@ -37,7 +37,7 @@ mod benchmarks {
 
     use super::*;
     use crate::{
-        benchmark_proofs::{fetch_challenges, fetch_proof, get_root, get_seed},
+        benchmark_proofs::{fetch_challenges, fetch_proof, get_provider_id, get_root, get_seed},
         pallet,
         types::{
             ChallengeTicksToleranceFor, KeyFor, MaxCustomChallengesPerBlockFor,
@@ -97,7 +97,10 @@ mod benchmarks {
         ));
 
         // Register caller as a Provider in Providers pallet.
-        let provider_id = <T as frame_system::Config>::Hashing::hash(b"provider_id");
+        let encoded_provider_id = get_provider_id();
+        let provider_id =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_provider_id.as_ref())
+                .expect("Failed to decode provider ID from bytes.");
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::insert(
             &caller,
             provider_id,

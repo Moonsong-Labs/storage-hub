@@ -20,6 +20,11 @@ pub fn get_seed() -> Vec<u8> {
 }
 
 #[rustfmt::skip]
+pub fn get_provider_id() -> Vec<u8> {
+    {{provider_id}}
+}
+
+#[rustfmt::skip]
 pub fn get_root() -> Vec<u8> {
     {{root}}
 }

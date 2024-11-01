@@ -135,8 +135,10 @@ describeBspNet(
       proofsCases.push(proofHexStr);
     });
 
-    it("Write rust file with seed, root, challenges and proofs", async () => {
+    it("Write rust file with seed, provider ID, root, challenges and proofs", async () => {
       const seedStr = `hex::decode("${seed.slice(2)}").expect("Seed should be a decodable hex string")`;
+
+      const providerIdStr = `hex::decode("${DUMMY_BSP_ID.slice(2)}").expect("Provider ID should be a decodable hex string")`;
 
       const rootStr = `hex::decode("${root}").expect("Root should be a decodable hex string")`;
 
@@ -162,6 +164,7 @@ describeBspNet(
       const rustCode = template
         .replace("{{date}}", new Date().toISOString())
         .replace("{{seed}}", seedStr)
+        .replace("{{provider_id}}", providerIdStr)
         .replace("{{root}}", rootStr)
         .replace("{{proofs}}", proofsStr)
         .replace("{{challenges}}", challengesStr);
