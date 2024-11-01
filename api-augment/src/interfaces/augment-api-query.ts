@@ -1635,6 +1635,15 @@ declare module "@polkadot/api-base/types/storage" {
       inherentIncluded: AugmentedQuery<ApiType, () => Observable<Option<Null>>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * The relay chain block (and anchored parachain block) to use when epoch changes
+       **/
+      lastRelayBlockAndParaBlockValidForNextEpoch: AugmentedQuery<
+        ApiType,
+        () => Observable<ITuple<[u32, u32]>>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * Latest random seed obtained from the one epoch ago randomness from BABE, and the latest block that it can process randomness requests from
        **/
       latestOneEpochAgoRandomness: AugmentedQuery<
