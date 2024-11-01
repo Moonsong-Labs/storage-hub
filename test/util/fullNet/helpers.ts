@@ -259,7 +259,7 @@ export const runSimpleFullNet = async (bspNetConfig: BspNetConfig) => {
           [multiAddressMsp1],
           1,
           "Terms of Service...",
-          500,
+          9999999,
           mspKey.address
         )
       )
