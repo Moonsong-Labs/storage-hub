@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+hex = { workspace = true, optional = true }
 scale-info = { workspace = true }
 
 # Local
@@ -63,16 +64,17 @@ pallet-balances = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"pallet-balances/runtime-benchmarks",
-	"pallet-storage-providers/runtime-benchmarks",
-	"shp-file-key-verifier/runtime-benchmarks",
-	"shp-file-metadata/runtime-benchmarks",
-	"shp-forest-verifier/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
-	"sp-trie",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "hex",
+    "pallet-balances/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "shp-file-key-verifier/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
+    "shp-forest-verifier/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+    "sp-trie",
 ]
 std = [
 	"codec/std",

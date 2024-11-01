@@ -11,11 +11,7 @@ use frame_support::{
     BoundedBTreeSet,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-#[cfg(feature = "runtime-benchmarks")]
-use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{FileMetadata, Fingerprint};
-#[cfg(feature = "runtime-benchmarks")]
-use shp_forest_verifier::ForestVerifier;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
 };
