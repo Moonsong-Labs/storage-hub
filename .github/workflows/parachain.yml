@@ -345,7 +345,6 @@ jobs:
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/4   \
-              --test-force-exit                    \
               ./suites/integration/**/**.test.ts
 
   typegen_check:
