@@ -12,6 +12,7 @@ import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
 import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
+import { sleep } from "../timer.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -113,10 +114,15 @@ export const forceSignupBsp = async (options: {
   return Object.assign(bspId, blockResults);
 };
 
+export const checkSHRunningContainers = async (docker: Docker) => {
+  const allContainers = await docker.listContainers({ all: true });
+  return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
+};
+
 export const closeSimpleBspNet = async () => {
   const docker = new Docker();
 
-  const allContainers = await docker.listContainers({ all: true });
+  let allContainers = await docker.listContainers({ all: true });
 
   const existingNodes = allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 
@@ -126,12 +132,7 @@ export const closeSimpleBspNet = async () => {
 
   const promises = existingNodes.map(async (node) => {
     const container = docker.getContainer(node.Id);
-
-    if (node.State === "running") {
-      await container.stop();
-    }
-
-    await container.remove();
+    await container.remove({ force: true });
   });
 
   if (toxiproxyContainer && toxiproxyContainer.State === "running") {
@@ -141,10 +142,22 @@ export const closeSimpleBspNet = async () => {
     console.log("No running toxiproxy container found, skipping");
   }
 
-  await Promise.allSettled(promises);
+  await Promise.all(promises);
 
   await docker.pruneContainers();
   await docker.pruneVolumes();
+
+  for (let i = 0; i < 10; i++) {
+    allContainers = await docker.listContainers({ all: true });
+    const remainingNodes = allContainers.filter((container) => container.Image === DOCKER_IMAGE);
+    if (remainingNodes.length === 0) {
+      return;
+    }
+
+    console.log("Waiting 1s for nodes to stop");
+    await sleep(1000);
+  }
+  invariant(false, `Failed to stop all nodes: ${JSON.stringify(allContainers)}`);
 };
 
 export const cleardownTest = async (cleardownOptions: {
