@@ -211,6 +211,8 @@ shp-file-metadata = { path = "primitives/file-metadata", default-features = fals
 shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-traits = { path = "primitives/traits", default-features = false }
+shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
+
 
 # Lcoal - StorageHub Runtime
 storage-hub-runtime = { path = "runtime", default-features = false }

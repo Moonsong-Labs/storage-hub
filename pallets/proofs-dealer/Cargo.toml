@@ -42,6 +42,7 @@ pallet-balances = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde = { workspace = true }
+shp-treasury-funding = { workspace = true }
 
 # Local
 pallet-storage-providers = { workspace = true }
@@ -83,6 +84,8 @@ std = [
 	"pallet-proofs-dealer-runtime-api/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
+	"shp-traits/std",
+	"shp-treasury-funding/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
@@ -93,5 +96,8 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"pallet-balances/try-runtime",
+	"pallet-payment-streams/try-runtime",
+	"shp-traits/try-runtime",
+	"shp-treasury-funding/try-runtime",
 	"sp-runtime/try-runtime",
 ]

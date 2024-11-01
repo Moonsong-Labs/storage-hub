@@ -199,6 +199,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketNotFound: AugmentedError<ApiType>;
       /**
+       * Cannot hold the required deposit from the user
+       **/
+      CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
