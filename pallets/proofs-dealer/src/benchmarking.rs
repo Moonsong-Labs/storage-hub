@@ -37,10 +37,10 @@ mod benchmarks {
 
     use super::*;
     use crate::{
-        benchmark_proofs::{fetch_challenges, fetch_proof, get_root},
+        benchmark_proofs::{fetch_challenges, fetch_proof, get_root, get_seed},
         pallet,
         types::{
-            ChallengeTicksToleranceFor, KeyFor, KeyProof, MaxCustomChallengesPerBlockFor,
+            ChallengeTicksToleranceFor, KeyFor, MaxCustomChallengesPerBlockFor,
             MerkleTrieHashingFor, Proof, ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, Config, Event, LastCheckpointTick,
@@ -171,7 +171,9 @@ mod benchmarks {
         ChallengesTicker::<T>::set(frame_system::Pallet::<T>::block_number());
 
         // Set the seed for the challenge block.
-        let seed = <T as frame_system::Config>::Hashing::hash(b"seed");
+        let encoded_seed = get_seed();
+        let seed = <T as frame_system::Config>::Hash::decode(&mut encoded_seed.as_ref())
+            .expect("Seed should be decodable as it is a hash");
         TickToChallengesSeed::<T>::insert(challenge_block, seed);
 
         // Calculate the custom challenges to respond to, so that we can generate a proof for each.

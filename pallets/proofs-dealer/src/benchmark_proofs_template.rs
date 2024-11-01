@@ -12,7 +12,12 @@
 //!
 //! Only the `multi-files-benchmarking.test.ts` test should run, and it should automatically regenerate this file.
 
-use sp_std::vec;
+use sp_std::{vec, vec::Vec};
+
+#[rustfmt::skip]
+pub fn get_seed() -> Vec<u8> {
+    {{seed}}
+}
 
 #[rustfmt::skip]
 pub fn get_root() -> Vec<u8> {
