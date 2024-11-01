@@ -1,25 +1,26 @@
+use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, sync::Arc};
+
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
 };
-use shc_common::types::{
-    ChunkId, FileMetadata, HashT, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
-};
-use shc_forest_manager::traits::ForestStorage;
-use shc_forest_manager::traits::ForestStorageHandler;
-use sp_core::Encode;
-use sp_core::{sr25519::Pair as Sr25519Pair, Pair, H256};
-use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{AccountId32, Deserialize, KeyTypeId, Serialize};
-
-use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
-
 use log::{debug, error};
-use tokio::fs;
+use sp_api::ProvideRuntimeApi;
+use sp_blockchain::HeaderBackend;
+use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
-use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, sync::Arc};
-use tokio::{fs::create_dir_all, sync::RwLock};
+use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
+use shc_common::types::{
+    BlockNumber, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof, KeyProofs, Proven, ProviderId,
+    RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, TrieRemoveMutation,
+    BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+};
+use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
+use sp_keystore::{Keystore, KeystorePtr};
+use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, Serialize};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -133,6 +134,17 @@ pub trait StorageHubClientApi {
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>>;
 
+    // Note: this RPC method returns a Vec<u8> because the `StorageProof` struct is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    // Note: This RPC method is only meant for nodes running a BSP.
+    #[method(name = "generateProof")]
+    async fn generate_proof(
+        &self,
+        provider_id: H256,
+        seed: H256,
+        challenged_file_keys: Vec<H256>,
+    ) -> RpcResult<Vec<u8>>;
+
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
 
@@ -141,22 +153,29 @@ pub trait StorageHubClientApi {
 }
 
 /// Stores the required objects to be used in our RPC method.
-pub struct StorageHubClientRpc<FL, FSH> {
+pub struct StorageHubClientRpc<FL, FSH, C, Block> {
+    client: Arc<C>,
     file_storage: Arc<RwLock<FL>>,
     forest_storage_handler: FSH,
     keystore: KeystorePtr,
+    _block_marker: std::marker::PhantomData<Block>,
 }
 
-impl<FL, FSH> StorageHubClientRpc<FL, FSH>
+impl<FL, FSH, C, Block> StorageHubClientRpc<FL, FSH, C, Block>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync,
 {
-    pub fn new(storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH>) -> Self {
+    pub fn new(
+        client: Arc<C>,
+        storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH>,
+    ) -> Self {
         Self {
+            client,
             file_storage: storage_hub_client_rpc_config.file_storage,
             forest_storage_handler: storage_hub_client_rpc_config.forest_storage_handler,
             keystore: storage_hub_client_rpc_config.keystore,
+            _block_marker: Default::default(),
         }
     }
 }
@@ -166,8 +185,18 @@ where
 // file uploads, even if the file is not in its storage. So we need a way to inform the task
 // to only react to its file.
 #[async_trait]
-impl<FL, FSH> StorageHubClientApiServer for StorageHubClientRpc<FL, FSH>
+impl<FL, FSH, C, Block> StorageHubClientApiServer for StorageHubClientRpc<FL, FSH, C, Block>
 where
+    Block: BlockT,
+    C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
+    C::Api: ProofsDealerRuntimeApi<
+        Block,
+        ProviderId,
+        BlockNumber,
+        ForestLeaf,
+        RandomnessOutput,
+        TrieRemoveMutation,
+    >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
 {
@@ -415,6 +444,86 @@ where
         Ok(forest_proof.encode())
     }
 
+    async fn generate_proof(
+        &self,
+        provider_id: H256,
+        seed: H256,
+        challenged_file_keys: Vec<H256>,
+    ) -> RpcResult<Vec<u8>> {
+        // TODO: Get provider ID itself.
+        // TODO: Generate challenges from seed.
+
+        // Generate the Forest proof in a closure to drop the read lock on the Forest Storage.
+        let proven_file_keys = {
+            // The Forest Key is an empty vector since this is a BSP, therefore it doesn't
+            // have multiple Forest keys.
+            let fs = self
+                .forest_storage_handler
+                .get(&Vec::new().into())
+                .await
+                .ok_or_else(|| {
+                    into_rpc_error(format!(
+                        "Forest storage not found for empty key. Make sure you're running a BSP."
+                    ))
+                })?;
+
+            let p = fs
+                .read()
+                .await
+                .generate_proof(challenged_file_keys.clone())
+                .map_err(into_rpc_error)?;
+
+            p
+        };
+
+        // Get the keys that were proven.
+        let mut proven_keys = Vec::new();
+        for key in proven_file_keys.proven {
+            match key {
+                Proven::ExactKey(leaf) => proven_keys.push(leaf.key),
+                Proven::NeighbourKeys((left, right)) => match (left, right) {
+                    (Some(left), Some(right)) => {
+                        proven_keys.push(left.key);
+                        proven_keys.push(right.key);
+                    }
+                    (Some(left), None) => proven_keys.push(left.key),
+                    (None, Some(right)) => proven_keys.push(right.key),
+                    (None, None) => {
+                        return Err(into_rpc_error("Both left and right leaves in forest proof are None. This should not be possible."));
+                    }
+                },
+                Proven::Empty => {
+                    return Err(into_rpc_error("Forest proof generated with empty forest. This should not be possible, as this provider shouldn't have been challenged with an empty forest."));
+                }
+            }
+        }
+
+        // Construct key challenges and generate key proofs for them.
+        let mut key_proofs = KeyProofs::new();
+        for file_key in &proven_keys {
+            // Generate the key proof for each file key.
+            let key_proof = generate_key_proof(
+                self.client.clone(),
+                self.file_storage.clone(),
+                *file_key,
+                seed,
+                provider_id,
+                None,
+            )
+            .await?;
+
+            key_proofs.insert(*file_key, key_proof);
+        }
+
+        // Construct full proof.
+        let proof = StorageProof {
+            forest_proof: proven_file_keys.proof,
+            key_proofs,
+        };
+
+        Ok(proof.encode())
+    }
+
     // If a seed is provided, we manually generate and persist it into the file system.
     // In the case a seed is not provided, we delegate generation and insertion to `sr25519_generate_new`, which
     // internally uses the block number as a seed.
@@ -478,4 +587,73 @@ fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
         INTERNAL_ERROR_MSG,
         Some(format!("{:?}", e)),
     )
+}
+
+async fn generate_key_proof<FL, C, Block>(
+    client: Arc<C>,
+    file_storage: Arc<RwLock<FL>>,
+    file_key: H256,
+    seed: RandomnessOutput,
+    provider_id: ProviderId,
+    at: Option<Block::Hash>,
+) -> RpcResult<KeyProof>
+where
+    Block: BlockT,
+    C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
+    C::Api: ProofsDealerRuntimeApi<
+        Block,
+        ProviderId,
+        BlockNumber,
+        ForestLeaf,
+        RandomnessOutput,
+        TrieRemoveMutation,
+    >,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+{
+    // Getting Runtime APIs
+    let api = client.runtime_api();
+    let at_hash = at.unwrap_or_else(|| client.info().best_hash);
+
+    // Get the metadata for the file.
+    let read_file_storage = file_storage.read().await;
+    let metadata = read_file_storage
+        .get_metadata(&file_key)
+        .map_err(|e| into_rpc_error(format!("Error retrieving file metadata: {:?}", e)))?
+        .ok_or_else(|| into_rpc_error(format!("File metadata not found for key {:?}", file_key)))?;
+    // Release the file storage read lock as soon as possible.
+    drop(read_file_storage);
+
+    // Calculate the number of challenges for this file.
+    let challenge_count = metadata.chunks_to_check();
+
+    // Generate the challenges for this file.
+    let file_key_challenges = api
+        .get_challenges_from_seed(at_hash, &seed, &provider_id, challenge_count)
+        .map_err(|e| into_rpc_error(format!("Failed to generate challenges from seed: {:?}", e)))?;
+
+    // Convert the challenges to chunk IDs.
+    let chunks_count = metadata.chunks_count();
+    let chunks_to_prove = file_key_challenges
+        .iter()
+        .map(|challenge| ChunkId::from_challenge(challenge.as_ref(), chunks_count))
+        .collect::<Vec<_>>();
+
+    // Construct file key proofs for the challenges.
+    let read_file_storage = file_storage.read().await;
+    let file_key_proof = read_file_storage
+        .generate_proof(&file_key, &chunks_to_prove)
+        .map_err(|e| {
+            into_rpc_error(format!(
+                "File is not in storage, or proof does not exist: {:?}",
+                e
+            ))
+        })?;
+    // Release the file storage read lock as soon as possible.
+    drop(read_file_storage);
+
+    // Return the key proof.
+    Ok(KeyProof {
+        proof: file_key_proof,
+        challenge_count,
+    })
 }

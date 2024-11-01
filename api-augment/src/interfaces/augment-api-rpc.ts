@@ -1036,6 +1036,16 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<Bytes>
       >;
       /**
+       * Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest, alongside their key proofs.
+       **/
+      generateProof: AugmentedRpc<
+        (
+          provider_id: H256 | string | Uint8Array,
+          seed: H256 | string | Uint8Array,
+          challenged_file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
+        ) => Observable<Bytes>
+      >;
+      /**
        * Get the metadata of a file from the Forest storage.
        **/
       getFileMetadata: AugmentedRpc<
