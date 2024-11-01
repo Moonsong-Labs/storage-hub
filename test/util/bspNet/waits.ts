@@ -342,8 +342,4 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
   if (!mspRespondDataBlob) {
     throw new Error("Event doesn't match Type");
   }
-
-  const responses = mspRespondDataBlob.results.responses;
-
-  return responses;
 };
