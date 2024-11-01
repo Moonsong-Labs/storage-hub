@@ -70,13 +70,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBatchMspRespondStorageRequests: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum number of SPs (MSP + BSPs) that can store a file.
-       *
-       * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
-       **/
-      maxBspsPerStorageRequest: u32 & AugmentedConst<ApiType>;
-      /**
        * Maximum number of multiaddresses for a storage request.
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
