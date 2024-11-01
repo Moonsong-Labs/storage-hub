@@ -22,7 +22,7 @@ use frame_benchmarking::v2::*;
         T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
 )]
 mod benchmarks {
-    use codec::{Decode, Encode};
+    use codec::Decode;
     use frame_support::{
         assert_ok,
         traits::{
@@ -33,11 +33,11 @@ mod benchmarks {
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
     use sp_runtime::{traits::Hash, BoundedVec};
-    use sp_std::{collections::btree_map::BTreeMap, vec, vec::Vec};
-    use sp_trie::CompactProof;
+    use sp_std::vec::Vec;
 
     use super::*;
     use crate::{
+        benchmark_proofs::{fetch_challenges, fetch_proof, get_root},
         pallet,
         types::{
             ChallengeTicksToleranceFor, KeyFor, KeyProof, MaxCustomChallengesPerBlockFor,
@@ -83,6 +83,8 @@ mod benchmarks {
 
     #[benchmark]
     fn submit_proof() -> Result<(), BenchmarkError> {
+        let n = 4;
+
         // Setup initial conditions.
         let caller: T::AccountId = whitelisted_caller();
         let provider_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -123,11 +125,10 @@ mod benchmarks {
             provider_balance / 100u32.into(),
         ));
 
-        // TODO: Build Provider's Forest.
-
-        // Set Provider's root to be an arbitrary value, different than the default root,
-        // to simulate that it is actually providing a service.
-        let root = <T as frame_system::Config>::Hashing::hash(b"1234");
+        // Set Provider's root to be the one that matches the proofs that will be submitted.
+        let encoded_root = get_root();
+        let root = <T as frame_system::Config>::Hash::decode(&mut encoded_root.as_ref())
+            .expect("Root should be decodable as it is a hash");
         pallet_storage_providers::BackupStorageProviders::<T>::mutate(&provider_id, |provider| {
             provider.as_mut().expect("Provider should exist").root = root;
         });
@@ -174,12 +175,7 @@ mod benchmarks {
         TickToChallengesSeed::<T>::insert(challenge_block, seed);
 
         // Calculate the custom challenges to respond to, so that we can generate a proof for each.
-        let custom_challenges =
-            generate_challenges::<T>(MaxCustomChallengesPerBlockFor::<T>::get());
-        let challenged_keys = custom_challenges
-            .iter()
-            .map(|(key, _)| *key)
-            .collect::<Vec<_>>();
+        let custom_challenges = generate_challenges::<T>(n.clone());
 
         // Set the custom challenges in the last checkpoint challenge tick,
         // which in this case is going to be 1.
@@ -187,28 +183,10 @@ mod benchmarks {
         LastCheckpointTick::<T>::set(last_checkpoint_tick);
         TickToCheckpointChallenges::<T>::insert(last_checkpoint_tick, custom_challenges.clone());
 
-        // TODO: Creating a vec of proofs with some content to pass verification.
-        let mut key_proofs = BTreeMap::new();
-        for i in 0..challenged_keys.len() {
-            key_proofs.insert(
-                challenged_keys[i],
-                KeyProof::<T> {
-                    proof: CompactProof {
-                        encoded_nodes: vec![vec![0]],
-                    }
-                    .into(),
-                    challenge_count: Default::default(),
-                },
-            );
-        }
-
-        // TODO: Generate proof.
-        let proof = Proof::<T> {
-            forest_proof: CompactProof {
-                encoded_nodes: vec![vec![0]],
-            },
-            key_proofs,
-        };
+        // Fetch proof for the challenged keys.
+        let encoded_proof = fetch_proof(n);
+        let proof =
+            <Proof<T>>::decode(&mut encoded_proof.as_ref()).expect("Proof should be decodable");
 
         // Call some extrinsic.
         #[extrinsic_call]
@@ -227,13 +205,12 @@ mod benchmarks {
         n: u32,
     ) -> BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>
     {
+        let encoded_challenges = fetch_challenges(n);
         let mut custom_challenges = Vec::new();
-        for _ in 0..n {
-            let encoded_challenge =
-                b"0x12b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314".encode();
+        for encoded_challenge in encoded_challenges {
             let typed_challenge =
                 <T as crate::Config>::MerkleTrieHash::decode(&mut encoded_challenge.as_ref())
-                    .unwrap();
+                    .expect("Challenge key should be decodable as it is a hash");
 
             let custom_challenge = (typed_challenge, None);
             custom_challenges.push(custom_challenge);
