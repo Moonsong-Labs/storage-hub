@@ -3362,9 +3362,6 @@ declare const _default: {
       revoke_storage_request: {
         fileKey: string;
       };
-      bsp_add_data_server_for_move_bucket_request: {
-        bucketId: string;
-      };
       msp_respond_storage_requests_multiple_buckets: {
         fileKeyResponsesInput: string;
       };

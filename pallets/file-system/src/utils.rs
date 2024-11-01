@@ -47,10 +47,9 @@ use crate::{
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, HoldReason, Pallet,
-    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
-    TickRangeToMaximumThreshold,
+    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
+    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    ReplicationTarget, StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -404,37 +403,6 @@ where
         Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
 
         Ok(msp_id)
-    }
-
-    pub(crate) fn do_bsp_add_data_server_for_move_bucket_request(
-        sender: T::AccountId,
-        bucket_id: BucketIdFor<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
-            .ok_or(Error::<T>::NotABsp)?;
-
-        // Check if the sender is a Storage Provider.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
-            Error::<T>::NotABsp
-        );
-
-        // Check if the move bucket request exists.
-        ensure!(
-            <PendingBucketsToMove<T>>::contains_key(&bucket_id),
-            Error::<T>::MoveBucketRequestNotFound,
-        );
-
-        // Check if the BSP is already a data server for the move bucket request.
-        ensure!(
-            !DataServersForMoveBucket::<T>::contains_key(&bucket_id, &bsp_id),
-            Error::<T>::BspAlreadyDataServer
-        );
-
-        // Add the data server to the move bucket request.
-        DataServersForMoveBucket::<T>::insert(&bucket_id, &bsp_id, ());
-
-        Ok(bsp_id)
     }
 
     /// Update the privacy of a bucket.
@@ -2224,9 +2192,9 @@ mod hooks {
         pallet,
         types::MerkleHash,
         utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
-        DataServersForMoveBucket, Event, FileDeletionRequestExpirations,
-        NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests,
-        ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        Event, FileDeletionRequestExpirations, NextStartingBlockToCleanUp, Pallet,
+        PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -2433,7 +2401,6 @@ mod hooks {
 
             PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
             PendingBucketsToMove::<T>::remove(&bucket_id);
-            DataServersForMoveBucket::<T>::drain_prefix(&bucket_id);
 
             remaining_weight.saturating_reduce(potential_weight);
 

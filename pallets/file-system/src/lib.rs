@@ -417,17 +417,6 @@ pub mod pallet {
         MoveBucketRequestMetadata<T>,
     >;
 
-    /// BSP data servers for move bucket requests.
-    #[pallet::storage]
-    pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        BucketIdFor<T>,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        (),
-    >;
-
     /// Bookkeeping of buckets that are pending to be moved to a new MSP.
     #[pallet::storage]
     pub type PendingBucketsToMove<T: Config> =
@@ -943,23 +932,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Add yourself as a data server for providing the files of the bucket requested to be moved.
-        #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn bsp_add_data_server_for_move_bucket_request(
-            origin: OriginFor<T>,
-            bucket_id: BucketIdFor<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let bsp_id =
-                Self::do_bsp_add_data_server_for_move_bucket_request(who.clone(), bucket_id)?;
-
-            Self::deposit_event(Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id });
-
-            Ok(())
-        }
-
         /// Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
         ///
         /// This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
@@ -969,7 +941,7 @@ pub mod pallet {
         /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
         /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
-        #[pallet::call_index(8)]
+        #[pallet::call_index(7)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -986,7 +958,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(9)]
+        #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_stop_storing_bucket(
             origin: OriginFor<T>,
@@ -1011,7 +983,7 @@ pub mod pallet {
         /// so a BSP is strongly advised to check beforehand. Another reason for failure is
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
-        #[pallet::call_index(10)]
+        #[pallet::call_index(9)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
@@ -1036,7 +1008,7 @@ pub mod pallet {
         }
 
         /// Used by a BSP to confirm they are storing data of a storage request.
-        #[pallet::call_index(11)]
+        #[pallet::call_index(10)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
@@ -1065,7 +1037,7 @@ pub mod pallet {
         /// the BSP gets that data is up to it. One example could be from the assigned MSP.
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
-        #[pallet::call_index(12)]
+        #[pallet::call_index(11)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_request_stop_storing(
             origin: OriginFor<T>,
@@ -1109,7 +1081,7 @@ pub mod pallet {
         /// It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
         /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
         /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
-        #[pallet::call_index(13)]
+        #[pallet::call_index(12)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_stop_storing(
             origin: OriginFor<T>,
@@ -1138,7 +1110,7 @@ pub mod pallet {
         /// it won't be getting paid for it anymore.
         /// The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
         /// wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
-        #[pallet::call_index(14)]
+        #[pallet::call_index(13)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn stop_storing_for_insolvent_user(
             origin: OriginFor<T>,
@@ -1176,7 +1148,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(15)]
+        #[pallet::call_index(14)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
@@ -1210,7 +1182,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(16)]
+        #[pallet::call_index(15)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
@@ -1240,7 +1212,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(17)]
+        #[pallet::call_index(16)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn set_global_parameters(
             origin: OriginFor<T>,
