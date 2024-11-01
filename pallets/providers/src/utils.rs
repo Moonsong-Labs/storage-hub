@@ -1003,7 +1003,7 @@ where
     /// Adjust the fixed rate payment stream between a user and an MSP based on the [`RateDeltaParam`].
     ///
     /// Handles creating, updating, or deleting the fixed rate payment stream storage.
-    fn compute_new_rate_delta(
+    fn apply_delta_fixed_rate_payment_stream(
         msp_id: &MainStorageProviderId<T>,
         bucket_id: &BucketId<T>,
         user_id: &T::AccountId,
@@ -1335,7 +1335,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::insert(&bucket_id, &bucket);
         MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
-        Self::compute_new_rate_delta(
+        Self::apply_delta_fixed_rate_payment_stream(
             &provider_id,
             &bucket_id,
             &user_id,
@@ -1354,33 +1354,33 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                     return Err(Error::<T>::MspAlreadyAssignedToBucket.into());
                 }
 
-                Self::compute_new_rate_delta(
+                Self::apply_delta_fixed_rate_payment_stream(
                     &msp_id,
                     bucket_id,
                     &bucket.user_id,
                     RateDeltaParam::RemoveBucket,
                 )?;
+
+                MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
             }
 
             bucket.msp_id = Some(*new_msp);
 
+            Self::apply_delta_fixed_rate_payment_stream(
+                new_msp,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::NewBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp, bucket_id, ());
+
             Ok::<_, DispatchError>(())
-        })?;
-
-        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-
-        Self::compute_new_rate_delta(
-            new_msp,
-            bucket_id,
-            &bucket.user_id,
-            RateDeltaParam::NewBucket,
-        )?;
-
-        Ok(())
+        })
     }
 
     fn remove_msp_bucket(bucket_id: &Self::BucketId) -> DispatchResult {
-        let (msp_id, user_id) = Buckets::<T>::try_mutate(bucket_id, |bucket| {
+        Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
             // MSP should exist within the context of this execution.
@@ -1390,14 +1390,17 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
             bucket.msp_id = None;
 
-            Ok::<_, DispatchError>((msp_id, bucket.user_id.clone()))
-        })?;
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::RemoveBucket,
+            )?;
 
-        MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
 
-        Self::compute_new_rate_delta(&msp_id, bucket_id, &user_id, RateDeltaParam::RemoveBucket)?;
-
-        Ok(())
+            Ok::<_, DispatchError>(())
+        })
     }
 
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
@@ -1417,7 +1420,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             None => return Err(Error::<T>::BucketMustHaveMspForOperation.into()),
         };
 
-        Self::compute_new_rate_delta(
+        Self::apply_delta_fixed_rate_payment_stream(
             &msp_id,
             &bucket_id,
             &bucket.user_id,
@@ -1478,7 +1481,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             ))
         })?;
 
-        Self::compute_new_rate_delta(
+        Self::apply_delta_fixed_rate_payment_stream(
             &msp_id,
             bucket_id,
             &user_id,
@@ -1505,7 +1508,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             ))
         })?;
 
-        Self::compute_new_rate_delta(
+        Self::apply_delta_fixed_rate_payment_stream(
             &msp_id,
             bucket_id,
             &user_id,
