@@ -223,6 +223,14 @@ pub mod pallet {
             CollectionId = CollectionIdFor<Self>,
         >;
 
+        /// The treasury account of the runtime, where a fraction of each payment goes.
+        #[pallet::constant]
+        type TreasuryAccount: Get<Self::AccountId>;
+
+        /// Penalty payed by a BSP when they forcefully stop storing a file.
+        #[pallet::constant]
+        type BspStopStoringFilePenalty: Get<BalanceOf<Self>>;
+
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
@@ -744,6 +752,8 @@ pub mod pallet {
         InconsistentStateKeyAlreadyExists,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
+        /// Failed to get owner account of ID of provider
+        FailedToGetOwnerAccount,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

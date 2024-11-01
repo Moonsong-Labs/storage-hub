@@ -676,6 +676,9 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
+    type BspStopStoringFilePenalty =
+        runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty;
+    type TreasuryAccount = TreasuryAccount;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;

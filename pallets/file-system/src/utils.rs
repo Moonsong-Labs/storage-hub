@@ -3,9 +3,9 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{
-        fungible::{InspectHold, MutateHold},
+        fungible::{InspectHold, Mutate, MutateHold},
         nonfungibles_v2::Create,
-        tokens::Precision,
+        tokens::{Precision, Preservation},
         Get,
     },
 };
@@ -1540,7 +1540,17 @@ where
             Error::<T>::NotABsp
         );
 
-        // TODO: charge SP for this action.
+        let bsp_account_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_owner_account(bsp_id)
+                .ok_or(Error::<T>::FailedToGetOwnerAccount)?;
+
+        // Penalise the BSP for stopping storing the file and send the funds to the treasury.
+        T::Currency::transfer(
+            &bsp_account_id,
+            &T::TreasuryAccount::get(),
+            T::BspStopStoringFilePenalty::get(),
+            Preservation::Preserve,
+        )?;
 
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
