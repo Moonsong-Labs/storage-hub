@@ -141,9 +141,11 @@ mod create_bucket_tests {
                     ),
                     bucket_creation_deposit
                 );
+
+                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 assert_eq!(
                     <Test as Config>::Currency::free_balance(&owner),
-                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128
                 );
 
                 // Assert that the correct event was deposited
@@ -1309,10 +1311,13 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
+                let new_stream_deposit: u64 =
+                    <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 let balance_to_mint: crate::types::BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
                         crate::types::BalanceOf<Test>,
                     >>::get()
+                    .saturating_add(new_stream_deposit as u128)
                     .saturating_add(<Test as pallet_balances::Config>::ExistentialDeposit::get());
                 <Test as file_system::Config>::Currency::mint_into(
                     &owner_without_funds,
