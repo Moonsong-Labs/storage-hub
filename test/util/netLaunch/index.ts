@@ -138,6 +138,7 @@ export class NetworkLauncher {
     );
 
     let composeContents = {
+      name: "bspnet",
       services: remappedYamlContents
     };
 
@@ -153,7 +154,8 @@ export class NetworkLauncher {
       composeContents = Object.assign(composeContents, {
         networks: {
           default: {
-            name: "docker_default"
+            name: "docker_default",
+            external: true
           }
         }
       });
