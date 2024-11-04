@@ -150,17 +150,6 @@ export class NetworkLauncher {
       });
     }
 
-    if (!this.config.noisy) {
-      composeContents = Object.assign(composeContents, {
-        networks: {
-          default: {
-            name: "docker_default",
-            external: true
-          }
-        }
-      });
-    }
-
     const updatedCompose = yaml.stringify(composeContents, {
       collectionStyle: "flow",
       defaultStringType: "QUOTE_DOUBLE",

@@ -82,11 +82,6 @@ export const addBspContainer = async (options?: {
     Image: DOCKER_IMAGE,
     name: containerName,
     platform: "linux/amd64",
-    NetworkingConfig: {
-      EndpointsConfig: {
-        docker_default: {}
-      }
-    },
     HostConfig: {
       PortBindings: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
