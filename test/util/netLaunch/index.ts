@@ -29,6 +29,7 @@ import {
   shUser
 } from "../pjsKeyring";
 import { MILLIUNIT, UNIT } from "../constants";
+import { sleep } from "../timer";
 
 export type ShEntity = {
   port: number;
@@ -492,6 +493,7 @@ export class NetworkLauncher {
     await launchedNetwork.setupGlobal(userApi);
     await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);
     await launchedNetwork.setupRuntimeParams(userApi);
+    await userApi.block.seal();
 
     if (launchedNetwork.type === "fullnet") {
       const mspServices = Object.keys(launchedNetwork.composeYaml.services).filter((service) =>
@@ -542,6 +544,11 @@ export class NetworkLauncher {
     if (launchedNetwork.config.initialised === true) {
       await launchedNetwork.execDemoTransfer();
     }
+
+    // Attempt to debounce and stablise
+
+    await sleep(5000);
+    await userApi.block.seal();
   }
 }
 
