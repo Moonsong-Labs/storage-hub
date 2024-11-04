@@ -334,6 +334,7 @@ jobs:
           cd test
           pnpm typegen
       - name: Run BSPNet Tests
+        id: run_tests
         run: |
           cd test
           pnpm i
@@ -346,6 +347,20 @@ jobs:
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/6   \
               ./suites/integration/**/**.test.ts
+
+      - name: Collect Docker Logs on Failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
+
+          echo "::group::Storage Hub Node Logs"
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "=== Logs from $container ==="
+            docker logs $container 2>&1
+          done
+          echo "::endgroup::"
 
   typegen_check:
     needs: [build_image, setup]

@@ -62,10 +62,9 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
     method: "system_localPeerId",
     params: []
   };
+  verbose && console.log(`Waiting for node at ${url} to launch...`);
 
   for (let i = 0; i < maxRetries; i++) {
-    verbose && console.log(`Waiting for node at ${url} to launch...`);
-
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -121,7 +120,7 @@ export const checkSHRunningContainers = async (docker: Docker) => {
 
 export const closeSimpleBspNet = async () => {
   await printDockerStatus();
-  
+
   const docker = new Docker();
 
   let allContainers = await docker.listContainers({ all: true });
@@ -166,11 +165,11 @@ export const closeSimpleBspNet = async () => {
 
 export const printDockerStatus = async () => {
   const docker = new Docker();
-  
+
   console.log("\n=== Docker Container Status ===");
-  
+
   const containers = await docker.listContainers({ all: true });
-  
+
   if (containers.length === 0) {
     console.log("No containers found");
     return;
@@ -182,7 +181,7 @@ export const printDockerStatus = async () => {
     console.log(`Image: ${container.Image}`);
     console.log(`Status: ${container.State}/${container.Status}`);
     console.log(`Created: ${new Date(container.Created * 1000).toISOString()}`);
-    
+
     if (container.State === "running") {
       try {
         const stats = await docker.getContainer(container.Id).stats({ stream: false });
@@ -198,6 +197,33 @@ export const printDockerStatus = async () => {
   console.log("\n===============================\n");
 };
 
+export const verifyContainerFreshness = async () => {
+  const docker = new Docker();
+  const containers = await docker.listContainers({ all: true });
+
+  const existingContainers = containers.filter(
+    (container) =>
+      container.Image === DOCKER_IMAGE || container.Names.some((name) => name.includes("toxiproxy"))
+  );
+
+  if (existingContainers.length > 0) {
+    console.log("\n=== WARNING: Found existing containers ===");
+    for (const container of existingContainers) {
+      console.log(`Container: ${container.Names.join(", ")}`);
+      console.log(`Created: ${new Date(container.Created * 1000).toISOString()}`);
+      console.log(`Status: ${container.State}/${container.Status}`);
+
+      const containerInfo = await docker.getContainer(container.Id).inspect();
+      console.log(
+        "Mounts:",
+        containerInfo.Mounts.map((m) => m.Source)
+      );
+      console.log("---");
+    }
+    throw new Error("Test environment is not clean - found existing containers");
+  }
+};
+
 export const cleardownTest = async (cleardownOptions: {
   api: EnrichedBspApi | EnrichedBspApi[];
   keepNetworkAlive?: boolean;
@@ -211,10 +237,26 @@ export const cleardownTest = async (cleardownOptions: {
       await cleardownOptions.api.disconnect();
     }
   } catch (e) {
-    console.error(e);
-    console.log("cleardown failed, but we will continue.");
+    console.error("Error disconnecting APIs:", e);
   }
-  cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
+
+  if (!cleardownOptions.keepNetworkAlive) {
+    await closeSimpleBspNet();
+
+    const docker = new Docker();
+    const remainingContainers = await docker.listContainers({ all: true });
+    const relevantContainers = remainingContainers.filter(
+      (container) =>
+        container.Image === DOCKER_IMAGE ||
+        container.Names.some((name) => name.includes("toxiproxy"))
+    );
+
+    if (relevantContainers.length > 0) {
+      console.error("WARNING: Containers still present after cleanup!");
+      await printDockerStatus();
+      throw new Error("Failed to clean up test environment");
+    }
+  }
 };
 
 export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {

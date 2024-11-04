@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
-import { cleardownTest } from "./helpers";
+import { cleardownTest, verifyContainerFreshness } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type {
   BspNetConfig,
@@ -44,6 +44,8 @@ export function describeBspNet(
 export async function describeBspNet<
   T extends [(context: BspNetContext) => void] | [TestOptions, (context: BspNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
+  await verifyContainerFreshness();
+
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
 
@@ -83,6 +85,7 @@ export async function describeBspNet<
           api: [await userApiPromise, await bspApiPromise],
           keepNetworkAlive: options?.keepAlive
         });
+
         if (options?.keepAlive) {
           if (bspNetConfigCases.length > 1) {
             console.error(
@@ -116,13 +119,15 @@ export async function describeBspNet<
 }
 
 /**
- * Implementation of the describeBspNet function.
+ * Implementation of the describeMspNet function.
  * @param title The title of the test suite.
  * @param args Additional arguments (either tests function or options and tests function).
  */
 export async function describeMspNet<
   T extends [(context: FullNetContext) => void] | [TestOptions, (context: FullNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
+  await verifyContainerFreshness();
+
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
 
