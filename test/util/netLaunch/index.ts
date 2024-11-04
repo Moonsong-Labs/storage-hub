@@ -107,14 +107,14 @@ export class NetworkLauncher {
       this.composeYaml,
       "Compose file has not been selected yet, run selectComposeFile() first"
     );
-    const sHservices: ShEntity[] = Object.entries(this.composeYaml.services)
+    const shServices: ShEntity[] = Object.entries(this.composeYaml.services)
       .filter(([_serviceName, service]: [string, any]) => service.image === "storage-hub:local")
       .map(([serviceName, _service]: [string, any]) => ({
         port: this.getPort(serviceName),
         name: serviceName
       }));
-    invariant(sHservices.length > 0, "No storage-hub services found in compose file");
-    this.entities = sHservices;
+    invariant(shServices.length > 0, "No storage-hub services found in compose file");
+    this.entities = shServices;
     return this;
   }
 
@@ -138,7 +138,7 @@ export class NetworkLauncher {
     );
 
     let composeContents = {
-      name: "bspnet",
+      name: "docker",
       services: remappedYamlContents
     };
 
@@ -439,9 +439,10 @@ export class NetworkLauncher {
     const bucketName = "nothingmuch-1";
 
     const fileMetadata = await api.file.newStorageRequest(source, location, bucketName);
-    await api.wait.bspVolunteer();
-    await api.wait.bspStored();
+    await api.wait.bspVolunteer(4);
+    await api.wait.bspStored(4);
 
+    // Stop BSP that is supposed to be down
     await api.docker.stopBspContainer(bspDownContainerName);
 
     return {
@@ -536,8 +537,7 @@ export class NetworkLauncher {
       await launchedNetwork.execDemoTransfer();
     }
 
-    // Attempt to debounce and stablise
-
+    // Attempt to debounce and stabilise
     await sleep(5000);
     await userApi.block.seal();
   }
