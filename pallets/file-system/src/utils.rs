@@ -1540,9 +1540,11 @@ where
             Error::<T>::NotABsp
         );
 
-        let bsp_account_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_owner_account(bsp_id)
-                .ok_or(Error::<T>::FailedToGetOwnerAccount)?;
+        let bsp_account_id = expect_or_err!(
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_owner_account(bsp_id),
+            "Failed to get owner account for BSP",
+            Error::<T>::FailedToGetOwnerAccount
+        );
 
         // Penalise the BSP for stopping storing the file and send the funds to the treasury.
         T::Currency::transfer(
