@@ -5,7 +5,8 @@
 //!
 //! To regenerate this file, follow these steps:
 //! 1. Clone the `storage-hub` repo if you haven't already.
-//! 2. Make sure you're able to run BSPNet integration tests locally. You can see the setps in the [testing README](https://github.com/Moonsong-Labs/storage-hub/blob/main/test/README.md).
+//! 2. Make sure you're able to run BSPNet integration tests locally. You can see the steps in the [testing README](https://github.com/Moonsong-Labs/storage-hub/blob/main/test/README.md).
+//!     a. Be careful to build with the `runtime-benchmarks` feature enabled. If you're building in a Mac for instance, run `pnpm crossbuild:mac --features runtime-benchmarks`.
 //! 3. In the [multi-files-benchmarking.test.ts](https://github.com/Moonsong-Labs/storage-hub/blob/main/test/suites/integration/bsp/multi-files-benchmarking.test.ts) test suite,
 //!    replace the `skip: true` with `only: true`.
 //! 4. Run the test suite with `pnpm test:bspnet:only`.

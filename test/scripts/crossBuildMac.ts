@@ -51,7 +51,13 @@ async function main() {
   // Build and copy libpq.so before cargo zigbuild
   await buildAndCopyLibpq(target);
 
-  execSync(`cargo zigbuild --target ${target} --release`, { stdio: "inherit" });
+  // Get additional arguments from command line
+  const additionalArgs = process.argv.slice(2).join(" ");
+
+  console.log(
+    `Running build command: cargo zigbuild --target ${target} --release ${additionalArgs}`
+  );
+  execSync(`cargo zigbuild --target ${target} --release ${additionalArgs}`, { stdio: "inherit" });
 }
 
 main();
