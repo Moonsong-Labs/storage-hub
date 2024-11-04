@@ -120,6 +120,8 @@ export const checkSHRunningContainers = async (docker: Docker) => {
 };
 
 export const closeSimpleBspNet = async () => {
+  await printDockerStatus();
+  
   const docker = new Docker();
 
   let allContainers = await docker.listContainers({ all: true });
@@ -151,6 +153,8 @@ export const closeSimpleBspNet = async () => {
     allContainers = await docker.listContainers({ all: true });
     const remainingNodes = allContainers.filter((container) => container.Image === DOCKER_IMAGE);
     if (remainingNodes.length === 0) {
+      await printDockerStatus();
+      console.log("All nodes verified to be removed, continuing");
       return;
     }
 
@@ -158,6 +162,40 @@ export const closeSimpleBspNet = async () => {
     await sleep(1000);
   }
   invariant(false, `Failed to stop all nodes: ${JSON.stringify(allContainers)}`);
+};
+
+export const printDockerStatus = async () => {
+  const docker = new Docker();
+  
+  console.log("\n=== Docker Container Status ===");
+  
+  const containers = await docker.listContainers({ all: true });
+  
+  if (containers.length === 0) {
+    console.log("No containers found");
+    return;
+  }
+
+  for (const container of containers) {
+    console.log(`\nContainer: ${container.Names.join(", ")}`);
+    console.log(`ID: ${container.Id}`);
+    console.log(`Image: ${container.Image}`);
+    console.log(`Status: ${container.State}/${container.Status}`);
+    console.log(`Created: ${new Date(container.Created * 1000).toISOString()}`);
+    
+    if (container.State === "running") {
+      try {
+        const stats = await docker.getContainer(container.Id).stats({ stream: false });
+        console.log("Memory Usage:", {
+          usage: `${Math.round(stats.memory_stats.usage / 1024 / 1024)}MB`,
+          limit: `${Math.round(stats.memory_stats.limit / 1024 / 1024)}MB`
+        });
+      } catch (e) {
+        console.log("Could not fetch container stats");
+      }
+    }
+  }
+  console.log("\n===============================\n");
 };
 
 export const cleardownTest = async (cleardownOptions: {
