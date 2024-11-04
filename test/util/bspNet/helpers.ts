@@ -1,11 +1,13 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import Docker from "dockerode";
+import fs from "node:fs/promises";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import * as util from "node:util";
 import invariant from "tiny-invariant";
+import tmp from "tmp";
 import { DOCKER_IMAGE } from "../constants.ts";
 import { sealBlock } from "./block.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
@@ -130,6 +132,27 @@ export const closeSimpleBspNet = async () => {
   const toxiproxyContainer = allContainers.find((container) =>
     container.Names.some((name) => name.includes("toxiproxy"))
   );
+
+  const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
+
+  const logPromises = existingNodes.map(async (node) => {
+    const container = docker.getContainer(node.Id);
+    try {
+      const logs = await container.logs({
+        stdout: true,
+        stderr: true,
+        timestamps: true
+      });
+      console.log(`Extracting logs for container ${node.Names[0]}`);
+      const containerName = node.Names[0].replace("/", "");
+      await fs.writeFile(`${tmpDir.name}/${containerName}.log`, logs.toString("utf8"));
+    } catch (e) {
+      console.warn(`Failed to extract logs for container ${node.Names[0]}:`, e);
+    }
+  });
+
+  await Promise.all(logPromises);
+  console.log(`Container logs saved to ${tmpDir.name}`);
 
   const promises = existingNodes.map(async (node) => {
     const container = docker.getContainer(node.Id);

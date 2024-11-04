@@ -351,16 +351,19 @@ jobs:
       - name: Collect Docker Logs on Failure
         if: failure() && steps.run_tests.outcome == 'failure'
         run: |
-          echo "::group::Docker Container Status"
-          docker ps -a
-          echo "::endgroup::"
+          mkdir -p test-logs
 
-          echo "::group::Storage Hub Node Logs"
-          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
-            echo "=== Logs from $container ==="
-            docker logs $container 2>&1
-          done
-          echo "::endgroup::"
+          if [ -d "/tmp/bsp-logs-*" ]; then
+            cp -r /tmp/bsp-logs-*/* test-logs/
+          fi
+
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bsp-test-logs-shard-${{ matrix.shard }}
+          path: test-logs/
+          retention-days: 5
 
   typegen_check:
     needs: [build_image, setup]
