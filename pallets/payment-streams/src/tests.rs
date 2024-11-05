@@ -1512,7 +1512,6 @@ mod fixed_rate_streams {
             });
         }
 
-        #[ignore]
         #[test]
         fn charge_three_users_with_different_payment_streams_works() {
             ExtBuilder::build().execute_with(|| {
@@ -1565,6 +1564,10 @@ mod fixed_rate_streams {
                         &dave,
                         &dave_amount_provided
                     )
+                );
+
+                <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
+                    &alice_msp_id,
                 );
 
                 // Get the current price for dynamic-rate payment streams from the runtime
