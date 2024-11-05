@@ -1,5 +1,6 @@
 import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP rejecting storage request",
@@ -30,11 +31,9 @@ describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const initialised = await getLaunchResponse();
-      const bucketId = initialised?.bucketIds[0];
+      const bucketId = initialised?.fileMetadata.bucketId;
 
-      if (!bucketId) {
-        throw new Error("Bucket ID not found");
-      }
+      invariant(bucketId, "Bucket ID not found");
 
       const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
         bucketId.toString()
@@ -81,11 +80,10 @@ describeMspNet(
       // Seal block containing the MSP's transaction response to the storage request
       const responses = await userApi.wait.mspResponse();
 
-      if (responses.length !== 1) {
-        throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
-        );
-      }
+      invariant(
+        responses.length === 1,
+        "Expected 1 response since there is only a single bucket and should have been accepted"
+      );
 
       const response = responses[0].asRejected;
 
