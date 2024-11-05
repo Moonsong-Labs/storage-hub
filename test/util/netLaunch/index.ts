@@ -465,7 +465,7 @@ export class NetworkLauncher {
     };
   }
 
-  public static async create(type: NetworkType, config: NetLaunchConfig, verbose = false) {
+  public static async create(type: NetworkType, config: NetLaunchConfig) {
     console.log(
       `\n\nLaunching network config ${config.noisy ? "with" : "without"} noise and ${config.rocksdb ? "with" : "without"} RocksDB for ${type} network`
     );
@@ -473,6 +473,9 @@ export class NetworkLauncher {
       .selectComposeFile()
       .populateEntities()
       .startNetwork();
+
+    // Wait for network to be in sync
+    await sleep(5000);
 
     const peerIDUser = await launchedNetwork.getPeerId("sh-user");
     console.log(`sh-user Peer ID: ${peerIDUser}`);
