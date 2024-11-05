@@ -119,9 +119,9 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
   const delay = 100;
 
   if (bspId && checkQuantity && checkQuantity > 1) {
-    // We do this because `bspConfirmStoring` cannot happened in the same block in which a BSP submit a proof.
+    // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
     throw new Error(
-      "Cannot use `waitForBspStored` with a bspId and an amount of extrinsec bigger than 1."
+      "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
     );
   }
 
