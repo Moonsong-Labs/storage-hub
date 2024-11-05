@@ -1566,8 +1566,10 @@ mod fixed_rate_streams {
                     )
                 );
 
-                <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
-                    &alice_msp_id,
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
+                        &alice_msp_id,
+                    )
                 );
 
                 // Get the current price for dynamic-rate payment streams from the runtime
