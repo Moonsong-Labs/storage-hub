@@ -20,7 +20,6 @@ use sp_runtime::{
 };
 use sp_std::{
     collections::{btree_map::BTreeMap, btree_set::BTreeSet},
-    vec,
     vec::Vec,
 };
 
@@ -43,8 +42,8 @@ use crate::{
         BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
         FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
-        MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
+        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata,
+        MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
@@ -524,7 +523,6 @@ where
         msp_id: Option<ProviderIdFor<T>>,
         bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
-        data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
@@ -593,7 +591,6 @@ where
             size,
             msp,
             user_peer_ids: user_peer_ids.unwrap_or_default(),
-            data_server_sps,
             bsps_required,
             bsps_confirmed: ReplicationTargetType::<T>::zero(),
             bsps_volunteered: ReplicationTargetType::<T>::zero(),
@@ -1501,7 +1498,7 @@ where
     /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
     ///
     /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1.
+    ///     Therefore, we decrement the `bsps_confirmed` by 1 and remove the BSP as a data server for the file.
     ///
     /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
     ///
@@ -1584,7 +1581,7 @@ where
             Some(mut storage_request_metadata) => {
                 match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
-                    // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
+                    // We need to decrement the number of bsps confirmed and volunteered, remove the BSP as a data server and from the storage request.
                     Some(bsp) => {
                         expect_or_err!(
                             bsp.confirmed,
@@ -1616,7 +1613,8 @@ where
                 <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata));
             }
             // We hit scenario 3. There is no storage request opened for the file.
-            // We need to create a new storage request with a single bsp required.
+            // We need to create a new storage request with a single bsp required and
+            // add this BSP as a data server if they can serve the file.
             None => {
                 Self::do_request_storage(
                     owner,
@@ -1627,12 +1625,19 @@ where
                     None,
                     Some(ReplicationTargetType::<T>::one()),
                     None,
-                    if can_serve {
-                        BoundedVec::try_from(vec![bsp_id]).unwrap()
-                    } else {
-                        BoundedVec::default()
-                    },
                 )?;
+
+                if can_serve {
+                    // Add the BSP as a data server for the file.
+                    <StorageRequestBsps<T>>::insert(
+                        &file_key,
+                        &bsp_id,
+                        StorageRequestBspsMetadata::<T> {
+                            confirmed: true,
+                            _phantom: Default::default(),
+                        },
+                    );
+                }
             }
         };
 

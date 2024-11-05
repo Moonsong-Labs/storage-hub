@@ -34,6 +34,9 @@ use runtime_params::RuntimeParameters;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
+use shp_treasury_funding::{
+    LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
+};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{Get, Hasher, H256};
 use sp_runtime::{
@@ -523,6 +526,16 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
     }
 }
 
+impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
+    type Balance = Balance;
+    type ProvidedUnit = StorageDataUnit;
+    type IdealUtilisationRate =
+        runtime_params::dynamic_params::runtime_config::IdealUtilisationRate;
+    type DecayRate = runtime_params::dynamic_params::runtime_config::DecayRate;
+    type MinimumCut = runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut;
+    type MaximumCut = runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut;
+}
+
 impl pallet_payment_streams::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -533,6 +546,8 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = u64; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
+    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perbill>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
 }
 
@@ -690,7 +705,6 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
