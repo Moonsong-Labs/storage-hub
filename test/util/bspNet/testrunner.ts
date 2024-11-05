@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import { cleardownTest, verifyContainerFreshness } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
-import type { BspNetConfig, BspNetContext, FullNetContext, TestOptions } from "./types";
+import type { BspNetContext, FullNetContext, TestOptions } from "./types";
 import * as ShConsts from "./consts";
 import { NetworkLauncher } from "../netLaunch";
 
@@ -55,14 +55,13 @@ export async function describeBspNet<
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
       let userApiPromise: Promise<EnrichedBspApi>;
       let bspApiPromise: Promise<EnrichedBspApi>;
-      let responseListenerPromise: ReturnType<typeof launchNetwork>;
+      let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
-        // Create a promise which captures a response from the launchNetwork function
         responseListenerPromise = new Promise((resolve) => {
           launchEventEmitter.once("networkLaunched", resolve);
         });
-        // Launch the network
+
         const launchResponse = await NetworkLauncher.create("bspnet", {
           ...bspNetConfig,
           toxics: options?.toxics,
@@ -75,7 +74,6 @@ export async function describeBspNet<
       });
 
       after(async () => {
-        console.log("🧹 Cleaning up test resources");
         await cleardownTest({
           api: [await userApiPromise, await bspApiPromise],
           keepNetworkAlive: options?.keepAlive
@@ -139,21 +137,19 @@ export async function describeMspNet<
       let userApiPromise: Promise<EnrichedBspApi>;
       let bspApiPromise: Promise<EnrichedBspApi>;
       let mspApiPromise: Promise<EnrichedBspApi>;
-      let responseListenerPromise: ReturnType<typeof launchFullNetwork>;
+      let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
-        // Create a promise which captures a response from the launchNetwork function
         responseListenerPromise = new Promise((resolve) => {
           launchEventEmitter.once("networkLaunched", resolve);
         });
-        // Launch the network
-        const launchResponse = await launchFullNetwork(
-          {
-            ...fullNetConfig,
-            toxics: options?.toxics
-          },
-          options?.initialised
-        );
+        console.log("🚀 Launching FullNet with config:");
+        console.log(fullNetConfig);
+        const launchResponse = await NetworkLauncher.create("fullnet", {
+          ...fullNetConfig,
+          toxics: options?.toxics,
+          initialised: options?.initialised
+        });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
@@ -198,32 +194,6 @@ export async function describeMspNet<
     });
   }
 }
-
-export const launchNetwork = async (
-  config: BspNetConfig,
-  initialised: boolean | "multi" = false
-) => {
-  return initialised === "multi"
-    ? await NetworkLauncher.create("bspnet", { ...config, initialised: "multi" })
-    : initialised === true
-      ? await NetworkLauncher.create("bspnet", { ...config, initialised: true })
-      : await NetworkLauncher.create("bspnet", config);
-};
-
-export const launchFullNetwork = async (
-  config: BspNetConfig,
-  initialised: boolean | "multi" = false
-) => {
-  if (initialised === "multi") {
-    throw new Error("multi initialisation not supported for fullNet");
-  }
-
-  if (initialised) {
-    return await NetworkLauncher.create("fullnet", { ...config, initialised: true });
-  }
-
-  return await NetworkLauncher.create("fullnet", config);
-};
 
 const pickConfig = (options: TestOptions) => {
   return options.networkConfig === "all"

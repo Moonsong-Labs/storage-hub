@@ -7,7 +7,7 @@ import type { HexString } from "@polkadot/util/types";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { SealedBlock } from "./block";
 import type { BspNetTestApi } from "./test-api";
-import type { launchFullNetwork, launchNetwork } from "./testrunner";
+import type { NetworkLauncher } from "../netLaunch";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -226,9 +226,9 @@ export type BspNetContext = {
 
   /**
    * Retrieves the response from launching the network.
-   * @returns The result of the launchNetwork function, which may include network details or initialization data (for multiInitialised network only).
+   * @return The result of creating the network, which may include network details or initialization data.
    */
-  getLaunchResponse: () => ReturnType<typeof launchNetwork>;
+  getLaunchResponse: () => ReturnType<typeof NetworkLauncher.create>;
 };
 
 /**
@@ -288,9 +288,9 @@ export type FullNetContext = {
 
   /**
    * Retrieves the response from launching the network.
-   * @returns The result of the launchFullNetwork function, which may include network details or initialization data (for multiInitialised network only).
+   * @returns The result of creating the network, which may include network details or initialization data.
    */
-  getLaunchResponse: () => ReturnType<typeof launchFullNetwork>;
+  getLaunchResponse: () => ReturnType<typeof NetworkLauncher.create>;
 };
 
 /**

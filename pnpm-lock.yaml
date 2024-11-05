@@ -104,6 +104,9 @@ importers:
       json-bigint:
         specifier: ^1.0.0
         version: 1.0.0
+      strip-ansi:
+        specifier: ^7.1.0
+        version: 7.1.0
       testcontainers:
         specifier: 10.13.0
         version: 10.13.0

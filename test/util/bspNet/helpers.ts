@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import * as util from "node:util";
 import invariant from "tiny-invariant";
+import stripAnsi from "strip-ansi";
 import tmp from "tmp";
 import { DOCKER_IMAGE } from "../constants.ts";
 import { sealBlock } from "./block.ts";
@@ -145,7 +146,10 @@ export const closeSimpleBspNet = async (verbose = false) => {
       });
       verbose && console.log(`Extracting logs for container ${node.Names[0]}`);
       const containerName = node.Names[0].replace("/", "");
-      await fs.writeFile(`${tmpDir.name}/${containerName}.log`, logs.toString("utf8"));
+
+      await fs.writeFile(`${tmpDir.name}/${containerName}.log`, stripAnsi(logs.toString()), {
+        encoding: "utf8"
+      });
     } catch (e) {
       console.warn(`Failed to extract logs for container ${node.Names[0]}:`, e);
     }
