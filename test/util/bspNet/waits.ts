@@ -176,7 +176,8 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
         );
       }
       break;
-    } catch {
+    } catch (e) {
+      console.error(e);
       invariant(
         i !== iterations,
         `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`

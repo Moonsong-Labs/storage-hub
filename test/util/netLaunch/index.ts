@@ -459,7 +459,7 @@ export class NetworkLauncher {
     await api.docker.stopBspContainer(bspDownContainerName);
 
     // Attempt to debounce and stabilise
-    await sleep(500);
+    await sleep(1500);
 
     return {
       bspTwoRpcPort,
@@ -492,7 +492,12 @@ export class NetworkLauncher {
       .startNetwork();
 
     // Wait for network to be in sync
-    await sleep(5000);
+    await using bspApi = await launchedNetwork.getApi("sh-bsp");
+    await bspApi.docker.waitForLog({
+      containerName: "docker-sh-bsp-1",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
 
     const peerIDUser = await launchedNetwork.getPeerId("sh-user");
     console.log(`sh-user Peer ID: ${peerIDUser}`);
@@ -507,6 +512,11 @@ export class NetworkLauncher {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     await using userApi = await launchedNetwork.getApi("sh-user");
+    await userApi.docker.waitForLog({
+      containerName: "docker-sh-user-1",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
 
     await launchedNetwork.setupGlobal(userApi);
     await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);
@@ -564,7 +574,7 @@ export class NetworkLauncher {
     }
 
     // Attempt to debounce and stabilise
-    await sleep(500);
+    await sleep(1500);
     return undefined;
   }
 }
