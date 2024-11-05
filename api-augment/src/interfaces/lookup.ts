@@ -1444,6 +1444,11 @@ export default {
         private: "bool",
         valuePropId: "H256"
       },
+      BucketDeleted: {
+        who: "AccountId32",
+        bucketId: "H256",
+        maybeCollectionId: "Option<u32>"
+      },
       MoveBucketRequested: {
         who: "AccountId32",
         bucketId: "H256",
@@ -3411,6 +3416,9 @@ export default {
       create_and_associate_collection_with_bucket: {
         bucketId: "H256"
       },
+      delete_bucket: {
+        bucketId: "H256"
+      },
       issue_storage_request: {
         _alias: {
           size_: "size"
@@ -4363,6 +4371,7 @@ export default {
       "ImpossibleFailedToGetValue",
       "BucketIsNotPrivate",
       "BucketNotFound",
+      "BucketNotEmpty",
       "NotBucketOwner",
       "ProviderRootNotFound",
       "ExpectedNonInclusionProof",

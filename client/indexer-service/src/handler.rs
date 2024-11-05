@@ -238,6 +238,7 @@ impl IndexerService {
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::DataServerRegisteredForMoveBucket { .. } => {}
+            pallet_file_system::Event::BucketDeleted { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -1428,6 +1428,11 @@ declare const _default: {
         private: string;
         valuePropId: string;
       };
+      BucketDeleted: {
+        who: string;
+        bucketId: string;
+        maybeCollectionId: string;
+      };
       MoveBucketRequested: {
         who: string;
         bucketId: string;
@@ -3336,6 +3341,9 @@ declare const _default: {
         private: string;
       };
       create_and_associate_collection_with_bucket: {
+        bucketId: string;
+      };
+      delete_bucket: {
         bucketId: string;
       };
       issue_storage_request: {
