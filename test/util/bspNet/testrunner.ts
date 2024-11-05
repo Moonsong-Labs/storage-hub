@@ -2,13 +2,7 @@ import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import { cleardownTest, verifyContainerFreshness } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
-import type {
-  BspNetConfig,
-  BspNetContext,
-  FullNetContext,
-  Initialised,
-  TestOptions
-} from "./types";
+import type { BspNetConfig, BspNetContext, FullNetContext, TestOptions } from "./types";
 import * as ShConsts from "./consts";
 import { NetworkLauncher } from "../netLaunch";
 
@@ -219,19 +213,16 @@ export const launchNetwork = async (
 export const launchFullNetwork = async (
   config: BspNetConfig,
   initialised: boolean | "multi" = false
-): Promise<Initialised | undefined> => {
+) => {
   if (initialised === "multi") {
     throw new Error("multi initialisation not supported for fullNet");
   }
 
   if (initialised) {
-    // return await runInitialisedFullNet(config);
-    return (await NetworkLauncher.create("fullnet", { ...config, initialised: true })) as any;
+    return await NetworkLauncher.create("fullnet", { ...config, initialised: true });
   }
 
-  // await runSimpleFullNet(config);
-  await NetworkLauncher.create("fullnet", config);
-  return undefined;
+  return await NetworkLauncher.create("fullnet", config);
 };
 
 const pickConfig = (options: TestOptions) => {

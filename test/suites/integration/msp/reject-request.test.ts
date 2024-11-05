@@ -31,7 +31,7 @@ describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const initialised = await getLaunchResponse();
-      const bucketId = initialised?.bucketIds[0];
+      const bucketId = initialised?.fileMetadata.bucketId;
 
       invariant(bucketId, "Bucket ID not found");
 

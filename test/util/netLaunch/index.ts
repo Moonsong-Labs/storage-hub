@@ -12,6 +12,7 @@ import {
   getContainerPeerId,
   ShConsts,
   type EnrichedBspApi,
+  type FileMetadata,
   type ToxicInfo
 } from "../bspNet";
 import {
@@ -389,65 +390,26 @@ export class NetworkLauncher {
   }
 
   public async execDemoTransfer() {
+    await using api = await this.getApi("sh-user");
+
+    const source = "res/whatsup.jpg";
+    const destination = "test/smile.jpg";
+    const bucketName = "nothingmuch-1";
+    const fileMetadata = await api.file.newStorageRequest(source, destination, bucketName);
+
     if (this.type === "bspnet") {
-      await using api = await this.getApi("sh-user");
-
-      const source = "res/whatsup.jpg";
-      const destination = "test/smile.jpg";
-      const bucketName = "nothingmuch-1";
-
-      const fileMetadata = await api.file.newStorageRequest(source, destination, bucketName);
       await api.wait.bspVolunteer();
       await api.wait.bspStored();
-
-      return { fileMetadata };
     }
 
     if (this.type === "fullnet") {
-      await using api = await this.getApi("sh-user");
-
-      const source = "res/whatsup.jpg";
-      const destination = "test/smile.jpg";
-      const bucketName = "nothingmuch-1";
-
-      const fileMetadata = await api.file.newStorageRequest(source, destination, bucketName);
-
-      // const newBucketEventEvent = await api.createBucket(bucketName);
-      // const newBucketEventDataBlob =
-      //   api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      // invariant(newBucketEventDataBlob, "Event doesn't match Type");
-
-      // const { fingerprint, file_size, location } =
-      //   await api.rpc.storagehubclient.loadFileInStorage(
-      //     source,
-      //     destination,
-      //     ShConsts.NODE_INFOS.user.AddressId,
-      //     newBucketEventDataBlob.bucketId
-      //   );
-
-      // await api.sealBlock(
-      //   api.tx.fileSystem.issueStorageRequest(
-      //     newBucketEventDataBlob.bucketId,
-      //     location,
-      //     fingerprint,
-      //     file_size,
-      //     ShConsts.DUMMY_MSP_ID,
-      //     [ShConsts.NODE_INFOS.user.expectedPeerId]
-      //   ),
-      //   shUser
-      // );
-
       // // This will advance the block which also contains the BSP volunteer tx.
       // // Hence why we can wait for the BSP to confirm storing.
       await api.wait.mspResponse();
       await api.wait.bspStored();
-
-      return { bucketIds: [fileMetadata.bucketId] };
-      // return {
-      //   bucketIds: [newBucketEventDataBlob.bucketId]
-      // };
     }
+
+    return { fileMetadata };
   }
 
   public async initExtraBsps() {
@@ -502,7 +464,7 @@ export class NetworkLauncher {
     return {
       bspTwoRpcPort,
       bspThreeRpcPort,
-      fileData: {
+      fileMetadata: {
         fileKey: fileMetadata.fileKey,
         bucketId: fileMetadata.bucketId,
         location: location,
@@ -513,7 +475,14 @@ export class NetworkLauncher {
     };
   }
 
-  public static async create(type: NetworkType, config: NetLaunchConfig) {
+  public static async create(
+    type: NetworkType,
+    config: NetLaunchConfig
+  ): Promise<
+    | { fileMetadata: FileMetadata }
+    | { bspTwoRpcPort: number; bspThreeRpcPort: number; fileMetadata: FileMetadata }
+    | undefined
+  > {
     console.log(
       `\n\nLaunching network config ${config.noisy ? "with" : "without"} noise and ${config.rocksdb ? "with" : "without"} RocksDB for ${type} network`
     );
