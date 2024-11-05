@@ -20,7 +20,7 @@ describeBspNet(
       await userApi.wait.bspStoredInTxPool();
 
       // Wait for the bsp to send all the confirm retries
-      await sleep(6000);
+      await sleep(12000);
       await userApi.wait.bspStoredInTxPool(4);
 
       // We get the confirm storing pending extrinsics to get their extrinsic index
