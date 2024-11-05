@@ -8,6 +8,7 @@ import {
   ShConsts
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
+import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
@@ -17,18 +18,21 @@ describeBspNet(
     let bspApi: EnrichedBspApi;
     let bspTwoApi: EnrichedBspApi;
     let bspThreeApi: EnrichedBspApi;
-    let fileData: FileMetadata;
-    let oneBspFileData: FileMetadata;
+    let fileMetadata: FileMetadata;
+    let oneBspfileMetadata: FileMetadata;
     let rootBeforeDeletion: string;
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      assert(launchResponse, "BSPNet failed to initialise");
-      fileData = launchResponse.fileData;
+      invariant(
+        launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
+        "BSPNet failed to initialise with required ports"
+      );
+      fileMetadata = launchResponse.fileMetadata;
       userApi = await createUserApi();
       bspApi = await createBspApi();
-      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
-      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`);
     });
 
     after(async () => {
@@ -170,16 +174,16 @@ describeBspNet(
       async () => {
         // TODO: Build inclusion forest proof for file.
         // TODO: BSP-Three sends transaction to stop storing the only file it has.
-        console.log(fileData);
+        console.log(fileMetadata);
         // // Build transaction for BSP-Three to stop storing the only file it has.
         // const call = bspThreeApi.sealBlock(
         //   bspThreeApi.tx.fileSystem.bspStopStoring(
-        //     fileData.fileKey,
-        //     fileData.bucketId,
-        //     fileData.location,
-        //     fileData.owner,
-        //     fileData.fingerprint,
-        //     fileData.fileSize,
+        //     fileMetadata.fileKey,
+        //     fileMetadata.bucketId,
+        //     fileMetadata.location,
+        //     fileMetadata.owner,
+        //     fileMetadata.fingerprint,
+        //     .fileSize,
         //     false
         //   ),
         //   bspThreeKey
@@ -193,15 +197,15 @@ describeBspNet(
       async () => {
         // TODO: Setup a BSP that has two files which lie under the same NibbledBranch in the forest.
         // TODO: Generate the proof to delete one of the files.
-        /* let inclusionForestProof = bspThreeApi.rpc.storagehubclient.buildForestRoot(fileData.fileKey); */
+        /* let inclusionForestProof = bspThreeApi.rpc.storagehubclient.buildForestRoot(fileMetadata.fileKey); */
         // TODO: Request the deletion of the file:
         /* const fileDeletionRequestResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-            fileData.fileKey,
-            fileData.bucketId,
-            fileData.location,
-            fileData.owner,
-            fileData.fingerprint,
-            fileData.fileSize,
+            fileMetadata.fileKey,
+            fileMetadata.bucketId,
+            fileMetadata.location,
+            fileMetadata.owner,
+            fileMetadata.fingerprint,
+            fileMetadata.fileSize,
             false,
             inclusion_forest_proof: ForestProof<T>,
         ); */
@@ -212,7 +216,7 @@ describeBspNet(
 		await bspThreeApi.advanceToBlock(cooldown); */
         // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
         /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-				fileData.fileKey,
+				fileMetadata.fileKey,
 				inclusionForestProof,
 			)); 
 			// Check for the confirm stopped storing event.
@@ -222,7 +226,7 @@ describeBspNet(
         		fileDeletionConfirmResult.events
       		);
 			// Make sure the new root was updated correctly.
-			bspThreeApi.rpc.storagehubclient.deleteFile(fileData.fileKey); // Not sure if this is the correct way to do it.
+			bspThreeApi.rpc.storagehubclient.deleteFile(fileMetadata.fileKey); // Not sure if this is the correct way to do it.
 			const newRoot = bspThreeApi.rpc.storagehubclient.getForestRoot();
 			const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
 			assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
@@ -249,8 +253,8 @@ describeBspNet(
       const source = "res/adolphus.jpg";
       const location = "test/adolphus.jpg";
       const bucketName = "nothingmuch-2";
-      const fileData = await userApi.file.newStorageRequest(source, location, bucketName);
-      oneBspFileData = fileData;
+      const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName);
+      oneBspfileMetadata = fileMetadata;
     });
 
     it("Only one BSP confirms it", async () => {
@@ -425,11 +429,11 @@ describeBspNet(
       // User sends file deletion request.
       await userApi.sealBlock(
         userApi.tx.fileSystem.deleteFile(
-          oneBspFileData.bucketId,
-          oneBspFileData.fileKey,
-          oneBspFileData.location,
-          oneBspFileData.fileSize,
-          oneBspFileData.fingerprint,
+          oneBspfileMetadata.bucketId,
+          oneBspfileMetadata.fileKey,
+          oneBspfileMetadata.location,
+          oneBspfileMetadata.fileSize,
+          oneBspfileMetadata.fingerprint,
           null
         ),
         shUser
@@ -476,7 +480,7 @@ describeBspNet(
       assert(newCheckpointChallengesEventDataBlob, "Event doesn't match Type");
       let containsFileKey = false;
       for (const checkpointChallenge of newCheckpointChallengesEventDataBlob.challenges) {
-        if (checkpointChallenge[0].toHuman() === oneBspFileData.fileKey) {
+        if (checkpointChallenge[0].toHuman() === oneBspfileMetadata.fileKey) {
           containsFileKey = true;
           break;
         }

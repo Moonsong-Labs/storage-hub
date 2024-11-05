@@ -15,6 +15,7 @@
   "keywords": [],
   "author": "",
   "module": "./dist/index.js",
+  "type": "module",
   "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
