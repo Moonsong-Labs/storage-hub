@@ -1,13 +1,13 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
+import type { Event, EventRecord } from "@polkadot/types/interfaces";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { EventRecord, Event, H256 } from "@polkadot/types/interfaces";
-import type { after, afterEach, before, beforeEach, it } from "node:test";
-import type { launchFullNetwork, launchNetwork } from "./testrunner";
-import type { BspNetTestApi } from "./test-api";
-import type { SealedBlock } from "./block";
 import type { HexString } from "@polkadot/util/types";
+import type { after, afterEach, before, beforeEach, it } from "node:test";
+import type { SealedBlock } from "./block";
+import type { BspNetTestApi } from "./test-api";
+import type { NetworkLauncher } from "../netLaunch";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -226,9 +226,9 @@ export type BspNetContext = {
 
   /**
    * Retrieves the response from launching the network.
-   * @returns The result of the launchNetwork function, which may include network details or initialization data (for multiInitialised network only).
+   * @return The result of creating the network, which may include network details or initialization data.
    */
-  getLaunchResponse: () => ReturnType<typeof launchNetwork>;
+  getLaunchResponse: () => ReturnType<typeof NetworkLauncher.create>;
 };
 
 /**
@@ -288,17 +288,17 @@ export type FullNetContext = {
 
   /**
    * Retrieves the response from launching the network.
-   * @returns The result of the launchFullNetwork function, which may include network details or initialization data (for multiInitialised network only).
+   * @returns The result of creating the network, which may include network details or initialization data.
    */
-  getLaunchResponse: () => ReturnType<typeof launchFullNetwork>;
+  getLaunchResponse: () => ReturnType<typeof NetworkLauncher.create>;
 };
 
 /**
  * Represents the initial state of the network after initialisation.
  */
 export type Initialised = {
-  /** A list of bucket IDs created during network initialisation */
-  bucketIds: H256[];
+  /** The metadata of the initial file stored in the network */
+  fileMetadata: FileMetadata;
 };
 
 /**
@@ -353,7 +353,7 @@ export type TestOptions = {
  *
  * @property {number} bspTwoRpcPort - The RPC port number for the second BSP node.
  * @property {number} bspThreeRpcPort - The RPC port number for the third BSP node.
- * @property {FileMetadata} fileData - Metadata of the initial file stored in the network.
+ * @property {FileMetadata} fileMetadata - Metadata of the initial file stored in the network.
  */
 export type InitialisedMultiBspNetwork = {
   /**
@@ -367,7 +367,7 @@ export type InitialisedMultiBspNetwork = {
   /**
    * @see FileMetadata for details on the file metadata structure.
    */
-  fileData: FileMetadata;
+  fileMetadata: FileMetadata;
 };
 
 /**
