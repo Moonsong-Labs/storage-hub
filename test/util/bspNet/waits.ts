@@ -154,7 +154,7 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
             timeout: 100
           });
 
-          // if we have found one we go one block forward
+          // If we have found one we go one block forward
           const { events } = await sealBlock(api);
           assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 
