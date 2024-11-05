@@ -81,6 +81,7 @@ export async function describeBspNet<
       });
 
       after(async () => {
+        console.log("🧹 Cleaning up test resources");
         await cleardownTest({
           api: [await userApiPromise, await bspApiPromise],
           keepNetworkAlive: options?.keepAlive

@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "engines": {
-    "node": "22.x.x"
+    "node": "23.x.x"
   },
   "scripts": {
     "bundle-types": "cd ../types-bundle && pnpm i && pnpm build && pnpm fmt:fix && cd ../test",
