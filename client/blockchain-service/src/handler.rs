@@ -1197,6 +1197,12 @@ impl BlockchainService {
                         ) if owner
                             == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
                         {
+                            log::info!(
+                                target: LOG_TARGET,
+                                "AcceptedBspVolunteer event for BSP ID: {:?}",
+                                bsp_id
+                            );
+
                             // We try to convert the types coming from the runtime into our expected types.
                             let fingerprint: Fingerprint = fingerprint.as_bytes().into();
 

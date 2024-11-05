@@ -1005,7 +1005,14 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                 &root, mutations, proof,
             )
-            .map_err(|_| Error::<T>::FailedToApplyDelta)?
+            .map_err(|e| {
+                log::error!(
+                    "Failed to apply delta for Provider {:?} with error: {:?}",
+                    provider_id,
+                    e
+                );
+                Error::<T>::FailedToApplyDelta
+            })?
             .1,
         )
     }

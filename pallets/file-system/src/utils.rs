@@ -16,7 +16,7 @@ use sp_runtime::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
         Saturating, Zero,
     },
-    ArithmeticError, BoundedVec, DispatchError,
+    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
 use sp_std::{
     collections::{btree_map::BTreeMap, btree_set::BTreeSet},
@@ -1098,16 +1098,22 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
-        let bsp_threshold =
-            Self::get_threshold_for_bsp_request(&bsp_id, &storage_request_metadata.fingerprint);
+        let earliest_volunteer_tick = Self::query_earliest_file_volunteer_tick(bsp_id, file_key)
+            .map_err({
+                |e| {
+                    log::error!("Failed to query earliest file volunteer tick: {:?}", e);
+                    Error::<T>::FailedToQueryEarliestFileVolunteerTick
+                }
+            })?;
 
-        // Compute threshold for BSP to succeed.
-        let (to_succeed, _slope) =
-            Self::compute_threshold_to_succeed(&bsp_id, storage_request_metadata.requested_at)?;
+        // Check if the BSP is eligible to volunteer for the storage request.
+        let current_tick_number =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-        // Check that the BSP's threshold is under the threshold required to volunteer for the storage request.
-        ensure!(bsp_threshold <= to_succeed, Error::<T>::AboveThreshold);
+        ensure!(
+            current_tick_number >= earliest_volunteer_tick,
+            Error::<T>::BspNotEligibleToVolunteer
+        );
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -1168,16 +1174,15 @@ where
             Error::<T>::NotABsp
         );
 
-        let file_keys = file_keys_and_proofs
-            .iter()
-            .map(|(fk, _)| *fk)
-            .collect::<Vec<_>>();
-
         // Verify the proof of non-inclusion.
         let proven_keys: BTreeSet<MerkleHash<T>> =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
-                file_keys.as_slice(),
+                file_keys_and_proofs
+                    .iter()
+                    .map(|(fk, _)| *fk)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
                 &non_inclusion_forest_proof,
             )?;
 
@@ -1188,29 +1193,30 @@ where
         > = BoundedVec::new();
 
         let mut seen_keys = BTreeSet::new();
+        let mut skipped_file_keys: BoundedBTreeSet<
+            MerkleHash<T>,
+            T::MaxBatchConfirmStorageRequests,
+        > = BoundedBTreeSet::new();
         for file_key in file_keys_and_proofs.iter() {
             // Skip any duplicates.
             if !seen_keys.insert(file_key.0) {
                 continue;
             }
 
-            // Check that the storage request exists.
-            let mut storage_request_metadata =
-                <StorageRequests<T>>::get(&file_key.0).ok_or(Error::<T>::StorageRequestNotFound)?;
-
-            if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
+            let mut storage_request_metadata = match <StorageRequests<T>>::get(&file_key.0) {
+                Some(metadata) if metadata.bsps_confirmed < metadata.bsps_required => metadata,
                 // Since BSPs need to race one another to confirm storage requests, it is entirely possible that a BSP confirms a storage request
-                // after the storage request has been fulfilled within the same block.
-                // TODO: Accumulate a list of storage requests that have been skipped for the BSP to confirm what it can.
-                continue;
-            }
-
-            expect_or_err!(
-                storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
-                "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
-                Error::<T>::StorageRequestBspsRequiredFulfilled,
-                bool
-            );
+                // after the storage request has been fulfilled or the replication target has been reached (bsps_required == bsps_confirmed).
+                Some(_) | None => {
+                    expect_or_err!(
+                        skipped_file_keys.try_insert(file_key.0),
+                        "Failed to push file key to skipped_file_keys",
+                        Error::<T>::TooManyStorageRequestResponses,
+                        result
+                    );
+                    continue;
+                }
+            };
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
@@ -1357,45 +1363,74 @@ where
             }
         }
 
-        // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
-        let old_root = expect_or_err!(
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
-            "Failed to get root for BSP, when it was already checked to be a BSP",
-            Error::<T>::NotABsp
-        );
+        // Remove all the skipped file keys from file_keys_and_metadatas
+        file_keys_and_metadatas.retain(|(fk, _)| !skipped_file_keys.contains(fk));
 
-        if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
-            // This means that this is the first file added to the BSP's Forest.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
+        let new_root = if !file_keys_and_metadatas.is_empty() {
+            // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
+            let old_root = expect_or_err!(
+                <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
+                "Failed to get root for BSP, when it was already checked to be a BSP",
+                Error::<T>::NotABsp
+            );
+
+            if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                // This means that this is the first file added to the BSP's Forest.
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
+                    &bsp_id,
+                )?;
+
+                // Emit the corresponding event.
+                Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+                    who: sender.clone(),
+                    bsp_id,
+                });
+            }
+
+            // Compute new root after inserting new file keys in forest partial trie.
+            let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
                 &bsp_id,
+                file_keys_and_metadatas
+                    .iter()
+                    .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                &non_inclusion_forest_proof,
             )?;
 
-            // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
-                who: sender.clone(),
-                bsp_id,
-            });
-        }
+            // Update root of BSP.
+            <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
-        // Compute new root after inserting new file keys in forest partial trie.
-        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &bsp_id,
+            Some(new_root)
+        } else {
+            None
+        };
+
+        // This should not fail since `skipped_file_keys` purpously share the same bound as `file_keys_and_metadatas`.
+        let skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
+            skipped_file_keys.into_iter().collect::<Vec<_>>().try_into(),
+            "Failed to convert skipped_file_keys to BoundedVec",
+            Error::<T>::TooManyStorageRequestResponses,
+            result
+        );
+
+        let file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
             file_keys_and_metadatas
-                .iter()
-                .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+                .into_iter()
+                .map(|(fk, _)| fk)
                 .collect::<Vec<_>>()
-                .as_slice(),
-            &non_inclusion_forest_proof,
-        )?;
+                .try_into(),
+            "Failed to convert file_keys_and_metadatas to BoundedVec",
+            Error::<T>::TooManyStorageRequestResponses,
+            result
+        );
 
-        // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
-
-        // Emit event.
         Self::deposit_event(Event::BspConfirmedStoring {
             who: sender,
             bsp_id,
-            file_keys: file_keys.to_vec().try_into().unwrap(),
+            confirmed_file_keys: file_keys,
+            skipped_file_keys,
             new_root,
         });
 
