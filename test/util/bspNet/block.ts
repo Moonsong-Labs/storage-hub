@@ -148,7 +148,7 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
 export const skipBlocksToMinChangeTime: (
   api: ApiPromise,
   bspId?: `0x${string}` | H256 | Uint8Array
-) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID) => {
+) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID, verbose = false) => {
   const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))
     .unwrap()
     .lastCapacityChange.toNumber();
@@ -157,12 +157,14 @@ export const skipBlocksToMinChangeTime: (
   const blocksToSkip = minChangeTime - (currentHeight - lastCapacityChangeHeight);
 
   if (blocksToSkip > 0) {
-    console.log(
-      `\tSkipping blocks to reach MinBlocksBetweenCapacityChanges height: #${minChangeTime}`
-    );
+    verbose &&
+      console.log(
+        `\tSkipping blocks to reach MinBlocksBetweenCapacityChanges height: #${minChangeTime}`
+      );
     await skipBlocks(api, blocksToSkip);
   } else {
-    console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
+    verbose &&
+      console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
   }
 };
 

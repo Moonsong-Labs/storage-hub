@@ -162,7 +162,7 @@ export class NetworkLauncher {
     return tmpFile.name;
   }
 
-  private async startNetwork() {
+  private async startNetwork(verbose = false) {
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const tmpFile = this.remapComposeYaml();
 
@@ -170,21 +170,21 @@ export class NetworkLauncher {
       await compose.upOne("toxiproxy", {
         cwd: cwd,
         config: tmpFile,
-        log: true
+        log: verbose
       });
     }
 
     await compose.upOne("sh-bsp", {
       cwd: cwd,
       config: tmpFile,
-      log: true
+      log: verbose
     });
 
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
     );
 
-    if (this.config.noisy) {
+    if (verbose && this.config.noisy) {
       console.log(`toxiproxy IP: ${bspIp}`);
     } else {
       console.log(`sh-bsp IP: ${bspIp}`);
@@ -194,7 +194,7 @@ export class NetworkLauncher {
       `http://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`,
       true
     );
-    console.log(`sh-bsp Peer ID: ${bspPeerId}`);
+    verbose && console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
     process.env.BSP_IP = bspIp;
     process.env.BSP_PEER_ID = bspPeerId;
@@ -230,7 +230,7 @@ export class NetworkLauncher {
         await compose.upOne(mspService, {
           cwd: cwd,
           config: tmpFile,
-          log: true,
+          log: verbose,
           env: {
             ...process.env,
             NODE_KEY: nodeKey,
@@ -245,7 +245,7 @@ export class NetworkLauncher {
     await compose.upOne("sh-user", {
       cwd: cwd,
       config: tmpFile,
-      log: true,
+      log: verbose,
       env: {
         ...process.env,
         BSP_IP: bspIp,
@@ -438,12 +438,18 @@ export class NetworkLauncher {
     const location = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
+    // Wait for a few seconds for all BSPs to be synced
+    await sleep(5000);
+
     const fileMetadata = await api.file.newStorageRequest(source, location, bucketName);
     await api.wait.bspVolunteer(4);
     await api.wait.bspStored(4);
 
     // Stop BSP that is supposed to be down
     await api.docker.stopBspContainer(bspDownContainerName);
+
+    // Attempt to debounce and stabilise
+    await sleep(500);
 
     return {
       bspTwoRpcPort,
@@ -459,9 +465,9 @@ export class NetworkLauncher {
     };
   }
 
-  public static async create(type: NetworkType, config: NetLaunchConfig) {
+  public static async create(type: NetworkType, config: NetLaunchConfig, verbose = false) {
     console.log(
-      `Launching network config ${config.noisy ? "with" : "without"} noise and ${config.rocksdb ? "with" : "without"} RocksDB for ${type} network`
+      `\n\nLaunching network config ${config.noisy ? "with" : "without"} noise and ${config.rocksdb ? "with" : "without"} RocksDB for ${type} network`
     );
     const launchedNetwork = await new NetworkLauncher(type, config)
       .selectComposeFile()
@@ -538,8 +544,7 @@ export class NetworkLauncher {
     }
 
     // Attempt to debounce and stabilise
-    await sleep(5000);
-    await userApi.block.seal();
+    await sleep(500);
   }
 }
 

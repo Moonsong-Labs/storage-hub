@@ -120,7 +120,7 @@ export const checkSHRunningContainers = async (docker: Docker) => {
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 };
 
-export const closeSimpleBspNet = async () => {
+export const closeSimpleBspNet = async (verbose = false) => {
   await printDockerStatus();
 
   const docker = new Docker();
@@ -143,7 +143,7 @@ export const closeSimpleBspNet = async () => {
         stderr: true,
         timestamps: true
       });
-      console.log(`Extracting logs for container ${node.Names[0]}`);
+      verbose && console.log(`Extracting logs for container ${node.Names[0]}`);
       const containerName = node.Names[0].replace("/", "");
       await fs.writeFile(`${tmpDir.name}/${containerName}.log`, logs.toString("utf8"));
     } catch (e) {
@@ -163,7 +163,7 @@ export const closeSimpleBspNet = async () => {
     console.log("Stopping toxiproxy container");
     promises.push(docker.getContainer(toxiproxyContainer.Id).stop());
   } else {
-    console.log("No running toxiproxy container found, skipping");
+    verbose && console.log("No running toxiproxy container found, skipping");
   }
 
   await Promise.all(promises);
@@ -176,7 +176,7 @@ export const closeSimpleBspNet = async () => {
     const remainingNodes = allContainers.filter((container) => container.Image === DOCKER_IMAGE);
     if (remainingNodes.length === 0) {
       await printDockerStatus();
-      console.log("All nodes verified to be removed, continuing");
+      verbose && console.log("All nodes verified to be removed, continuing");
       return;
     }
 
@@ -186,38 +186,40 @@ export const closeSimpleBspNet = async () => {
   invariant(false, `Failed to stop all nodes: ${JSON.stringify(allContainers)}`);
 };
 
-export const printDockerStatus = async () => {
+export const printDockerStatus = async (verbose = false) => {
   const docker = new Docker();
 
-  console.log("\n=== Docker Container Status ===");
+  verbose && console.log("\n=== Docker Container Status ===");
 
   const containers = await docker.listContainers({ all: true });
 
   if (containers.length === 0) {
-    console.log("No containers found");
+    verbose && console.log("No containers found");
     return;
   }
 
-  for (const container of containers) {
-    console.log(`\nContainer: ${container.Names.join(", ")}`);
-    console.log(`ID: ${container.Id}`);
-    console.log(`Image: ${container.Image}`);
-    console.log(`Status: ${container.State}/${container.Status}`);
-    console.log(`Created: ${new Date(container.Created * 1000).toISOString()}`);
+  if (verbose) {
+    for (const container of containers) {
+      console.log(`\nContainer: ${container.Names.join(", ")}`);
+      console.log(`ID: ${container.Id}`);
+      console.log(`Image: ${container.Image}`);
+      console.log(`Status: ${container.State}/${container.Status}`);
+      console.log(`Created: ${new Date(container.Created * 1000).toISOString()}`);
 
-    if (container.State === "running") {
-      try {
-        const stats = await docker.getContainer(container.Id).stats({ stream: false });
-        console.log("Memory Usage:", {
-          usage: `${Math.round(stats.memory_stats.usage / 1024 / 1024)}MB`,
-          limit: `${Math.round(stats.memory_stats.limit / 1024 / 1024)}MB`
-        });
-      } catch (e) {
-        console.log("Could not fetch container stats");
+      if (container.State === "running") {
+        try {
+          const stats = await docker.getContainer(container.Id).stats({ stream: false });
+          console.log("Memory Usage:", {
+            usage: `${Math.round(stats.memory_stats.usage / 1024 / 1024)}MB`,
+            limit: `${Math.round(stats.memory_stats.limit / 1024 / 1024)}MB`
+          });
+        } catch (e) {
+          console.log("Could not fetch container stats");
+        }
       }
     }
   }
-  console.log("\n===============================\n");
+  verbose && console.log("\n===============================\n");
 };
 
 export const verifyContainerFreshness = async () => {
