@@ -1076,6 +1076,18 @@ declare module "@polkadot/api-base/types/storage" {
       onPollTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * Mapping of Privileged Providers.
+       *
+       * Privileged Providers are those who are allowed to charge up to the current tick in
+       * fixed rate payment streams, regardless of their [`LastChargeableInfo`].
+       **/
+      privilegedProviders: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<Null>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * The mapping from a user to if it has been registered to the network and the amount of payment streams it has.
        *
        * Since users have to provide a deposit to be able to open each payment stream, this is used to keep track of the amount of payment streams
