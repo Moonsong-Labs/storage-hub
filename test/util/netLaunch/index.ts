@@ -491,15 +491,9 @@ export class NetworkLauncher {
       .populateEntities()
       .startNetwork();
 
-    // Wait for network to be in sync
-    await using userApi = await launchedNetwork.getApi("sh-user");
-    await userApi.docker.waitForLog({
-      containerName: "docker-sh-user-1",
-      searchString: "💤 Idle",
-      timeout: 15000
-    });
-
     await using bspApi = await launchedNetwork.getApi("sh-bsp");
+
+    // Wait for network to be in sync
     await bspApi.docker.waitForLog({
       containerName: "docker-sh-bsp-1",
       searchString: "💤 Idle",
@@ -517,6 +511,14 @@ export class NetworkLauncher {
 
     const bspPeerId = await launchedNetwork.getPeerId("sh-bsp");
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
+
+    await using userApi = await launchedNetwork.getApi("sh-user");
+
+    await userApi.docker.waitForLog({
+      containerName: "docker-sh-user-1",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
 
     await launchedNetwork.setupGlobal(userApi);
     await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);

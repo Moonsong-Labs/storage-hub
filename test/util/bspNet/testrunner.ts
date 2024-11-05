@@ -143,8 +143,6 @@ export async function describeMspNet<
         responseListenerPromise = new Promise((resolve) => {
           launchEventEmitter.once("networkLaunched", resolve);
         });
-        console.log("🚀 Launching FullNet with config:");
-        console.log(fullNetConfig);
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...fullNetConfig,
           toxics: options?.toxics,
