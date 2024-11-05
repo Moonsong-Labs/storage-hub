@@ -39,6 +39,7 @@
     "zombie:test:local": "SH_IMAGE=storage-hub:local pnpm zombienet test configs/simple.zndsl",
     "zombie:test:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet test configs/simple.zndsl",
     "test:full": "node --no-deprecation --import tsx --test ./suites/zombie/**.spec.ts",
+    "test:fullnet": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/msp/**.test.ts",
     "test:bspnet": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/bsp/**.test.ts",
     "test:bspnet:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --import tsx --test-concurrency 1 --test --test-only ./suites/integration/bsp/**.test.ts",
     "test:user": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/user/**.test.ts",

@@ -8,6 +8,7 @@ import {
   ShConsts
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID } from "../../../util/bspNet/consts";
+import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
@@ -23,12 +24,15 @@ describeBspNet(
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      assert(launchResponse, "BSPNet failed to initialise");
+      invariant(
+        launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
+        "BSPNet failed to initialise with required ports"
+      );
       fileData = launchResponse.fileData;
       userApi = await createUserApi();
       bspApi = await createBspApi();
-      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
-      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`);
     });
 
     after(async () => {
