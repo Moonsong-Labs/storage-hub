@@ -4,7 +4,7 @@ import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP rejecting storage request",
-  { initialised: true, keepAlive: false },
+  { initialised: true },
   ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;

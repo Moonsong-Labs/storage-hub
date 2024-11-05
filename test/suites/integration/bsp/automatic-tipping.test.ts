@@ -3,7 +3,7 @@ import { assert } from "node:console";
 
 describeBspNet(
   "BSP Automatic Tipping",
-  { extrinsicRetryTimeout: 2, keepAlive: false },
+  { extrinsicRetryTimeout: 2 },
   ({ before, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
 

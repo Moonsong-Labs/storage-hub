@@ -403,8 +403,8 @@ export class NetworkLauncher {
     }
 
     if (this.type === "fullnet") {
-      // // This will advance the block which also contains the BSP volunteer tx.
-      // // Hence why we can wait for the BSP to confirm storing.
+      // This will advance the block which also contains the BSP volunteer tx.
+      // Hence why we can wait for the BSP to confirm storing.
       await api.wait.mspResponse();
       await api.wait.bspStored();
     }
@@ -492,6 +492,13 @@ export class NetworkLauncher {
       .startNetwork();
 
     // Wait for network to be in sync
+    await using userApi = await launchedNetwork.getApi("sh-user");
+    await userApi.docker.waitForLog({
+      containerName: "docker-sh-user-1",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
+
     await using bspApi = await launchedNetwork.getApi("sh-bsp");
     await bspApi.docker.waitForLog({
       containerName: "docker-sh-bsp-1",
@@ -499,8 +506,8 @@ export class NetworkLauncher {
       timeout: 15000
     });
 
-    const peerIDUser = await launchedNetwork.getPeerId("sh-user");
-    console.log(`sh-user Peer ID: ${peerIDUser}`);
+    const userPeerId = await launchedNetwork.getPeerId("sh-user");
+    console.log(`sh-user Peer ID: ${userPeerId}`);
 
     const bspContainerName = launchedNetwork.composeYaml.services["sh-bsp"].container_name;
     invariant(bspContainerName, "BSP container name not found in compose file");
@@ -510,13 +517,6 @@ export class NetworkLauncher {
 
     const bspPeerId = await launchedNetwork.getPeerId("sh-bsp");
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
-
-    await using userApi = await launchedNetwork.getApi("sh-user");
-    await userApi.docker.waitForLog({
-      containerName: "docker-sh-user-1",
-      searchString: "💤 Idle",
-      timeout: 15000
-    });
 
     await launchedNetwork.setupGlobal(userApi);
     await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);

@@ -31,4 +31,3 @@ bootStrapNetwork().catch((e) => {
   console.log("❌ BSPNet Bootstrap failure");
   process.exitCode = 1;
 });
-// .finally(async () => await api?.disconnect());
