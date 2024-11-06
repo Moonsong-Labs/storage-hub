@@ -89,6 +89,27 @@ pub mod dynamic_params {
         /// 9 = 48 - l * (e ^ (0.3 - 0) - 1)
         /// l = (48 - 9) / (e ^ (0.3 - 0) - 1) ≈ 111
         pub static LowerExponentFactor: u32 = 111;
+
+        #[codec(index = 11)]
+        #[allow(non_upper_case_globals)]
+        /// Ideal utilisation rate of the system
+        pub static IdealUtilisationRate: Perbill = Perbill::from_percent(85);
+
+        #[codec(index = 12)]
+        #[allow(non_upper_case_globals)]
+        /// Decay rate of the power of two function that determines the percentage of funds that go to
+        /// the treasury for utilisation rates greater than the ideal.
+        pub static DecayRate: Perbill = Perbill::from_percent(5);
+
+        #[codec(index = 13)]
+        #[allow(non_upper_case_globals)]
+        /// The minimum treasury cut that can be taken from the amount charged from a payment stream.
+        pub static MinimumTreasuryCut: Perbill = Perbill::from_percent(1);
+
+        #[codec(index = 14)]
+        #[allow(non_upper_case_globals)]
+        /// The maximum treasury cut that can be taken from the amount charged from a payment stream.
+        pub static MaximumTreasuryCut: Perbill = Perbill::from_percent(5);
     }
 }
 

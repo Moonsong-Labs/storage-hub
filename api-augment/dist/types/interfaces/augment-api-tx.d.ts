@@ -604,6 +604,19 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, bool, H256]
       >;
+      /**
+       * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
+       * This way, the User is allowed to remove now unused buckets to recover their deposit for them.
+       *
+       * The User must provide the BucketId of the bucket they want to delete, which should correspond to a
+       * bucket that is both theirs and currently empty.
+       *
+       * To check if a bucket is empty, we compare its current root with the one of an empty trie.
+       **/
+      deleteBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
       deleteFile: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
@@ -3356,6 +3369,28 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     providers: {
       /**
+       * Dispatchable extrinsic that allows BSPs and MSPs to add a new multiaddress to their account.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the account that wants to add a new multiaddress.
+       *
+       * Parameters:
+       * - `new_multiaddress`: The new multiaddress that the signer wants to add to its account.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the signer is registered as a MSP or BSP.
+       * 3. Check that the Provider has not reached the maximum amount of multiaddresses.
+       * 4. Check that the multiaddress is valid (size and any other relevant checks). TODO: Implement this.
+       * 5. Update the Provider's storage to add the multiaddress.
+       *
+       * Emits `MultiAddressAdded` event when successful.
+       **/
+      addMultiaddress: AugmentedSubmittable<
+        (newMultiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [Bytes]
+      >;
+      /**
        * Dispatchable extrinsic only callable by an MSP that allows it to add a value proposition to its service
        *
        * The dispatch origin for this call must be Signed.
@@ -3498,7 +3533,7 @@ declare module "@polkadot/api-base/types/submittable" {
         [AccountId32, H256, u64, Vec<Bytes>, AccountId32, Option<u32>]
       >;
       /**
-       * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+       * Dispatchable extrinsic that allows to forcefully and automatically sign up a Main Storage Provider.
        *
        * The dispatch origin for this call must be Root.
        * The `who` parameter is the account that wants to sign up as a Main Storage Provider.
@@ -3561,6 +3596,27 @@ declare module "@polkadot/api-base/types/submittable" {
        * Emits `MspSignOffSuccess` event when successful.
        **/
       mspSignOff: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
+       * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the account that wants to remove a multiaddress.
+       *
+       * Parameters:
+       * - `multiaddress`: The multiaddress that the signer wants to remove from its account.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the signer is registered as a MSP or BSP.
+       * 3. Check that the multiaddress exists in the Provider's account.
+       * 4. Update the Provider's storage to remove the multiaddress.
+       *
+       * Emits `MultiAddressRemoved` event when successful.
+       **/
+      removeMultiaddress: AugmentedSubmittable<
+        (multiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [Bytes]
+      >;
       /**
        * Dispatchable extrinsic that allows users to sign up as a Backup Storage Provider.
        *

@@ -33,6 +33,9 @@ use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
+use shp_treasury_funding::{
+    LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
+};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -439,6 +442,7 @@ parameter_types! {
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type WeightInfo = ();
 }
 
@@ -508,6 +512,16 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
     }
 }
 
+impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
+    type Balance = Balance;
+    type ProvidedUnit = StorageDataUnit;
+    type IdealUtilisationRate =
+        runtime_params::dynamic_params::runtime_config::IdealUtilisationRate;
+    type DecayRate = runtime_params::dynamic_params::runtime_config::DecayRate;
+    type MinimumCut = runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut;
+    type MaximumCut = runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut;
+}
+
 impl pallet_payment_streams::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -518,6 +532,8 @@ impl pallet_payment_streams::Config for Runtime {
     type Units = StorageDataUnit; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = ProofsDealer;
+    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perbill>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
 }
 
@@ -624,6 +640,8 @@ type ThresholdType = u32;
 
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 10;
+    pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {
@@ -656,9 +674,9 @@ impl pallet_file_system::Config for Runtime {
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
@@ -672,6 +690,7 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

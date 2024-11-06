@@ -326,6 +326,8 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
+        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id)?;
+
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::MspSignUpSuccess {
             who: who.clone(),
@@ -442,6 +444,8 @@ where
                 None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
             }
         })?;
+
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id)?;
 
         Ok(msp_id)
     }
@@ -727,6 +731,104 @@ where
         Ok(old_capacity)
     }
 
+    /// This function holds the logic that checks if a user can add a new multiaddress to its storage
+    /// and, if so, updates the storage to reflect the new multiaddress and returns the provider id if successful
+    pub fn do_add_multiaddress(
+        who: &T::AccountId,
+        new_multiaddress: &MultiAddress<T>,
+    ) -> Result<HashId<T>, DispatchError> {
+        // Check that the account is a registered Provider and modify the Provider's storage accordingly
+        let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // If the provider is a MSP, add the new multiaddress to the MSP's storage,
+            // making sure the multiaddress did not exist previously
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+            ensure!(
+                !msp.multiaddresses.contains(new_multiaddress),
+                Error::<T>::MultiAddressAlreadyExists
+            );
+            msp.multiaddresses
+                .try_push(new_multiaddress.clone())
+                .map_err(|_| Error::<T>::MultiAddressesMaxAmountReached)?;
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+            msp_id
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // If the provider is a BSP, add the new multiaddress to the BSP's storage,
+            // making sure the multiaddress did not exist previously
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+            ensure!(
+                !bsp.multiaddresses.contains(new_multiaddress),
+                Error::<T>::MultiAddressAlreadyExists
+            );
+            bsp.multiaddresses
+                .try_push(new_multiaddress.clone())
+                .map_err(|_| Error::<T>::MultiAddressesMaxAmountReached)?;
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+            bsp_id
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(provider_id)
+    }
+
+    /// This function holds the logic that checks if a user can remove a multiaddress from its storage
+    /// and, if so, updates the storage to reflect the removal of the multiaddress and returns the provider id if successful
+    pub fn do_remove_multiaddress(
+        who: &T::AccountId,
+        multiaddress: &MultiAddress<T>,
+    ) -> Result<HashId<T>, DispatchError> {
+        // Check that the account is a registered Provider and modify the Provider's storage accordingly
+        let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // If the provider is a MSP, remove the multiaddress from the MSP's storage.
+            // but only if it's not the only multiaddress left
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+
+            ensure!(
+                msp.multiaddresses.len() > 1,
+                Error::<T>::LastMultiAddressCantBeRemoved
+            );
+
+            let multiaddress_index = msp
+                .multiaddresses
+                .iter()
+                .position(|addr| addr == multiaddress)
+                .ok_or(Error::<T>::MultiAddressNotFound)?;
+            msp.multiaddresses.remove(multiaddress_index);
+
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+
+            msp_id
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // If the provider is a BSP, remove the multiaddress from the BSP's storage.
+            // but only if it's not the only multiaddress left
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+
+            ensure!(
+                bsp.multiaddresses.len() > 1,
+                Error::<T>::LastMultiAddressCantBeRemoved
+            );
+
+            let multiaddress_index = bsp
+                .multiaddresses
+                .iter()
+                .position(|addr| addr == multiaddress)
+                .ok_or(Error::<T>::MultiAddressNotFound)?;
+            bsp.multiaddresses.remove(multiaddress_index);
+
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+
+            bsp_id
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(provider_id)
+    }
+
     /// Slash a Storage Provider.
     ///
     /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
@@ -918,6 +1020,8 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
         }
     }
 }
+
+/**************** Interface Implementations ****************/
 
 /// Implement the ReadBucketsInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
@@ -1504,7 +1608,7 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
     }
 
     fn update_provider_after_key_removal(
-        who: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         removed_trie_value: &Vec<u8>,
     ) -> DispatchResult {
         // Get the removed file's metadata
@@ -1526,18 +1630,18 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider
-        Self::decrease_capacity_used(who, file_size)?;
+        Self::decrease_capacity_used(provider_id, file_size)?;
 
         // Update the provider's payment stream with the user
         let previous_amount_provided =
             <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
-                who,
+                provider_id,
                 &owner,
             )
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
         let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
         <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-            who,
+            provider_id,
             &owner,
             &new_amount_provided,
         )?;

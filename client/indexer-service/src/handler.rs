@@ -238,6 +238,7 @@ impl IndexerService {
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::DataServerRegisteredForMoveBucket { .. } => {}
+            pallet_file_system::Event::BucketDeleted { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
@@ -458,6 +459,8 @@ impl IndexerService {
             }
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
+            pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
+            pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

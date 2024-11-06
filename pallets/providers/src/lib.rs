@@ -461,6 +461,18 @@ pub mod pallet {
             amount_slashed: BalanceOf<T>,
         },
 
+        /// Event emitted when a Provider has added a new MultiAddress to its account.
+        MultiAddressAdded {
+            provider_id: HashId<T>,
+            new_multiaddress: MultiAddress<T>,
+        },
+
+        /// Event emitted when a Provider has removed a MultiAddress from its account.
+        MultiAddressRemoved {
+            provider_id: HashId<T>,
+            removed_multiaddress: MultiAddress<T>,
+        },
+
         /// Event emitted when an MSP adds a new value proposition.
         ValuePropAdded {
             msp_id: MainStorageProviderId<T>,
@@ -539,6 +551,14 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
+        MultiAddressesMaxAmountReached,
+        /// Error thrown when a Provider tries to delete a MultiAddress from its account but it does not have that MultiAddress.
+        MultiAddressNotFound,
+        /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
+        MultiAddressAlreadyExists,
+        /// Error thrown when a Provider tries to remove the last MultiAddress from its account.
+        LastMultiAddressCantBeRemoved,
         /// Error thrown when the value proposition id is not found.
         ValuePropositionNotFound,
         /// Error thrown when value proposition under a given id already exists.
@@ -948,7 +968,82 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+        /// Dispatchable extrinsic that allows BSPs and MSPs to add a new multiaddress to their account.
+        ///
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to add a new multiaddress.
+        ///
+        /// Parameters:
+        /// - `new_multiaddress`: The new multiaddress that the signer wants to add to its account.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is registered as a MSP or BSP.
+        /// 3. Check that the Provider has not reached the maximum amount of multiaddresses.
+        /// 4. Check that the multiaddress is valid (size and any other relevant checks). TODO: Implement this.
+        /// 5. Update the Provider's storage to add the multiaddress.
+        ///
+        /// Emits `MultiAddressAdded` event when successful.
+        #[pallet::call_index(9)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn add_multiaddress(
+            origin: OriginFor<T>,
+            new_multiaddress: MultiAddress<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            let provider_id = Self::do_add_multiaddress(&who, &new_multiaddress)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::MultiAddressAdded {
+                provider_id,
+                new_multiaddress,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
+        ///
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to remove a multiaddress.
+        ///
+        /// Parameters:
+        /// - `multiaddress`: The multiaddress that the signer wants to remove from its account.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is registered as a MSP or BSP.
+        /// 3. Check that the multiaddress exists in the Provider's account.
+        /// 4. Update the Provider's storage to remove the multiaddress.
+        ///
+        /// Emits `MultiAddressRemoved` event when successful.
+        #[pallet::call_index(10)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn remove_multiaddress(
+            origin: OriginFor<T>,
+            multiaddress: MultiAddress<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            let provider_id = Self::do_remove_multiaddress(&who, &multiaddress)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::MultiAddressRemoved {
+                provider_id,
+                removed_multiaddress: multiaddress,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows to forcefully and automatically sign up a Main Storage Provider.
         ///
         /// The dispatch origin for this call must be Root.
         /// The `who` parameter is the account that wants to sign up as a Main Storage Provider.
@@ -970,7 +1065,7 @@ pub mod pallet {
         /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
         ///
         /// Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(11)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_msp_sign_up(
             origin: OriginFor<T>,
@@ -1048,7 +1143,7 @@ pub mod pallet {
         /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
         ///
         /// Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
-        #[pallet::call_index(10)]
+        #[pallet::call_index(12)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_bsp_sign_up(
             origin: OriginFor<T>,
@@ -1101,7 +1196,7 @@ pub mod pallet {
         ///
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
-        #[pallet::call_index(11)]
+        #[pallet::call_index(13)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn slash(origin: OriginFor<T>, provider_id: HashId<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.

@@ -116,7 +116,7 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
   // TODO: add bsp ID to check if is not confirming storing
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
-  const delay = 100;
+  const delay = 200;
 
   if (bspId && checkQuantity && checkQuantity > 1) {
     // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
@@ -132,7 +132,7 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true,
-        timeout: 100
+        timeout: 300
       });
       if (checkQuantity) {
         invariant(
@@ -188,7 +188,7 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
 export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
   // To allow time for local file transfer to complete (5s)
   const iterations = 50;
-  const delay = 100;
+  const delay = 200;
   for (let i = 0; i < iterations + 1; i++) {
     try {
       await sleep(delay);
@@ -196,7 +196,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true,
-        timeout: 100
+        timeout: 300
       });
       if (checkQuantity) {
         invariant(
@@ -205,7 +205,8 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
         );
       }
       break;
-    } catch {
+    } catch (e) {
+      console.error(e);
       invariant(
         i !== iterations,
         `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
@@ -351,7 +352,7 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
     } catch {
       invariant(
         i < iterations - 1,
-        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
+        `Failed to detect MSP respond extrinsic in txPool after ${(i * delay) / 1000}s`
       );
     }
   }

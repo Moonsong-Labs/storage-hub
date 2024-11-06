@@ -429,6 +429,14 @@ declare module "@polkadot/api-base/types/events" {
         { bspId: H256; fileKey: H256; owner: AccountId32; location: Bytes }
       >;
       /**
+       * Notifies that an empty bucket has been deleted.
+       **/
+      BucketDeleted: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bucketId: H256, maybeCollectionId: Option<u32>],
+        { who: AccountId32; bucketId: H256; maybeCollectionId: Option<u32> }
+      >;
+      /**
        * Notifies that a bucket's privacy has been updated.
        **/
       BucketPrivacyUpdated: AugmentedEvent<
@@ -1681,6 +1689,22 @@ declare module "@polkadot/api-base/types/events" {
           capacity: u64;
           valueProp: PalletStorageProvidersValuePropositionWithId;
         }
+      >;
+      /**
+       * Event emitted when a Provider has added a new MultiAddress to its account.
+       **/
+      MultiAddressAdded: AugmentedEvent<
+        ApiType,
+        [providerId: H256, newMultiaddress: Bytes],
+        { providerId: H256; newMultiaddress: Bytes }
+      >;
+      /**
+       * Event emitted when a Provider has removed a MultiAddress from its account.
+       **/
+      MultiAddressRemoved: AugmentedEvent<
+        ApiType,
+        [providerId: H256, removedMultiaddress: Bytes],
+        { providerId: H256; removedMultiaddress: Bytes }
       >;
       /**
        * Event emitted when a sign up request has been canceled successfully. Provides information about

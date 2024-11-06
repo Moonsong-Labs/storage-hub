@@ -976,6 +976,12 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> bool;
+
+    /// Add a priviledge provider to the PriviledgerProvider storage.
+    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+
+    /// Remove a priviledge provider to the PriviledgerProvider storage.
+    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.
@@ -1067,4 +1073,24 @@ pub trait UpdateStoragePrice {
         used_capacity: Self::StorageDataUnit,
         total_capacity: Self::StorageDataUnit,
     ) -> Self::Price;
+}
+
+/// A trait to calculate the cut that should go to the Treasury, from what's charged by a Provider.
+///
+/// This is used by the Payment Streams pallet, which requires some type to implement this trait,
+/// and uses such implementation to calculate the cut that should go to the Treasury, from what's charged by a Provider.
+pub trait TreasuryCutCalculator {
+    /// The numerical type which represents the balance type of the runtime.
+    type Balance: NumericalParam;
+    /// Type of the unit provided by Providers
+    type ProvidedUnit: NumericalParam;
+
+    /// Calculate the percentage of charged funds by a Provider that should go to the treasury.
+    ///
+    /// Returns the percentage of charged funds by a Provider that should go to the treasury.
+    fn calculate_treasury_cut(
+        provided_amount: Self::ProvidedUnit,
+        used_amount: Self::ProvidedUnit,
+        amount_to_charge: Self::Balance,
+    ) -> Self::Balance;
 }

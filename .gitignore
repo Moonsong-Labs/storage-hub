@@ -22,6 +22,7 @@ runtimes/
 
 .DS_Store
 .vscode/
+.zed/
 
 # Chain Specs
 *.spec.json

@@ -28,7 +28,7 @@ services:
         "--sealing=manual",
         "--base-path=/data",
       ]
-  sh-msp:
+  sh-msp-1:
     image: storage-hub:local
     container_name: docker-sh-msp-1
     platform: linux/amd64
@@ -46,7 +46,37 @@ services:
         "--jump-capacity=1073741824",
         "--storage-layer=rocks-db",
         "--storage-path=/tmp/msp/${MSP_ID:-default_msp_id}",
-        "--name=sh-msp",
+        "--name=sh-msp-1",
+        "--no-hardware-benchmarks",
+        "--unsafe-rpc-external",
+        "--rpc-methods=unsafe",
+        "--port=30350",
+        "--rpc-cors=all",
+        "--node-key=${NODE_KEY}",
+        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
+        "--keystore-path=/keystore",
+        "--sealing=manual",
+        "--base-path=/data",
+      ]
+  sh-msp-2:
+    image: storage-hub:local
+    container_name: docker-sh-msp-2
+    platform: linux/amd64
+    ports:
+      - "9778:9944"
+      - "30556:30350"
+    volumes:
+      - ./dev-keystores/msp:/keystore:rw
+    command:
+      [
+        "--dev",
+        "--provider",
+        "--provider-type=msp",
+        "--max-storage-capacity=4294967295",
+        "--jump-capacity=1073741824",
+        "--storage-layer=rocks-db",
+        "--storage-path=/tmp/msp/${MSP_ID:-default_msp_id}",
+        "--name=sh-msp-2",
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
         "--rpc-methods=unsafe",
