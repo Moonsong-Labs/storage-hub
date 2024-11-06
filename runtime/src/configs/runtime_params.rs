@@ -114,7 +114,11 @@ pub mod dynamic_params {
         #[codec(index = 15)]
         #[allow(non_upper_case_globals)]
         /// The penalty a BSP must pay when they forcefully stop storing a file.
-        pub static BspStopStoringFilePenalty: Balance = 1 * UNIT;
+        /// We set this to be half of the `SlashAmountPerMaxFileSize` with the rationale that
+        /// for a BSP that has lost this file, it should be more convenient to voluntarily
+        /// show up and pay this penalty in good faith, rather than risking being slashed for
+        /// being unable to submit a proof that should include this file.
+        pub static BspStopStoringFilePenalty: Balance = SlashAmountPerMaxFileSize::get() / 2;
     }
 }
 
