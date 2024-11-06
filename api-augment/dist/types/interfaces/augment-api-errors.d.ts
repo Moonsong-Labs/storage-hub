@@ -195,6 +195,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketIsNotPrivate: AugmentedError<ApiType>;
       /**
+       * Bucket is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
+      /**
        * Bucket does not exist
        **/
       BucketNotFound: AugmentedError<ApiType>;

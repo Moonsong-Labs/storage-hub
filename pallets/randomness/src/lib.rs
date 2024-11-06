@@ -38,8 +38,9 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use frame_system::WeightInfo;
+    use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use shp_session_keys::{InherentError, INHERENT_IDENTIFIER};
-    use sp_runtime::traits::Saturating;
+    use sp_runtime::traits::{BlockNumberProvider, Saturating};
 
     #[pallet::pallet]
     pub struct Pallet<T>(PhantomData<T>);
@@ -52,6 +53,9 @@ pub mod pallet {
 
         /// Get the BABE data from the runtime
         type BabeDataGetter: GetBabeData<u64, Self::Hash>;
+
+        /// Interface to get the relay chain block number which was used as an anchor for the last block in the parachain.
+        type RelayBlockGetter: BlockNumberProvider<BlockNumber = RelayChainBlockNumber>;
 
         /// Weight info
         type WeightInfo: WeightInfo;
@@ -79,6 +83,11 @@ pub mod pallet {
     /// Current relay epoch
     #[pallet::storage]
     pub(crate) type RelayEpoch<T: Config> = StorageValue<_, u64, ValueQuery>;
+
+    /// The relay chain block (and anchored parachain block) to use when epoch changes
+    #[pallet::storage]
+    pub(crate) type LastRelayBlockAndParaBlockValidForNextEpoch<T: Config> =
+        StorageValue<_, (RelayChainBlockNumber, BlockNumberFor<T>), ValueQuery>;
 
     /// Ensures the mandatory inherent was included in the block
     #[pallet::storage]
@@ -119,13 +128,16 @@ pub mod pallet {
                 let epoch_randomness = T::BabeDataGetter::get_epoch_randomness();
                 // The latest BABE randomness is predictable during the current epoch and this inherent
                 // must be executed and included in every block, which means that iff this logic is being
-                // executed, the epoch JUST changed, so the obtained randomness is valid for every previous block.
-                // TODO: add logic to check parent relay block (ideally, we make it valid for `curr_relay_block - 2`)
-                let latest_valid_block = frame_system::Pallet::<T>::block_number()
-                    .saturating_sub(sp_runtime::traits::One::one());
+                // executed, the epoch JUST changed, so the obtained randomness is valid for every block of the
+                // parachain that was anchored to a relay chain block that's not the current one nor the last one.
+                let (_second_to_last_relay_anchor, latest_valid_block_for_randomness) =
+                    LastRelayBlockAndParaBlockValidForNextEpoch::<T>::get();
 
                 // Save it to be readily available for use
-                LatestOneEpochAgoRandomness::<T>::put((epoch_randomness, latest_valid_block));
+                LatestOneEpochAgoRandomness::<T>::put((
+                    epoch_randomness,
+                    latest_valid_block_for_randomness,
+                ));
 
                 // Update storage with the latest epoch for which randomness was processed for
                 <RelayEpoch<T>>::put(relay_epoch_index);
@@ -137,6 +149,15 @@ pub mod pallet {
                     valid_until_block: latest_valid_block,
                 });
             }
+
+            // Update the last relay block and parachain block anchored to it to have ready for next block in case epoch changes
+            let previous_relay_block = T::RelayBlockGetter::current_block_number(); // This returns the relay chain block anchor for the PREVIOUS parachain block
+            let previous_parachain_block = frame_system::Pallet::<T>::block_number()
+                .saturating_sub(sp_runtime::traits::One::one());
+            LastRelayBlockAndParaBlockValidForNextEpoch::<T>::put((
+                previous_relay_block,
+                previous_parachain_block,
+            ));
 
             // Update storage to reflect that this inherent was included in the block (so the block is valid)
             <InherentIncluded<T>>::put(());

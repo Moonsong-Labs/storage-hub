@@ -1842,6 +1842,12 @@ declare module "@polkadot/types/lookup" {
       readonly private: bool;
       readonly valuePropId: H256;
     } & Struct;
+    readonly isBucketDeleted: boolean;
+    readonly asBucketDeleted: {
+      readonly who: AccountId32;
+      readonly bucketId: H256;
+      readonly maybeCollectionId: Option<u32>;
+    } & Struct;
     readonly isMoveBucketRequested: boolean;
     readonly asMoveBucketRequested: {
       readonly who: AccountId32;
@@ -1978,6 +1984,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly type:
       | "NewBucket"
+      | "BucketDeleted"
       | "MoveBucketRequested"
       | "BucketPrivacyUpdated"
       | "NewCollectionAndAssociation"
@@ -4076,6 +4083,10 @@ declare module "@polkadot/types/lookup" {
     readonly asCreateAndAssociateCollectionWithBucket: {
       readonly bucketId: H256;
     } & Struct;
+    readonly isDeleteBucket: boolean;
+    readonly asDeleteBucket: {
+      readonly bucketId: H256;
+    } & Struct;
     readonly isIssueStorageRequest: boolean;
     readonly asIssueStorageRequest: {
       readonly bucketId: H256;
@@ -4161,6 +4172,7 @@ declare module "@polkadot/types/lookup" {
       | "MspRespondMoveBucketRequest"
       | "UpdateBucketPrivacy"
       | "CreateAndAssociateCollectionWithBucket"
+      | "DeleteBucket"
       | "IssueStorageRequest"
       | "RevokeStorageRequest"
       | "BspAddDataServerForMoveBucketRequest"
@@ -5221,6 +5233,7 @@ declare module "@polkadot/types/lookup" {
     readonly isImpossibleFailedToGetValue: boolean;
     readonly isBucketIsNotPrivate: boolean;
     readonly isBucketNotFound: boolean;
+    readonly isBucketNotEmpty: boolean;
     readonly isNotBucketOwner: boolean;
     readonly isProviderRootNotFound: boolean;
     readonly isExpectedNonInclusionProof: boolean;
@@ -5285,6 +5298,7 @@ declare module "@polkadot/types/lookup" {
       | "ImpossibleFailedToGetValue"
       | "BucketIsNotPrivate"
       | "BucketNotFound"
+      | "BucketNotEmpty"
       | "NotBucketOwner"
       | "ProviderRootNotFound"
       | "ExpectedNonInclusionProof"

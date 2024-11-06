@@ -3,7 +3,7 @@ use super::*;
 use frame_support::{derive_impl, parameter_types, traits::Everything, weights::Weight};
 use sp_core::{blake2_256, H160, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup},
+    traits::{BlakeTwo256, BlockNumberProvider, IdentityLookup},
     BuildStorage, Perbill,
 };
 use sp_std::convert::{TryFrom, TryInto};
@@ -107,9 +107,23 @@ impl crate::GetBabeData<u64, H256> for BabeDataGetter {
     }
 }
 
+/// Mock implementation of the relay chain data provider, which should return the relay chain block
+/// that the previous parachain block was anchored to.
+pub struct MockRelaychainDataProvider;
+impl BlockNumberProvider for MockRelaychainDataProvider {
+    type BlockNumber = u32;
+    fn current_block_number() -> Self::BlockNumber {
+        frame_system::Pallet::<Test>::block_number()
+            .saturating_sub(1)
+            .try_into()
+            .unwrap()
+    }
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = MockRelaychainDataProvider;
     type WeightInfo = ();
 }
 

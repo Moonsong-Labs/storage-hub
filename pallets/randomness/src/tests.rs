@@ -84,7 +84,7 @@ fn set_babe_randomness_works_after_a_few_epochs() {
         for i in 1..10 {
             // Include the inherent in the block to set the randomness.
             // For mock, the relay epoch is equal to the block number, the randomness is the Blake2 256 bit hash of the relay epoch
-            // and its valid block is current block number - 1
+            // and its valid block is current block number - 2
             assert_ok!(Randomness::set_babe_randomness(RuntimeOrigin::none()));
 
             // Get the last relay epoch for which randomness was processed (should be equal to i since we start the index at 1).
@@ -97,7 +97,7 @@ fn set_babe_randomness_works_after_a_few_epochs() {
                 randomness,
                 Some((
                     H256::from_slice(&blake2_256(&last_processed_relay_epoch.to_le_bytes())),
-                    System::block_number() - 1
+                    System::block_number().saturating_sub(2)
                 ))
             );
 
@@ -108,7 +108,7 @@ fn set_babe_randomness_works_after_a_few_epochs() {
                         &last_processed_relay_epoch.to_le_bytes(),
                     )),
                     from_epoch: i,
-                    valid_until_block: System::block_number() - 1,
+                    valid_until_block: System::block_number().saturating_sub(2),
                 }
                 .into(),
             );
