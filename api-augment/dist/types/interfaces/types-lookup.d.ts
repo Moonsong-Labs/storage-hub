@@ -5125,6 +5125,7 @@ declare module "@polkadot/types/lookup" {
     readonly isSpRegisteredButDataNotFound: boolean;
     readonly isBucketNotFound: boolean;
     readonly isBucketAlreadyExists: boolean;
+    readonly isBucketNotEmpty: boolean;
     readonly isAppendBucketToMspFailed: boolean;
     readonly isProviderNotSlashable: boolean;
     readonly isBucketMustHaveMspForOperation: boolean;
@@ -5137,7 +5138,6 @@ declare module "@polkadot/types/lookup" {
     readonly isValuePropositionNotAvailable: boolean;
     readonly isFixedRatePaymentStreamNotFound: boolean;
     readonly isMspAlreadyAssignedToBucket: boolean;
-    readonly isOverflow: boolean;
     readonly isBucketSizeExceedsLimit: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
@@ -5166,6 +5166,7 @@ declare module "@polkadot/types/lookup" {
       | "SpRegisteredButDataNotFound"
       | "BucketNotFound"
       | "BucketAlreadyExists"
+      | "BucketNotEmpty"
       | "AppendBucketToMspFailed"
       | "ProviderNotSlashable"
       | "BucketMustHaveMspForOperation"
@@ -5178,7 +5179,6 @@ declare module "@polkadot/types/lookup" {
       | "ValuePropositionNotAvailable"
       | "FixedRatePaymentStreamNotFound"
       | "MspAlreadyAssignedToBucket"
-      | "Overflow"
       | "BucketSizeExceedsLimit"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"

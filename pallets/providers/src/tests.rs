@@ -3960,7 +3960,7 @@ mod add_bucket {
     }
 }
 
-mod remove_msp_bucket {
+mod unassign_msp_from_bucket {
     use super::*;
     mod failure {
         use super::*;
@@ -3985,7 +3985,9 @@ mod remove_msp_bucket {
 
                 // Try to change a bucket that does not exist
                 assert_noop!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::remove_msp_bucket(&bucket_id),
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    ),
                     Error::<Test>::BucketNotFound
                 );
             });
@@ -3996,7 +3998,7 @@ mod remove_msp_bucket {
         use super::*;
 
         #[test]
-        fn remove_msp_bucket_works() {
+        fn unassign_msp_from_bucket_works() {
             ExtBuilder::build().execute_with(|| {
                 // Register Alice as MSP
                 let alice: AccountId = accounts::ALICE.0;
@@ -4032,7 +4034,7 @@ mod remove_msp_bucket {
                 );
 
                 assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::remove_msp_bucket(&bucket_id),
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id),
                 );
 
                 assert!(
@@ -4043,7 +4045,7 @@ mod remove_msp_bucket {
                 );
 
                 assert_noop!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::remove_msp_bucket(&bucket_id),
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id),
                     Error::<Test>::BucketMustHaveMspForOperation
                 );
             });
@@ -4051,7 +4053,7 @@ mod remove_msp_bucket {
     }
 }
 
-mod change_msp_bucket {
+mod assign_msp_to_bucket {
     use super::*;
     mod failure {
         use super::*;
@@ -4076,7 +4078,7 @@ mod change_msp_bucket {
 
                 // Try to change a bucket that does not exist
                 assert_noop!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::change_msp_bucket(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
                         &bucket_id, &msp_id,
                     ),
                     Error::<Test>::BucketNotFound
@@ -4115,7 +4117,7 @@ mod change_msp_bucket {
                 ));
 
                 assert_noop!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::change_msp_bucket(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
                         &bucket_id, &msp_id,
                     ),
                     Error::<Test>::MspAlreadyAssignedToBucket
@@ -4128,7 +4130,7 @@ mod change_msp_bucket {
         use super::*;
 
         #[test]
-        fn change_msp_bucket() {
+        fn assign_msp_to_bucket() {
             ExtBuilder::build().execute_with(|| {
                 // Register Alice as MSP
                 let alice: AccountId = accounts::ALICE.0;
@@ -4177,7 +4179,7 @@ mod change_msp_bucket {
 
                 // Change MSP of bucket
                 assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::change_msp_bucket(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
                         &bucket_id,
                         &charlie_msp_id,
                     )
@@ -4488,7 +4490,9 @@ mod increase_bucket_size {
 
                 // Remove the MSP from the bucket
                 assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::remove_msp_bucket(&bucket_id)
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
                 );
 
                 // Try to increase the size of a bucket that does not have an MSP
@@ -4653,7 +4657,9 @@ mod decrease_bucket_size {
 
                 // Remove the MSP from the bucket
                 assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::remove_msp_bucket(&bucket_id)
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
                 );
 
                 // Try to increase the size of a bucket that does not have an MSP

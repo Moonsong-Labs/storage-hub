@@ -283,10 +283,13 @@ pub trait MutateBucketsInterface {
     ) -> DispatchResult;
 
     /// Change MSP of a bucket.
-    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult;
+    fn assign_msp_to_bucket(
+        bucket_id: &Self::BucketId,
+        new_msp: &Self::ProviderId,
+    ) -> DispatchResult;
 
     /// Set a bucket's `msp_id` to `None` and also removing the element from the list in `MainStorageProviderIdsToBuckets`
-    fn remove_msp_bucket(bucket_id: &Self::BucketId) -> DispatchResult;
+    fn unassign_msp_from_bucket(bucket_id: &Self::BucketId) -> DispatchResult;
 
     /// Change the root of a bucket.
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult;

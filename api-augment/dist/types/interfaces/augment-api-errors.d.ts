@@ -995,6 +995,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketMustHaveMspForOperation: AugmentedError<ApiType>;
       /**
+       * Bucket cannot be deleted because it is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
+      /**
        * Error thrown when a bucket ID is not found in storage.
        **/
       BucketNotFound: AugmentedError<ApiType>;
@@ -1082,10 +1086,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
-      /**
-       * Error thrown when an arithmetic operation results in an overflow.
-       **/
-      Overflow: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to update a payment stream that does not exist.
        **/

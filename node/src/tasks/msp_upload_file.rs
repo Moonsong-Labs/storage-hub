@@ -691,11 +691,15 @@ where
                 );
                 error!(target: LOG_TARGET, err_msg);
                 anyhow!(err_msg)
-            })?
-            .ok_or(anyhow!("MSP ID not found for bucket ID {:?}. This can happen if the MSP stopped storing the bucket while processing this storage request.", event.bucket_id))?;
+            })?;
 
-        if own_msp_id != msp_id_of_bucket_id {
-            // Skip the file if the MSP ID of the bucket ID does not match the node's MSP ID.
+        if let Some(msp_id) = msp_id_of_bucket_id {
+            if own_msp_id != msp_id {
+                warn!(target: LOG_TARGET, "Skipping storage request - MSP ID does not match own MSP ID for bucket ID {:?}", event.bucket_id);
+                return Ok(());
+            }
+        } else {
+            warn!(target: LOG_TARGET, "Skipping storage request - MSP ID not found for bucket ID {:?}", event.bucket_id);
             return Ok(());
         }
 

@@ -390,7 +390,7 @@ where
         );
 
         // Change the MSP that stores the bucket.
-        <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
+        <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
 
         // Increase the used capacity of the new MSP.
         <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -749,7 +749,7 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
     ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
-        // Check if the sender is an MSP.
+        // Check if the sender is a Provider.
         let msp_id =
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
@@ -776,7 +776,7 @@ where
         )?;
 
         // Remove the MSP from the bucket.
-        <T::Providers as MutateBucketsInterface>::remove_msp_bucket(&bucket_id)?;
+        <T::Providers as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id)?;
 
         Ok((msp_id, bucket_owner))
     }

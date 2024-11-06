@@ -29,8 +29,8 @@ use shp_traits::{
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId,
-    ValueProposition, ValuePropositionWithId,
+    Multiaddresses, ProviderId, RateDeltaParam, SignUpRequestSpParams, StorageProviderId,
+    ValuePropId, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -1020,24 +1020,22 @@ where
                 let bucket: Bucket<T> =
                     Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-                let new_rate = if bucket.size.is_zero() {
-                    current_rate
-                        .checked_add(&T::ZeroSizeBucketFixedRate::get())
-                        .ok_or(Error::<T>::Overflow)?
-                } else {
-                    let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                        &msp_id,
-                        &bucket.value_prop_id,
-                    )
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+                    &msp_id,
+                    &bucket.value_prop_id,
+                )
+                .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-                    let bucket_rate =
-                        value_prop.price_per_unit_of_data_per_block * bucket.size.into();
+                let bucket_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&bucket.size.into())
+                    .ok_or(ArithmeticError::Overflow)?;
 
-                    current_rate
-                        .checked_add(&bucket_rate)
-                        .ok_or(Error::<T>::Overflow)?
-                };
+                let new_rate = current_rate
+                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_add(&bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
 
                 if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
                     &msp_id, &user_id,
@@ -1059,20 +1057,20 @@ where
                 let bucket: Bucket<T> =
                     Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-                let new_rate = if bucket.size.is_zero() {
-                    current_rate.saturating_sub(T::ZeroSizeBucketFixedRate::get())
-                } else {
-                    let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                        &msp_id,
-                        &bucket.value_prop_id,
-                    )
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+                    &msp_id,
+                    &bucket.value_prop_id,
+                )
+                .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-                    let bucket_rate =
-                        value_prop.price_per_unit_of_data_per_block * bucket.size.into();
+                let bucket_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&bucket.size.into())
+                    .ok_or(ArithmeticError::Overflow)?;
 
-                    current_rate.saturating_sub(bucket_rate)
-                };
+                let new_rate = current_rate
+                    .saturating_sub(T::ZeroSizeBucketFixedRate::get())
+                    .saturating_sub(bucket_rate);
 
                 if new_rate.is_zero() {
                     <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
@@ -1099,7 +1097,7 @@ where
                 let new_bucket_size = bucket
                     .size
                     .checked_add(&delta)
-                    .ok_or(Error::<T>::Overflow)?;
+                    .ok_or(ArithmeticError::Overflow)?;
 
                 // Ensure the new bucket size does not exceed the bucket data limit of associated value proposition
                 ensure!(
@@ -1107,11 +1105,14 @@ where
                     Error::<T>::BucketSizeExceedsLimit
                 );
 
-                let delta_rate = value_prop.price_per_unit_of_data_per_block * delta.into();
+                let delta_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&delta.into())
+                    .ok_or(ArithmeticError::Overflow)?;
 
                 let new_rate = current_rate
                     .checked_add(&delta_rate)
-                    .ok_or(Error::<T>::Overflow)?;
+                    .ok_or(ArithmeticError::Overflow)?;
 
                 <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
                     &msp_id, &user_id, new_rate,
@@ -1125,7 +1126,10 @@ where
                 )
                 .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-                let delta_rate = value_prop.price_per_unit_of_data_per_block * delta.into();
+                let delta_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&delta.into())
+                    .ok_or(ArithmeticError::Overflow)?;
 
                 let new_rate = current_rate.saturating_sub(delta_rate);
 
@@ -1146,18 +1150,6 @@ where
 
         Ok(())
     }
-}
-
-/// The delta applied to a fixed rate payment stream via [`Pallet::compute_new_rate_delta`].
-enum RateDeltaParam<T: Config> {
-    /// Variant should be used when a new bucket is associated to an MSP.
-    NewBucket,
-    /// Variant should be used when a bucket is removed from an MSP.
-    RemoveBucket,
-    /// Variant should be used when a bucket size has increased by some amount.
-    Increase(StorageDataUnit<T>),
-    /// Variant should be used when a bucket size has decreased by some amount.
-    Decrease(StorageDataUnit<T>),
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
@@ -1345,7 +1337,10 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult {
+    fn assign_msp_to_bucket(
+        bucket_id: &Self::BucketId,
+        new_msp: &Self::ProviderId,
+    ) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
@@ -1379,7 +1374,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         })
     }
 
-    fn remove_msp_bucket(bucket_id: &Self::BucketId) -> DispatchResult {
+    fn unassign_msp_from_bucket(bucket_id: &Self::BucketId) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
@@ -1415,20 +1410,24 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
         let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        let msp_id = match bucket.msp_id {
-            Some(msp_id) => msp_id,
-            None => return Err(Error::<T>::BucketMustHaveMspForOperation.into()),
+        // Check if the bucket is empty
+        ensure!(
+            bucket.root == T::DefaultMerkleRoot::get(),
+            Error::<T>::BucketNotEmpty
+        );
+
+        if let Some(msp_id) = bucket.msp_id {
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::RemoveBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
         };
 
-        Self::apply_delta_fixed_rate_payment_stream(
-            &msp_id,
-            &bucket_id,
-            &bucket.user_id,
-            RateDeltaParam::RemoveBucket,
-        )?;
-
         Buckets::<T>::remove(&bucket_id);
-        MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
 
         // Release the bucket deposit hold
         T::NativeBalance::release(

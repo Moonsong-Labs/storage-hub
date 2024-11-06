@@ -79,7 +79,7 @@ where
             event.location,
         );
 
-        let msp_id = self
+        let Some(msp_id) = self
             .storage_hub_handler
             .blockchain
             .query_msp_id_of_bucket_id(event.bucket_id)
@@ -91,7 +91,14 @@ where
                     e
                 )
             })?
-            .ok_or(anyhow::anyhow!("MSP ID not found for bucket ID {:?}. This can happen if the MSP stopped storing the bucket while processing this storage request.", event.bucket_id))?;
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "Skipping storage request - no MSP ID found for bucket ID {:?}",
+                event.bucket_id
+            );
+            return Ok(());
+        };
 
         let msp_multiaddresses = self
             .storage_hub_handler

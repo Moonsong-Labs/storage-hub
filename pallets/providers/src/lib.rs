@@ -550,6 +550,8 @@ pub mod pallet {
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
+        /// Bucket cannot be deleted because it is not empty.
+        BucketNotEmpty,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
@@ -574,8 +576,6 @@ pub mod pallet {
         FixedRatePaymentStreamNotFound,
         /// Error thrown when changing the MSP of a bucket to the same assigned MSP.
         MspAlreadyAssignedToBucket,
-        /// Error thrown when an arithmetic operation results in an overflow.
-        Overflow,
         /// Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
         BucketSizeExceedsLimit,
 
