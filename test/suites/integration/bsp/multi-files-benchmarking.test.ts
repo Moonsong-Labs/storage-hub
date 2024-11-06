@@ -20,14 +20,72 @@ describeBspNet(
     });
 
     it("Add files to the BSP's Forest", async () => {
-      const sources = ["res/adolphus.jpg", "res/cloud.jpg", "res/smile.jpg", "res/whatsup.jpg"];
-      const locations = [
-        "test/adolphus.jpg",
-        "test/cloud.jpg",
-        "test/smile.jpg",
-        "test/whatsup.jpg"
+      const sources = [
+        "res/benchmarking/1.jpg",
+        "res/benchmarking/2.jpg",
+        "res/benchmarking/3.jpg",
+        "res/benchmarking/4.jpg",
+        "res/benchmarking/5.jpg",
+        "res/benchmarking/6.jpg",
+        "res/benchmarking/7.jpg",
+        "res/benchmarking/8.jpg",
+        "res/benchmarking/9.jpg",
+        "res/benchmarking/10.jpg"
+        // "res/benchmarking/11.jpg",
+        // "res/benchmarking/12.jpg",
+        // "res/benchmarking/13.jpg",
+        // "res/benchmarking/14.jpg",
+        // "res/benchmarking/15.jpg",
+        // "res/benchmarking/16.jpg",
+        // "res/benchmarking/17.jpg",
+        // "res/benchmarking/18.jpg",
+        // "res/benchmarking/19.jpg",
+        // "res/benchmarking/20.jpg"
       ];
-      const bucketNames = ["bucket-1", "bucket-2", "bucket-3", "bucket-4"];
+      const locations = [
+        "test/1.jpg",
+        "test/2.jpg",
+        "test/3.jpg",
+        "test/4.jpg",
+        "test/5.jpg",
+        "test/6.jpg",
+        "test/7.jpg",
+        "test/8.jpg",
+        "test/9.jpg",
+        "test/10.jpg"
+        // "test/11.jpg",
+        // "test/12.jpg",
+        // "test/13.jpg",
+        // "test/14.jpg",
+        // "test/15.jpg",
+        // "test/16.jpg",
+        // "test/17.jpg",
+        // "test/18.jpg",
+        // "test/19.jpg",
+        // "test/20.jpg"
+      ];
+      const bucketNames = [
+        "bucket-1",
+        "bucket-2",
+        "bucket-3",
+        "bucket-4",
+        "bucket-5",
+        "bucket-6",
+        "bucket-7",
+        "bucket-8",
+        "bucket-9",
+        "bucket-10"
+        // "bucket-11",
+        // "bucket-12",
+        // "bucket-13",
+        // "bucket-14",
+        // "bucket-15",
+        // "bucket-16",
+        // "bucket-17",
+        // "bucket-18",
+        // "bucket-19",
+        // "bucket-20"
+      ];
 
       // Upload files to the BSP.
       for (let i = 0; i < sources.length; i++) {
@@ -45,6 +103,7 @@ describeBspNet(
 
       // Sort the file keys.
       fileKeys.sort();
+      console.log("Sorted file keys: ", fileKeys);
 
       // Wait for the BSP to add the last confirmed file to its Forest.
       await sleep(500);
@@ -55,84 +114,34 @@ describeBspNet(
       root = forestRoot.toString().slice(2);
     });
 
-    it("Generate a proof for 1 file", async () => {
-      const challenges = [decrementHash(fileKeys[0])];
-      const proof = await bspApi.rpc.storagehubclient.generateProof(DUMMY_BSP_ID, seed, challenges);
+    it("Generate a proof for files 1 to 20", async () => {
+      for (let i = 1; i <= 10; i++) {
+        const filteredIndexes = Array.from({ length: i - 1 }, (_, index) => index + 1)
+          .filter((num) => num % 2 !== 0)
+          .concat(i % 2 !== 0 ? [i - 1] : []);
 
-      console.log("\n\n Challenges for 1 file:");
-      console.log(challenges);
-      console.log("Proof for 1 file:");
-      console.log(proof.toString());
+        const challenges = filteredIndexes.map((index) => decrementHash(fileKeys[index]));
+        const proof = await bspApi.rpc.storagehubclient.generateProof(
+          DUMMY_BSP_ID,
+          seed,
+          challenges
+        );
 
-      // Remove the 0x prefix from the challenges and proof.
-      for (const i in challenges) {
-        challenges[i] = challenges[i].slice(2);
+        console.log(`\n\n Challenges for ${i} files:`);
+        console.log(challenges);
+        // console.log("Proof for 1 file:");
+        // console.log(proof.toString());
+
+        // Remove the 0x prefix from the challenges and proof.
+        for (const i in challenges) {
+          challenges[i] = challenges[i].slice(2);
+        }
+        const proofHexStr = proof.toString().slice(2);
+
+        // Add the challenges and proof to the arrays.
+        challengesCases.push(challenges);
+        proofsCases.push(proofHexStr);
       }
-      const proofHexStr = proof.toString().slice(2);
-
-      // Add the challenges and proof to the arrays.
-      challengesCases.push(challenges);
-      proofsCases.push(proofHexStr);
-    });
-
-    it("Generate a proof for 2 files", async () => {
-      const challenges = [decrementHash(fileKeys[1])];
-      const proof = await bspApi.rpc.storagehubclient.generateProof(DUMMY_BSP_ID, seed, challenges);
-
-      console.log("\n\n Challenges for 2 files:");
-      console.log(challenges);
-      console.log("Proof for 2 files:");
-      console.log(proof.toString());
-
-      // Remove the 0x prefix from the challenges and proof.
-      for (const i in challenges) {
-        challenges[i] = challenges[i].slice(2);
-      }
-      const proofHexStr = proof.toString().slice(2);
-
-      // Add the challenges and proof to the arrays.
-      challengesCases.push(challenges);
-      proofsCases.push(proofHexStr);
-    });
-
-    it("Generate a proof for 3 files", async () => {
-      const challenges = [decrementHash(fileKeys[1]), decrementHash(fileKeys[2])];
-      const proof = await bspApi.rpc.storagehubclient.generateProof(DUMMY_BSP_ID, seed, challenges);
-
-      console.log("\n\n Challenges for 3 files:");
-      console.log(challenges);
-      console.log("Proof for 3 files:");
-      console.log(proof.toString());
-
-      // Remove the 0x prefix from the challenges and proof.
-      for (const i in challenges) {
-        challenges[i] = challenges[i].slice(2);
-      }
-      const proofHexStr = proof.toString().slice(2);
-
-      // Add the challenges and proof to the arrays.
-      challengesCases.push(challenges);
-      proofsCases.push(proofHexStr);
-    });
-
-    it("Generate a proof for 4 files", async () => {
-      const challenges = [decrementHash(fileKeys[1]), decrementHash(fileKeys[3])];
-      const proof = await bspApi.rpc.storagehubclient.generateProof(DUMMY_BSP_ID, seed, challenges);
-
-      console.log("\n\n Challenges for 4 files:");
-      console.log(challenges);
-      console.log("Proof for 4 files:");
-      console.log(proof.toString());
-
-      // Remove the 0x prefix from the challenges and proof.
-      for (const i in challenges) {
-        challenges[i] = challenges[i].slice(2);
-      }
-      const proofHexStr = proof.toString().slice(2);
-
-      // Add the challenges and proof to the arrays.
-      challengesCases.push(challenges);
-      proofsCases.push(proofHexStr);
     });
 
     it("Write rust file with seed, provider ID, root, challenges and proofs", async () => {
