@@ -513,6 +513,8 @@ jobs:
         run: |
           cd api-augment
           if [ -n "$(git status --porcelain .)" ]; then
+            echo "Diff:"
+            git diff .
             echo "Typegen produced changes. Please run 'pnpm typegen' locally and commit the changes."
             exit 1
           else
