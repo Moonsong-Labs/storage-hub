@@ -612,7 +612,7 @@ pub mod pallet {
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::submit_proof(proof.key_proofs.len() as u32))]
         pub fn submit_proof(
             origin: OriginFor<T>,
             proof: Proof<T>,

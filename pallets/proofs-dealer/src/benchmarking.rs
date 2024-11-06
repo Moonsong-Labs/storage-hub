@@ -82,9 +82,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn submit_proof() -> Result<(), BenchmarkError> {
-        let n = 4;
-
+    fn submit_proof(n: Linear<1, { 4 }>) -> Result<(), BenchmarkError> {
         // Setup initial conditions.
         let caller: T::AccountId = whitelisted_caller();
         let provider_balance = match 1_000_000_000_000_000u128.try_into() {
