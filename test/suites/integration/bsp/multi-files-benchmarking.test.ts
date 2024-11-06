@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 
 describeBspNet(
   "Build proofs for benchmarking test cases",
-  { networkConfig: "standard", skip: true },
+  { networkConfig: "standard", skip: true, only: true },
   ({ before, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -30,17 +30,17 @@ describeBspNet(
         "res/benchmarking/7.jpg",
         "res/benchmarking/8.jpg",
         "res/benchmarking/9.jpg",
-        "res/benchmarking/10.jpg"
-        // "res/benchmarking/11.jpg",
-        // "res/benchmarking/12.jpg",
-        // "res/benchmarking/13.jpg",
-        // "res/benchmarking/14.jpg",
-        // "res/benchmarking/15.jpg",
-        // "res/benchmarking/16.jpg",
-        // "res/benchmarking/17.jpg",
-        // "res/benchmarking/18.jpg",
-        // "res/benchmarking/19.jpg",
-        // "res/benchmarking/20.jpg"
+        "res/benchmarking/10.jpg",
+        "res/benchmarking/11.jpg",
+        "res/benchmarking/12.jpg",
+        "res/benchmarking/13.jpg",
+        "res/benchmarking/14.jpg",
+        "res/benchmarking/15.jpg",
+        "res/benchmarking/16.jpg",
+        "res/benchmarking/17.jpg",
+        "res/benchmarking/18.jpg",
+        "res/benchmarking/19.jpg",
+        "res/benchmarking/20.jpg"
       ];
       const locations = [
         "test/1.jpg",
@@ -52,17 +52,17 @@ describeBspNet(
         "test/7.jpg",
         "test/8.jpg",
         "test/9.jpg",
-        "test/10.jpg"
-        // "test/11.jpg",
-        // "test/12.jpg",
-        // "test/13.jpg",
-        // "test/14.jpg",
-        // "test/15.jpg",
-        // "test/16.jpg",
-        // "test/17.jpg",
-        // "test/18.jpg",
-        // "test/19.jpg",
-        // "test/20.jpg"
+        "test/10.jpg",
+        "test/11.jpg",
+        "test/12.jpg",
+        "test/13.jpg",
+        "test/14.jpg",
+        "test/15.jpg",
+        "test/16.jpg",
+        "test/17.jpg",
+        "test/18.jpg",
+        "test/19.jpg",
+        "test/20.jpg"
       ];
       const bucketNames = [
         "bucket-1",
@@ -74,21 +74,22 @@ describeBspNet(
         "bucket-7",
         "bucket-8",
         "bucket-9",
-        "bucket-10"
-        // "bucket-11",
-        // "bucket-12",
-        // "bucket-13",
-        // "bucket-14",
-        // "bucket-15",
-        // "bucket-16",
-        // "bucket-17",
-        // "bucket-18",
-        // "bucket-19",
-        // "bucket-20"
+        "bucket-10",
+        "bucket-11",
+        "bucket-12",
+        "bucket-13",
+        "bucket-14",
+        "bucket-15",
+        "bucket-16",
+        "bucket-17",
+        "bucket-18",
+        "bucket-19",
+        "bucket-20"
       ];
 
       // Upload files to the BSP.
       for (let i = 0; i < sources.length; i++) {
+        console.log(`Uploading file ${i + 1} of ${sources.length}`);
         const source = sources[i];
         const destination = locations[i];
         const bucketName = bucketNames[i];
@@ -115,7 +116,7 @@ describeBspNet(
     });
 
     it("Generate a proof for files 1 to 20", async () => {
-      for (let i = 1; i <= 10; i++) {
+      for (let i = 1; i <= 20; i++) {
         const filteredIndexes = Array.from({ length: i - 1 }, (_, index) => index + 1)
           .filter((num) => num % 2 !== 0)
           .concat(i % 2 !== 0 ? [i - 1] : []);

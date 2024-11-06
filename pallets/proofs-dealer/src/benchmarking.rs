@@ -82,7 +82,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn submit_proof(n: Linear<1, { 10 }>) -> Result<(), BenchmarkError> {
+    fn submit_proof(n: Linear<1, { 20 }>) -> Result<(), BenchmarkError> {
         // Setup initial conditions.
         let caller: T::AccountId = whitelisted_caller();
         let provider_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -187,9 +187,13 @@ mod benchmarks {
         TickToCheckpointChallenges::<T>::insert(last_checkpoint_tick, custom_challenges.clone());
 
         // Fetch proof for the challenged keys.
-        let encoded_proof = fetch_proof(n);
+        let encoded_proof = fetch_proof(n.clone());
         let proof =
             <Proof<T>>::decode(&mut encoded_proof.as_ref()).expect("Proof should be decodable");
+
+        // Check that the proof has the expected number of file key proofs.
+        let n: u32 = n.into();
+        assert_eq!(proof.key_proofs.len() as u32, n);
 
         // Call some extrinsic.
         #[extrinsic_call]
