@@ -136,7 +136,10 @@ where
         {
             Ok(proven) => {
                 if proven.len() != 1 {
-                    Err(anyhow::anyhow!("Expected exactly one proven chunk."))
+                    Err(anyhow::anyhow!(
+                        "Expected exactly one proven chunk but got {}.",
+                        proven.len()
+                    ))
                 } else {
                     Ok(proven[0].clone())
                 }
