@@ -119,8 +119,6 @@ export async function describeBspNet<
 export async function describeMspNet<
   T extends [(context: FullNetContext) => void] | [TestOptions, (context: FullNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
-  await verifyContainerFreshness();
-
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
 
@@ -140,6 +138,8 @@ export async function describeMspNet<
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
+        await verifyContainerFreshness();
+
         responseListenerPromise = new Promise((resolve) => {
           launchEventEmitter.once("networkLaunched", resolve);
         });
