@@ -110,6 +110,15 @@ pub mod dynamic_params {
         #[allow(non_upper_case_globals)]
         /// The maximum treasury cut that can be taken from the amount charged from a payment stream.
         pub static MaximumTreasuryCut: Perbill = Perbill::from_percent(5);
+
+        #[codec(index = 15)]
+        #[allow(non_upper_case_globals)]
+        /// The penalty a BSP must pay when they forcefully stop storing a file.
+        /// We set this to be half of the `SlashAmountPerMaxFileSize` with the rationale that
+        /// for a BSP that has lost this file, it should be more convenient to voluntarily
+        /// show up and pay this penalty in good faith, rather than risking being slashed for
+        /// being unable to submit a proof that should include this file.
+        pub static BspStopStoringFilePenalty: Balance = SlashAmountPerMaxFileSize::get() / 2;
     }
 }
 

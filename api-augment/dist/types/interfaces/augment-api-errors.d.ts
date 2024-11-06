@@ -231,6 +231,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToEncodeFingerprint: AugmentedError<ApiType>;
       /**
+       * Failed to get owner account of ID of provider
+       **/
+      FailedToGetOwnerAccount: AugmentedError<ApiType>;
+      /**
        * Failed to convert to primitive type.
        **/
       FailedTypeConversion: AugmentedError<ApiType>;

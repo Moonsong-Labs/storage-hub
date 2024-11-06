@@ -5780,6 +5780,128 @@ mod bsp_stop_storing {
         }
 
         #[test]
+        fn bsp_request_stop_storing_fails_if_cannot_pay_for_fee() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(vec![1]).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+                // Dispatch BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
+                ));
+
+                // Assert that the RequestStorageBsps now contains the BSP under the location
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: true,
+                        _phantom: Default::default()
+                    }
+                );
+
+                // Assert that the storage was updated
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                    })
+                );
+
+                // Set BSPs free balance to existential deposit
+                let existential_deposit = ExistentialDeposit::get();
+                <Test as Config>::Currency::set_balance(&bsp_account_id, existential_deposit);
+
+                // Dispatch BSP request stop storing.
+                let error = FileSystem::bsp_request_stop_storing(
+                    bsp_signed.clone(),
+                    file_key,
+                    bucket_id,
+                    location.clone(),
+                    owner_account_id.clone(),
+                    fingerprint,
+                    size,
+                    false,
+                    CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                )
+                .unwrap_err();
+
+                match error {
+                    sp_runtime::DispatchError::Token(_) => {
+                        assert!(true);
+                    }
+                    _ => {
+                        panic!("Unexpected error: {:?}", error);
+                    }
+                }
+            });
+        }
+
+        #[test]
         fn bsp_request_stop_storing_fails_if_pending_stop_storing_request_exists() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
@@ -6129,7 +6251,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6184,6 +6306,12 @@ mod bsp_stop_storing {
                     size,
                     fingerprint,
                 );
+
+                <Test as Config>::Currency::mint_into(
+                    &bsp_account_id,
+                    <Test as Config>::BspStopStoringFilePenalty::get(),
+                )
+                .unwrap();
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
