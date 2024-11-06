@@ -6,8 +6,23 @@
 import "@polkadot/api-base/types/calls";
 
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
-import type { Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
+import type {
+  Bytes,
+  Null,
+  Option,
+  Result,
+  Text,
+  Vec,
+  bool,
+  u128,
+  u32
+} from "@polkadot/types-codec";
 import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
+import type {
+  BenchmarkBatch,
+  BenchmarkConfig,
+  BenchmarkList
+} from "@polkadot/types/interfaces/benchmark";
 import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
 import type { BlockHash } from "@polkadot/types/interfaces/chain";
 import type { AuthorityId } from "@polkadot/types/interfaces/consensus";
@@ -29,6 +44,7 @@ import type {
   KeyTypeId,
   Slot,
   SlotDuration,
+  StorageInfo,
   Weight,
   WeightV2
 } from "@polkadot/types/interfaces/runtime";
@@ -117,6 +133,41 @@ declare module "@polkadot/api-base/types/calls" {
           includedHash: BlockHash | string | Uint8Array,
           slot: Slot | AnyNumber | Uint8Array
         ) => Observable<bool>
+      >;
+      /**
+       * Generic call
+       **/
+      [key: string]: DecoratedCallBase<ApiType>;
+    };
+    /** 0x67f4b8fba858782a/1 */
+    benchmark: {
+      /**
+       * Get the benchmark metadata available for this runtime.
+       **/
+      benchmarkMetadata: AugmentedCall<
+        ApiType,
+        (
+          extra: bool | boolean | Uint8Array
+        ) => Observable<ITuple<[Vec<BenchmarkList>, Vec<StorageInfo>]>>
+      >;
+      /**
+       * Dispatch the given benchmark.
+       **/
+      dispatchBenchmark: AugmentedCall<
+        ApiType,
+        (
+          config:
+            | BenchmarkConfig
+            | {
+                pallet?: any;
+                benchmark?: any;
+                selectedComponents?: any;
+                verify?: any;
+                internalRepeats?: any;
+              }
+            | string
+            | Uint8Array
+        ) => Observable<Result<Vec<BenchmarkBatch>, Text>>
       >;
       /**
        * Generic call
