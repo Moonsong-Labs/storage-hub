@@ -7680,6 +7680,7 @@ dependencies = [
  "log",
  "pallet-balances 39.0.0",
  "parity-scale-codec",
+ "polkadot-parachain-primitives 14.0.0",
  "scale-info",
  "serde",
  "shp-session-keys",

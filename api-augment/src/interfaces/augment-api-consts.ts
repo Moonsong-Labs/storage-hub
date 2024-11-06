@@ -70,6 +70,10 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
+       * Penalty payed by a BSP when they forcefully stop storing a file.
+       **/
+      bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
+      /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
@@ -77,13 +81,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
        **/
       maxBatchMspRespondStorageRequests: u32 & AugmentedConst<ApiType>;
-      /**
-       * Maximum number of SPs (MSP + BSPs) that can store a file.
-       *
-       * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
-       **/
-      maxBspsPerStorageRequest: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum number of multiaddresses for a storage request.
        **/
@@ -132,6 +129,10 @@ declare module "@polkadot/api-base/types/consts" {
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
+      /**
+       * The treasury account of the runtime, where a fraction of each payment goes.
+       **/
+      treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
