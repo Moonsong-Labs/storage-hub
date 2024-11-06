@@ -38,8 +38,6 @@ export function describeBspNet(
 export async function describeBspNet<
   T extends [(context: BspNetContext) => void] | [TestOptions, (context: BspNetContext) => void]
 >(title: string, ...args: T): Promise<void> {
-  await verifyContainerFreshness();
-
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
 
@@ -58,6 +56,8 @@ export async function describeBspNet<
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
+        await verifyContainerFreshness();
+
         responseListenerPromise = new Promise((resolve) => {
           launchEventEmitter.once("networkLaunched", resolve);
         });
