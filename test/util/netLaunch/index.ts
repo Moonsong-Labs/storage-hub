@@ -564,7 +564,9 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.type === "bspnet") {
-      await launchedNetwork.setupMsp(userApi, mspKey.address, multiAddressBsp);
+      const mockMspPeerId = "coolMSPWMvbhtYjbhgjoDzbnf71SFznJAKBBkSGYEUtnpES1y9tM";
+      const mockMspMultiAddress = `/ip4/${bspIp}/tcp/30350/p2p/${mockMspPeerId}`;
+      await launchedNetwork.setupMsp(userApi, mspKey.address, mockMspMultiAddress);
     }
 
     if (launchedNetwork.config.initialised === "multi") {
