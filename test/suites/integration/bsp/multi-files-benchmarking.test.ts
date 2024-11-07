@@ -40,7 +40,27 @@ describeBspNet(
         "res/benchmarking/17.jpg",
         "res/benchmarking/18.jpg",
         "res/benchmarking/19.jpg",
-        "res/benchmarking/20.jpg"
+        "res/benchmarking/20.jpg",
+        "res/benchmarking/21.jpg",
+        "res/benchmarking/22.jpg",
+        "res/benchmarking/23.jpg",
+        "res/benchmarking/24.jpg",
+        "res/benchmarking/25.jpg",
+        "res/benchmarking/26.jpg",
+        "res/benchmarking/27.jpg",
+        "res/benchmarking/28.jpg",
+        "res/benchmarking/29.jpg",
+        "res/benchmarking/30.jpg",
+        "res/benchmarking/31.jpg",
+        "res/benchmarking/32.jpg",
+        "res/benchmarking/33.jpg",
+        "res/benchmarking/34.jpg",
+        "res/benchmarking/35.jpg",
+        "res/benchmarking/36.jpg",
+        "res/benchmarking/37.jpg",
+        "res/benchmarking/38.jpg",
+        "res/benchmarking/39.jpg",
+        "res/benchmarking/40.jpg"
       ];
       const locations = [
         "test/1.jpg",
@@ -62,7 +82,27 @@ describeBspNet(
         "test/17.jpg",
         "test/18.jpg",
         "test/19.jpg",
-        "test/20.jpg"
+        "test/20.jpg",
+        "test/21.jpg",
+        "test/22.jpg",
+        "test/23.jpg",
+        "test/24.jpg",
+        "test/25.jpg",
+        "test/26.jpg",
+        "test/27.jpg",
+        "test/28.jpg",
+        "test/29.jpg",
+        "test/30.jpg",
+        "test/31.jpg",
+        "test/32.jpg",
+        "test/33.jpg",
+        "test/34.jpg",
+        "test/35.jpg",
+        "test/36.jpg",
+        "test/37.jpg",
+        "test/38.jpg",
+        "test/39.jpg",
+        "test/40.jpg"
       ];
       const bucketNames = [
         "bucket-1",
@@ -84,7 +124,27 @@ describeBspNet(
         "bucket-17",
         "bucket-18",
         "bucket-19",
-        "bucket-20"
+        "bucket-20",
+        "bucket-21",
+        "bucket-22",
+        "bucket-23",
+        "bucket-24",
+        "bucket-25",
+        "bucket-26",
+        "bucket-27",
+        "bucket-28",
+        "bucket-29",
+        "bucket-30",
+        "bucket-31",
+        "bucket-32",
+        "bucket-33",
+        "bucket-34",
+        "bucket-35",
+        "bucket-36",
+        "bucket-37",
+        "bucket-38",
+        "bucket-39",
+        "bucket-40"
       ];
 
       // Upload files to the BSP.
@@ -100,6 +160,13 @@ describeBspNet(
         await userApi.wait.bspVolunteer(1);
         await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
         await userApi.wait.bspStored(1);
+
+        // Advance two blocks to give room for proof submission.
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        await userApi.advanceToBlock(currentBlockNumber + 2, {
+          waitForBspProofs: [DUMMY_BSP_ID]
+        });
       }
 
       // Sort the file keys.
