@@ -253,7 +253,13 @@ describeBspNet(
       const source = "res/adolphus.jpg";
       const location = "test/adolphus.jpg";
       const bucketName = "nothingmuch-2";
-      const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName, null, null);
+      const fileMetadata = await userApi.file.newStorageRequest(
+        source,
+        location,
+        bucketName,
+        null,
+        null
+      );
       oneBspfileMetadata = fileMetadata;
     });
 
@@ -426,7 +432,7 @@ describeBspNet(
         "The root of the BSP should match the actual merkle forest root."
       );
 
-      // User sends file deletion request.  
+      // User sends file deletion request.
       await userApi.sealBlock(
         userApi.tx.fileSystem.deleteFile(
           oneBspfileMetadata.bucketId,

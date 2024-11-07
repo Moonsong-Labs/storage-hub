@@ -24,9 +24,7 @@ export const sendNewStorageRequest = async (
   }
 
   if (localValuePropId === undefined) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId
-    );
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
 
     localValuePropId = valueProps[0].id;
   }

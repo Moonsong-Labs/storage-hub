@@ -35,9 +35,7 @@ describeMspNet(
 
       invariant(bucketId, "Bucket ID not found");
 
-      await mspApi.rpc.storagehubclient.getForestRoot(
-        bucketId.toString()
-      );
+      await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 
       await userApi.sealBlock(
         userApi.tx.fileSystem.issueStorageRequest(
