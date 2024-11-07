@@ -8,6 +8,7 @@ import {
   sleep,
   type EnrichedBspApi
 } from "../../../util";
+import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -21,11 +22,14 @@ describeBspNet(
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      assert(launchResponse, "BSPNet failed to initialise");
+      invariant(
+        launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
+        "BSPNet failed to initialise with required ports"
+      );
       userApi = await createUserApi();
       bspApi = await createBspApi();
-      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
-      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`);
       userAddress = ShConsts.NODE_INFOS.user.AddressId;
     });
 

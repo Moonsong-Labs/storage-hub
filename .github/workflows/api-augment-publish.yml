@@ -15,27 +15,27 @@ jobs:
         with:
           ref: ${{ github.event.inputs.sha }}
 
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+        
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org/
 
       - name: Build API Augment
         run: |
           cd api-augment
-          pnpm install
+          pnpm i --frozen-lockfile
           pnpm run build
 
       - name: Publish API Augment
-        uses: JS-DevTools/npm-publish@v3
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          package: api-augment/package.json
-          registry: https://registry.npmjs.org/
-          access: public
-          command: pnpm publish
+        run: |
+          cd api-augment
+          pnpm publish ${{ github.event.inputs.DryRun && '--dry-run' || ''  }} --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

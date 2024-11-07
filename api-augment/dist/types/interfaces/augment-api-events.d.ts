@@ -547,6 +547,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that an empty bucket has been deleted.
+       **/
+      BucketDeleted: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bucketId: H256, maybeCollectionId: Option<u32>],
+        {
+          who: AccountId32;
+          bucketId: H256;
+          maybeCollectionId: Option<u32>;
+        }
+      >;
+      /**
        * Notifies that a bucket's privacy has been updated.
        **/
       BucketPrivacyUpdated: AugmentedEvent<
@@ -575,12 +587,18 @@ declare module "@polkadot/api-base/types/events" {
        **/
       FileDeletionRequest: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256, bucketId: H256, mspId: H256, proofOfInclusion: bool],
+        [
+          user: AccountId32,
+          fileKey: H256,
+          bucketId: H256,
+          mspId: Option<H256>,
+          proofOfInclusion: bool
+        ],
         {
           user: AccountId32;
           fileKey: H256;
           bucketId: H256;
-          mspId: H256;
+          mspId: Option<H256>;
           proofOfInclusion: bool;
         }
       >;

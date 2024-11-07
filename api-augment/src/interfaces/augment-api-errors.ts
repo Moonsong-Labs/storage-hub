@@ -203,6 +203,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketIsNotPrivate: AugmentedError<ApiType>;
       /**
+       * Bucket is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
+      /**
        * Bucket does not exist
        **/
       BucketNotFound: AugmentedError<ApiType>;
@@ -234,6 +238,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to encode fingerprint as slice.
        **/
       FailedToEncodeFingerprint: AugmentedError<ApiType>;
+      /**
+       * Failed to get owner account of ID of provider
+       **/
+      FailedToGetOwnerAccount: AugmentedError<ApiType>;
       /**
        * Failed to convert to primitive type.
        **/

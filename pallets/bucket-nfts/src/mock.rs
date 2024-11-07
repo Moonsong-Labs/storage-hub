@@ -14,6 +14,7 @@ use shp_traits::{
     ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface, TrieMutation,
     TrieRemoveMutation,
 };
+use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -93,6 +94,7 @@ parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+    pub const ExistentialDeposit: u128 = 1;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -126,7 +128,7 @@ impl pallet_balances::Config for Test {
     type Balance = Balance;
     type DustRemoval = ();
     type RuntimeEvent = RuntimeEvent;
-    type ExistentialDeposit = ConstU128<1>;
+    type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = ();
     type MaxLocks = ConstU32<10>;
@@ -244,7 +246,8 @@ impl pallet_file_system::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type BspStopStoringFilePenalty = ConstU128<1>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
@@ -315,6 +318,8 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
@@ -423,6 +428,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
+            (TreasuryAccount::get(), ExistentialDeposit::get()),
         ],
     }
     .assimilate_storage(&mut t)

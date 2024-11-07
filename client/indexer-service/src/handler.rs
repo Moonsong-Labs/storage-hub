@@ -243,6 +243,7 @@ impl IndexerService {
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
+            pallet_file_system::Event::BucketDeleted { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
