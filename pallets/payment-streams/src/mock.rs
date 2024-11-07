@@ -298,14 +298,8 @@ impl crate::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
-}
-
-// Build genesis storage according to the mock runtime.
-pub fn _new_test_ext() -> sp_io::TestExternalities {
-    frame_system::GenesisConfig::<Test>::default()
-        .build_storage()
-        .unwrap()
-        .into()
+    #[cfg(feature = "runtime-benchmarks")]
+    type RegisterProvidersBenchmark = StorageProviders;
 }
 
 // Externalities builder with predefined balances for accounts and starting at block number 1

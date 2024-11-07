@@ -1088,3 +1088,68 @@ pub trait TreasuryCutCalculator {
         amount_to_charge: Self::Balance,
     ) -> Self::Balance;
 }
+
+#[cfg(feature = "runtime-benchmarks")]
+pub mod runtime_benchmark_helper_interfaces {
+    use super::*;
+
+    /// A trait that allows pallets that need it to forcefully register MSPs and BSPs for benchmarking.
+    pub trait ForceRegisterProviders {
+        /// Type that can be used to identify accounts.
+        type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+        /// Type of the registered Providers' IDs.
+        type ProviderId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+
+        /// Type of the unit of storage data in which the capacity is measured.
+        type StorageDataUnit: NumericalParam + Into<u64>;
+
+        /// Type of a multiaddress.
+        type MultiAddress: Parameter
+            + MaybeSerializeDeserialize
+            + Debug
+            + Ord
+            + Default
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec
+            + TryFrom<sp_runtime::Vec<u8>>;
+
+        /// Balance type of the runtime.
+        type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
+
+        /// Maximum amount of multiaddresses a provider can have.
+        type MaxNumberOfMultiAddresses: Get<u32>;
+
+        /// Force register a MSP.
+        fn force_register_msp(
+            who: Self::AccountId,
+            msp_id: &str,
+            initial_capacity: Self::StorageDataUnit,
+            multiaddresses: BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>,
+            price_per_unit_per_block: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+        ) -> Result<Self::ProviderId, DispatchError>;
+
+        /// Force register a BSP.
+        fn force_register_bsp(
+            who: Self::AccountId,
+            bsp_id: &str,
+            initial_capacity: Self::StorageDataUnit,
+            multiaddresses: BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>,
+        ) -> Result<Self::ProviderId, DispatchError>;
+    }
+}

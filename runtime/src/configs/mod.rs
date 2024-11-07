@@ -534,6 +534,8 @@ impl pallet_payment_streams::Config for Runtime {
     type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perbill>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type RegisterProvidersBenchmark = Providers;
 }
 
 // TODO: remove this and replace with pallet treasury

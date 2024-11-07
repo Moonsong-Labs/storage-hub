@@ -1771,3 +1771,71 @@ where
         Ok(stake)
     }
 }
+
+#[cfg(feature = "runtime-benchmarks")]
+pub mod runtime_benchmark_helpers {
+    use super::*;
+
+    use frame_support::traits::OriginTrait;
+    use frame_system::pallet_prelude::OriginFor;
+    use shp_traits::runtime_benchmark_helper_interfaces::ForceRegisterProviders;
+    use sp_runtime::traits::Hash;
+    use sp_std::vec;
+    use types::Hashing;
+
+    impl<T: pallet::Config> ForceRegisterProviders for pallet::Pallet<T> {
+        type AccountId = T::AccountId;
+        type ProviderId = HashId<T>;
+        type StorageDataUnit = T::StorageDataUnit;
+        type Balance = T::NativeBalance;
+        type MultiAddress = MultiAddress<T>;
+        type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
+
+        fn force_register_bsp(
+            who: Self::AccountId,
+            bsp_id: &str,
+            initial_capacity: Self::StorageDataUnit,
+            multiaddresses: BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>,
+        ) -> Result<Self::ProviderId, DispatchError> {
+            let bsp_id = <Hashing<T> as Hash>::hash(bsp_id.as_bytes());
+            Self::force_bsp_sign_up(
+                OriginFor::<T>::root(),
+                who.clone(),
+                bsp_id,
+                initial_capacity,
+                multiaddresses,
+                who,
+                None,
+            )
+            .map_err(|e| e.error)?;
+
+            Ok(bsp_id)
+        }
+
+        fn force_register_msp(
+            who: Self::AccountId,
+            msp_id: &str,
+            initial_capacity: Self::StorageDataUnit,
+            multiaddresses: BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>,
+            price_per_unit_per_block: <Self::Balance as frame_support::traits::fungible::Inspect<
+                Self::AccountId,
+            >>::Balance,
+        ) -> Result<Self::ProviderId, DispatchError> {
+            let msp_id = <Hashing<T> as Hash>::hash(msp_id.as_bytes());
+            Self::force_msp_sign_up(
+                OriginFor::<T>::root(),
+                who.clone(),
+                msp_id,
+                initial_capacity,
+                multiaddresses,
+                price_per_unit_per_block,
+                vec![].try_into().unwrap(),
+                initial_capacity,
+                who,
+            )
+            .map_err(|e| e.error)?;
+
+            Ok(msp_id)
+        }
+    }
+}

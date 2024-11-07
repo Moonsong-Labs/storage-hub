@@ -244,6 +244,8 @@ impl pallet_payment_streams::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type RegisterProvidersBenchmark = StorageProviders;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;

@@ -11,8 +11,8 @@
 pub mod types;
 mod utils;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -53,6 +53,10 @@ pub mod pallet {
         /// The trait for reading provider data.
         type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId>
             + SystemMetricsInterface<ProvidedUnit = Self::Units>;
+
+        #[cfg(feature = "runtime-benchmarks")]
+        /// The trait to register new providers for benchmarking.
+        type RegisterProvidersBenchmark: shp_traits::runtime_benchmark_helper_interfaces::ForceRegisterProviders<AccountId = Self::AccountId, ProviderId = ProviderIdFor<Self>, StorageDataUnit = Self::Units, Balance = Self::NativeBalance>;
 
         /// The trait exposing data of which providers submitted valid proofs in which ticks
         type ProvidersProofSubmitters: ProofSubmittersInterface<

@@ -160,6 +160,8 @@ pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
 
 /// HashId is the type that uniquely identifies either a Storage Provider (MSP or BSP) or a Bucket.
 pub type HashId<T> = <T as frame_system::Config>::Hash;
+/// Hasher is the hashing algorithm used to get the HashId.
+pub type Hashing<T> = <T as frame_system::Config>::Hashing;
 
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
 /// pallet configuration so the runtime can use any type that implements them.
