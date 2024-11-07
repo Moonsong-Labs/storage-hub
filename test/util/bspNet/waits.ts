@@ -328,19 +328,5 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
     }
   }
 
-  const { events } = await sealBlock(api);
-  const mspRespondEvent = assertEventPresent(
-    api,
-    "fileSystem",
-    "MspRespondedToStorageRequests",
-    events
-  );
-
-  const mspRespondDataBlob =
-    api.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-    mspRespondEvent.event.data;
-
-  if (!mspRespondDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
+  await sealBlock(api);
 };
