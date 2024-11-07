@@ -62,6 +62,10 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
+       * Penalty payed by a BSP when they forcefully stop storing a file.
+       **/
+      bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
+      /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
@@ -69,13 +73,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
        **/
       maxBatchMspRespondStorageRequests: u32 & AugmentedConst<ApiType>;
-      /**
-       * Maximum number of SPs (MSP + BSPs) that can store a file.
-       *
-       * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
-       **/
-      maxBspsPerStorageRequest: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum number of multiaddresses for a storage request.
        **/
@@ -117,9 +114,17 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * Deposit held from the User when creating a new storage request
+       **/
+      storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
+      /**
+       * The treasury account of the runtime, where a fraction of each payment goes.
+       **/
+      treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
@@ -237,6 +242,11 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
+       * The maximum amount of Users that a Provider can charge in a single extrinsic execution.
+       * This is used to prevent a Provider from charging too many Users in a single block, which could lead to a DoS attack.
+       **/
+      maxUsersToCharge: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
        * `NewStreamDeposit * rate` will be held as a deposit.
@@ -244,6 +254,10 @@ declare module "@polkadot/api-base/types/consts" {
        * to be provided by the pallet using the `PaymentStreamsInterface` interface.
        **/
       newStreamDeposit: u32 & AugmentedConst<ApiType>;
+      /**
+       * The treasury account of the runtime, where a fraction of each payment goes.
+       **/
+      treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
       /**
        * The number of ticks that a user will have to wait after it has been flagged as without funds to be able to clear that flag
        * and be able to pay for services again. If there's any outstanding debt when the flag is cleared, it will be paid.
@@ -373,6 +387,14 @@ declare module "@polkadot/api-base/types/consts" {
     };
     providers: {
       /**
+       * The amount of blocks that a BSP must wait before being able to sign off, after being signed up.
+       *
+       * This is to prevent BSPs from signing up and off too quickly, thus making it harder for an attacker
+       * to suddenly have a large portion of the total number of BSPs. The reason for this, is that the
+       * attacker would have to lock up a large amount of funds for this period of time.
+       **/
+      bspSignUpLockPeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The amount that an account has to deposit to create a bucket.
        **/
       bucketDeposit: u128 & AugmentedConst<ApiType>;
@@ -396,6 +418,7 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of Buckets that a MSP can have.
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
+      maxCommitmentSize: u32 & AugmentedConst<ApiType>;
       /**
        * The estimated maximum size of an unknown file.
        *

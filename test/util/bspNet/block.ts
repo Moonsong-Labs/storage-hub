@@ -148,21 +148,23 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
 export const skipBlocksToMinChangeTime: (
   api: ApiPromise,
   bspId?: `0x${string}` | H256 | Uint8Array
-) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID) => {
+) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID, verbose = false) => {
   const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))
     .unwrap()
     .lastCapacityChange.toNumber();
   const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
   const minChangeTime = api.consts.providers.minBlocksBetweenCapacityChanges.toNumber();
-  const blocksToSkip = minChangeTime - (currentHeight - lastCapacityChangeHeight);
+  const blockToAdvanceTo = lastCapacityChangeHeight + minChangeTime;
 
-  if (blocksToSkip > 0) {
-    console.log(
-      `\tSkipping blocks to reach MinBlocksBetweenCapacityChanges height: #${minChangeTime}`
-    );
-    await skipBlocks(api, blocksToSkip);
+  if (blockToAdvanceTo > currentHeight) {
+    verbose &&
+      console.log(
+        `\tSkipping to block #${blockToAdvanceTo} to go beyond MinBlocksBetweenCapacityChanges`
+      );
+    await advanceToBlock(api, blockToAdvanceTo, false, [bspId.toString()]);
   } else {
-    console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
+    verbose &&
+      console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
   }
 };
 
@@ -254,7 +256,10 @@ export const advanceToBlock = async (
       // First we get the last tick for which the BSP submitted a proof.
       const lastTickResult =
         await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
-      assert(lastTickResult.isOk);
+      if (lastTickResult.isErr) {
+        verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
+        continue;
+      }
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
       const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);

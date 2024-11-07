@@ -5,6 +5,8 @@ diesel::table! {
         id -> Int4,
         account -> Varchar,
         capacity -> Numeric,
+        stake -> Numeric,
+        last_tick_proven -> Int8,
         created_at -> Timestamp,
         updated_at -> Timestamp,
         onchain_bsp_id -> Varchar,

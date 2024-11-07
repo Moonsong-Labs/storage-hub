@@ -481,6 +481,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -560,6 +561,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -667,6 +669,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -685,6 +688,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -820,6 +824,7 @@ fn submit_proof_success() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -911,11 +916,15 @@ fn submit_proof_success() {
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
 
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
         // Check for event submitted.
         System::assert_last_event(
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
+                last_tick_proven,
             }
             .into(),
         );
@@ -971,6 +980,7 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1055,11 +1065,15 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
 
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
         // Check for event submitted.
         System::assert_last_event(
             Event::ProofAccepted {
                 provider: provider_id,
                 proof,
+                last_tick_proven,
             }
             .into(),
         );
@@ -1098,6 +1112,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1214,6 +1229,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1343,11 +1359,12 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
-		// Increment the used capacity of BSPs in the Providers pallet.
-		pallet_storage_providers::UsedBspsCapacity::<Test>::set(100);
+        // Increment the used capacity of BSPs in the Providers pallet.
+        pallet_storage_providers::UsedBspsCapacity::<Test>::set(100);
 
         // Hold some of the Provider's balance so it simulates it having a stake.
         assert_ok!(<Test as crate::Config>::NativeBalance::hold(
@@ -1366,15 +1383,19 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             },
         );
 
-		// Create a dynamic-rate payment stream between the user and the Provider.
-		pallet_payment_streams::DynamicRatePaymentStreams::<Test>::insert(
+        // Create a dynamic-rate payment stream between the user and the Provider.
+        pallet_payment_streams::DynamicRatePaymentStreams::<Test>::insert(
             &provider_id,
-			&1,
+            &1,
             pallet_payment_streams::types::DynamicRatePaymentStream {
                 amount_provided: 10,
-				price_index_when_last_charged: pallet_payment_streams::AccumulatedPriceIndex::<Test>::get(),
-				user_deposit: 10 * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get() as u128 * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
-				out_of_funds_tick: None,
+                price_index_when_last_charged:
+                    pallet_payment_streams::AccumulatedPriceIndex::<Test>::get(),
+                user_deposit: 10
+                    * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get(
+                    ) as u128
+                    * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+                out_of_funds_tick: None,
             },
         );
 
@@ -1475,9 +1496,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // Check if root of the provider was updated the last challenge key
         // Note: The apply_delta method is applying the mutation the root of the provider for every challenge key.
         // This is to avoid having to construct valid tries and proofs.
-        let root =
-            <<Test as crate::Config>::ProvidersPallet as ReadChallengeableProvidersInterface>::get_root(provider_id)
-                .unwrap();
+        let root = Providers::get_root(provider_id).unwrap();
         assert_eq!(root.as_ref(), challenges.last().unwrap().as_ref());
     });
 }
@@ -1514,6 +1533,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1742,6 +1762,7 @@ fn submit_proof_empty_key_proofs_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1814,6 +1835,7 @@ fn submit_proof_no_record_of_last_proof_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1886,6 +1908,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -1972,6 +1995,7 @@ fn submit_proof_challenges_block_too_old_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2058,6 +2082,7 @@ fn submit_proof_seed_not_found_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2158,6 +2183,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2263,6 +2289,7 @@ fn submit_proof_forest_proof_verification_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2361,6 +2388,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2442,6 +2470,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2574,6 +2603,7 @@ fn submit_proof_key_proof_verification_fail() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -2989,6 +3019,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -3105,6 +3136,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -3247,6 +3279,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -3280,6 +3313,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -3384,11 +3418,15 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             None
         ));
 
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(alice_provider_id).unwrap();
+
         // Check for event submitted.
         System::assert_last_event(
             Event::ProofAccepted {
                 provider: alice_provider_id,
                 proof,
+                last_tick_proven,
             }
             .into(),
         );
@@ -3948,6 +3986,7 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
                 payment_account: Default::default(),
                 reputation_weight:
                     <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
             },
         );
 
@@ -4146,6 +4185,7 @@ mod on_idle_hook_tests {
                     payment_account: Default::default(),
                     reputation_weight:
                         <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                    sign_up_block: Default::default(),
                 },
             );
 
@@ -4226,6 +4266,7 @@ mod on_idle_hook_tests {
                     payment_account: Default::default(),
                     reputation_weight:
                         <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                    sign_up_block: Default::default(),
                 },
             );
 
@@ -4307,6 +4348,7 @@ mod on_idle_hook_tests {
                     payment_account: Default::default(),
                     reputation_weight:
                         <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                    sign_up_block: Default::default(),
                 },
             );
 

@@ -28,6 +28,7 @@ import type {
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
+  PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -549,6 +550,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that an empty bucket has been deleted.
+       **/
+      BucketDeleted: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bucketId: H256, maybeCollectionId: Option<u32>],
+        {
+          who: AccountId32;
+          bucketId: H256;
+          maybeCollectionId: Option<u32>;
+        }
+      >;
+      /**
        * Notifies that a bucket's privacy has been updated.
        **/
       BucketPrivacyUpdated: AugmentedEvent<
@@ -663,7 +676,8 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
-          private: bool
+          private: bool,
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -672,6 +686,7 @@ declare module "@polkadot/api-base/types/events" {
           name: Bytes;
           collectionId: Option<u32>;
           private: bool;
+          valuePropId: H256;
         }
       >;
       /**
@@ -1566,6 +1581,19 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when multiple payment streams have been charged from a Provider. Provides information about
+       * the charged users, the Provider that received the funds and the tick when the charge happened.
+       **/
+      UsersCharged: AugmentedEvent<
+        ApiType,
+        [userAccounts: Vec<AccountId32>, providerId: H256, chargedAtTick: u32],
+        {
+          userAccounts: Vec<AccountId32>;
+          providerId: H256;
+          chargedAtTick: u32;
+        }
+      >;
+      /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
        * correctly paid all their outstanding debt and can now contract new services again.
        **/
@@ -2032,10 +2060,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofAccepted: AugmentedEvent<
         ApiType,
-        [provider: H256, proof: PalletProofsDealerProof],
+        [provider: H256, proof: PalletProofsDealerProof, lastTickProven: u32],
         {
           provider: H256;
           proof: PalletProofsDealerProof;
+          lastTickProven: u32;
         }
       >;
       /**
@@ -2121,17 +2150,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MspRequestSignUpSuccess: AugmentedEvent<
         ApiType,
-        [
-          who: AccountId32,
-          multiaddresses: Vec<Bytes>,
-          capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
-        ],
+        [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u64],
         {
           who: AccountId32;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
         }
       >;
       /**
@@ -2157,14 +2180,36 @@ declare module "@polkadot/api-base/types/events" {
           mspId: H256,
           multiaddresses: Vec<Bytes>,
           capacity: u64,
-          valueProp: PalletStorageProvidersValueProposition
+          valueProp: PalletStorageProvidersValuePropositionWithId
         ],
         {
           who: AccountId32;
           mspId: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
-          valueProp: PalletStorageProvidersValueProposition;
+          valueProp: PalletStorageProvidersValuePropositionWithId;
+        }
+      >;
+      /**
+       * Event emitted when a Provider has added a new MultiAddress to its account.
+       **/
+      MultiAddressAdded: AugmentedEvent<
+        ApiType,
+        [providerId: H256, newMultiaddress: Bytes],
+        {
+          providerId: H256;
+          newMultiaddress: Bytes;
+        }
+      >;
+      /**
+       * Event emitted when a Provider has removed a MultiAddress from its account.
+       **/
+      MultiAddressRemoved: AugmentedEvent<
+        ApiType,
+        [providerId: H256, removedMultiaddress: Bytes],
+        {
+          providerId: H256;
+          removedMultiaddress: Bytes;
         }
       >;
       /**
@@ -2187,6 +2232,29 @@ declare module "@polkadot/api-base/types/events" {
         {
           providerId: H256;
           amountSlashed: u128;
+        }
+      >;
+      /**
+       * Event emitted when an MSP adds a new value proposition.
+       **/
+      ValuePropAdded: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256, valueProp: PalletStorageProvidersValueProposition],
+        {
+          mspId: H256;
+          valuePropId: H256;
+          valueProp: PalletStorageProvidersValueProposition;
+        }
+      >;
+      /**
+       * Event emitted when an MSP's value proposition is made unavailable.
+       **/
+      ValuePropUnavailable: AugmentedEvent<
+        ApiType,
+        [mspId: H256, valuePropId: H256],
+        {
+          mspId: H256;
+          valuePropId: H256;
         }
       >;
       /**

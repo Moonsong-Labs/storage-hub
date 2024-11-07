@@ -61,16 +61,17 @@ import type {
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersStorageProvider,
+  PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
   PalletXcmRemoteLockedFungibleRecord,
   PalletXcmVersionMigrationStage,
   PolkadotCorePrimitivesOutboundHrmpMessage,
-  PolkadotPrimitivesV7AbridgedHostConfiguration,
-  PolkadotPrimitivesV7PersistedValidationData,
-  PolkadotPrimitivesV7UpgradeGoAhead,
-  PolkadotPrimitivesV7UpgradeRestriction,
+  PolkadotPrimitivesV8AbridgedHostConfiguration,
+  PolkadotPrimitivesV8PersistedValidationData,
+  PolkadotPrimitivesV8UpgradeGoAhead,
+  PolkadotPrimitivesV8UpgradeRestriction,
   ShpTraitsTrieRemoveMutation,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
@@ -762,7 +763,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       hostConfiguration: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7AbridgedHostConfiguration>>,
+        () => Observable<Option<PolkadotPrimitivesV8AbridgedHostConfiguration>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -908,7 +909,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeGoAhead: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7UpgradeGoAhead>>,
+        () => Observable<Option<PolkadotPrimitivesV8UpgradeGoAhead>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -923,7 +924,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       upgradeRestrictionSignal: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7UpgradeRestriction>>,
+        () => Observable<Option<PolkadotPrimitivesV8UpgradeRestriction>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -946,7 +947,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       validationData: AugmentedQuery<
         ApiType,
-        () => Observable<Option<PolkadotPrimitivesV7PersistedValidationData>>,
+        () => Observable<Option<PolkadotPrimitivesV8PersistedValidationData>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -980,7 +981,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
+       * This is equivalent to what it would have cost to provide one unit of the provided service since the beginning of the network.
        * We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
        * when the payment stream was last charged, and the index at the last chargeable tick.
        *
@@ -1005,7 +1006,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to store and manage dynamic-rate payment streams between Users and Providers.
        *
        * This storage is updated in:
-       * - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which adds a new entry to the map.
+       * - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which adds a new entry to the map.
        * - [delete_dynamic_rate_payment_stream](crate::dispatchables::delete_dynamic_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_dynamic_rate_payment_stream](crate::dispatchables::update_dynamic_rate_payment_stream), which updates the entry's `amount_provided`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `price_index_when_last_charged`.
@@ -1025,7 +1026,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This is used to store and manage fixed-rate payment streams between Users and Providers.
        *
        * This storage is updated in:
-       * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which adds a new entry to the map.
+       * - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which adds a new entry to the map.
        * - [delete_fixed_rate_payment_stream](crate::dispatchables::delete_fixed_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_fixed_rate_payment_stream](crate::dispatchables::update_fixed_rate_payment_stream), which updates the entry's `rate`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_tick`.
@@ -1075,14 +1076,26 @@ declare module "@polkadot/api-base/types/storage" {
       onPollTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * Mapping of Privileged Providers.
+       *
+       * Privileged Providers are those who are allowed to charge up to the current tick in
+       * fixed rate payment streams, regardless of their [`LastChargeableInfo`].
+       **/
+      privilegedProviders: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<Null>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * The mapping from a user to if it has been registered to the network and the amount of payment streams it has.
        *
        * Since users have to provide a deposit to be able to open each payment stream, this is used to keep track of the amount of payment streams
        * that a user has and it is also useful to check if a user has registered to the network.
        *
        * This storage is updated in:
-       * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
-       * - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+       * - [create_fixed_rate_payment_stream](crate::dispatchables::create_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+       * - [create_dynamic_rate_payment_stream](crate::dispatchables::create_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
        * - [remove_fixed_rate_payment_stream](crate::dispatchables::remove_fixed_rate_payment_stream), which removes one from this storage and releases the deposit.
        * - [remove_dynamic_rate_payment_stream](crate::dispatchables::remove_dynamic_rate_payment_stream), which removes one from this storage and releases the deposit.
        **/
@@ -1538,6 +1551,21 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
+       *
+       * These are applied at the bucket level. Propositions are the price per [`Config::StorageDataUnit`] per block and the
+       * limit of data that can be stored in the bucket.
+       **/
+      mainStorageProviderIdsToValuePropositions: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersValueProposition>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * The mapping from a MainStorageProviderId to a MainStorageProvider.
        *
        * This is used to get a Main Storage Provider's metadata.
@@ -1547,7 +1575,6 @@ declare module "@polkadot/api-base/types/storage" {
        * - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
        * - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
        * - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
-       * - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
        **/
       mainStorageProviders: AugmentedQuery<
         ApiType,
@@ -1584,7 +1611,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg: AccountId32 | string | Uint8Array
-        ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProvider, u32]>>>,
+        ) => Observable<Option<PalletStorageProvidersSignUpRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
@@ -1618,6 +1645,15 @@ declare module "@polkadot/api-base/types/storage" {
        * Ensures the mandatory inherent was included in the block
        **/
       inherentIncluded: AugmentedQuery<ApiType, () => Observable<Option<Null>>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * The relay chain block (and anchored parachain block) to use when epoch changes
+       **/
+      lastRelayBlockAndParaBlockValidForNextEpoch: AugmentedQuery<
+        ApiType,
+        () => Observable<ITuple<[u32, u32]>>,
+        []
+      > &
         QueryableStorageEntry<ApiType, []>;
       /**
        * Latest random seed obtained from the one epoch ago randomness from BABE, and the latest block that it can process randomness requests from

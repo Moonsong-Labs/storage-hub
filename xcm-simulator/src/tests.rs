@@ -10,6 +10,7 @@ use pallet_file_system;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
 use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
 use sp_core::H256;
+use sp_runtime::bounded_vec;
 use sp_weights::WeightMeter;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
@@ -446,7 +447,7 @@ mod providers {
     use pallet_randomness::LatestOneEpochAgoRandomness;
     use sp_core::H256;
     use sp_runtime::BoundedVec;
-    use storagehub::configs::SpMinDeposit;
+    use storagehub::configs::{BspSignUpLockPeriod, SpMinDeposit};
 
     use crate::{
         sh_sibling_account_id, storagehub::configs::MinBlocksBetweenCapacityChanges,
@@ -931,6 +932,9 @@ mod providers {
             // And we check its current balance in StorageHub (after deposit)
             parachain_balance_after_deposit =
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID));
+
+            // Advance enough blocks to allow the parachain to sign off as BSP
+            sh_run_to_block(storagehub::System::block_number() + BspSignUpLockPeriod::get());
         });
 
         // The parachain signs off as a provider in StorageHub.
@@ -1168,7 +1172,6 @@ mod users {
     use pallet_file_system::types::MaxFilePathSize;
     use pallet_file_system::types::MaxNumberOfPeerIds;
     use pallet_file_system::types::MaxPeerIdSize;
-    use pallet_storage_providers::types::ValuePropId;
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
@@ -1192,12 +1195,9 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, bounded_vec![], 10);
+        let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
-            let value_prop: ValueProposition<storagehub::Runtime> = ValueProposition {
-                identifier: ValuePropId::<storagehub::Runtime>::default(),
-                data_limit: 10,
-                protocols: BoundedVec::new(),
-            };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
                 MaxMultiAddressAmount<storagehub::Runtime>,
@@ -1217,7 +1217,9 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                value_prop,
+                1,
+                bounded_vec![],
+                10,
                 ALICE
             ));
 
@@ -1243,6 +1245,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1451,12 +1454,9 @@ mod users {
         let bucket_name: BoundedVec<u8, BucketNameLimit> =
             "InitialBucket".as_bytes().to_vec().try_into().unwrap();
         let mut bucket_id = H256::default();
+        let value_prop = ValueProposition::<storagehub::Runtime>::new(1, bounded_vec![], 10);
+        let value_prop_id = value_prop.derive_id();
         StorageHub::execute_with(|| {
-            let value_prop: ValueProposition<storagehub::Runtime> = ValueProposition {
-                identifier: ValuePropId::<storagehub::Runtime>::default(),
-                data_limit: 10,
-                protocols: BoundedVec::new(),
-            };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
                 MaxMultiAddressAmount<storagehub::Runtime>,
@@ -1476,7 +1476,9 @@ mod users {
                 alice_msp_id,
                 capacity,
                 multiaddresses.clone(),
-                value_prop,
+                1,
+                bounded_vec![],
+                10,
                 ALICE
             ));
 
@@ -1597,6 +1599,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub

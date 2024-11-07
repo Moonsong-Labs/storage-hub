@@ -2,7 +2,12 @@ use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
-    traits::{nonfungibles_v2::Create, Get},
+    traits::{
+        fungible::{InspectHold, Mutate, MutateHold},
+        nonfungibles_v2::Create,
+        tokens::{Precision, Preservation},
+        Get,
+    },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
@@ -15,7 +20,6 @@ use sp_runtime::{
 };
 use sp_std::{
     collections::{btree_map::BTreeMap, btree_set::BTreeSet},
-    vec,
     vec::Vec,
 };
 
@@ -31,20 +35,20 @@ use shp_traits::{
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
-use crate::types::AcceptedStorageRequestParameters;
+use crate::types::{AcceptedStorageRequestParameters, ValuePropId};
 use crate::{
     pallet,
     types::{
         BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
         FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MaxBspsPerStorageRequest, MerkleHash,
-        MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
+        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata,
+        MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
     },
-    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, Pallet,
+    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, HoldReason, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
     TickRangeToMaximumThreshold,
@@ -250,9 +254,8 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
-        // TODO: Hold user funds for the bucket creation.
-
         // Check if the MSP is indeed an MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
@@ -275,6 +278,7 @@ where
             bucket_id,
             private,
             maybe_collection_id.clone(),
+            value_prop_id,
         )?;
 
         Ok((bucket_id, maybe_collection_id))
@@ -505,6 +509,56 @@ where
         Ok(collection_id)
     }
 
+    /// Delete an empty bucket.
+    ///
+    /// *Callable only by the User owner of the bucket.*
+    ///
+    /// This function will delete the bucket and the associated collection if the bucket is empty.
+    /// If the bucket is not empty, the function will return an error.
+    /// The bucket deposit paid by the User when initially creating the bucket will be returned to the User.
+    pub(crate) fn do_delete_bucket(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
+        // Check that the bucket with the received ID exists.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::bucket_exists(&bucket_id),
+            Error::<T>::BucketNotFound
+        );
+
+        // Check if the sender is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
+        // Check if the bucket is empty, both by checking its size and that its root is the default one
+        // (the root of an empty trie).
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)? == Zero::zero(),
+            Error::<T>::BucketNotEmpty
+        );
+        let bucket_root = expect_or_err!(
+            <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id),
+            "Bucket exists so it should have a root",
+            Error::<T>::BucketNotFound
+        );
+        ensure!(
+            bucket_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root(),
+            Error::<T>::BucketNotEmpty
+        );
+
+        // Retrieve the collection ID associated with the bucket, if any.
+        let maybe_collection_id: Option<CollectionIdFor<T>> =
+            <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
+
+        // Delete the bucket.
+        <T::Providers as MutateBucketsInterface>::remove_root_bucket(bucket_id)?;
+
+        // Return the collection ID associated with the bucket, if any.
+        Ok(maybe_collection_id)
+    }
+
     /// Request storage for a file.
     ///
     /// In the event that a storage request is created without any user multiaddresses (checkout `do_bsp_stop_storing`),
@@ -519,10 +573,7 @@ where
         msp_id: Option<ProviderIdFor<T>>,
         bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
-        data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
-        // TODO: Check user funds and lock them for the storage request.
-
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
 
@@ -537,6 +588,17 @@ where
         ensure!(
             !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
             Error::<T>::BucketIsBeingMoved
+        );
+
+        // Check if we can hold the storage request creation deposit from the user
+        let deposit = T::StorageRequestCreationDeposit::get();
+        ensure!(
+            T::Currency::can_hold(
+                &HoldReason::StorageRequestCreationHold.into(),
+                &sender,
+                deposit
+            ),
+            Error::<T>::CannotHoldDeposit
         );
 
         // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
@@ -579,7 +641,6 @@ where
             size,
             msp,
             user_peer_ids: user_peer_ids.unwrap_or_default(),
-            data_server_sps,
             bsps_required,
             bsps_confirmed: ReplicationTargetType::<T>::zero(),
             bsps_volunteered: ReplicationTargetType::<T>::zero(),
@@ -599,6 +660,13 @@ where
             !<StorageRequests<T>>::contains_key(&file_key),
             Error::<T>::StorageRequestAlreadyRegistered
         );
+
+        // Hold the deposit from the user
+        T::Currency::hold(
+            &HoldReason::StorageRequestCreationHold.into(),
+            &sender,
+            deposit,
+        )?;
 
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
@@ -955,6 +1023,14 @@ where
                     bool
                 );
 
+                // Return the storage request creation deposit to the user
+                T::Currency::release(
+                    &HoldReason::StorageRequestCreationHold.into(),
+                    &storage_request_metadata.owner,
+                    T::StorageRequestCreationDeposit::get(),
+                    Precision::BestEffort,
+                )?;
+
                 // Notify that the storage request has been fulfilled.
                 Self::deposit_event(Event::StorageRequestFulfilled { file_key });
             } else {
@@ -1306,6 +1382,14 @@ where
                     bool
                 );
 
+                // Return the storage request creation deposit to the user
+                T::Currency::release(
+                    &HoldReason::StorageRequestCreationHold.into(),
+                    &storage_request_metadata.owner,
+                    T::StorageRequestCreationDeposit::get(),
+                    Precision::BestEffort,
+                )?;
+
                 // Notify that the storage request has been fulfilled.
                 Self::deposit_event(Event::StorageRequestFulfilled {
                     file_key: file_key.0,
@@ -1441,6 +1525,14 @@ where
         // Remove storage request.
         <StorageRequests<T>>::remove(&file_key);
 
+        // Return the storage request creation deposit to the user
+        T::Currency::release(
+            &HoldReason::StorageRequestCreationHold.into(),
+            &storage_request_metadata.owner,
+            T::StorageRequestCreationDeposit::get(),
+            Precision::BestEffort,
+        )?;
+
         // A revoked storage request is not considered active anymore.
         <BucketsWithStorageRequests<T>>::remove(&storage_request_metadata.bucket_id, &file_key);
 
@@ -1456,7 +1548,7 @@ where
     /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
     ///
     /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1.
+    ///     Therefore, we decrement the `bsps_confirmed` by 1 and remove the BSP as a data server for the file.
     ///
     /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
     ///
@@ -1498,7 +1590,19 @@ where
             Error::<T>::NotABsp
         );
 
-        // TODO: charge SP for this action.
+        let bsp_account_id = expect_or_err!(
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_owner_account(bsp_id),
+            "Failed to get owner account for BSP",
+            Error::<T>::FailedToGetOwnerAccount
+        );
+
+        // Penalise the BSP for stopping storing the file and send the funds to the treasury.
+        T::Currency::transfer(
+            &bsp_account_id,
+            &T::TreasuryAccount::get(),
+            T::BspStopStoringFilePenalty::get(),
+            Preservation::Preserve,
+        )?;
 
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
@@ -1539,7 +1643,7 @@ where
             Some(mut storage_request_metadata) => {
                 match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
-                    // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
+                    // We need to decrement the number of bsps confirmed and volunteered, remove the BSP as a data server and from the storage request.
                     Some(bsp) => {
                         expect_or_err!(
                             bsp.confirmed,
@@ -1571,7 +1675,8 @@ where
                 <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata));
             }
             // We hit scenario 3. There is no storage request opened for the file.
-            // We need to create a new storage request with a single bsp required.
+            // We need to create a new storage request with a single bsp required and
+            // add this BSP as a data server if they can serve the file.
             None => {
                 Self::do_request_storage(
                     owner,
@@ -1582,12 +1687,19 @@ where
                     None,
                     Some(ReplicationTargetType::<T>::one()),
                     None,
-                    if can_serve {
-                        BoundedVec::try_from(vec![bsp_id]).unwrap()
-                    } else {
-                        BoundedVec::default()
-                    },
                 )?;
+
+                if can_serve {
+                    // Add the BSP as a data server for the file.
+                    <StorageRequestBsps<T>>::insert(
+                        &file_key,
+                        &bsp_id,
+                        StorageRequestBspsMetadata::<T> {
+                            confirmed: true,
+                            _phantom: Default::default(),
+                        },
+                    );
+                }
             }
         };
 
@@ -2142,13 +2254,35 @@ mod hooks {
         ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
-    use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
     use shp_traits::TrieRemoveMutation;
-    use sp_runtime::traits::{Get, One, Zero};
-    use sp_runtime::Saturating;
+    use sp_runtime::{
+        traits::{Get, One, Zero},
+        Saturating,
+    };
+    use sp_weights::Weight;
 
     impl<T: pallet::Config> Pallet<T> {
+        pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
+            let current_data_price_per_unit =
+                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::get_price_per_unit_per_tick();
+            weight.consume(T::DbWeight::get().reads(1));
+
+            let new_data_price_per_unit =
+                <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
+                    current_data_price_per_unit,
+                    <T::Providers as shp_traits::SystemMetricsInterface>::get_total_used_capacity(),
+                    <T::Providers as shp_traits::SystemMetricsInterface>::get_total_capacity(),
+                );
+
+            if new_data_price_per_unit != current_data_price_per_unit {
+                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::set_price_per_unit_per_tick(
+                    new_data_price_per_unit,
+                );
+                weight.consume(T::DbWeight::get().writes(1));
+            }
+        }
+
         pub(crate) fn do_on_idle(
             current_block: BlockNumberFor<T>,
             mut remaining_weight: &mut Weight,

@@ -38,8 +38,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// TODO #[cfg(feature = "runtime-benchmarks")]
+// TODO mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -95,6 +95,8 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+            > + shp_traits::SystemMetricsInterface<
+                ProvidedUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             >;
 
         /// The trait for issuing challenges and verifying proofs.
@@ -108,7 +110,13 @@ pub mod pallet {
             AccountId = Self::AccountId,
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
-        >;
+        >
+        + shp_traits::MutatePricePerUnitPerTickInterface<PricePerUnitPerTick = BalanceOf<Self>>;
+
+        type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
+            Price = BalanceOf<Self>,
+            StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+            >;
 
         /// The trait for checking user solvency in the system
         type UserSolvency: shp_traits::ReadUserSolvencyInterface<AccountId = Self::AccountId>;
@@ -197,9 +205,14 @@ pub mod pallet {
         /// The currency mechanism, used for paying for reserves.
         type Currency: Inspect<Self::AccountId>
             + Mutate<Self::AccountId>
+            + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
+            + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
             + hold::Balanced<Self::AccountId>
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
+
+        /// The overarching hold reason
+        type RuntimeHoldReason: From<HoldReason>;
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
@@ -210,12 +223,13 @@ pub mod pallet {
             CollectionId = CollectionIdFor<Self>,
         >;
 
-        /// Maximum number of SPs (MSP + BSPs) that can store a file.
-        ///
-        /// This is used to limit the number of BSPs storing a file and claiming rewards for it.
-        /// If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
+        /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
-        type MaxBspsPerStorageRequest: Get<u32>;
+        type TreasuryAccount: Get<Self::AccountId>;
+
+        /// Penalty payed by a BSP when they forcefully stop storing a file.
+        #[pallet::constant]
+        type BspStopStoringFilePenalty: Get<BalanceOf<Self>>;
 
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
@@ -268,6 +282,10 @@ pub mod pallet {
         /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
         type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
+
+        /// Deposit held from the User when creating a new storage request
+        #[pallet::constant]
+        type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
     }
 
     #[pallet::pallet]
@@ -473,6 +491,13 @@ pub mod pallet {
             name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
+            value_prop_id: ValuePropId<T>,
+        },
+        /// Notifies that an empty bucket has been deleted.
+        BucketDeleted {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            maybe_collection_id: Option<CollectionIdFor<T>>,
         },
         /// Notifies that a bucket is being moved to a new MSP.
         MoveBucketRequested {
@@ -667,6 +692,8 @@ pub mod pallet {
         BucketIsNotPrivate,
         /// Bucket does not exist
         BucketNotFound,
+        /// Bucket is not empty.
+        BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
         /// Root of the provider not found.
@@ -731,6 +758,23 @@ pub mod pallet {
         InvalidBucketIdFileKeyPair,
         /// Key already exists in mapping when it should not.
         InconsistentStateKeyAlreadyExists,
+        /// Cannot hold the required deposit from the user
+        CannotHoldDeposit,
+        /// Failed to get owner account of ID of provider
+        FailedToGetOwnerAccount,
+    }
+
+    /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
+    ///
+    /// This allows us to hold tokens and be able to identify in the future that those held tokens were
+    /// held because of this pallet
+    #[pallet::composite_enum]
+    pub enum HoldReason {
+        /// Deposit that a user has to pay to create a new storage request
+        StorageRequestCreationHold,
+        // Only for testing, another unrelated hold reason
+        #[cfg(test)]
+        AnotherUnrelatedHold,
     }
 
     #[pallet::call]
@@ -742,11 +786,12 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
+            value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             let (bucket_id, maybe_collection_id) =
-                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private)?;
+                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private, value_prop_id)?;
 
             Self::deposit_event(Event::NewBucket {
                 who,
@@ -755,6 +800,7 @@ pub mod pallet {
                 name,
                 collection_id: maybe_collection_id,
                 private,
+                value_prop_id,
             });
 
             Ok(())
@@ -847,8 +893,34 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Issue a new storage request for a file
+        /// Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
+        /// This way, the User is allowed to remove now unused buckets to recover their deposit for them.
+        ///
+        /// The User must provide the BucketId of the bucket they want to delete, which should correspond to a
+        /// bucket that is both theirs and currently empty.
+        ///
+        /// To check if a bucket is empty, we compare its current root with the one of an empty trie.
         #[pallet::call_index(5)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn delete_bucket(origin: OriginFor<T>, bucket_id: BucketIdFor<T>) -> DispatchResult {
+            // Check that the extrinsic was signed and get the signer
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and delete the bucket
+            let maybe_collection_id = Self::do_delete_bucket(who.clone(), bucket_id)?;
+
+            // Emit event.
+            Self::deposit_event(Event::BucketDeleted {
+                who,
+                bucket_id,
+                maybe_collection_id,
+            });
+
+            Ok(())
+        }
+
+        /// Issue a new storage request for a file
+        #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
@@ -872,7 +944,6 @@ pub mod pallet {
                 Some(msp_id),
                 None,
                 Some(peer_ids.clone()),
-                Default::default(),
             )?;
 
             // BSPs listen to this event and volunteer to store the file
@@ -890,7 +961,7 @@ pub mod pallet {
         }
 
         /// Revoke storage request
-        #[pallet::call_index(6)]
+        #[pallet::call_index(7)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
@@ -909,7 +980,7 @@ pub mod pallet {
         }
 
         /// Add yourself as a data server for providing the files of the bucket requested to be moved.
-        #[pallet::call_index(7)]
+        #[pallet::call_index(8)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_add_data_server_for_move_bucket_request(
             origin: OriginFor<T>,
@@ -934,7 +1005,7 @@ pub mod pallet {
         /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
         /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
-        #[pallet::call_index(8)]
+        #[pallet::call_index(9)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -957,7 +1028,7 @@ pub mod pallet {
         /// so a BSP is strongly advised to check beforehand. Another reason for failure is
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(10)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
@@ -982,7 +1053,7 @@ pub mod pallet {
         }
 
         /// Used by a BSP to confirm they are storing data of a storage request.
-        #[pallet::call_index(10)]
+        #[pallet::call_index(11)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
@@ -1011,7 +1082,7 @@ pub mod pallet {
         /// the BSP gets that data is up to it. One example could be from the assigned MSP.
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
-        #[pallet::call_index(11)]
+        #[pallet::call_index(12)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_request_stop_storing(
             origin: OriginFor<T>,
@@ -1055,7 +1126,7 @@ pub mod pallet {
         /// It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
         /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
         /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
-        #[pallet::call_index(12)]
+        #[pallet::call_index(13)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_stop_storing(
             origin: OriginFor<T>,
@@ -1084,7 +1155,7 @@ pub mod pallet {
         /// it won't be getting paid for it anymore.
         /// The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
         /// wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
-        #[pallet::call_index(13)]
+        #[pallet::call_index(14)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn stop_storing_for_insolvent_user(
             origin: OriginFor<T>,
@@ -1122,7 +1193,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(14)]
+        #[pallet::call_index(15)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
@@ -1156,7 +1227,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(15)]
+        #[pallet::call_index(16)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
@@ -1186,7 +1257,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(16)]
+        #[pallet::call_index(17)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn set_global_parameters(
             origin: OriginFor<T>,
@@ -1223,6 +1294,12 @@ pub mod pallet {
     where
         u32: TryFrom<BlockNumberFor<T>>,
     {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
+
+            Self::do_on_poll(weight);
+        }
+
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut remaining_weight = remaining_weight;
 

@@ -16,8 +16,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
@@ -27,8 +28,9 @@ use shp_traits::{
 };
 use sp_std::vec::Vec;
 use types::{
-    Bucket, MainStorageProvider, MultiAddress, Multiaddresses, ProviderId, StorageProvider,
-    StorageProviderId,
+    Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
+    Multiaddresses, ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId,
+    ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -67,10 +69,12 @@ where
 {
     /// This function holds the logic that checks if a user can request to sign up as a Main Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
-    pub fn do_request_msp_sign_up(msp_info: &MainStorageProvider<T>) -> DispatchResult {
+    pub fn do_request_msp_sign_up(
+        sign_up_request: MainStorageProviderSignUpRequest<T>,
+    ) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
 
-        let who = &msp_info.owner_account;
+        let who = sign_up_request.msp_info.owner_account.clone();
 
         // Check that the user does not have a pending sign up request
         ensure!(
@@ -80,14 +84,14 @@ where
 
         // Check that the account is not already registered either as a Main Storage Provider or a Backup Storage Provider
         ensure!(
-            AccountIdToMainStorageProviderId::<T>::get(who).is_none()
-                && AccountIdToBackupStorageProviderId::<T>::get(who).is_none(),
+            AccountIdToMainStorageProviderId::<T>::get(&who).is_none()
+                && AccountIdToBackupStorageProviderId::<T>::get(&who).is_none(),
             Error::<T>::AlreadyRegistered
         );
 
         // Check that the multiaddresses vector is not empty (SPs have to register with at least one)
         ensure!(
-            !msp_info.multiaddresses.is_empty(),
+            !sign_up_request.msp_info.multiaddresses.is_empty(),
             Error::<T>::NoMultiAddress
         );
 
@@ -103,12 +107,13 @@ where
 
         // Check that the data to be stored is bigger than the minimum required by the runtime
         ensure!(
-            msp_info.capacity >= T::SpMinCapacity::get(),
+            sign_up_request.msp_info.capacity >= T::SpMinCapacity::get(),
             Error::<T>::StorageTooLow
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = msp_info
+        let capacity_over_minimum = sign_up_request
+            .msp_info
             .capacity
             .checked_sub(&T::SpMinCapacity::get())
             .ok_or(Error::<T>::StorageTooLow)?;
@@ -121,25 +126,25 @@ where
 
         // Check if the user has enough balance to pay the deposit
         let user_balance =
-            T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
+            T::NativeBalance::reducible_balance(&who, Preservation::Preserve, Fortitude::Polite);
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
 
         // Check if we can hold the deposit from the user
         ensure!(
-            T::NativeBalance::can_hold(&HoldReason::StorageProviderDeposit.into(), who, deposit),
+            T::NativeBalance::can_hold(&HoldReason::StorageProviderDeposit.into(), &who, deposit),
             Error::<T>::CannotHoldDeposit
         );
 
         // Hold the deposit from the user
-        T::NativeBalance::hold(&HoldReason::StorageProviderDeposit.into(), who, deposit)?;
+        T::NativeBalance::hold(&HoldReason::StorageProviderDeposit.into(), &who, deposit)?;
 
         // Store the sign up request in the SignUpRequests mapping
         SignUpRequests::<T>::insert(
             who,
-            (
-                StorageProvider::MainStorageProvider(msp_info.clone()),
-                frame_system::Pallet::<T>::block_number(),
-            ),
+            SignUpRequest::<T> {
+                sp_sign_up_request: SignUpRequestSpParams::MainStorageProvider(sign_up_request),
+                at: frame_system::Pallet::<T>::block_number(),
+            },
         );
 
         Ok(())
@@ -216,10 +221,10 @@ where
         // Store the sign up request in the SignUpRequests mapping
         SignUpRequests::<T>::insert(
             who,
-            (
-                StorageProvider::BackupStorageProvider(bsp_info.clone()),
-                frame_system::Pallet::<T>::block_number(),
-            ),
+            SignUpRequest::<T> {
+                sp_sign_up_request: SignUpRequestSpParams::BackupStorageProvider(bsp_info.clone()),
+                at: frame_system::Pallet::<T>::block_number(),
+            },
         );
 
         Ok(())
@@ -250,7 +255,7 @@ where
     /// according to the type of Storage Provider that the user is trying to sign up as
     pub fn do_confirm_sign_up(who: &T::AccountId) -> DispatchResult {
         // Check that the signer has requested to sign up as a Storage Provider
-        let (sp, request_block) =
+        let sign_up_request =
             SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)?;
 
         // Get the ProviderId by using the AccountId as the seed for a random generator
@@ -260,17 +265,17 @@ where
         // Check that the maximum block number after which the randomness is invalid is greater than or equal to the block number when the
         // request was made to ensure that the randomness was not known when the request was made
         ensure!(
-            block_number_when_random >= request_block,
+            block_number_when_random >= sign_up_request.at,
             Error::<T>::RandomnessNotValidYet
         );
 
         // Check what type of Storage Provider the signer is trying to sign up as and dispatch the corresponding logic
-        match sp {
-            StorageProvider::MainStorageProvider(msp_info) => {
-                Self::do_msp_sign_up(who, sp_id, &msp_info, request_block)?;
+        match sign_up_request.sp_sign_up_request {
+            SignUpRequestSpParams::MainStorageProvider(msp_params) => {
+                Self::do_msp_sign_up(who, sp_id, msp_params, sign_up_request.at)?;
             }
-            StorageProvider::BackupStorageProvider(bsp_info) => {
-                Self::do_bsp_sign_up(who, sp_id, &bsp_info, request_block)?;
+            SignUpRequestSpParams::BackupStorageProvider(bsp_params) => {
+                Self::do_bsp_sign_up(who, sp_id, &bsp_params, sign_up_request.at)?;
             }
         }
 
@@ -283,7 +288,7 @@ where
     pub fn do_msp_sign_up(
         who: &T::AccountId,
         msp_id: MainStorageProviderId<T>,
-        msp_info: &MainStorageProvider<T>,
+        sign_up_request: MainStorageProviderSignUpRequest<T>,
         request_block: BlockNumberFor<T>,
     ) -> DispatchResult {
         // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
@@ -299,7 +304,18 @@ where
         AccountIdToMainStorageProviderId::<T>::insert(who, msp_id);
 
         // Save the MainStorageProvider information in storage
-        MainStorageProviders::<T>::insert(&msp_id, msp_info);
+        MainStorageProviders::<T>::insert(&msp_id, sign_up_request.msp_info.clone());
+
+        let (_, value_prop) = Self::do_add_value_prop(
+            who,
+            sign_up_request.value_prop.price_per_unit_of_data_per_block,
+            sign_up_request.value_prop.commitment,
+            sign_up_request.value_prop.bucket_data_limit,
+        )?;
+
+        let value_prop_id = value_prop.derive_id();
+        // Save the ValueProposition information in storage
+        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
 
         // Increment the counter of Main Storage Providers registered
         let new_amount_of_msps = MspCount::<T>::get()
@@ -310,13 +326,18 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
+        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id)?;
+
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::MspSignUpSuccess {
             who: who.clone(),
             msp_id,
-            multiaddresses: msp_info.multiaddresses.clone(),
-            capacity: msp_info.capacity,
-            value_prop: msp_info.value_prop.clone(),
+            multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
+            capacity: sign_up_request.msp_info.capacity.clone(),
+            value_prop: ValuePropositionWithId {
+                id: value_prop_id,
+                value_prop: value_prop.clone(),
+            },
         });
 
         Ok(())
@@ -424,6 +445,8 @@ where
             }
         })?;
 
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id)?;
+
         Ok(msp_id)
     }
 
@@ -447,6 +470,13 @@ where
         ensure!(
             bsp.capacity_used == T::StorageDataUnit::zero(),
             Error::<T>::StorageStillInUse
+        );
+
+        // Check that the sign off period since the BSP signed up has passed
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                >= bsp.sign_up_block + T::BspSignUpLockPeriod::get(),
+            Error::<T>::SignOffPeriodNotPassed
         );
 
         // Update the BSPs storage, removing the signer as an BSP
@@ -701,6 +731,104 @@ where
         Ok(old_capacity)
     }
 
+    /// This function holds the logic that checks if a user can add a new multiaddress to its storage
+    /// and, if so, updates the storage to reflect the new multiaddress and returns the provider id if successful
+    pub fn do_add_multiaddress(
+        who: &T::AccountId,
+        new_multiaddress: &MultiAddress<T>,
+    ) -> Result<HashId<T>, DispatchError> {
+        // Check that the account is a registered Provider and modify the Provider's storage accordingly
+        let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // If the provider is a MSP, add the new multiaddress to the MSP's storage,
+            // making sure the multiaddress did not exist previously
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+            ensure!(
+                !msp.multiaddresses.contains(new_multiaddress),
+                Error::<T>::MultiAddressAlreadyExists
+            );
+            msp.multiaddresses
+                .try_push(new_multiaddress.clone())
+                .map_err(|_| Error::<T>::MultiAddressesMaxAmountReached)?;
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+            msp_id
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // If the provider is a BSP, add the new multiaddress to the BSP's storage,
+            // making sure the multiaddress did not exist previously
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+            ensure!(
+                !bsp.multiaddresses.contains(new_multiaddress),
+                Error::<T>::MultiAddressAlreadyExists
+            );
+            bsp.multiaddresses
+                .try_push(new_multiaddress.clone())
+                .map_err(|_| Error::<T>::MultiAddressesMaxAmountReached)?;
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+            bsp_id
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(provider_id)
+    }
+
+    /// This function holds the logic that checks if a user can remove a multiaddress from its storage
+    /// and, if so, updates the storage to reflect the removal of the multiaddress and returns the provider id if successful
+    pub fn do_remove_multiaddress(
+        who: &T::AccountId,
+        multiaddress: &MultiAddress<T>,
+    ) -> Result<HashId<T>, DispatchError> {
+        // Check that the account is a registered Provider and modify the Provider's storage accordingly
+        let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // If the provider is a MSP, remove the multiaddress from the MSP's storage.
+            // but only if it's not the only multiaddress left
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+
+            ensure!(
+                msp.multiaddresses.len() > 1,
+                Error::<T>::LastMultiAddressCantBeRemoved
+            );
+
+            let multiaddress_index = msp
+                .multiaddresses
+                .iter()
+                .position(|addr| addr == multiaddress)
+                .ok_or(Error::<T>::MultiAddressNotFound)?;
+            msp.multiaddresses.remove(multiaddress_index);
+
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+
+            msp_id
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // If the provider is a BSP, remove the multiaddress from the BSP's storage.
+            // but only if it's not the only multiaddress left
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+
+            ensure!(
+                bsp.multiaddresses.len() > 1,
+                Error::<T>::LastMultiAddressCantBeRemoved
+            );
+
+            let multiaddress_index = bsp
+                .multiaddresses
+                .iter()
+                .position(|addr| addr == multiaddress)
+                .ok_or(Error::<T>::MultiAddressNotFound)?;
+            bsp.multiaddresses.remove(multiaddress_index);
+
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+
+            bsp_id
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(provider_id)
+    }
+
     /// Slash a Storage Provider.
     ///
     /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
@@ -748,6 +876,53 @@ where
         });
 
         Ok(Pays::No.into())
+    }
+
+    pub(crate) fn do_add_value_prop(
+        who: &T::AccountId,
+        price_per_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        let value_prop = ValueProposition::<T>::new(
+            price_per_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
+        let value_prop_id = value_prop.derive_id();
+
+        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
+            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
+        }
+
+        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
+
+        Ok((msp_id, value_prop))
+    }
+
+    pub(crate) fn do_make_value_prop_unavailable(
+        who: &T::AccountId,
+        value_prop_id: ValuePropId<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
+            &msp_id,
+            value_prop_id,
+            |value_prop| {
+                let value_prop = value_prop
+                    .as_mut()
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+                value_prop.available = false;
+
+                Ok(msp_id)
+            },
+        )
     }
 
     fn hold_balance(
@@ -841,9 +1016,12 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             owner_account: msp.owner_account,
             payment_account: msp.payment_account,
             reputation_weight: T::StartingReputationWeight::get(),
+            sign_up_block: msp.sign_up_block,
         }
     }
 }
+
+/**************** Interface Implementations ****************/
 
 /// Implement the ReadBucketsInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
@@ -938,6 +1116,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
+    type ValuePropId = ValuePropId<T>;
 
     fn add_bucket(
         provider_id: Self::ProviderId,
@@ -945,6 +1124,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
@@ -964,6 +1144,15 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
+        let value_prop =
+            MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+                .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+        ensure!(
+            value_prop.available,
+            Error::<T>::ValuePropositionNotAvailable
+        );
+
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
         ensure!(
@@ -981,6 +1170,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             read_access_group_id: maybe_read_access_group_id,
             user_id,
             size: T::StorageDataUnit::zero(),
+            value_prop_id,
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
@@ -1287,14 +1477,11 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance>
     {
-        if let Some(bucket) = Buckets::<T>::get(&who) {
-            match MainStorageProviders::<T>::get(bucket.msp_id) {
-                Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
-                    &HoldReason::BucketDeposit.into(),
-                    &related_msp.owner_account,
-                )),
-                None => None,
-            }
+        if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &msp.owner_account,
+            ))
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
             Some(T::NativeBalance::balance_on_hold(
                 &HoldReason::StorageProviderDeposit.into(),
@@ -1421,7 +1608,7 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
     }
 
     fn update_provider_after_key_removal(
-        who: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         removed_trie_value: &Vec<u8>,
     ) -> DispatchResult {
         // Get the removed file's metadata
@@ -1443,18 +1630,18 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider
-        Self::decrease_capacity_used(who, file_size)?;
+        Self::decrease_capacity_used(provider_id, file_size)?;
 
         // Update the provider's payment stream with the user
         let previous_amount_provided =
             <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
-                who,
+                provider_id,
                 &owner,
             )
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
         let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
         <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-            who,
+            provider_id,
             &owner,
             &new_amount_provided,
         )?;
@@ -1565,5 +1752,26 @@ where
         } else {
             Err(QueryProviderMultiaddressesError::ProviderNotRegistered)
         }
+    }
+
+    pub fn query_value_propositions_for_msp(
+        msp_id: &MainStorageProviderId<T>,
+    ) -> Vec<ValuePropositionWithId<T>> {
+        MainStorageProviderIdsToValuePropositions::<T>::iter_prefix(msp_id)
+            .map(|(id, vp)| ValuePropositionWithId { id, value_prop: vp })
+            .collect::<Vec<ValuePropositionWithId<T>>>()
+    }
+
+    pub fn get_bsp_stake(
+        bsp_id: &BackupStorageProviderId<T>,
+    ) -> Result<BalanceOf<T>, GetStakeError> {
+        let bsp =
+            BackupStorageProviders::<T>::get(bsp_id).ok_or(GetStakeError::ProviderNotRegistered)?;
+
+        let stake = T::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &bsp.owner_account,
+        );
+        Ok(stake)
     }
 }

@@ -68,7 +68,8 @@ import type {
   RandomnessOutput,
   StorageDataUnit,
   StorageProviderId,
-  TrieRemoveMutation
+  TrieRemoveMutation,
+  ValuePropositionWithId
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
@@ -558,6 +559,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<StorageDataUnit, QueryStorageProviderCapacityError>>
+      >;
+      /**
+       * Query the value propositions for a MSP.
+       **/
+      queryValuePropositionsForMsp: AugmentedCall<
+        ApiType,
+        (
+          mspId: MainStorageProviderId | string | Uint8Array
+        ) => Observable<Vec<ValuePropositionWithId>>
       >;
       /**
        * Generic call

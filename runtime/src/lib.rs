@@ -8,7 +8,10 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub mod apis;
 pub mod configs;
+mod genesis_config_presets;
 mod weights;
+
+extern crate alloc;
 
 use smallvec::smallvec;
 use sp_runtime::{
@@ -26,7 +29,7 @@ use frame_support::weights::{
 };
 pub use parachains_common::BlockNumber;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-pub use sp_runtime::{MultiAddress, Perbill, Permill};
+pub use sp_runtime::{MultiAddress, Perbill, Permill, Perquintill};
 use sp_std::prelude::Vec;
 
 #[cfg(any(feature = "std", test))]
@@ -178,6 +181,8 @@ pub const DAYS: BlockNumber = HOURS * 24;
 pub const UNIT: Balance = 1_000_000_000_000;
 pub const MILLIUNIT: Balance = 1_000_000_000;
 pub const MICROUNIT: Balance = 1_000_000;
+pub const NANOUNIT: Balance = 1_000;
+pub const PICOUNIT: Balance = 1;
 
 /// The existential deposit. Set to 1/10 of the Connected Relay Chain.
 pub const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
@@ -299,6 +304,7 @@ mod benches {
         [cumulus_pallet_xcmp_queue, XcmpQueue]
         [nfts, Nfts]
         [pallet_parameters, Parameters]
+        [pallet_proofs_dealer, ProofsDealer]
     );
 }
 

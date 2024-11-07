@@ -27,11 +27,14 @@ frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+sp-keyring = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+sp-weights = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
+shp-treasury-funding = { workspace = true }
 
 # Local
 pallet-storage-providers = { workspace = true }
@@ -54,6 +57,8 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
+	"shp-traits/runtime-benchmarks",
+	"shp-treasury-funding/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -66,14 +71,20 @@ std = [
 	"pallet-proofs-dealer-runtime-api/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
+	"shp-traits/std",
+	"shp-treasury-funding/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
 	"sp-trie/std",
+	"sp-weights/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"pallet-balances/try-runtime",
+	"pallet-payment-streams/try-runtime",
+	"shp-traits/try-runtime",
+	"shp-treasury-funding/try-runtime",
 	"sp-runtime/try-runtime",
 ]

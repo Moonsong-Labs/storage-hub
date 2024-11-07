@@ -9,7 +9,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
-use shp_traits::ReadProvidersInterface;
+use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError};
 use sp_std::fmt::Debug;
 
@@ -56,12 +56,6 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// SPs will expect a connection request to be initiated by the user with this Peer Id.
     pub user_peer_ids: PeerIds<T>,
-
-    /// List of storage providers that can serve the data that is requested to be stored.
-    ///
-    /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
-    /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
-    pub data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
 
     /// Number of BSPs requested to store the data.
     ///
@@ -373,9 +367,6 @@ pub type KeyProof<T> =
 pub type FileKeyHasher<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHashing;
 
-/// Alias for the `MaxBspsPerStorageRequest` type used in the FileSystem pallet.
-pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
-
 /// Alias for the `MaxBatchConfirmStorageRequests` type used in the FileSystem pallet.
 pub type MaxBatchConfirmStorageRequests<T> = <T as crate::Config>::MaxBatchConfirmStorageRequests;
 
@@ -424,6 +415,9 @@ pub type MultiAddress<T> =
 /// Alias for the `MaxMultiAddresses` type used in the ReadProvidersInterface.
 pub type MaxMultiAddresses<T> =
     <<T as crate::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::MaxNumberOfMultiAddresses;
+
+/// Alias for the `ValuePropId` type used in the MutateBucketsInterface.
+pub type ValuePropId<T> = <<T as crate::Config>::Providers as MutateBucketsInterface>::ValuePropId;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;

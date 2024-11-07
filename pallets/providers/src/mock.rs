@@ -14,6 +14,7 @@ use shp_traits::{
     CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
     ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
+use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
@@ -65,6 +66,7 @@ parameter_types! {
     pub const SS58Prefix: u8 = 42;
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
     pub const BucketHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::BucketDeposit);
+    pub const ExistentialDeposit: u128 = 1;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -98,7 +100,7 @@ impl pallet_balances::Config for Test {
     type Balance = Balance;
     type DustRemoval = ();
     type RuntimeEvent = RuntimeEvent;
-    type ExistentialDeposit = ConstU128<1>;
+    type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = ();
     type MaxLocks = ConstU32<10>;
@@ -113,13 +115,14 @@ impl pallet_balances::Config for Test {
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
-        0
+        1000
     }
 }
 
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersPallet = StorageProviders;
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
@@ -238,6 +241,9 @@ impl pallet_payment_streams::Config for Test {
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
+    type TreasuryAccount = TreasuryAccount;
+    type MaxUsersToCharge = ConstU32<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -257,7 +263,6 @@ impl crate::Config for Test {
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type PaymentStreams = PaymentStreams;
     type ProvidersProofSubmitters = MockSubmittingProviders;
@@ -278,6 +283,8 @@ impl crate::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<1>;
+    type BspSignUpLockPeriod = ConstU64<10>;
+    type MaxCommitmentSize = ConstU32<1000>;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -388,7 +395,7 @@ pub fn _new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub mod accounts {
-    use super::UNITS;
+    use super::{ExistentialDeposit, UNITS};
 
     pub const ALICE: (u64, u128) = (0, 5_000_000 * UNITS);
     pub const BOB: (u64, u128) = (1, 10_000_000 * UNITS);
@@ -397,6 +404,7 @@ pub mod accounts {
     pub const EVE: (u64, u128) = (4, 400_000_000 * UNITS);
     pub const FERDIE: (u64, u128) = (5, 5_000_000_000 * UNITS);
     pub const GEORGE: (u64, u128) = (6, 600_000_000_000 * UNITS);
+    pub const TREASURY: (u64, u128) = (1000, ExistentialDeposit::get());
 }
 
 // Externalities builder with predefined balances for accounts and starting at block number 1
@@ -415,6 +423,7 @@ impl ExtBuilder {
                 accounts::EVE,
                 accounts::FERDIE,
                 accounts::GEORGE,
+                accounts::TREASURY,
             ],
         }
         .assimilate_storage(&mut t)

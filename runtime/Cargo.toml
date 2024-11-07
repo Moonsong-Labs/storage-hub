@@ -25,6 +25,9 @@ hex-literal = { workspace = true, optional = true }
 log = { workspace = true }
 smallvec = { workspace = true }
 scale-info = { workspace = true }
+serde_json = { features = [
+	"alloc",
+], workspace = true, default-features = false }
 
 # Local
 pallet-bucket-nfts = { workspace = true }
@@ -40,10 +43,12 @@ pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 
 shp-constants = { workspace = true }
+shp-data-price-updater = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
+shp-treasury-funding = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -152,11 +157,13 @@ std = [
 	"polkadot-parachain-primitives/std",
 	"polkadot-runtime-common/std",
 	"scale-info/std",
+	"serde_json/std",
 	"shp-constants/std",
 	"shp-file-key-verifier/std",
 	"shp-file-metadata/std",
 	"shp-forest-verifier/std",
 	"shp-traits/std",
+	"shp-treasury-funding/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
@@ -180,7 +187,6 @@ runtime-benchmarks = [
 	"cumulus-pallet-parachain-system/runtime-benchmarks",
 	"cumulus-pallet-session-benchmarking/runtime-benchmarks",
 	"cumulus-pallet-xcmp-queue/runtime-benchmarks",
-	"cumulus-primitives-aura/std",
 	"cumulus-primitives-core/runtime-benchmarks",
 	"cumulus-primitives-utility/runtime-benchmarks",
 	"frame-benchmarking/runtime-benchmarks",
@@ -210,6 +216,7 @@ runtime-benchmarks = [
 	"shp-file-metadata/runtime-benchmarks",
 	"shp-forest-verifier/runtime-benchmarks",
 	"shp-traits/runtime-benchmarks",
+	"shp-treasury-funding/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
@@ -249,6 +256,7 @@ try-runtime = [
 	"shp-file-metadata/try-runtime",
 	"shp-forest-verifier/try-runtime",
 	"shp-traits/try-runtime",
+	"shp-treasury-funding/try-runtime",
 	"sp-runtime/try-runtime",
 ]
 

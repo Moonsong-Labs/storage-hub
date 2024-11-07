@@ -18,6 +18,8 @@ pub struct Bsp {
     pub id: i32,
     pub account: String,
     pub capacity: BigDecimal,
+    pub stake: BigDecimal,
+    pub last_tick_proven: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub onchain_bsp_id: String,
@@ -40,12 +42,14 @@ impl Bsp {
         capacity: BigDecimal,
         multiaddresses: Vec<MultiAddress>,
         onchain_bsp_id: String,
+        stake: BigDecimal,
     ) -> Result<Self, diesel::result::Error> {
         let bsp = diesel::insert_into(bsp::table)
             .values((
                 bsp::account.eq(account),
                 bsp::capacity.eq(capacity),
                 bsp::onchain_bsp_id.eq(onchain_bsp_id),
+                bsp::stake.eq(stake),
             ))
             .returning(Bsp::as_select())
             .get_result(conn)
@@ -113,6 +117,32 @@ impl Bsp {
             .first(conn)
             .await?;
         Ok(bsp)
+    }
+
+    pub async fn update_stake<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bsp_id: String,
+        stake: BigDecimal,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(bsp::table)
+            .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
+            .set(bsp::stake.eq(stake))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn update_last_tick_proven<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bsp_id: String,
+        last_tick_proven: i64,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(bsp::table)
+            .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
+            .set(bsp::last_tick_proven.eq(last_tick_proven))
+            .execute(conn)
+            .await?;
+        Ok(())
     }
 }
 

@@ -203,9 +203,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketIsNotPrivate: AugmentedError<ApiType>;
       /**
+       * Bucket is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
+      /**
        * Bucket does not exist
        **/
       BucketNotFound: AugmentedError<ApiType>;
+      /**
+       * Cannot hold the required deposit from the user
+       **/
+      CannotHoldDeposit: AugmentedError<ApiType>;
       /**
        * Divided by 0
        **/
@@ -230,6 +238,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to encode fingerprint as slice.
        **/
       FailedToEncodeFingerprint: AugmentedError<ApiType>;
+      /**
+       * Failed to get owner account of ID of provider
+       **/
+      FailedToGetOwnerAccount: AugmentedError<ApiType>;
       /**
        * Failed to convert to primitive type.
        **/
@@ -1011,6 +1023,22 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
       /**
+       * Error thrown when a Provider tries to remove the last MultiAddress from its account.
+       **/
+      LastMultiAddressCantBeRemoved: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
+       **/
+      MultiAddressAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
+       **/
+      MultiAddressesMaxAmountReached: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a Provider tries to delete a MultiAddress from its account but it does not have that MultiAddress.
+       **/
+      MultiAddressNotFound: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
        **/
       NewCapacityCantBeZero: AugmentedError<ApiType>;
@@ -1063,6 +1091,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       RandomnessNotValidYet: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to sign off as a BSP but the sign off period has not passed yet.
+       **/
+      SignOffPeriodNotPassed: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user tries to confirm a sign up that was not requested previously.
        **/
       SignUpNotRequested: AugmentedError<ApiType>;
@@ -1086,6 +1118,18 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
        **/
       StorageTooLow: AugmentedError<ApiType>;
+      /**
+       * Error thrown when value proposition under a given id already exists.
+       **/
+      ValuePropositionAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a value proposition is not available.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
+       * Error thrown when the value proposition id is not found.
+       **/
+      ValuePropositionNotFound: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

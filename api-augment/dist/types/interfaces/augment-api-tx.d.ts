@@ -26,7 +26,6 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
-  PalletStorageProvidersValueProposition,
   ShpFileKeyVerifierFileKeyProof,
   SpRuntimeMultiSignature,
   SpTrieStorageProofCompactProof,
@@ -600,9 +599,23 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
-          private: bool | boolean | Uint8Array
+          private: bool | boolean | Uint8Array,
+          valuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool]
+        [H256, Bytes, bool, H256]
+      >;
+      /**
+       * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
+       * This way, the User is allowed to remove now unused buckets to recover their deposit for them.
+       *
+       * The User must provide the BucketId of the bucket they want to delete, which should correspond to a
+       * bucket that is both theirs and currently empty.
+       *
+       * To check if a bucket is empty, we compare its current root with the one of an empty trie.
+       **/
+      deleteBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       deleteFile: AugmentedSubmittable<
         (
@@ -2185,38 +2198,6 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     parachainSystem: {
       /**
-       * Authorize an upgrade to a given `code_hash` for the runtime. The runtime can be supplied
-       * later.
-       *
-       * The `check_version` parameter sets a boolean flag for whether or not the runtime's spec
-       * version and name should be verified on upgrade. Since the authorization only has a hash,
-       * it cannot actually perform the verification.
-       *
-       * This call requires Root origin.
-       **/
-      authorizeUpgrade: AugmentedSubmittable<
-        (
-          codeHash: H256 | string | Uint8Array,
-          checkVersion: bool | boolean | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, bool]
-      >;
-      /**
-       * Provide the preimage (runtime binary) `code` for an upgrade that has been authorized.
-       *
-       * If the authorization required a version check, this call will ensure the spec name
-       * remains unchanged and that the spec version has increased.
-       *
-       * Note that this function will not apply the new `code`, but only attempt to schedule the
-       * upgrade with the Relay Chain.
-       *
-       * All origins are allowed.
-       **/
-      enactAuthorizedUpgrade: AugmentedSubmittable<
-        (code: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [Bytes]
-      >;
-      /**
        * Set the current validation data.
        *
        * This should be invoked exactly once per block. It will panic at the finalization
@@ -2276,6 +2257,44 @@ declare module "@polkadot/api-base/types/submittable" {
       [key: string]: SubmittableExtrinsicFunction<ApiType>;
     };
     paymentStreams: {
+      /**
+       * Dispatchable extrinsic that allows Providers to charge multiple User's payment streams.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the Provider that has at least one type of payment stream with each of the Users.
+       *
+       * Parameters:
+       * - `user_accounts`: The array of User Account IDs that have payment streams with the Provider.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the array of Users is not bigger than the maximum allowed.
+       * 3. Execute a for loop for each User in the array of User Account IDs, in which it:
+       * a. Checks that a payment stream between the signer (Provider) and the User exists
+       * b. If there is a fixed-rate payment stream:
+       * 1. Get the rate of the payment stream
+       * 2. Get the difference between the last charged tick number and the last chargeable tick number of the stream
+       * 3. Calculate the amount to charge doing `rate * difference`
+       * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+       * 5. Update the last charged tick number of the payment stream
+       * c. If there is a dynamic-rate payment stream:
+       * 1. Get the amount provided by the Provider
+       * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
+       * 3. Calculate the amount to charge doing `amount_provided * difference`
+       * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+       * 5. Update the price index when the stream was last charged of the payment stream
+       *
+       * Emits a `PaymentStreamCharged` per User that had to pay and a `UsersCharged` event when successful.
+       *
+       * Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
+       * will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
+       **/
+      chargeMultipleUsersPaymentStreams: AugmentedSubmittable<
+        (
+          userAccounts: Vec<AccountId32> | (AccountId32 | string | Uint8Array)[]
+        ) => SubmittableExtrinsic<ApiType>,
+        [Vec<AccountId32>]
+      >;
       /**
        * Dispatchable extrinsic that allows Providers to charge a payment stream from a User.
        *
@@ -3350,36 +3369,42 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     providers: {
       /**
+       * Dispatchable extrinsic that allows BSPs and MSPs to add a new multiaddress to their account.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the account that wants to add a new multiaddress.
+       *
+       * Parameters:
+       * - `new_multiaddress`: The new multiaddress that the signer wants to add to its account.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the signer is registered as a MSP or BSP.
+       * 3. Check that the Provider has not reached the maximum amount of multiaddresses.
+       * 4. Check that the multiaddress is valid (size and any other relevant checks). TODO: Implement this.
+       * 5. Update the Provider's storage to add the multiaddress.
+       *
+       * Emits `MultiAddressAdded` event when successful.
+       **/
+      addMultiaddress: AugmentedSubmittable<
+        (newMultiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [Bytes]
+      >;
+      /**
        * Dispatchable extrinsic only callable by an MSP that allows it to add a value proposition to its service
        *
        * The dispatch origin for this call must be Signed.
        * The origin must be the account that wants to add a value proposition.
        *
-       * Parameters:
-       * - `new_value_prop`: The value proposition that the MSP wants to add to its service.
-       *
-       * This extrinsic will perform the following checks and logic:
-       * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that the signer is registered as a MSP
-       * 3. Check that the MSP has not reached the maximum amount of value propositions
-       * 4. Check that the value proposition is valid (size and any other relevant checks)
-       * 5. Update the MSPs storage to add the value proposition (with its identifier)
-       *
        * Emits `ValuePropAdded` event when successful.
        **/
       addValueProp: AugmentedSubmittable<
         (
-          newValueProp:
-            | PalletStorageProvidersValueProposition
-            | {
-                identifier?: any;
-                dataLimit?: any;
-                protocols?: any;
-              }
-            | string
-            | Uint8Array
+          pricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          bucketDataLimit: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [PalletStorageProvidersValueProposition]
+        [u128, Bytes, u64]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Backup Storage Provider.
@@ -3508,7 +3533,7 @@ declare module "@polkadot/api-base/types/submittable" {
         [AccountId32, H256, u64, Vec<Bytes>, AccountId32, Option<u32>]
       >;
       /**
-       * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+       * Dispatchable extrinsic that allows to forcefully and automatically sign up a Main Storage Provider.
        *
        * The dispatch origin for this call must be Root.
        * The `who` parameter is the account that wants to sign up as a Main Storage Provider.
@@ -3537,18 +3562,22 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
-            | PalletStorageProvidersValueProposition
-            | {
-                identifier?: any;
-                dataLimit?: any;
-                protocols?: any;
-              }
-            | string
-            | Uint8Array,
+          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [AccountId32, H256, u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
+      >;
+      /**
+       * Dispatchable extrinsic only callable by an MSP that allows it to make a value proposition unavailable.
+       *
+       * This operation cannot be reversed. You can only add new value propositions.
+       * This will not affect existing buckets which are using this value proposition.
+       **/
+      makeValuePropUnavailable: AugmentedSubmittable<
+        (valuePropId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
@@ -3567,6 +3596,27 @@ declare module "@polkadot/api-base/types/submittable" {
        * Emits `MspSignOffSuccess` event when successful.
        **/
       mspSignOff: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
+       * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the account that wants to remove a multiaddress.
+       *
+       * Parameters:
+       * - `multiaddress`: The multiaddress that the signer wants to remove from its account.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the signer is registered as a MSP or BSP.
+       * 3. Check that the multiaddress exists in the Provider's account.
+       * 4. Update the Provider's storage to remove the multiaddress.
+       *
+       * Emits `MultiAddressRemoved` event when successful.
+       **/
+      removeMultiaddress: AugmentedSubmittable<
+        (multiaddress: Bytes | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [Bytes]
+      >;
       /**
        * Dispatchable extrinsic that allows users to sign up as a Backup Storage Provider.
        *
@@ -3632,18 +3682,12 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valueProp:
-            | PalletStorageProvidersValueProposition
-            | {
-                identifier?: any;
-                dataLimit?: any;
-                protocols?: any;
-              }
-            | string
-            | Uint8Array,
+          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          commitment: Bytes | string | Uint8Array,
+          valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [u64, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+        [u64, Vec<Bytes>, u128, Bytes, u64, AccountId32]
       >;
       /**
        * Dispatchable extrinsic to slash a _slashable_ Storage Provider.

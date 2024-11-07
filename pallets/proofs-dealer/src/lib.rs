@@ -8,10 +8,14 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmark_proofs;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 pub mod types;
 pub mod utils;
+pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -35,13 +39,16 @@ pub mod pallet {
     use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
 
-    use crate::types::*;
     use crate::*;
+    use crate::{types::*, weights::*};
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
@@ -386,6 +393,7 @@ pub mod pallet {
         ProofAccepted {
             provider: ProviderIdFor<T>,
             proof: Proof<T>,
+            last_tick_proven: BlockNumberFor<T>,
         },
 
         /// A new challenge seed was generated.
@@ -536,7 +544,7 @@ pub mod pallet {
         /// Users are charged a small fee for submitting a challenge, which
         /// goes to the Treasury.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::challenge())]
         pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -594,10 +602,14 @@ pub mod pallet {
                 }
             };
 
-            Self::do_submit_proof(&provider, &proof)?;
+            let last_tick_proven = Self::do_submit_proof(&provider, &proof)?;
 
             // Emit event.
-            Self::deposit_event(Event::ProofAccepted { provider, proof });
+            Self::deposit_event(Event::ProofAccepted {
+                provider,
+                proof,
+                last_tick_proven,
+            });
 
             // Return a successful DispatchResultWithPostInfo.
             // If the proof is valid, the execution of this extrinsic should be refunded.
@@ -657,7 +669,7 @@ pub mod pallet {
         /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
-        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut sp_weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
             // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.
