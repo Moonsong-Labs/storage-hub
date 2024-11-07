@@ -516,6 +516,19 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, bool, H256]
       >;
+      /**
+       * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
+       * This way, the User is allowed to remove now unused buckets to recover their deposit for them.
+       *
+       * The User must provide the BucketId of the bucket they want to delete, which should correspond to a
+       * bucket that is both theirs and currently empty.
+       *
+       * To check if a bucket is empty, we compare its current root with the one of an empty trie.
+       **/
+      deleteBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
       deleteFile: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
@@ -2960,7 +2973,7 @@ declare module "@polkadot/api-base/types/submittable" {
         [AccountId32, H256, u64, Vec<Bytes>, AccountId32, Option<u32>]
       >;
       /**
-       * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+       * Dispatchable extrinsic that allows to forcefully and automatically sign up a Main Storage Provider.
        *
        * The dispatch origin for this call must be Root.
        * The `who` parameter is the account that wants to sign up as a Main Storage Provider.

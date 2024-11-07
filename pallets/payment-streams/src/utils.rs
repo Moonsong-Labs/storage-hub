@@ -566,7 +566,7 @@ where
         let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
         // Get the last chargeable info for this provider
-        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(provider_id);
         let last_chargeable_tick = last_chargeable_info.last_chargeable_tick;
 
         // If the fixed-rate payment stream exists:
@@ -946,7 +946,7 @@ where
         // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
         for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
             // Get the amount that should be charged for this payment stream
-            let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+            let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(&provider_id);
             let amount_to_charge = fixed_rate_payment_stream
                 .rate
                 .checked_mul(&T::BlockNumberToBalance::convert(
@@ -1004,7 +1004,7 @@ where
         for (provider_id, dynamic_rate_payment_stream) in dynamic_rate_payment_streams {
             // Get the amount that should be charged for this payment stream
             let price_index_at_last_chargeable_tick =
-                LastChargeableInfo::<T>::get(provider_id).price_index;
+                Self::get_last_chargeable_info_with_privilege(&provider_id).price_index;
             let amount_to_charge = price_index_at_last_chargeable_tick
                 .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                 .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
@@ -1238,7 +1238,7 @@ where
         payment_stream: &PaymentStream<T>,
     ) -> DispatchResult {
         // Get the amount that should be charged for this payment stream
-        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(&provider_id);
 
         // Get the user deposit and amount to charge from the payment stream
         let (deposit, amount_to_charge) = match payment_stream {
@@ -1522,6 +1522,18 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account)
             || DynamicRatePaymentStreams::<T>::contains_key(provider_id, user_account)
     }
+
+    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
+        PrivilegedProviders::<T>::insert(provider_id, ());
+
+        Ok(())
+    }
+
+    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
+        PrivilegedProviders::<T>::remove(provider_id);
+
+        Ok(())
+    }
 }
 
 impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
@@ -1570,7 +1582,7 @@ where
         );
 
         // Get the last chargeable info of the Provider
-        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+        let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(provider_id);
 
         // Get all the users that have a payment stream with this Provider
         let users_of_provider = Self::get_users_with_payment_stream_with_provider(provider_id);
@@ -1642,5 +1654,19 @@ where
         }
 
         payment_streams
+    }
+
+    pub fn get_last_chargeable_info_with_privilege(
+        provider_id: &ProviderIdFor<T>,
+    ) -> ProviderLastChargeableInfo<T> {
+        // If this is a Privileged Provider, then it is allowed to charge up to the current tick.
+        if let Some(_) = PrivilegedProviders::<T>::get(provider_id) {
+            return ProviderLastChargeableInfo {
+                last_chargeable_tick: Self::get_current_tick(),
+                price_index: Default::default(),
+            };
+        }
+
+        return LastChargeableInfo::<T>::get(provider_id);
     }
 }

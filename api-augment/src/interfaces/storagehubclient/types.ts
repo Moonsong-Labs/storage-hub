@@ -1,8 +1,8 @@
 // Auto-generated via `yarn polkadot-types-from-defs`, do not edit
 /* eslint-disable */
 
-import type { Bytes, Enum, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
-import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
+import type { Bytes, Enum, Struct, U8aFixed, u32, u64 } from '@polkadot/types-codec';
+import type { AccountId, BlockNumber, H256 } from '@polkadot/types/interfaces/runtime';
 
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
@@ -34,14 +34,14 @@ export interface FileMetadata extends Struct {
 export interface GetBspInfoError extends Enum {
   readonly isBspNotRegistered: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "BspNotRegistered" | "InternalApiError";
+  readonly type: 'BspNotRegistered' | 'InternalApiError';
 }
 
 /** @name GetChallengePeriodError */
 export interface GetChallengePeriodError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'InternalApiError';
 }
 
 /** @name GetChallengeSeedError */
@@ -49,7 +49,7 @@ export interface GetChallengeSeedError extends Enum {
   readonly isTickBeyondLastSeedStored: boolean;
   readonly isTickIsInTheFuture: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "TickBeyondLastSeedStored" | "TickIsInTheFuture" | "InternalApiError";
+  readonly type: 'TickBeyondLastSeedStored' | 'TickIsInTheFuture' | 'InternalApiError';
 }
 
 /** @name GetCheckpointChallengesError */
@@ -57,10 +57,7 @@ export interface GetCheckpointChallengesError extends Enum {
   readonly isTickGreaterThanLastCheckpointTick: boolean;
   readonly isNoCheckpointChallengesInTick: boolean;
   readonly isInternalApiError: boolean;
-  readonly type:
-    | "TickGreaterThanLastCheckpointTick"
-    | "NoCheckpointChallengesInTick"
-    | "InternalApiError";
+  readonly type: 'TickGreaterThanLastCheckpointTick' | 'NoCheckpointChallengesInTick' | 'InternalApiError';
 }
 
 /** @name GetFileFromFileStorageResult */
@@ -72,7 +69,7 @@ export interface GetFileFromFileStorageResult extends Enum {
   readonly asIncompleteFile: IncompleteFileStatus;
   readonly isFileFoundWithInconsistency: boolean;
   readonly asFileFoundWithInconsistency: FileMetadata;
-  readonly type: "FileNotFound" | "FileFound" | "IncompleteFile" | "FileFoundWithInconsistency";
+  readonly type: 'FileNotFound' | 'FileFound' | 'IncompleteFile' | 'FileFoundWithInconsistency';
 }
 
 /** @name GetLastTickProviderSubmittedProofError */
@@ -80,7 +77,7 @@ export interface GetLastTickProviderSubmittedProofError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isProviderNeverSubmittedProof: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'ProviderNeverSubmittedProof' | 'InternalApiError';
 }
 
 /** @name GetNextDeadlineTickError */
@@ -89,11 +86,7 @@ export interface GetNextDeadlineTickError extends Enum {
   readonly isProviderNotInitialised: boolean;
   readonly isArithmeticOverflow: boolean;
   readonly isInternalApiError: boolean;
-  readonly type:
-    | "ProviderNotRegistered"
-    | "ProviderNotInitialised"
-    | "ArithmeticOverflow"
-    | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'ProviderNotInitialised' | 'ArithmeticOverflow' | 'InternalApiError';
 }
 
 /** @name GetUsersWithDebtOverThresholdError */
@@ -103,12 +96,7 @@ export interface GetUsersWithDebtOverThresholdError extends Enum {
   readonly isAmountToChargeOverflow: boolean;
   readonly isDebtOverflow: boolean;
   readonly isInternalApiError: boolean;
-  readonly type:
-    | "ProviderNotRegistered"
-    | "ProviderWithoutPaymentStreams"
-    | "AmountToChargeOverflow"
-    | "DebtOverflow"
-    | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'ProviderWithoutPaymentStreams' | 'AmountToChargeOverflow' | 'DebtOverflow' | 'InternalApiError';
 }
 
 /** @name IncompleteFileStatus */
@@ -137,7 +125,7 @@ export interface ProviderId extends H256 {}
 export interface QueryAvailableStorageCapacityError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'InternalApiError';
 }
 
 /** @name QueryBspConfirmChunksToProveForFileError */
@@ -146,20 +134,20 @@ export interface QueryBspConfirmChunksToProveForFileError extends Enum {
   readonly isConfirmChunks: boolean;
   readonly asConfirmChunks: QueryConfirmChunksToProveForFileError;
   readonly isInternalError: boolean;
-  readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
+  readonly type: 'StorageRequestNotFound' | 'ConfirmChunks' | 'InternalError';
 }
 
 /** @name QueryConfirmChunksToProveForFileError */
 export interface QueryConfirmChunksToProveForFileError extends Enum {
   readonly isChallengedChunkToChunkIdError: boolean;
-  readonly type: "ChallengedChunkToChunkIdError";
+  readonly type: 'ChallengedChunkToChunkIdError';
 }
 
 /** @name QueryEarliestChangeCapacityBlockError */
 export interface QueryEarliestChangeCapacityBlockError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'InternalApiError';
 }
 
 /** @name QueryFileEarliestVolunteerBlockError */
@@ -169,12 +157,7 @@ export interface QueryFileEarliestVolunteerBlockError extends Enum {
   readonly isThresholdArithmeticError: boolean;
   readonly isStorageRequestNotFound: boolean;
   readonly isInternalError: boolean;
-  readonly type:
-    | "FailedToEncodeFingerprint"
-    | "FailedToEncodeBsp"
-    | "ThresholdArithmeticError"
-    | "StorageRequestNotFound"
-    | "InternalError";
+  readonly type: 'FailedToEncodeFingerprint' | 'FailedToEncodeBsp' | 'ThresholdArithmeticError' | 'StorageRequestNotFound' | 'InternalError';
 }
 
 /** @name QueryMspConfirmChunksToProveForFileError */
@@ -183,28 +166,28 @@ export interface QueryMspConfirmChunksToProveForFileError extends Enum {
   readonly isConfirmChunks: boolean;
   readonly asConfirmChunks: QueryConfirmChunksToProveForFileError;
   readonly isInternalError: boolean;
-  readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
+  readonly type: 'StorageRequestNotFound' | 'ConfirmChunks' | 'InternalError';
 }
 
 /** @name QueryMspIdOfBucketIdError */
 export interface QueryMspIdOfBucketIdError extends Enum {
   readonly isBucketNotFound: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "BucketNotFound" | "InternalApiError";
+  readonly type: 'BucketNotFound' | 'InternalApiError';
 }
 
 /** @name QueryProviderMultiaddressesError */
 export interface QueryProviderMultiaddressesError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'InternalApiError';
 }
 
 /** @name QueryStorageProviderCapacityError */
 export interface QueryStorageProviderCapacityError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "InternalApiError";
+  readonly type: 'ProviderNotRegistered' | 'InternalApiError';
 }
 
 /** @name RandomnessOutput */
@@ -217,7 +200,7 @@ export interface SaveFileToDisk extends Enum {
   readonly asSuccess: FileMetadata;
   readonly isIncompleteFile: boolean;
   readonly asIncompleteFile: IncompleteFileStatus;
-  readonly type: "FileNotFound" | "Success" | "IncompleteFile";
+  readonly type: 'FileNotFound' | 'Success' | 'IncompleteFile';
 }
 
 /** @name StorageData */
@@ -232,7 +215,7 @@ export interface StorageProviderId extends Enum {
   readonly asBackupStorageProvider: BackupStorageProviderId;
   readonly isMainStorageProvider: boolean;
   readonly asMainStorageProvider: MainStorageProviderId;
-  readonly type: "BackupStorageProvider" | "MainStorageProvider";
+  readonly type: 'BackupStorageProvider' | 'MainStorageProvider';
 }
 
 /** @name TrieRemoveMutation */
@@ -253,4 +236,4 @@ export interface ValuePropositionWithId extends Struct {
   readonly value_prop: ValueProposition;
 }
 
-export type PHANTOM_STORAGEHUBCLIENT = "storagehubclient";
+export type PHANTOM_STORAGEHUBCLIENT = 'storagehubclient';

@@ -92,10 +92,10 @@ pub mod dynamic_params {
 
         #[codec(index = 11)]
         #[allow(non_upper_case_globals)]
-        /// 0-size bucket fixed rate payment stream.
+        /// 0-size bucket fixed rate payment stream representing the price for 1 MB of data.
         ///
-        /// Determining the rate to add to a fixed payment stream between an MSP and a user.
-        pub static ZeroSizeBucketFixedRate: Balance = 1;
+        /// Base rate for a new fixed payment stream established between an MSP and a user.
+        pub static ZeroSizeBucketFixedRate: Balance = 48 * PICOUNIT;
 
         #[codec(index = 12)]
         #[allow(non_upper_case_globals)]
@@ -117,6 +117,15 @@ pub mod dynamic_params {
         #[allow(non_upper_case_globals)]
         /// The maximum treasury cut that can be taken from the amount charged from a payment stream.
         pub static MaximumTreasuryCut: Perbill = Perbill::from_percent(5);
+
+        #[codec(index = 15)]
+        #[allow(non_upper_case_globals)]
+        /// The penalty a BSP must pay when they forcefully stop storing a file.
+        /// We set this to be half of the `SlashAmountPerMaxFileSize` with the rationale that
+        /// for a BSP that has lost this file, it should be more convenient to voluntarily
+        /// show up and pay this penalty in good faith, rather than risking being slashed for
+        /// being unable to submit a proof that should include this file.
+        pub static BspStopStoringFilePenalty: Balance = SlashAmountPerMaxFileSize::get() / 2;
     }
 }
 
