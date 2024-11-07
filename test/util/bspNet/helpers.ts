@@ -33,7 +33,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
       );
       return stdout.trim();
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
+      await sleep(sleepTime);
     }
   }
   // TODO: Replace with dockerode
@@ -82,7 +82,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
       const resp = (await response.json()) as any;
       return resp.result as string;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
+      await sleep(sleepTime);
     }
   }
 
@@ -183,9 +183,6 @@ export const closeSimpleBspNet = async (verbose = false) => {
       verbose && console.log("All nodes verified to be removed, continuing");
       return;
     }
-
-    console.log("Waiting 1s for nodes to stop");
-    await sleep(1000);
   }
   invariant(false, `Failed to stop all nodes: ${JSON.stringify(allContainers)}`);
 };

@@ -1,10 +1,11 @@
-import { BspNetTestApi, registerToxics, type BspNetConfig, type ToxicInfo } from "../util";
+import { BspNetTestApi, registerToxics, type ToxicInfo } from "../util";
 import * as ShConsts from "../util/bspNet/consts";
-import { NetworkLauncher } from "../util/netLaunch";
+import { NetworkLauncher, type NetLaunchConfig } from "../util/netLaunch";
 
-const bspNetConfig: BspNetConfig = {
+const bspNetConfig: NetLaunchConfig = {
   noisy: process.env.NOISY === "1",
-  rocksdb: process.env.ROCKSDB === "1"
+  rocksdb: process.env.ROCKSDB === "1",
+  indexer: process.env.INDEXER === "1"
 };
 
 const CONFIG = {
