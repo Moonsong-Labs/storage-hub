@@ -107,3 +107,37 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
         spawner.spawn(async move { self.run().await });
     }
 }
+
+#[macro_export]
+macro_rules! define_event_bus {
+    ($provider_name:ident, $($event_type:ty),+) => {
+        #[derive(Clone, Default)]
+        pub struct $provider_name {
+            $(pub $event_type: EventBus<$event_type>,)+
+        }
+
+        $(
+            impl ProvidesEventBus<$event_type> for $provider_name {
+                fn event_bus(&self) -> &EventBus<$event_type> {
+                    &self.$event_type
+                }
+            }
+        )+
+    };
+}
+
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
+
+#[proc_macro_derive(EventBusMessage)]
+pub fn derive_event_bus_message(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+
+    let expanded = quote! {
+        impl EventBusMessage for #name {}
+    };
+
+    TokenStream::from(expanded)
+}
