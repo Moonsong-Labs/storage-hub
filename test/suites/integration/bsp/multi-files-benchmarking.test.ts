@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 
 describeBspNet(
   "Build proofs for benchmarking test cases",
-  { networkConfig: "standard", skip: true, only: true },
+  { networkConfig: "standard", skip: true },
   ({ before, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;

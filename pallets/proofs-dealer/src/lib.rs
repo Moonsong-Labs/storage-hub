@@ -34,7 +34,7 @@ pub mod pallet {
     };
     use sp_runtime::{
         traits::{CheckedSub, Convert, Saturating, Zero},
-        Perbill,
+        Perbill, SaturatedConversion,
     };
     use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
@@ -612,7 +612,32 @@ pub mod pallet {
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::submit_proof(proof.key_proofs.len() as u32))]
+        #[pallet::weight({
+            let max_random_key_proofs = T::RandomChallengesPerBlock::get().saturating_mul(2u32.into());
+            let max_exact_custom_key_proofs = T::MaxCustomChallengesPerBlock::get();
+            let max_custom_key_proofs = max_exact_custom_key_proofs.saturating_mul(2u32.into());
+
+            let max_key_proofs_with_apply_delta = max_random_key_proofs.saturating_add(max_exact_custom_key_proofs);
+            let max_key_proofs = max_random_key_proofs.saturating_add(max_custom_key_proofs);
+
+            let key_proofs_len = SaturatedConversion::saturated_into::<u32>(
+                proof.key_proofs.len()
+            );
+            match key_proofs_len {
+                n if n <= max_random_key_proofs => {
+                    T::WeightInfo::submit_proof(n)
+                }
+                n if n <= max_key_proofs_with_apply_delta => {
+                    // TODO: BENCHMARK THIS CASE
+                    T::WeightInfo::submit_proof(n)
+                }
+                n if n <= max_key_proofs => {
+                    // TODO: BENCHMARK THIS CASE
+                    T::WeightInfo::submit_proof(n)
+                }
+                _ => Weight::from_parts(1_000_000, 0) + T::DbWeight::get().writes(1),
+            }
+        })]
         pub fn submit_proof(
             origin: OriginFor<T>,
             proof: Proof<T>,
