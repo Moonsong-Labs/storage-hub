@@ -13,15 +13,19 @@ export const sendNewStorageRequest = async (
   source: string,
   location: string,
   bucketName: string,
-  valuePropId?: HexString,
-  mspId?: HexString,
+  valuePropId?: HexString | null,
+  mspId?: HexString | null,
   owner?: KeyringPair
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
 
+  if (mspId === undefined) {
+    mspId = ShConsts.DUMMY_MSP_ID;
+  }
+
   if (localValuePropId === undefined) {
     const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId ?? ShConsts.DUMMY_MSP_ID
+      mspId
     );
 
     localValuePropId = valueProps[0].id;
@@ -51,7 +55,7 @@ export const sendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      mspId ?? ShConsts.DUMMY_MSP_ID,
+      mspId,
       [ShConsts.NODE_INFOS.user.expectedPeerId]
     ),
     owner ?? shUser
@@ -82,8 +86,8 @@ export const sendNewStorageRequest = async (
 export const createBucket = async (
   api: ApiPromise,
   bucketName: string,
-  valuePropId?: HexString,
-  mspId: HexString = ShConsts.DUMMY_MSP_ID,
+  valuePropId?: HexString | null,
+  mspId: HexString | null = ShConsts.DUMMY_MSP_ID,
   owner: KeyringPair = shUser
 ) => {
   let localValuePropId = valuePropId;

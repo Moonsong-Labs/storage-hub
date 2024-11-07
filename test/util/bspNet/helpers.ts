@@ -418,7 +418,7 @@ export const runMultipleInitialisedBspsNet = async (
     const location = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName);
+    const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName, null, null);
 
     await userApi.wait.bspVolunteer(4);
     await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);

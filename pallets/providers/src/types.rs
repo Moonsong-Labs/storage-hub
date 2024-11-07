@@ -94,11 +94,11 @@ pub struct BackupStorageProvider<T: Config> {
 pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
-    pub msp_id: MainStorageProviderId<T>,
+    pub msp_id: Option<MainStorageProviderId<T>>,
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     pub size: StorageDataUnit<T>,
-    pub value_prop_id: HashId<T>,
+    pub value_prop_id: Option<HashId<T>>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]

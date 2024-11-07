@@ -245,16 +245,18 @@ where
     /// Create a bucket for an owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
-        msp_id: ProviderIdFor<T>,
+        msp_id: Option<ProviderIdFor<T>>,
         name: BucketNameFor<T>,
         private: bool,
-        value_prop_id: ValuePropId<T>,
+        value_prop_id: Option<ValuePropId<T>>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // Check if the MSP is indeed an MSP.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
-            Error::<T>::NotAMsp
-        );
+        if let Some(msp_id) = msp_id {
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+                Error::<T>::NotAMsp
+            );
+        }
 
         // Create collection only if bucket is private
         let maybe_collection_id = if private {
@@ -264,7 +266,7 @@ where
             None
         };
 
-        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&msp_id, &sender, name);
+        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
@@ -380,11 +382,13 @@ where
         // Change the MSP that stores the bucket.
         <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
 
-        // Decrease the used capacity of the previous MSP.
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &previous_msp_id,
-            bucket_size,
-        )?;
+        if let Some(previous_msp_id) = previous_msp_id {
+            // Decrease the used capacity of the previous MSP.
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &previous_msp_id,
+                bucket_size,
+            )?;
+        }
 
         // Increase the used capacity of the new MSP.
         <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -1691,7 +1695,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
-    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
+    ) -> Result<(bool, Option<ProviderIdFor<T>>), DispatchError> {
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
             sender.clone(),
@@ -1713,8 +1717,7 @@ where
             Error::<T>::NotBucketOwner
         );
 
-        let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)
-            .ok_or(Error::<T>::BucketNotFound)?;
+        let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.

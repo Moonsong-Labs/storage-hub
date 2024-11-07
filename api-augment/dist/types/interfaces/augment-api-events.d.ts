@@ -654,21 +654,21 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
-          mspId: H256,
+          mspId: Option<H256>,
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
           private: bool,
-          valuePropId: H256
+          valuePropId: Option<H256>
         ],
         {
           who: AccountId32;
-          mspId: H256;
+          mspId: Option<H256>;
           bucketId: H256;
           name: Bytes;
           collectionId: Option<u32>;
           private: bool;
-          valuePropId: H256;
+          valuePropId: Option<H256>;
         }
       >;
       /**

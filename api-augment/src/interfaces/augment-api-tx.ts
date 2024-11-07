@@ -509,12 +509,12 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       createBucket: AugmentedSubmittable<
         (
-          mspId: H256 | string | Uint8Array,
+          mspId: Option<H256> | null | Uint8Array | H256 | string,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
-          valuePropId: H256 | string | Uint8Array
+          valuePropId: Option<H256> | null | Uint8Array | H256 | string
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool, H256]
+        [Option<H256>, Bytes, bool, Option<H256>]
       >;
       deleteFile: AugmentedSubmittable<
         (
@@ -542,10 +542,10 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          mspId: H256 | string | Uint8Array,
+          mspId: Option<H256> | null | Uint8Array | H256 | string,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, H256, Vec<Bytes>]
+        [H256, Bytes, H256, u64, Option<H256>, Vec<Bytes>]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (

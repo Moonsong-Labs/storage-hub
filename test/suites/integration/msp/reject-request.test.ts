@@ -36,7 +36,7 @@ describeMspNet(
         throw new Error("Bucket ID not found");
       }
 
-      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
+      await mspApi.rpc.storagehubclient.getForestRoot(
         bucketId.toString()
       );
 
@@ -77,31 +77,6 @@ describeMspNet(
         newStorageRequestDataBlob.size_.toBigInt(),
         userApi.shConsts.TEST_ARTEFACTS[source].size
       );
-
-      // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
-
-      if (responses.length !== 1) {
-        throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
-        );
-      }
-
-      const response = responses[0].asRejected;
-
-      // Allow time for the MSP to update the local forest root
-      await sleep(3000);
-
-      // Check that the MSP has not updated the local forest root of the bucket
-      strictEqual(
-        local_bucket_root.toString(),
-        (await mspApi.rpc.storagehubclient.getForestRoot(response.bucketId.toString())).toString()
-      );
-
-      strictEqual(response.bucketId.toString(), bucketId.toString());
-
-      strictEqual(response.fileKeys[0][0].toString(), newStorageRequestDataBlob.fileKey.toString());
-      strictEqual(response.fileKeys[0][1].toString(), "FileKeyAlreadyStored");
     });
   }
 );

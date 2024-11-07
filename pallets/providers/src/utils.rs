@@ -1034,26 +1034,23 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     }
 
     fn derive_bucket_id(
-        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId {
-        let concat = msp_id
+        let concat = owner
             .encode()
             .into_iter()
-            .chain(
-                owner
-                    .encode()
-                    .into_iter()
-                    .chain(bucket_name.encode().into_iter()),
-            )
+            .chain(bucket_name.encode().into_iter())
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 
-    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
-        Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
+    fn get_msp_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.msp_id)
     }
 
     fn get_read_access_group_id_of_bucket(
@@ -1078,7 +1075,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 
     fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
         if let Some(bucket) = Buckets::<T>::get(bucket_id) {
-            bucket.msp_id == *msp_id
+            bucket.msp_id == Some(*msp_id)
         } else {
             false
         }
@@ -1098,7 +1095,9 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Ok(bucket.size)
     }
 
-    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError> {
+    fn get_msp_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(bucket.msp_id)
     }
@@ -1115,23 +1114,17 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ValuePropId = ValuePropId<T>;
 
     fn add_bucket(
-        provider_id: Self::ProviderId,
+        provider_id: Option<Self::ProviderId>,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Self::ValuePropId,
+        value_prop_id: Option<Self::ValuePropId>,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
             !Buckets::<T>::contains_key(&bucket_id),
             Error::<T>::BucketAlreadyExists
-        );
-
-        // Check if the MSP exists
-        ensure!(
-            MainStorageProviders::<T>::contains_key(&provider_id),
-            Error::<T>::NotRegistered
         );
 
         let user_balance = T::NativeBalance::reducible_balance(
@@ -1140,14 +1133,26 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
-        let value_prop =
-            MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+        if let Some(provider_id) = provider_id {
+            // Check if the MSP exists
+            ensure!(
+                MainStorageProviders::<T>::contains_key(&provider_id),
+                Error::<T>::NotRegistered
+            );
+
+            if let Some(value_prop_id) = value_prop_id {
+                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+                    &provider_id,
+                    &value_prop_id,
+                )
                 .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-        ensure!(
-            value_prop.available,
-            Error::<T>::ValuePropositionNotAvailable
-        );
+                ensure!(
+                    value_prop.available,
+                    Error::<T>::ValuePropositionNotAvailable
+                );
+            }
+        }
 
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
@@ -1171,8 +1176,10 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        MainStorageProviderIdsToBuckets::<T>::try_append(&provider_id, bucket_id)
-            .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+        if let Some(provider_id) = provider_id {
+            MainStorageProviderIdsToBuckets::<T>::try_append(&provider_id, bucket_id)
+                .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+        }
 
         Ok(())
     }
@@ -1180,7 +1187,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.msp_id = *new_msp;
+            bucket.msp_id = Some(*new_msp);
 
             Ok(())
         })
@@ -1205,9 +1212,8 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
         let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        MainStorageProviderIdsToBuckets::<T>::mutate_exists(
-            &bucket.msp_id,
-            |buckets| match buckets {
+        if let Some(msp_id) = bucket.msp_id {
+            MainStorageProviderIdsToBuckets::<T>::mutate_exists(&msp_id, |buckets| match buckets {
                 Some(b) => {
                     b.retain(|b| b != &bucket_id);
 
@@ -1216,8 +1222,8 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                     }
                 }
                 _ => {}
-            },
-        );
+            });
+        }
 
         // Release the bucket deposit hold
         T::NativeBalance::release(
@@ -1436,8 +1442,12 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
             let msp_for_bucket = bucket.msp_id;
-            if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
-                Some(msp.owner_account)
+            if let Some(msp_id) = msp_for_bucket {
+                if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
+                    Some(msp.owner_account)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -1739,7 +1749,7 @@ where
 
     pub fn query_msp_id_of_bucket_id(
         bucket_id: &BucketId<T>,
-    ) -> Result<MainStorageProviderId<T>, QueryMspIdOfBucketIdError> {
+    ) -> Result<Option<MainStorageProviderId<T>>, QueryMspIdOfBucketIdError> {
         let bucket =
             Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
         Ok(bucket.msp_id)

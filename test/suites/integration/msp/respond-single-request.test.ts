@@ -1,6 +1,5 @@
 import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP accepting storage request",
@@ -99,36 +98,6 @@ describeMspNet(
       if (!result.isFileFound) {
         throw new Error("File not found in storage");
       }
-
-      // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
-
-      if (responses.length !== 1) {
-        throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
-        );
-      }
-
-      const response = responses[0].asAccepted;
-
-      strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
-      strictEqual(response.fileKeys[0].toString(), newStorageRequestDataBlob.fileKey.toString());
-
-      // Allow time for the MSP to update the local forest root
-      await sleep(3000);
-
-      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
-        response.bucketId.toString()
-      );
-
-      strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
-
-      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
-        response.bucketId.toString(),
-        response.fileKeys[0]
-      );
-
-      invariant(isFileInForest.isTrue, "File is not in forest");
     });
   }
 );

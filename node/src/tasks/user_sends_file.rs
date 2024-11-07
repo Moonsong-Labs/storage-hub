@@ -92,44 +92,49 @@ where
                 )
             })?;
 
-        let msp_multiaddresses = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_multiaddresses(msp_id)
-            .await
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to query MSP multiaddresses of MSP ID {:?}\n Error: {:?}",
-                    msp_id,
-                    e
-                )
-            })?;
+        if let Some(msp_id) = msp_id {
+            let msp_multiaddresses = self
+                .storage_hub_handler
+                .blockchain
+                .query_provider_multiaddresses(msp_id)
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to query MSP multiaddresses of MSP ID {:?}\n Error: {:?}",
+                        msp_id,
+                        e
+                    )
+                })?;
 
-        let multiaddress_vec = convert_raw_multiaddresses_to_multiaddr(msp_multiaddresses);
+            let multiaddress_vec = convert_raw_multiaddresses_to_multiaddr(msp_multiaddresses);
 
-        // Adds the multiaddresses of the MSP to the known addresses of the file transfer service.
-        // This is required to establish a connection to the MSP.
-        let peer_ids = self.extract_peer_ids(multiaddress_vec).await;
+            // Adds the multiaddresses of the MSP to the known addresses of the file transfer service.
+            // This is required to establish a connection to the MSP.
+            let peer_ids = self.extract_peer_ids(multiaddress_vec).await;
 
-        let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size.into(),
-            fingerprint: event.fingerprint,
-            location: event.location.into_inner(),
-        };
+            let file_metadata = FileMetadata {
+                owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+                bucket_id: event.bucket_id.as_ref().to_vec(),
+                file_size: event.size.into(),
+                fingerprint: event.fingerprint,
+                location: event.location.into_inner(),
+            };
 
-        let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+            let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
-        // TODO: Check how we can improve this.
-        // We could either make sure this scenario doesn't happen beforehand,
-        // by implementing formatting checks for multiaddresses in the runtime,
-        // or try to fetch new peer ids from the runtime at this point.
-        if peer_ids.is_empty() {
-            info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
+            // TODO: Check how we can improve this.
+            // We could either make sure this scenario doesn't happen beforehand,
+            // by implementing formatting checks for multiaddresses in the runtime,
+            // or try to fetch new peer ids from the runtime at this point.
+            if peer_ids.is_empty() {
+                info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
+            }
+
+            self.send_chunks_to_provider(peer_ids, &file_metadata)
+                .await?;
         }
 
-        self.send_chunks_to_provider(peer_ids, &file_metadata).await
+        Ok(())
     }
 }
 

@@ -667,7 +667,7 @@ where
                 anyhow!(err_msg)
             })?;
 
-        if own_msp_id != msp_id_of_bucket_id {
+        if Some(own_msp_id) != msp_id_of_bucket_id {
             // Skip the file if the MSP ID of the bucket ID does not match the node's MSP ID.
             return Ok(());
         }

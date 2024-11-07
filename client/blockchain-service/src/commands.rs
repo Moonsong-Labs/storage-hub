@@ -180,8 +180,9 @@ pub enum BlockchainServiceCommand {
     },
     QueryMspIdOfBucketId {
         bucket_id: BucketId,
-        callback:
-            tokio::sync::oneshot::Sender<Result<MainStorageProviderId, QueryMspIdOfBucketIdError>>,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError>,
+        >,
     },
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
@@ -364,7 +365,7 @@ pub trait BlockchainServiceInterface {
     async fn query_msp_id_of_bucket_id(
         &self,
         bucket_id: BucketId,
-    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError>;
+    ) -> Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError>;
 
     /// Helper function to release the forest root write lock.
     async fn release_forest_root_write_lock(
@@ -808,7 +809,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_msp_id_of_bucket_id(
         &self,
         bucket_id: BucketId,
-    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError> {
+    ) -> Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryMspIdOfBucketId {
             bucket_id,

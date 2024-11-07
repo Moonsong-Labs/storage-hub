@@ -474,12 +474,12 @@ pub mod pallet {
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: Option<ValuePropId<T>>,
         },
         /// Notifies that a bucket is being moved to a new MSP.
         MoveBucketRequested {
@@ -593,7 +593,7 @@ pub mod pallet {
             user: T::AccountId,
             file_key: MerkleHash<T>,
             bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a proof has been submitted for a pending file deletion request.
@@ -776,10 +776,10 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn create_bucket(
             origin: OriginFor<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             name: BucketNameFor<T>,
             private: bool,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: Option<ValuePropId<T>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -895,7 +895,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -908,7 +908,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
-                Some(msp_id),
+                msp_id,
                 None,
                 Some(peer_ids.clone()),
                 Default::default(),

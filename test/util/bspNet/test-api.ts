@@ -114,7 +114,7 @@ export class BspNetTestApi implements AsyncDisposable {
     return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
   }
 
-  private async createBucket(bucketName: string, valuePropId?: HexString) {
+  private async createBucket(bucketName: string, valuePropId?: HexString | null) {
     return Files.createBucket(this._api, bucketName, valuePropId);
   }
 
@@ -313,7 +313,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString) =>
+      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString | null) =>
         Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
 
       /**
@@ -330,8 +330,8 @@ export class BspNetTestApi implements AsyncDisposable {
         source: string,
         location: string,
         bucketName: string,
-        valuePropId?: HexString,
-        msp_id?: HexString,
+        valuePropId?: HexString | null,
+        msp_id?: HexString | null,
         owner?: KeyringPair
       ) =>
         Files.sendNewStorageRequest(

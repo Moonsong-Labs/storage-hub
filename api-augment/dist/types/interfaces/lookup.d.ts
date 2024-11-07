@@ -1554,13 +1554,13 @@ declare const _default: {
     };
   };
   /**
-   * Lookup137: pallet_file_system::types::RejectedStorageRequestReason
+   * Lookup138: pallet_file_system::types::RejectedStorageRequestReason
    **/
   PalletFileSystemRejectedStorageRequestReason: {
     _enum: string[];
   };
   /**
-   * Lookup138: pallet_file_system::types::EitherAccountIdOrMspId<T>
+   * Lookup139: pallet_file_system::types::EitherAccountIdOrMspId<T>
    **/
   PalletFileSystemEitherAccountIdOrMspId: {
     _enum: {
@@ -1569,7 +1569,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup139: pallet_proofs_dealer::pallet::Event<T>
+   * Lookup140: pallet_proofs_dealer::pallet::Event<T>
    **/
   PalletProofsDealerEvent: {
     _enum: {
@@ -1614,34 +1614,34 @@ declare const _default: {
     };
   };
   /**
-   * Lookup140: pallet_proofs_dealer::types::Proof<T>
+   * Lookup141: pallet_proofs_dealer::types::Proof<T>
    **/
   PalletProofsDealerProof: {
     forestProof: string;
     keyProofs: string;
   };
   /**
-   * Lookup141: sp_trie::storage_proof::CompactProof
+   * Lookup142: sp_trie::storage_proof::CompactProof
    **/
   SpTrieStorageProofCompactProof: {
     encodedNodes: string;
   };
   /**
-   * Lookup144: pallet_proofs_dealer::types::KeyProof<T>
+   * Lookup145: pallet_proofs_dealer::types::KeyProof<T>
    **/
   PalletProofsDealerKeyProof: {
     proof: string;
     challengeCount: string;
   };
   /**
-   * Lookup145: shp_file_key_verifier::types::FileKeyProof
+   * Lookup146: shp_file_key_verifier::types::FileKeyProof
    **/
   ShpFileKeyVerifierFileKeyProof: {
     fileMetadata: string;
     proof: string;
   };
   /**
-   * Lookup146: shp_file_metadata::FileMetadata
+   * Lookup147: shp_file_metadata::FileMetadata
    **/
   ShpFileMetadataFileMetadata: {
     owner: string;
@@ -1651,15 +1651,15 @@ declare const _default: {
     fingerprint: string;
   };
   /**
-   * Lookup147: shp_file_metadata::Fingerprint
+   * Lookup148: shp_file_metadata::Fingerprint
    **/
   ShpFileMetadataFingerprint: string;
   /**
-   * Lookup153: shp_traits::TrieRemoveMutation
+   * Lookup154: shp_traits::TrieRemoveMutation
    **/
   ShpTraitsTrieRemoveMutation: string;
   /**
-   * Lookup157: pallet_randomness::pallet::Event<T>
+   * Lookup158: pallet_randomness::pallet::Event<T>
    **/
   PalletRandomnessEvent: {
     _enum: {
@@ -1671,7 +1671,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup158: pallet_payment_streams::pallet::Event<T>
+   * Lookup159: pallet_payment_streams::pallet::Event<T>
    **/
   PalletPaymentStreamsEvent: {
     _enum: {
@@ -1732,7 +1732,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup160: pallet_bucket_nfts::pallet::Event<T>
+   * Lookup161: pallet_bucket_nfts::pallet::Event<T>
    **/
   PalletBucketNftsEvent: {
     _enum: {
@@ -1753,7 +1753,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup161: pallet_nfts::pallet::Event<T, I>
+   * Lookup162: pallet_nfts::pallet::Event<T, I>
    **/
   PalletNftsEvent: {
     _enum: {
@@ -1954,7 +1954,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup165: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
+   * Lookup166: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeNamespace: {
     _enum: {
@@ -1965,20 +1965,20 @@ declare const _default: {
     };
   };
   /**
-   * Lookup167: pallet_nfts::types::PriceWithDirection<Amount>
+   * Lookup168: pallet_nfts::types::PriceWithDirection<Amount>
    **/
   PalletNftsPriceWithDirection: {
     amount: string;
     direction: string;
   };
   /**
-   * Lookup168: pallet_nfts::types::PriceDirection
+   * Lookup169: pallet_nfts::types::PriceDirection
    **/
   PalletNftsPriceDirection: {
     _enum: string[];
   };
   /**
-   * Lookup169: pallet_nfts::types::PalletAttributes<CollectionId>
+   * Lookup170: pallet_nfts::types::PalletAttributes<CollectionId>
    **/
   PalletNftsPalletAttributes: {
     _enum: {
@@ -1987,7 +1987,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup170: pallet_parameters::pallet::Event<T>
+   * Lookup171: pallet_parameters::pallet::Event<T>
    **/
   PalletParametersEvent: {
     _enum: {
@@ -1999,7 +1999,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup171: storage_hub_runtime::configs::runtime_params::RuntimeParametersKey
+   * Lookup172: storage_hub_runtime::configs::runtime_params::RuntimeParametersKey
    **/
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: {
     _enum: {
@@ -2007,57 +2007,57 @@ declare const _default: {
     };
   };
   /**
-   * Lookup172: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersKey
+   * Lookup173: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersKey
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: {
     _enum: string[];
   };
   /**
-   * Lookup173: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize
+   * Lookup174: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: string;
   /**
-   * Lookup174: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod
+   * Lookup175: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: string;
   /**
-   * Lookup175: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod
+   * Lookup176: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: string;
   /**
-   * Lookup176: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinChallengePeriod
+   * Lookup177: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinChallengePeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: string;
   /**
-   * Lookup177: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage
+   * Lookup178: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage: string;
   /**
-   * Lookup178: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage
+   * Lookup179: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage: string;
   /**
-   * Lookup179: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MostlyStablePrice
+   * Lookup180: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MostlyStablePrice
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: string;
   /**
-   * Lookup180: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxPrice
+   * Lookup181: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxPrice
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: string;
   /**
-   * Lookup181: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinPrice
+   * Lookup182: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinPrice
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: string;
   /**
-   * Lookup182: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpperExponentFactor
+   * Lookup183: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpperExponentFactor
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: string;
   /**
-   * Lookup183: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowerExponentFactor
+   * Lookup184: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowerExponentFactor
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: string;
   /**
-   * Lookup185: storage_hub_runtime::configs::runtime_params::RuntimeParametersValue
+   * Lookup186: storage_hub_runtime::configs::runtime_params::RuntimeParametersValue
    **/
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: {
     _enum: {
@@ -2065,7 +2065,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup186: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersValue
+   * Lookup187: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersValue
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: {
     _enum: {
@@ -2083,7 +2083,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup188: frame_system::Phase
+   * Lookup189: frame_system::Phase
    **/
   FrameSystemPhase: {
     _enum: {
@@ -2093,21 +2093,21 @@ declare const _default: {
     };
   };
   /**
-   * Lookup191: frame_system::LastRuntimeUpgradeInfo
+   * Lookup192: frame_system::LastRuntimeUpgradeInfo
    **/
   FrameSystemLastRuntimeUpgradeInfo: {
     specVersion: string;
     specName: string;
   };
   /**
-   * Lookup193: frame_system::CodeUpgradeAuthorization<T>
+   * Lookup194: frame_system::CodeUpgradeAuthorization<T>
    **/
   FrameSystemCodeUpgradeAuthorization: {
     codeHash: string;
     checkVersion: string;
   };
   /**
-   * Lookup194: frame_system::pallet::Call<T>
+   * Lookup195: frame_system::pallet::Call<T>
    **/
   FrameSystemCall: {
     _enum: {
@@ -2152,7 +2152,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup197: frame_system::limits::BlockWeights
+   * Lookup198: frame_system::limits::BlockWeights
    **/
   FrameSystemLimitsBlockWeights: {
     baseBlock: string;
@@ -2160,7 +2160,7 @@ declare const _default: {
     perClass: string;
   };
   /**
-   * Lookup198: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
+   * Lookup199: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
    **/
   FrameSupportDispatchPerDispatchClassWeightsPerClass: {
     normal: string;
@@ -2168,7 +2168,7 @@ declare const _default: {
     mandatory: string;
   };
   /**
-   * Lookup199: frame_system::limits::WeightsPerClass
+   * Lookup200: frame_system::limits::WeightsPerClass
    **/
   FrameSystemLimitsWeightsPerClass: {
     baseExtrinsic: string;
@@ -2177,13 +2177,13 @@ declare const _default: {
     reserved: string;
   };
   /**
-   * Lookup201: frame_system::limits::BlockLength
+   * Lookup202: frame_system::limits::BlockLength
    **/
   FrameSystemLimitsBlockLength: {
     max: string;
   };
   /**
-   * Lookup202: frame_support::dispatch::PerDispatchClass<T>
+   * Lookup203: frame_support::dispatch::PerDispatchClass<T>
    **/
   FrameSupportDispatchPerDispatchClassU32: {
     normal: string;
@@ -2191,14 +2191,14 @@ declare const _default: {
     mandatory: string;
   };
   /**
-   * Lookup203: sp_weights::RuntimeDbWeight
+   * Lookup204: sp_weights::RuntimeDbWeight
    **/
   SpWeightsRuntimeDbWeight: {
     read: string;
     write: string;
   };
   /**
-   * Lookup204: sp_version::RuntimeVersion
+   * Lookup205: sp_version::RuntimeVersion
    **/
   SpVersionRuntimeVersion: {
     specName: string;
@@ -2211,13 +2211,13 @@ declare const _default: {
     stateVersion: string;
   };
   /**
-   * Lookup209: frame_system::pallet::Error<T>
+   * Lookup210: frame_system::pallet::Error<T>
    **/
   FrameSystemError: {
     _enum: string[];
   };
   /**
-   * Lookup211: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
+   * Lookup212: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
    **/
   CumulusPalletParachainSystemUnincludedSegmentAncestor: {
     usedBandwidth: string;
@@ -2225,7 +2225,7 @@ declare const _default: {
     consumedGoAheadSignal: string;
   };
   /**
-   * Lookup212: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
+   * Lookup213: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
    **/
   CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth: {
     umpMsgCount: string;
@@ -2233,7 +2233,7 @@ declare const _default: {
     hrmpOutgoing: string;
   };
   /**
-   * Lookup214: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
+   * Lookup215: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
    **/
   CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate: {
     msgCount: string;
