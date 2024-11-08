@@ -245,7 +245,7 @@ describeBspNet(
     it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
       { skip: "Dropping transactions is not implemented as testing utility yet." },
-      async () => { }
+      async () => {}
     );
 
     it("New storage request sent by user, to only one BSP", async () => {
