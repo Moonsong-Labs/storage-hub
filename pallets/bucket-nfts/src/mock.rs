@@ -357,6 +357,11 @@ impl pallet_storage_providers::Config for Test {
     type StorageDataUnit = u64;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ProviderId = H256;
+    type ProviderIdHashing = BlakeTwo256;
+    type ValuePropId = H256;
+    type ValuePropIdHashing = BlakeTwo256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;

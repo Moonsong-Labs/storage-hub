@@ -6,11 +6,13 @@ use frame_support::{
 use pallet_aura::Authorities;
 use pallet_file_system_runtime_api::*;
 use pallet_payment_streams_runtime_api::*;
-use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
+use pallet_proofs_dealer::types::{
+    KeyFor, ProviderIdFor as ProofsDealerProviderIdFor, RandomnessOutputFor,
+};
 use pallet_proofs_dealer_runtime_api::*;
 use pallet_storage_providers::types::{
     BackupStorageProvider, BackupStorageProviderId, BucketId, MainStorageProviderId,
-    Multiaddresses, ProviderId, StorageDataUnit, StorageProviderId, ValuePropositionWithId,
+    Multiaddresses, ProviderIdFor, StorageDataUnit, StorageProviderId, ValuePropositionWithId,
 };
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
@@ -350,8 +352,8 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
-        fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProofsDealerProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
+        fn get_last_tick_provider_submitted_proof(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }
 
@@ -369,7 +371,7 @@ impl_runtime_apis! {
             ProofsDealer::get_challenge_seed(tick)
         }
 
-        fn get_challenge_period(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetChallengePeriodError> {
+        fn get_challenge_period(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetChallengePeriodError> {
             ProofsDealer::get_challenge_period(provider_id)
         }
 
@@ -377,11 +379,11 @@ impl_runtime_apis! {
             ProofsDealer::get_checkpoint_challenge_period()
         }
 
-        fn get_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>, count: u32) -> Vec<KeyFor<Runtime>> {
+        fn get_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProofsDealerProviderIdFor<Runtime>, count: u32) -> Vec<KeyFor<Runtime>> {
             ProofsDealer::get_challenges_from_seed(seed, provider_id, count)
         }
 
-        fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
+        fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
             ProofsDealer::get_forest_challenges_from_seed(seed, provider_id)
         }
 
@@ -389,13 +391,13 @@ impl_runtime_apis! {
             ProofsDealer::get_current_tick()
         }
 
-        fn get_next_deadline_tick(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
+        fn get_next_deadline_tick(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
             ProofsDealer::get_next_deadline_tick(provider_id)
         }
     }
 
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>, Multiaddresses<Runtime>, ValuePropositionWithId<Runtime>> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderIdFor<Runtime>, StorageProviderId<Runtime>, StorageDataUnit<Runtime>, Balance, BucketId<Runtime>, Multiaddresses<Runtime>, ValuePropositionWithId<Runtime>> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
@@ -404,19 +406,19 @@ impl_runtime_apis! {
             Providers::get_storage_provider_id(who)
         }
 
-        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderId<Runtime>, QueryMspIdOfBucketIdError> {
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderIdFor<Runtime>, QueryMspIdOfBucketIdError> {
             Providers::query_msp_id_of_bucket_id(bucket_id)
         }
 
-        fn query_provider_multiaddresses(provider_id: &ProviderId<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
+        fn query_provider_multiaddresses(provider_id: &ProviderIdFor<Runtime>) -> Result<Multiaddresses<Runtime>, QueryProviderMultiaddressesError> {
             Providers::query_provider_multiaddresses(provider_id)
         }
 
-        fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryStorageProviderCapacityError> {
+        fn query_storage_provider_capacity(provider_id: &ProviderIdFor<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryStorageProviderCapacityError> {
             Providers::query_storage_provider_capacity(provider_id)
         }
 
-        fn query_available_storage_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryAvailableStorageCapacityError> {
+        fn query_available_storage_capacity(provider_id: &ProviderIdFor<Runtime>) -> Result<StorageDataUnit<Runtime>, QueryAvailableStorageCapacityError> {
             Providers::query_available_storage_capacity(provider_id)
         }
 
@@ -424,7 +426,7 @@ impl_runtime_apis! {
             Providers::query_earliest_change_capacity_block(provider_id)
         }
 
-        fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId<Runtime>) -> Option<Balance> {
+        fn get_worst_case_scenario_slashable_amount(provider_id: ProviderIdFor<Runtime>) -> Option<Balance> {
             Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
         }
 
@@ -432,7 +434,7 @@ impl_runtime_apis! {
             Providers::get_slash_amount_per_max_file_size()
         }
 
-        fn query_value_propositions_for_msp(who: &ProviderId<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
+        fn query_value_propositions_for_msp(who: &ProviderIdFor<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
             Providers::query_value_propositions_for_msp(who)
         }
 

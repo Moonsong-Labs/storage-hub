@@ -11,8 +11,8 @@
 pub mod types;
 mod utils;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 #[cfg(test)]
 mod mock;
