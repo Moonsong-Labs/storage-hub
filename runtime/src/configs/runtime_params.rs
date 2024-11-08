@@ -118,7 +118,7 @@ pub mod dynamic_params {
         /// The maximum treasury cut that can be taken from the amount charged from a payment stream.
         pub static MaximumTreasuryCut: Perbill = Perbill::from_percent(5);
 
-        #[codec(index = 15)]
+        #[codec(index = 16)]
         #[allow(non_upper_case_globals)]
         /// The penalty a BSP must pay when they forcefully stop storing a file.
         /// We set this to be half of the `SlashAmountPerMaxFileSize` with the rationale that
