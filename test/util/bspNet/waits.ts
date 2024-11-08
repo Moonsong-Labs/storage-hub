@@ -128,6 +128,15 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
   for (let i = 0; i < iterations + 1; i++) {
     try {
       await sleep(delay);
+
+      // check if we have a submitProo extrinsic 
+      if (bspId) {
+        let txs = await api.rpc.author.pendingExtrinsics();
+        let match = txs.filter((tx) => tx.method === "submitProof");
+
+
+      }
+
       const matches = await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspConfirmStoring",
@@ -144,25 +153,25 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
       assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
       break;
     } catch {
-      if (bspId) {
-        try {
-          // In cases the bsp is submitting a proof at the same time is trying to confirmStoring
-          await assertExtrinsicPresent(api, {
-            module: "proofsDealer",
-            method: "submitProof",
-            checkTxPool: true,
-            timeout: 100
-          });
+      // if (bspId) {
+      //   try {
+      //     // In cases the bsp is submitting a proof at the same time is trying to confirmStoring
+      //     await assertExtrinsicPresent(api, {
+      //       module: "proofsDealer",
+      //       method: "submitProof",
+      //       checkTxPool: true,
+      //       timeout: 100
+      //     });
 
-          // If we have found one we go one block forward
-          const { events } = await sealBlock(api);
-          assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+      //     // If we have found one we go one block forward
+      //     const { events } = await sealBlock(api);
+      //     assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 
-          continue;
-        } catch {
-          // Nothing here
-        }
-      }
+      //     continue;
+      //   } catch {
+      //     // Nothing here
+      //   }
+      // }
 
       invariant(
         i !== iterations,
