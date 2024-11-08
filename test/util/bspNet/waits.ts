@@ -133,7 +133,7 @@ export const waitForBspStored = async (
     try {
       await sleep(delay);
 
-      // check if we have a submitProo extrinsic
+      // check if we have a submitProof extrinsic
       if (bspAccount) {
         const txs = await api.rpc.author.pendingExtrinsics();
         const match = txs.filter(
