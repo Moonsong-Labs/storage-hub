@@ -24,8 +24,14 @@ mod benchmarks {
         BoundedVec,
     };
     use frame_system::RawOrigin;
-    use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
-    use sp_runtime::traits::{Hash, One};
+    use pallet_storage_providers::{
+        types::{MaxMultiAddressAmount, MultiAddress},
+        TotalBspsCapacity, UsedBspsCapacity,
+    };
+    use sp_runtime::{
+        format,
+        traits::{Hash, One},
+    };
 
     use super::*;
     use crate::{pallet, Call, Config, Event, Pallet};
@@ -49,14 +55,21 @@ mod benchmarks {
         LastChargeableInfo::<T>::insert(sp_id, new_info);
     }
 
-    fn register_provider<T>() -> Result<(T::AccountId, ProviderIdFor<T>), BenchmarkError>
+    // The worst case scenario when calculating the treasury cut is when the used capacity is the total capacity,
+    // since it has to calculate the taylor series for the 2^x function
+    fn set_up_worst_case_scenario_for_treasury_cut<T: pallet_storage_providers::Config>() {
+        let total_capacity = TotalBspsCapacity::<T>::get();
+        UsedBspsCapacity::<T>::put(total_capacity);
+    }
+
+    fn register_provider<T>(index: u32) -> Result<(T::AccountId, ProviderIdFor<T>), BenchmarkError>
     where
         T: pallet_storage_providers::Config + crate::Config,
         <<T as crate::Config>::ProvidersPallet as shp_traits::ReadProvidersInterface>::ProviderId:
             From<<T as pallet_storage_providers::Config>::ProviderId>,
     {
-        let sp_account: T::AccountId = account("SP", 0, 0);
-        let sp_id_seed = "benchmark_sp";
+        let sp_account: T::AccountId = account("SP", index, 0);
+        let sp_id_seed = format!("benchmark_sp_{}", index);
         let sp_id = <<T as pallet_storage_providers::Config>::ProviderIdHashing as Hash>::hash(
             sp_id_seed.as_bytes(),
         );
@@ -79,6 +92,18 @@ mod benchmarks {
             &sp_account,
             sp_balance,
         ));
+
+        // Make sure the sp_account is not already in use
+        if pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::contains_key(
+            &sp_account,
+        ) {
+            return Err(BenchmarkError::Stop("Provider account already in use."));
+        }
+
+        // Make sure the sp_id is not already in use
+        if pallet_storage_providers::BackupStorageProviders::<T>::contains_key(&sp_id) {
+            return Err(BenchmarkError::Stop("Provider ID already in use."));
+        }
 
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::insert(
             &sp_account,
@@ -135,7 +160,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (_provider_account, provider_id) = register_provider::<T>()?;
+        let (_provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Rate of the to-be-created payment stream
         let rate = 100u32;
@@ -182,7 +207,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (_provider_account, provider_id) = register_provider::<T>()?;
+        let (_provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Rate of the to-be-created payment stream
         let initial_rate = 100u32;
@@ -217,6 +242,9 @@ mod benchmarks {
             price_index: AccumulatedPriceIndex::<T>::get(),
         };
         update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info);
+
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
 
         // New rate of the to-be-updated payment stream
         let new_rate = 200u32;
@@ -275,7 +303,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (_provider_account, provider_id) = register_provider::<T>()?;
+        let (_provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Rate of the to-be-created payment stream
         let rate = 100u32;
@@ -297,6 +325,9 @@ mod benchmarks {
             price_index: AccumulatedPriceIndex::<T>::get(),
         };
         update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info);
+
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
@@ -343,7 +374,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (_provider_account, provider_id) = register_provider::<T>()?;
+        let (_provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Amount of the to-be-created payment stream
         let amount_provided = 1000u32;
@@ -394,7 +425,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (_provider_account, provider_id) = register_provider::<T>()?;
+        let (_provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Amount of the to-be-created payment stream
         let initial_amount = 1000u32;
@@ -429,6 +460,9 @@ mod benchmarks {
             price_index: AccumulatedPriceIndex::<T>::get(),
         };
         update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info);
+
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
 
         // New provided amount of the to-be-updated payment stream
         let new_amount_provided = 200u32;
@@ -491,7 +525,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (_provider_account, provider_id) = register_provider::<T>()?;
+        let (_provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Amount of the to-be-created payment stream
         let amount_provided = 1000u32;
@@ -526,6 +560,9 @@ mod benchmarks {
             price_index: AccumulatedPriceIndex::<T>::get(),
         };
         update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info);
+
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
@@ -576,7 +613,7 @@ mod benchmarks {
         ));
 
         // Set up a Provider with an account with some balance.
-        let (provider_account, provider_id) = register_provider::<T>()?;
+        let (provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Worst case scenario: the provider has to charge both types of payment streams in the extrinsic:
         // Create the dynamic-rate payment stream
@@ -611,6 +648,9 @@ mod benchmarks {
         };
         update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info);
 
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
+
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
         _(RawOrigin::Signed(provider_account), user_account.clone());
@@ -639,7 +679,7 @@ mod benchmarks {
         let max_users = <T as crate::Config>::MaxUsersToCharge::get();
 
         // Set up a Provider with an account with some balance.
-        let (provider_account, provider_id) = register_provider::<T>()?;
+        let (provider_account, provider_id) = register_provider::<T>(0)?;
 
         // Set up `max_users` accounts with some balance and create a fixed-rate and a dynamic-rate
         // payment stream with each one
@@ -695,6 +735,9 @@ mod benchmarks {
         };
         update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info);
 
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
+
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
         _(RawOrigin::Signed(provider_account), user_accounts.clone());
@@ -719,7 +762,84 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn pay_outstanding_debt() -> Result<(), BenchmarkError> {}
+    fn pay_outstanding_debt(n: Linear<1, { 1000 }>) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Since we have to create a payment stream per iteration, the easiest way is to set up
+        // a Provider with an account with some balance per iteration number.
+        let n: u32 = n.into();
+        let mut provider_ids: Vec<ProviderIdFor<T>> = Vec::new();
+        for i in 0..n {
+            let (_provider_account, provider_id) = register_provider::<T>(i)?;
+            let amount_provided = 1000u32;
+
+            // Ensure that a payment stream between the user and this provider does not exist
+            let dynamic_rate_stream =
+                DynamicRatePaymentStreams::<T>::get(provider_id, user_account.clone());
+            match dynamic_rate_stream {
+                Some(_) => {
+                    return Err(BenchmarkError::Stop("Payment stream already exists."));
+                }
+                None => {}
+            }
+
+            // Create the dynamic-rate payment stream
+            Pallet::<T>::create_dynamic_rate_payment_stream(
+                RawOrigin::Root.into(),
+                provider_id,
+                user_account.clone(),
+                amount_provided.into(),
+            )
+            .map_err(|_| {
+                BenchmarkError::Stop("Dynamic rate payment stream not created successfully.")
+            })?;
+
+            provider_ids.push(provider_id);
+        }
+
+        // Update last chargeable info of each provider to one block ahead
+        run_to_block::<T>(frame_system::Pallet::<T>::block_number() + One::one());
+        let new_last_chargeable_info = ProviderLastChargeableInfo {
+            last_chargeable_tick: frame_system::Pallet::<T>::block_number(),
+            price_index: AccumulatedPriceIndex::<T>::get(),
+        };
+        for provider_id in provider_ids {
+            update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info.clone());
+        }
+
+        // Worst case scenario: the used bsp capacity is the total capacity when charging the payment streams
+        set_up_worst_case_scenario_for_treasury_cut::<T>();
+
+        // Make the user insolvent
+        set_user_as_insolvent::<T>(user_account.clone());
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(RawOrigin::Signed(user_account.clone()), n);
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the user paid all debts event was emitted for the user
+        let user_paid_debts_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::UserPaidAllDebts {
+                who: user_account.clone(),
+            });
+        frame_system::Pallet::<T>::assert_has_event(user_paid_debts_event.into());
+
+        // Verify that the user has no remaining payment streams
+        assert_eq!(RegisteredUsers::<T>::get(user_account), 0);
+
+        Ok(())
+    }
 
     impl_benchmark_test_suite! {
             Pallet,

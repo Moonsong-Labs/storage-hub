@@ -913,12 +913,16 @@ where
     }
 
     /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider
-    /// the amount owed, deleting the corresponding payment stream and decreasing the user's payment streams count until all outstanding debt is paid.
+    /// the amount owed, deleting the corresponding payment stream and decreasing the user's payment streams count until all outstanding debt is paid
+    /// or the amount of streams to pay has been reached. It returns true if the user has paid all the outstanding debt, false otherwise.
     ///
     /// Note: This could be achieved by calling `manage_user_without_funds` for each payment stream, but this function is more efficient as it
     /// avoids repeating the same checks and operations for each payment stream, such as releasing all the deposit of the user at once instead
     /// of doing it for each payment stream.
-    pub fn do_pay_outstanding_debt(user_account: &T::AccountId) -> DispatchResult {
+    pub fn do_pay_outstanding_debt(
+        user_account: &T::AccountId,
+        amount_of_streams_to_pay: u32,
+    ) -> Result<bool, DispatchError> {
         // Check that the user is flagged as without funds
         ensure!(
             UsersWithoutFunds::<T>::contains_key(user_account),
@@ -926,7 +930,7 @@ where
         );
 
         // Release the total deposit amount that the user has deposited
-        T::NativeBalance::release_all(
+        let total_deposit_released = T::NativeBalance::release_all(
             &HoldReason::PaymentStreamDeposit.into(),
             &user_account,
             Precision::Exact,
@@ -942,6 +946,18 @@ where
         let fixed_rate_payment_streams = Self::get_fixed_rate_payment_streams_of_user(user_account);
         let dynamic_rate_payment_streams =
             Self::get_dynamic_rate_payment_streams_of_user(user_account);
+
+        // Get the amount of streams that the user has still to pay (which should fit in a u32)
+        let total_streams_to_pay: u32 = (fixed_rate_payment_streams.len()
+            + dynamic_rate_payment_streams.len())
+        .try_into()
+        .map_err(|_| ArithmeticError::Overflow)?;
+
+        // Keep track of the deposit that corresponds to the payment streams that have been paid
+        let mut total_deposit_paid: BalanceOf<T> = Zero::zero();
+
+        // And keep track of the total amount of streams that have been paid
+        let mut total_streams_paid: u32 = 0;
 
         // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
         for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
@@ -989,6 +1005,11 @@ where
                 Preservation::Preserve,
             )?;
 
+            // Update the total deposit paid
+            total_deposit_paid = total_deposit_paid
+                .checked_add(&fixed_rate_payment_stream.user_deposit)
+                .ok_or(ArithmeticError::Overflow)?;
+
             // Remove the payment stream from the FixedRatePaymentStreams mapping
             FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
 
@@ -998,6 +1019,14 @@ where
                 .checked_sub(1)
                 .ok_or(ArithmeticError::Underflow)?;
             RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+
+            // Increase the total amount of streams that have been paid
+            total_streams_paid += 1;
+
+            // If the amount of streams to pay has been reached, break the loop
+            if total_streams_paid >= amount_of_streams_to_pay {
+                break;
+            }
         }
 
         // Do the same for the dynamic-rate payment streams
@@ -1043,6 +1072,11 @@ where
                 Preservation::Preserve,
             )?;
 
+            // Update the total deposit paid
+            total_deposit_paid = total_deposit_paid
+                .checked_add(&dynamic_rate_payment_stream.user_deposit)
+                .ok_or(ArithmeticError::Overflow)?;
+
             // Remove the payment stream from the DynamicRatePaymentStreams mapping
             DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
 
@@ -1052,9 +1086,33 @@ where
                 .checked_sub(1)
                 .ok_or(ArithmeticError::Underflow)?;
             RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+
+            // Increase the total amount of streams that have been paid
+            total_streams_paid += 1;
+
+            // If the amount of streams to pay has been reached, break the loop
+            if total_streams_paid >= amount_of_streams_to_pay {
+                break;
+            }
         }
 
-        Ok(())
+        // Hold the difference between the total deposit release and the total deposit used to pay the payment streams
+        let difference = total_deposit_released
+            .checked_sub(&total_deposit_paid)
+            .ok_or(ArithmeticError::Underflow)?;
+        T::NativeBalance::hold(
+            &HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            difference,
+        )?;
+
+        if total_streams_to_pay <= amount_of_streams_to_pay {
+            // If the user has paid all the outstanding debt, return true
+            Ok(true)
+        } else {
+            // If the user has not paid all the outstanding debt, return false
+            Ok(false)
+        }
     }
 
     pub fn do_clear_insolvent_flag(user_account: &T::AccountId) -> DispatchResult {
@@ -1076,8 +1134,12 @@ where
             Error::<T>::CooldownPeriodNotPassed
         );
 
-        // Pay the user outstanding debt
-        Self::do_pay_outstanding_debt(user_account)?;
+        // Make sure the user has no remaining payment streams
+        let user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+        ensure!(
+            user_payment_streams_count == 0,
+            Error::<T>::UserHasRemainingDebt
+        );
 
         // Remove the user from the UsersWithoutFunds mapping
         UsersWithoutFunds::<T>::remove(user_account);
@@ -1331,7 +1393,7 @@ where
         RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
         // Add the user to the UsersWithoutFunds mapping and emit the UserWithoutFunds event. If the user has no remaining
-        // payment streams, emit the UserPaidDebts event as well.
+        // payment streams, emit the UserPaidAllDebts event as well.
         // Note: once a user is flagged as without funds, it is considered insolvent by the system and every Provider
         // will be incentivised to stop providing services to that user.
         // To be unflagged, the user will have to pay its remaining debt and wait the cooldown period, after which it will
@@ -1344,7 +1406,7 @@ where
             });
         }
         if user_payment_streams_count == 0 {
-            Self::deposit_event(Event::<T>::UserPaidDebts {
+            Self::deposit_event(Event::<T>::UserPaidAllDebts {
                 who: user_account.clone(),
             });
         }

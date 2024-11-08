@@ -300,7 +300,8 @@ impl IndexerService {
             pallet_payment_streams::Event::UsersCharged { .. } => {}
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
-            pallet_payment_streams::Event::UserPaidDebts { .. } => {}
+            pallet_payment_streams::Event::UserPaidAllDebts { .. } => {}
+            pallet_payment_streams::Event::UserPaidSomeDebts { .. } => {}
             pallet_payment_streams::Event::UserSolvent { .. } => {}
             pallet_payment_streams::Event::__Ignore(_, _) => {}
         }
