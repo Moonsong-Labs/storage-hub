@@ -112,13 +112,13 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, bspId?: string) => {
+export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, bspAccount?: string) => {
   // TODO: add bsp ID to check if is not confirming storing
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
   const delay = 200;
 
-  if (bspId && checkQuantity && checkQuantity > 1) {
+  if (bspAccount && checkQuantity && checkQuantity > 1) {
     // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
     throw new Error(
       "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
@@ -130,10 +130,15 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
       await sleep(delay);
 
       // check if we have a submitProo extrinsic 
-      if (bspId) {
+      if (bspAccount) {
         let txs = await api.rpc.author.pendingExtrinsics();
-        let match = txs.filter((tx) => tx.method === "submitProof");
+        let match = txs.filter((tx) => (tx.method.method === "submitProof" && tx.signer.toString() === bspAccount));
 
+        // If we have a submit proof event at the same time we are trying to confirm storage
+        // we need to advance one block because the two event cannot happen at the same time
+        if (match.length === 1) {
+          await sealBlock(api);
+        }
 
       }
 
@@ -153,26 +158,6 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
       assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
       break;
     } catch {
-      // if (bspId) {
-      //   try {
-      //     // In cases the bsp is submitting a proof at the same time is trying to confirmStoring
-      //     await assertExtrinsicPresent(api, {
-      //       module: "proofsDealer",
-      //       method: "submitProof",
-      //       checkTxPool: true,
-      //       timeout: 100
-      //     });
-
-      //     // If we have found one we go one block forward
-      //     const { events } = await sealBlock(api);
-      //     assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
-
-      //     continue;
-      //   } catch {
-      //     // Nothing here
-      //   }
-      // }
-
       invariant(
         i !== iterations,
         `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
