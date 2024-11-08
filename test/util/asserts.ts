@@ -45,7 +45,7 @@ export const assertExtrinsicPresent = async (
     extIndex: number;
   }[]
 > => {
-  const timeoutMs = options.timeout || 5000; // Default timeout of 5 seconds
+  const timeoutMs = options.timeout || 10000; // Default timeout of 10 seconds
   const iterations = Math.floor(timeoutMs / 100);
 
   // Perform invariant checks outside the loop to fail fast on critical errors

@@ -179,6 +179,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspNotConfirmed: AugmentedError<ApiType>;
       /**
+       * BSP cannot volunteer at this current tick.
+       **/
+      BspNotEligibleToVolunteer: AugmentedError<ApiType>;
+      /**
        * BSP has not volunteered to store the given file.
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
@@ -194,6 +198,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Bucket is not private. Call `update_bucket_privacy` to make it private.
        **/
       BucketIsNotPrivate: AugmentedError<ApiType>;
+      /**
+       * Bucket is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
       /**
        * Bucket does not exist
        **/
@@ -226,6 +234,14 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to encode fingerprint as slice.
        **/
       FailedToEncodeFingerprint: AugmentedError<ApiType>;
+      /**
+       * Failed to get owner account of ID of provider
+       **/
+      FailedToGetOwnerAccount: AugmentedError<ApiType>;
+      /**
+       * Failed to query earliest volunteer tick
+       **/
+      FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
       /**
        * Failed to convert to primitive type.
        **/

@@ -38,7 +38,7 @@ use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{Get, Hasher, H256};
+use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -442,6 +442,7 @@ parameter_types! {
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type WeightInfo = ();
 }
 
@@ -706,6 +707,8 @@ impl pallet_file_system::Config for Runtime {
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
+    type BspStopStoringFilePenalty = ConstU128<1>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
