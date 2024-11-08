@@ -367,7 +367,7 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
 
-      if (nextChallengeTick < currentBlockNumber) {
+      if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
         await userApi.advanceToBlock(nextChallengeTick);
       }
