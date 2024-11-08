@@ -1,4 +1,4 @@
-import type { Bytes, Enum, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
+import type { Bytes, Enum, Null, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
@@ -200,7 +200,7 @@ export interface StorageProviderId extends Enum {
   readonly type: "BackupStorageProvider" | "MainStorageProvider";
 }
 /** @name TrieRemoveMutation */
-export interface TrieRemoveMutation extends Struct {}
+export interface TrieRemoveMutation extends Null {}
 /** @name ValuePropId */
 export interface ValuePropId extends H256 {}
 /** @name ValueProposition */

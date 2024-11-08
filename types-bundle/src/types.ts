@@ -31,7 +31,7 @@ export const ALL_TYPES: RegistryTypes = {
   ProviderId: "H256",
   Key: "H256",
   RandomnessOutput: "H256",
-  TrieRemoveMutation: {},
+  TrieRemoveMutation: "Null",
   BackupStorageProviderId: "H256",
   MainStorageProviderId: "H256",
   StorageData: "u32",

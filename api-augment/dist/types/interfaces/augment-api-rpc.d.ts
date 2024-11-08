@@ -1092,7 +1092,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
             | Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>
             | [
                 H256 | string | Uint8Array,
-                Option<TrieRemoveMutation> | null | Uint8Array | TrieRemoveMutation | {} | string
+                Option<TrieRemoveMutation> | null | Uint8Array | TrieRemoveMutation
               ][]
         ) => Observable<Bytes>
       >;

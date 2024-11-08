@@ -1,7 +1,7 @@
 // Auto-generated via `yarn polkadot-types-from-defs`, do not edit
 /* eslint-disable */
 
-import type { Bytes, Enum, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
+import type { Bytes, Enum, Null, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
 /** @name BackupStorageProvider */
@@ -236,7 +236,7 @@ export interface StorageProviderId extends Enum {
 }
 
 /** @name TrieRemoveMutation */
-export interface TrieRemoveMutation extends Struct {}
+export interface TrieRemoveMutation extends Null {}
 
 /** @name ValuePropId */
 export interface ValuePropId extends H256 {}
