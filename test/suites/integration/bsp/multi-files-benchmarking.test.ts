@@ -177,9 +177,9 @@ describeBspNet(
       await sleep(500);
 
       // Get the root of the Forest.
-      console.log("Forest root: ", root);
       const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
       root = forestRoot.toString().slice(2);
+      console.log("Forest root: ", forestRoot.toString());
     });
 
     it("Generate a proof with 1 to 20 file key proofs, plus 10 custom challenges with TrieRemoveMutation", async () => {
@@ -203,18 +203,30 @@ describeBspNet(
         // - For 3 challenges: [second file key hash - 1, third file key hash - 1] (first, second and third file key in the proof)
         // - For 4 challenges: [second file key hash -1, fourth file key hash - 1] (first, second, third and fourth file key in the proof)
         // - For 5 challenges: [second file key hash - 1, fourth file key hash - 1, fifth file key hash - 1] (first, second, third, fourth and fifth file key in the proof)
-        const challenges = filteredIndexes.map((index) => decrementHash(fileKeys[index]));
+        const randomChallenges = filteredIndexes.map((index) => decrementHash(fileKeys[index]));
 
         // There should be always at least 10 challenges, representing the random challenges.
         // So we extend the challenges array with the last element repeatedly until it has 10 elements.
-        while (challenges.length < 10) {
-          challenges.push(challenges[challenges.length - 1]);
+        while (randomChallenges.length < 10) {
+          randomChallenges.push(randomChallenges[randomChallenges.length - 1]);
         }
 
+        // Add the last 10 file keys as challenges, with a TrieRemoveMutation.
+        // This will account for the worst case scenario possible between 1 to 20 file key proofs.
+        // That is when, on the one hand, the 1 to 20 file key proofs respond to random challenges,
+        // and there are 10 more checkpoint challenges with file deletions, that do not require a
+        // file key proof, but execute a TrieRemoveMutation.
+        const last10FileKeys = fileKeys.slice(fileKeys.length - 10);
+        const challenges = randomChallenges.concat(last10FileKeys);
+
+        // Add TrieRemoveMutation to all the challenges.
+        const challengesWithMutation: [string, boolean][] = challenges.map((key) => [key, true]);
+
+        // Generate the proof for the file keys.
         const proof = await bspApi.rpc.storagehubclient.generateProof(
           DUMMY_BSP_ID,
           seed,
-          challenges
+          challengesWithMutation
         );
 
         console.log(`\n\n Challenges for ${i} files:`);

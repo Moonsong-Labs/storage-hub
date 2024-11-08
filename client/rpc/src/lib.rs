@@ -24,6 +24,8 @@ use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, S
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
+type ShouldRemoveFile = bool;
+
 pub struct StorageHubClientRpcConfig<FL, FSH> {
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage_handler: FSH,
@@ -142,7 +144,7 @@ pub trait StorageHubClientApi {
         &self,
         provider_id: H256,
         seed: H256,
-        challenged_file_keys: Option<Vec<(H256, Option<TrieRemoveMutation>)>>,
+        challenged_file_keys: Option<Vec<(H256, ShouldRemoveFile)>>,
     ) -> RpcResult<Vec<u8>>;
 
     #[method(name = "insertBcsvKeys")]
@@ -450,9 +452,10 @@ where
         &self,
         provider_id: H256,
         seed: H256,
-        checkpoint_challenges: Option<Vec<(H256, Option<TrieRemoveMutation>)>>,
+        checkpoint_challenges: Option<Vec<(H256, ShouldRemoveFile)>>,
     ) -> RpcResult<Vec<u8>> {
         // TODO: Get provider ID itself.
+        debug!(target: LOG_TARGET, "Checkpoint challenges: {:?}", checkpoint_challenges);
 
         // Getting Runtime APIs
         let api = self.client.runtime_api();
@@ -526,13 +529,20 @@ where
         let mut key_proofs = KeyProofs::new();
         for file_key in &proven_keys {
             // If the file key is a checkpoint challenge for a file deletion, we should NOT generate a key proof for it.
-            let should_generate_key_proof =
-                if let Some(checkpoint_challenges) = checkpoint_challenges.clone() {
-                    checkpoint_challenges
-                        .contains(&(file_key.clone(), Some(TrieRemoveMutation::default())))
-                } else {
+            let should_generate_key_proof = if let Some(checkpoint_challenges) =
+                checkpoint_challenges.clone()
+            {
+                if checkpoint_challenges.contains(&(file_key.clone(), true)) {
+                    debug!(target: LOG_TARGET, "File key {} is a checkpoint challenge for a file deletion", file_key);
                     false
-                };
+                } else {
+                    debug!(target: LOG_TARGET, "File key {} is not a checkpoint challenge for a file deletion", file_key);
+                    true
+                }
+            } else {
+                debug!(target: LOG_TARGET, "No checkpoint challenges provided");
+                false
+            };
 
             if should_generate_key_proof {
                 // Generate the key proof for each file key.
