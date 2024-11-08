@@ -116,7 +116,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
         },
         {
           name: "checkpoint_challenges",
-          type: "Option<Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>>"
+          type: "Option<Vec<(H256, Option<TrieRemoveMutation>)>>"
         }
       ],
       type: "Vec<u8>"

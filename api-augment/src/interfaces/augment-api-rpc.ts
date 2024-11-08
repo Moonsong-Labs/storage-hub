@@ -100,7 +100,8 @@ import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   FileMetadata,
   GetFileFromFileStorageResult,
-  SaveFileToDisk
+  SaveFileToDisk,
+  TrieRemoveMutation
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
@@ -1042,7 +1043,15 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (
           provider_id: H256 | string | Uint8Array,
           seed: H256 | string | Uint8Array,
-          checkpoint_challenges: Option<Vec<ITuple>> | null | Uint8Array | Vec<ITuple> | ITuple[]
+          checkpoint_challenges:
+            | Option<Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>>
+            | null
+            | Uint8Array
+            | Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>
+            | [
+                H256 | string | Uint8Array,
+                Option<TrieRemoveMutation> | null | Uint8Array | TrieRemoveMutation | {} | string
+              ][]
         ) => Observable<Bytes>
       >;
       /**
