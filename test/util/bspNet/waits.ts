@@ -131,8 +131,8 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
 
       // check if we have a submitProo extrinsic 
       if (bspAccount) {
-        let txs = await api.rpc.author.pendingExtrinsics();
-        let match = txs.filter((tx) => (tx.method.method === "submitProof" && tx.signer.toString() === bspAccount));
+        const txs = await api.rpc.author.pendingExtrinsics();
+        const match = txs.filter((tx) => (tx.method.method === "submitProof" && tx.signer.toString() === bspAccount));
 
         // If we have a submit proof event at the same time we are trying to confirm storage
         // we need to advance one block because the two event cannot happen at the same time
