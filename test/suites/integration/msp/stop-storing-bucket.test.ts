@@ -5,7 +5,6 @@ import type { H256 } from "@polkadot/types/interfaces";
 
 describeMspNet(
   "MSP deleting bucket when stop storing bucket is called",
-
   ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -44,19 +43,7 @@ describeMspNet(
 
       bucketId = newBucketEventDataBlob.bucketId;
 
-      const { location, fingerprint, file_size } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          bucketId
-        );
-
-      strictEqual(location.toHuman(), destination);
-      strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
-
-      const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketName);
+      const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
 
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey);
 

@@ -105,13 +105,19 @@ export class BspNetTestApi implements AsyncDisposable {
     return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
-  private async sendNewStorageRequest(
+  private async createBucketAndSendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string,
     valuePropId: HexString
   ) {
-    return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
+    return Files.createBucketAndSendNewStorageRequest(
+      this._api,
+      source,
+      location,
+      bucketName,
+      valuePropId
+    );
   }
 
   private async createBucket(bucketName: string, valuePropId?: HexString) {
@@ -317,6 +323,24 @@ export class BspNetTestApi implements AsyncDisposable {
         Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
 
       /**
+       * Issue a new storage request.
+       *
+       * @param source - The local path to the file to be uploaded.
+       * @param location - The StorageHub "location" field of the file to be uploaded.
+       * @param bucketID - The ID of the bucket to use for the new storage request.
+       * @param owner - Signer with which to issue the newStorageRequest Defaults to SH_USER.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @returns A promise that resolves to file metadata.
+       */
+      newStorageRequest: (
+        source: string,
+        location: string,
+        bucketId: H256,
+        owner?: KeyringPair,
+        msp_id?: HexString
+      ) => Files.sendNewStorageRequest(this._api, source, location, bucketId, owner, msp_id),
+
+      /**
        * Creates a new bucket and submits a new storage request.
        *
        * @param source - The local path to the file to be uploaded.
@@ -326,7 +350,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to file metadata.
        */
-      newStorageRequest: (
+      createBucketAndSendNewStorageRequest: (
         source: string,
         location: string,
         bucketName: string,
@@ -334,7 +358,7 @@ export class BspNetTestApi implements AsyncDisposable {
         msp_id?: HexString,
         owner?: KeyringPair
       ) =>
-        Files.sendNewStorageRequest(
+        Files.createBucketAndSendNewStorageRequest(
           this._api,
           source,
           location,
@@ -445,9 +469,9 @@ export class BspNetTestApi implements AsyncDisposable {
       sealBlock: this.sealBlock.bind(this),
       /**
        * Soon Deprecated. Use api.file.newStorageRequest() instead.
-       * @see {@link sendNewStorageRequest}
+       * @see {@link createBucketAndSendNewStorageRequest}
        */
-      sendNewStorageRequest: this.sendNewStorageRequest.bind(this),
+      createBucketAndSendNewStorageRequest: this.createBucketAndSendNewStorageRequest.bind(this),
       /**
        * Soon Deprecated. Use api.file.newBucket() instead.
        * @see {@link createBucket}

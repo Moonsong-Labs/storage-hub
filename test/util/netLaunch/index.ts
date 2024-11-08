@@ -396,7 +396,11 @@ export class NetworkLauncher {
     const source = "res/whatsup.jpg";
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
-    const fileMetadata = await api.file.newStorageRequest(source, destination, bucketName);
+    const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
+      source,
+      destination,
+      bucketName
+    );
 
     if (this.type === "bspnet") {
       await api.wait.bspVolunteer();
@@ -452,7 +456,11 @@ export class NetworkLauncher {
     // Wait for a few seconds for all BSPs to be synced
     await sleep(5000);
 
-    const fileMetadata = await api.file.newStorageRequest(source, location, bucketName);
+    const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
+      source,
+      location,
+      bucketName
+    );
     await api.wait.bspVolunteer(4);
     await api.wait.bspStored(4);
 
