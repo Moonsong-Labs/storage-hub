@@ -1,7 +1,7 @@
 // Auto-generated via `yarn polkadot-types-from-defs`, do not edit
 /* eslint-disable */
 
-import type { Bytes, Enum, Null, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
+import type { Bytes, Enum, Null, Struct, U8aFixed, bool, u32, u64 } from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
 /** @name BackupStorageProvider */
@@ -219,6 +219,9 @@ export interface SaveFileToDisk extends Enum {
   readonly asIncompleteFile: IncompleteFileStatus;
   readonly type: "FileNotFound" | "Success" | "IncompleteFile";
 }
+
+/** @name ShouldRemoveFile */
+export interface ShouldRemoveFile extends bool {}
 
 /** @name StorageData */
 export interface StorageData extends u32 {}

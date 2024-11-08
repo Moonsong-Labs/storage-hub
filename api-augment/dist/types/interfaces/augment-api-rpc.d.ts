@@ -95,7 +95,7 @@ import type {
   FileMetadata,
   GetFileFromFileStorageResult,
   SaveFileToDisk,
-  TrieRemoveMutation
+  ShouldRemoveFile
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module "@polkadot/rpc-core/types/jsonrpc" {
@@ -1086,14 +1086,11 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           provider_id: H256 | string | Uint8Array,
           seed: H256 | string | Uint8Array,
           checkpoint_challenges:
-            | Option<Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>>
+            | Option<Vec<ITuple<[H256, ShouldRemoveFile]>>>
             | null
             | Uint8Array
-            | Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>
-            | [
-                H256 | string | Uint8Array,
-                Option<TrieRemoveMutation> | null | Uint8Array | TrieRemoveMutation
-              ][]
+            | Vec<ITuple<[H256, ShouldRemoveFile]>>
+            | [H256 | string | Uint8Array, ShouldRemoveFile | boolean | Uint8Array][]
         ) => Observable<Bytes>
       >;
       /**

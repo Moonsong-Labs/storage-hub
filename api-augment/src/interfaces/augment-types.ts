@@ -1289,6 +1289,7 @@ import type {
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   SaveFileToDisk,
+  ShouldRemoveFile,
   StorageDataUnit,
   StorageProviderId,
   TrieRemoveMutation,
@@ -2230,6 +2231,7 @@ declare module "@polkadot/types/types/registry" {
     SessionStatus: SessionStatus;
     SetId: SetId;
     SetIndex: SetIndex;
+    ShouldRemoveFile: ShouldRemoveFile;
     Si0Field: Si0Field;
     Si0LookupTypeId: Si0LookupTypeId;
     Si0Path: Si0Path;

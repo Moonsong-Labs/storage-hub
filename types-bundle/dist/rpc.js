@@ -114,7 +114,7 @@ export const rpcDefinitions = {
         },
         {
           name: "checkpoint_challenges",
-          type: "Option<Vec<(H256, Option<TrieRemoveMutation>)>>"
+          type: "Option<Vec<(H256, ShouldRemoveFile)>>"
         }
       ],
       type: "Vec<u8>"
