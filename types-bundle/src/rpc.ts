@@ -115,8 +115,8 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
           type: "H256"
         },
         {
-          name: "challenged_file_keys",
-          type: "Vec<H256>"
+          name: "checkpoint_challenges",
+          type: "Option<Vec<ITuple<[H256, Option<TrieRemoveMutation>]>>>"
         }
       ],
       type: "Vec<u8>"

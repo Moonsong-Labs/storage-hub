@@ -1042,7 +1042,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (
           provider_id: H256 | string | Uint8Array,
           seed: H256 | string | Uint8Array,
-          challenged_file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
+          checkpoint_challenges: Option<Vec<ITuple>> | null | Uint8Array | Vec<ITuple> | ITuple[]
         ) => Observable<Bytes>
       >;
       /**

@@ -209,7 +209,7 @@ where
                     .await?;
 
                 key_proofs.insert(*file_key, key_proof);
-            }
+            };
         }
 
         // Construct full proof.
