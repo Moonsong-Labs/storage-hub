@@ -219,7 +219,7 @@ mod benchmarks {
                 <T as crate::Config>::MerkleTrieHash::decode(&mut encoded_challenge.as_ref())
                     .expect("Challenge key should be decodable as it is a hash");
 
-            let custom_challenge = (typed_challenge, None);
+            let custom_challenge = (typed_challenge, Some(TrieRemoveMutation::default()));
             custom_challenges.push(custom_challenge);
         }
         BoundedVec::try_from(custom_challenges).expect("Length of custom challenges should be less than or equal to MaxCustomChallengesPerBlockFor")

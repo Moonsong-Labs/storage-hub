@@ -182,13 +182,35 @@ describeBspNet(
       root = forestRoot.toString().slice(2);
     });
 
-    it("Generate a proof for files 1 to 20", async () => {
+    it("Generate a proof with 1 to 20 file key proofs, plus 10 custom challenges with TrieRemoveMutation", async () => {
+      // Case: There are 10 random challenges, which can be responded with 1 to 20 file key proofs,
+      // depending on the Forest of the BSP and where the challenges fall within it. Additionally,
+      // in the worst case scenario for this amount of file key proofs, there can be 10 more file keys
+      // proven in the forest proof, that correspond to an exact match of a challenge with TrieRemoveMutation.
+      // File keys that would be removed from the Forest, are not meant to also send a file key proof, and
+      // that is the case for an exact match of a custom challenge with TrieRemoveMutation.
+
       for (let i = 1; i <= 20; i++) {
+        // Create an array of odd indexes from 1 up to (i - 1), appending (i - 1) if `i` is odd.
         const filteredIndexes = Array.from({ length: i - 1 }, (_, index) => index + 1)
           .filter((num) => num % 2 !== 0)
           .concat(i % 2 !== 0 ? [i - 1] : []);
 
+        // With those indexes, create an array of challenges that correspond to the indexed file
+        // key hashes, minus one. That way the challenge falls in between the file key proofs.
+        // - For 1 challenge: [first file key hash - 1] (only the first file key in the proof)
+        // - For 2 challenges: [second file key hash - 1] (first and second file key in the proof)
+        // - For 3 challenges: [second file key hash - 1, third file key hash - 1] (first, second and third file key in the proof)
+        // - For 4 challenges: [second file key hash -1, fourth file key hash - 1] (first, second, third and fourth file key in the proof)
+        // - For 5 challenges: [second file key hash - 1, fourth file key hash - 1, fifth file key hash - 1] (first, second, third, fourth and fifth file key in the proof)
         const challenges = filteredIndexes.map((index) => decrementHash(fileKeys[index]));
+
+        // There should be always at least 10 challenges, representing the random challenges.
+        // So we extend the challenges array with the last element repeatedly until it has 10 elements.
+        while (challenges.length < 10) {
+          challenges.push(challenges[challenges.length - 1]);
+        }
+
         const proof = await bspApi.rpc.storagehubclient.generateProof(
           DUMMY_BSP_ID,
           seed,
