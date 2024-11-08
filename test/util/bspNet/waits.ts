@@ -112,7 +112,11 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, bspAccount?: string) => {
+export const waitForBspStored = async (
+  api: ApiPromise,
+  checkQuantity?: number,
+  bspAccount?: string
+) => {
   // TODO: add bsp ID to check if is not confirming storing
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
@@ -129,17 +133,18 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number, 
     try {
       await sleep(delay);
 
-      // check if we have a submitProo extrinsic 
+      // check if we have a submitProo extrinsic
       if (bspAccount) {
         const txs = await api.rpc.author.pendingExtrinsics();
-        const match = txs.filter((tx) => (tx.method.method === "submitProof" && tx.signer.toString() === bspAccount));
+        const match = txs.filter(
+          (tx) => tx.method.method === "submitProof" && tx.signer.toString() === bspAccount
+        );
 
         // If we have a submit proof event at the same time we are trying to confirm storage
         // we need to advance one block because the two event cannot happen at the same time
         if (match.length === 1) {
           await sealBlock(api);
         }
-
       }
 
       const matches = await assertExtrinsicPresent(api, {
