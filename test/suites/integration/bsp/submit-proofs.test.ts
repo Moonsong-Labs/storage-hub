@@ -13,7 +13,7 @@ import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard", only: true },
+  { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -215,26 +215,26 @@ describeBspNet(
         ); */
         // Wait enough blocks for the deletion to be allowed.
         /* const currentBlock = await bspThreeApi.rpc.chain.getBlock();
-		const currentBlockNumber = currentBlock.block.header.number.toNumber();
-		const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
-		await bspThreeApi.advanceToBlock(cooldown); */
+    const currentBlockNumber = currentBlock.block.header.number.toNumber();
+    const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+    await bspThreeApi.advanceToBlock(cooldown); */
         // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
         /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-				fileMetadata.fileKey,
-				inclusionForestProof,
-			)); 
-			// Check for the confirm stopped storing event.
-      		let confirmStopStoringEvent = bspThreeApi.assert.eventPresent(
-        		"fileSystem",
-       			"BspConfirmStoppedStoring",
-        		fileDeletionConfirmResult.events
-      		);
-			// Make sure the new root was updated correctly.
-			bspThreeApi.rpc.storagehubclient.deleteFile(fileMetadata.fileKey); // Not sure if this is the correct way to do it.
-			const newRoot = bspThreeApi.rpc.storagehubclient.getForestRoot();
-			const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
-			assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
-		*/
+        fileMetadata.fileKey,
+        inclusionForestProof,
+      )); 
+      // Check for the confirm stopped storing event.
+          let confirmStopStoringEvent = bspThreeApi.assert.eventPresent(
+            "fileSystem",
+              "BspConfirmStoppedStoring",
+            fileDeletionConfirmResult.events
+          );
+      // Make sure the new root was updated correctly.
+      bspThreeApi.rpc.storagehubclient.deleteFile(fileMetadata.fileKey); // Not sure if this is the correct way to do it.
+      const newRoot = bspThreeApi.rpc.storagehubclient.getForestRoot();
+      const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
+      assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
+    */
       }
     );
 
@@ -245,7 +245,7 @@ describeBspNet(
     it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
       { skip: "Dropping transactions is not implemented as testing utility yet." },
-      async () => {}
+      async () => { }
     );
 
     it("New storage request sent by user, to only one BSP", async () => {
