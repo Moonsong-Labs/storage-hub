@@ -201,7 +201,7 @@ describeBspNet(
         // - For 1 challenge: [first file key hash - 1] (only the first file key in the proof)
         // - For 2 challenges: [second file key hash - 1] (first and second file key in the proof)
         // - For 3 challenges: [second file key hash - 1, third file key hash - 1] (first, second and third file key in the proof)
-        // - For 4 challenges: [second file key hash -1, fourth file key hash - 1] (first, second, third and fourth file key in the proof)
+        // - For 4 challenges: [second file key hash - 1, fourth file key hash - 1] (first, second, third and fourth file key in the proof)
         // - For 5 challenges: [second file key hash - 1, fourth file key hash - 1, fifth file key hash - 1] (first, second, third, fourth and fifth file key in the proof)
         const randomChallenges = filteredIndexes.map((index) => decrementHash(fileKeys[index]));
 
