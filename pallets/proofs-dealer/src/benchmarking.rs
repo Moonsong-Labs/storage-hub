@@ -82,7 +82,61 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn submit_proof(n: Linear<1, { 20 }>) -> Result<(), BenchmarkError> {
+    fn submit_proof_no_checkpoint_challenges_key_proofs(
+        n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        let n: u32 = n.into();
+        let (caller, proof) = setup_submit_proof::<T>(n)?;
+
+        // Call some extrinsic.
+        #[extrinsic_call]
+        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn submit_proof_with_checkpoint_challenges_key_proofs(
+        n: Linear<
+            { T::MaxCustomChallengesPerBlock::get() + 1 },
+            { T::MaxCustomChallengesPerBlock::get() * 2 },
+        >,
+    ) -> Result<(), BenchmarkError> {
+        let n: u32 = n.into();
+        let (caller, proof) = setup_submit_proof::<T>(n)?;
+
+        // Call some extrinsic.
+        #[extrinsic_call]
+        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
+
+        Ok(())
+    }
+
+    impl_benchmark_test_suite! {
+            Pallet,
+            crate::mock::new_test_ext(),
+            crate::mock::Test,
+    }
+
+    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, Proof<T>), BenchmarkError>
+    where
+    // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
+        T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
+    // The Storage Providers pallet is the `Providers` pallet that this pallet requires.
+        T: crate::Config<ProvidersPallet = pallet_storage_providers::Pallet<T>>,
+    // The `Balances` pallet is the `NativeBalance` pallet that this pallet requires.
+        T: crate::Config<NativeBalance = pallet_balances::Pallet<T>>,
+    // The `Balances` pallet is the `NativeBalance` pallet that `pallet_storage_providers::Config` requires.
+        T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
+    // The `Proof` inner type of the `ForestVerifier` trait is `CompactProof`.
+        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = sp_trie::CompactProof>,
+    // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
+        <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
+    // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
+        pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
+    // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
+        T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
+    {
         // Setup initial conditions.
         let caller: T::AccountId = whitelisted_caller();
         let provider_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -192,20 +246,9 @@ mod benchmarks {
             <Proof<T>>::decode(&mut encoded_proof.as_ref()).expect("Proof should be decodable");
 
         // Check that the proof has the expected number of file key proofs.
-        let n: u32 = n.into();
         assert_eq!(proof.key_proofs.len() as u32, n);
 
-        // Call some extrinsic.
-        #[extrinsic_call]
-        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
-
-        Ok(())
-    }
-
-    impl_benchmark_test_suite! {
-            Pallet,
-            crate::mock::new_test_ext(),
-            crate::mock::Test,
+        Ok((caller, proof))
     }
 
     fn generate_challenges<T: Config>(

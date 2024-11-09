@@ -43,7 +43,8 @@ use core::marker::PhantomData;
 /// Weight functions needed for `pallet_proofs_dealer`.
 pub trait WeightInfo {
 	fn challenge() -> Weight;
-	fn submit_proof(n: u32, ) -> Weight;
+	fn submit_proof_no_checkpoint_challenges_key_proofs(n: u32, ) -> Weight;
+	fn submit_proof_with_checkpoint_challenges_key_proofs(n: u32, ) -> Weight;
 }
 
 /// Weights for `pallet_proofs_dealer` using the Substrate node and recommended hardware.
@@ -58,7 +59,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		//  Measured:  `220`
 		//  Estimated: `4687`
 		// Minimum execution time: 41_000_000 picoseconds.
-		Weight::from_parts(41_000_000, 4687)
+		Weight::from_parts(42_000_000, 4687)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
@@ -85,14 +86,48 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `ProofsDealer::TickToProvidersDeadlines` (r:0 w:2)
 	/// Proof: `ProofsDealer::TickToProvidersDeadlines` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 20]`.
-	fn submit_proof(n: u32, ) -> Weight {
+	fn submit_proof_no_checkpoint_challenges_key_proofs(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1411`
 		//  Estimated: `35487`
-		// Minimum execution time: 334_000_000 picoseconds.
-		Weight::from_parts(251_422_792, 35487)
-			// Standard Error: 217_863
-			.saturating_add(Weight::from_parts(86_384_950, 0).saturating_mul(n.into()))
+		// Minimum execution time: 330_000_000 picoseconds.
+		Weight::from_parts(247_459_303, 35487)
+			// Standard Error: 66_499
+			.saturating_add(Weight::from_parts(82_357_953, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(11_u64))
+			.saturating_add(T::DbWeight::get().writes(5_u64))
+	}
+	/// Storage: `Providers::AccountIdToBackupStorageProviderId` (r:1 w:0)
+	/// Proof: `Providers::AccountIdToBackupStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::LastTickProviderSubmittedAProofFor` (r:1 w:1)
+	/// Proof: `ProofsDealer::LastTickProviderSubmittedAProofFor` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:0)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:2 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
+	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::TickToChallengesSeed` (r:1 w:0)
+	/// Proof: `ProofsDealer::TickToChallengesSeed` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::LastCheckpointTick` (r:1 w:0)
+	/// Proof: `ProofsDealer::LastCheckpointTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::TickToCheckpointChallenges` (r:1 w:0)
+	/// Proof: `ProofsDealer::TickToCheckpointChallenges` (`max_values`: None, `max_size`: Some(681), added: 3156, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ValidProofSubmittersLastTicks` (r:1 w:1)
+	/// Proof: `ProofsDealer::ValidProofSubmittersLastTicks` (`max_values`: None, `max_size`: Some(32022), added: 34497, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::TickToProvidersDeadlines` (r:0 w:2)
+	/// Proof: `ProofsDealer::TickToProvidersDeadlines` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[21, 40]`.
+	fn submit_proof_with_checkpoint_challenges_key_proofs(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1411`
+		//  Estimated: `35487`
+		// Minimum execution time: 1_960_000_000 picoseconds.
+		Weight::from_parts(363_732_547, 35487)
+			// Standard Error: 339_650
+			.saturating_add(Weight::from_parts(76_443_086, 0).saturating_mul(n.into()))
 			.saturating_add(T::DbWeight::get().reads(11_u64))
 			.saturating_add(T::DbWeight::get().writes(5_u64))
 	}
@@ -109,7 +144,7 @@ impl WeightInfo for () {
 		//  Measured:  `220`
 		//  Estimated: `4687`
 		// Minimum execution time: 41_000_000 picoseconds.
-		Weight::from_parts(41_000_000, 4687)
+		Weight::from_parts(42_000_000, 4687)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
@@ -136,14 +171,48 @@ impl WeightInfo for () {
 	/// Storage: `ProofsDealer::TickToProvidersDeadlines` (r:0 w:2)
 	/// Proof: `ProofsDealer::TickToProvidersDeadlines` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[1, 20]`.
-	fn submit_proof(n: u32, ) -> Weight {
+	fn submit_proof_no_checkpoint_challenges_key_proofs(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1411`
 		//  Estimated: `35487`
-		// Minimum execution time: 334_000_000 picoseconds.
-		Weight::from_parts(251_422_792, 35487)
-			// Standard Error: 217_863
-			.saturating_add(Weight::from_parts(86_384_950, 0).saturating_mul(n.into()))
+		// Minimum execution time: 330_000_000 picoseconds.
+		Weight::from_parts(247_459_303, 35487)
+			// Standard Error: 66_499
+			.saturating_add(Weight::from_parts(82_357_953, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(11_u64))
+			.saturating_add(RocksDbWeight::get().writes(5_u64))
+	}
+	/// Storage: `Providers::AccountIdToBackupStorageProviderId` (r:1 w:0)
+	/// Proof: `Providers::AccountIdToBackupStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::LastTickProviderSubmittedAProofFor` (r:1 w:1)
+	/// Proof: `ProofsDealer::LastTickProviderSubmittedAProofFor` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:0)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:2 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
+	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::TickToChallengesSeed` (r:1 w:0)
+	/// Proof: `ProofsDealer::TickToChallengesSeed` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::LastCheckpointTick` (r:1 w:0)
+	/// Proof: `ProofsDealer::LastCheckpointTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::TickToCheckpointChallenges` (r:1 w:0)
+	/// Proof: `ProofsDealer::TickToCheckpointChallenges` (`max_values`: None, `max_size`: Some(681), added: 3156, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ValidProofSubmittersLastTicks` (r:1 w:1)
+	/// Proof: `ProofsDealer::ValidProofSubmittersLastTicks` (`max_values`: None, `max_size`: Some(32022), added: 34497, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::TickToProvidersDeadlines` (r:0 w:2)
+	/// Proof: `ProofsDealer::TickToProvidersDeadlines` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[21, 40]`.
+	fn submit_proof_with_checkpoint_challenges_key_proofs(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1411`
+		//  Estimated: `35487`
+		// Minimum execution time: 1_960_000_000 picoseconds.
+		Weight::from_parts(363_732_547, 35487)
+			// Standard Error: 339_650
+			.saturating_add(Weight::from_parts(76_443_086, 0).saturating_mul(n.into()))
 			.saturating_add(RocksDbWeight::get().reads(11_u64))
 			.saturating_add(RocksDbWeight::get().writes(5_u64))
 	}
