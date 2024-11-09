@@ -979,6 +979,11 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       TooManyValidProofSubmitters: AugmentedError<ApiType>;
       /**
+       * After successfully applying delta for a set of mutations, the number of mutated keys is
+       * not the same as the number of mutations expected to have been applied.
+       **/
+      UnexpectedNumberOfRemoveMutations: AugmentedError<ApiType>;
+      /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be
        * submitting proofs.

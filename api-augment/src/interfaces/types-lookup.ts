@@ -5618,6 +5618,7 @@ declare module "@polkadot/types/lookup" {
     readonly isKeyProofNotFound: boolean;
     readonly isKeyProofVerificationFailed: boolean;
     readonly isFailedToApplyDelta: boolean;
+    readonly isUnexpectedNumberOfRemoveMutations: boolean;
     readonly isFailedToUpdateProviderAfterKeyRemoval: boolean;
     readonly isTooManyValidProofSubmitters: boolean;
     readonly type:
@@ -5642,6 +5643,7 @@ declare module "@polkadot/types/lookup" {
       | "KeyProofNotFound"
       | "KeyProofVerificationFailed"
       | "FailedToApplyDelta"
+      | "UnexpectedNumberOfRemoveMutations"
       | "FailedToUpdateProviderAfterKeyRemoval"
       | "TooManyValidProofSubmitters";
   }

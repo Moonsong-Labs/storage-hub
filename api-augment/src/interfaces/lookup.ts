@@ -4442,6 +4442,7 @@ export default {
       "KeyProofNotFound",
       "KeyProofVerificationFailed",
       "FailedToApplyDelta",
+      "UnexpectedNumberOfRemoveMutations",
       "FailedToUpdateProviderAfterKeyRemoval",
       "TooManyValidProofSubmitters"
     ]
