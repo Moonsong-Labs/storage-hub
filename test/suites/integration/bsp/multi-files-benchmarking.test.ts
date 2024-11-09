@@ -182,15 +182,29 @@ describeBspNet(
       console.log("Forest root: ", forestRoot.toString());
     });
 
-    it("Generate a proof with 1 to 20 file key proofs, plus 10 custom challenges with TrieRemoveMutation", async () => {
-      // Case: There are 10 random challenges, which can be responded with 1 to 20 file key proofs,
+    it("Generate a proof with 1 to 40 file key proofs, plus the maximum number of checkpoint challenges possible left with TrieRemoveMutation", async () => {
+      // * Case: Up to 20 file key proofs in proof.
+      // There are 10 random challenges, which can be responded with 1 to 20 file key proofs,
       // depending on the Forest of the BSP and where the challenges fall within it. Additionally,
       // in the worst case scenario for this amount of file key proofs, there can be 10 more file keys
       // proven in the forest proof, that correspond to an exact match of a challenge with TrieRemoveMutation.
       // File keys that would be removed from the Forest, are not meant to also send a file key proof, and
       // that is the case for an exact match of a custom challenge with TrieRemoveMutation.
+      //
+      // * Case: 21 to 40 file key proofs in proof.
+      // If there are more than 20 file key proofs, then it means that some of those file key proofs are
+      // a response to checkpoint challenges, so it is now impossible to have 10 file keys proven to be
+      // removed from the Forest. For example, if there are 21 file key proofs, then at least one of those
+      // file keys proven is a consequence of a checkpoint challenge either not falling exactly in an existing
+      // leaf, or not having a TrieRemoveMutation. So the worst case scenario for 21 file keys proven is
+      // another 9 file keys proven with a TrieRemoveMutation. For 22 file keys proven, the worst case scenario
+      // is also 9 file keys proven with a TrieRemoveMutation. For 23, 8 file keys proven with a TrieRemoveMutation.
+      // For 24, also 8 file keys proven with a TrieRemoveMutation. It continues like this until with 40 file keys
+      // proven, the worst case scenario is 0 file keys proven with a TrieRemoveMutation. Basically, with 40 file
+      // keys proven, it means that there are 2 file keys proven for every random and checkpoint challenge, so no
+      // checkpoint challenge fell exactly in an existing leaf.
 
-      for (let i = 1; i <= 20; i++) {
+      for (let i = 1; i <= 40; i++) {
         // Create an array of odd indexes from 1 up to (i - 1), appending (i - 1) if `i` is odd.
         const filteredIndexes = Array.from({ length: i - 1 }, (_, index) => index + 1)
           .filter((num) => num % 2 !== 0)
@@ -211,13 +225,16 @@ describeBspNet(
           randomChallenges.push(randomChallenges[randomChallenges.length - 1]);
         }
 
-        // Add the last 10 file keys as challenges, with a TrieRemoveMutation.
-        // This will account for the worst case scenario possible between 1 to 20 file key proofs.
-        // That is when, on the one hand, the 1 to 20 file key proofs respond to random challenges,
-        // and there are 10 more checkpoint challenges with file deletions, that do not require a
+        // Add at most 10 file keys as challenges, with a TrieRemoveMutation.
+        // This will account for the worst case scenario possible.
+        // That is when:
+        // - The file keys proven respond to random challenges, or checkpoint challenge that either
+        // did not fall exactly in an existing leaf, or did not have a TrieRemoveMutation.
+        // - There are at most 10 more checkpoint challenges with file deletions, that do not require a
         // file key proof, but execute a TrieRemoveMutation.
-        const last10FileKeys = fileKeys.slice(fileKeys.length - 10);
-        const challenges = randomChallenges.concat(last10FileKeys);
+        const numberOfChallengesToAdd = removeMutationChallengesToAdd(randomChallenges.length);
+        const challengesToAdd = fileKeys.slice(fileKeys.length - numberOfChallengesToAdd);
+        const challenges = randomChallenges.concat(challengesToAdd);
 
         // Add TrieRemoveMutation to all the challenges.
         const challengesWithMutation: [string, boolean][] = challenges.map((key) => [key, true]);
@@ -301,4 +318,15 @@ const decrementHash = (hash: string): string => {
 
   // Make sure the hash maintains the same length as the original, padding with zeros if necessary
   return `0x${decrementedHash.padStart(hash.length - 2, "0")}`;
+};
+
+const removeMutationChallengesToAdd = (existingChallenges: number): number => {
+  let challengesToAdd: number;
+  if (existingChallenges <= 10) {
+    challengesToAdd = 10;
+  } else {
+    challengesToAdd = 20 - existingChallenges;
+  }
+
+  return challengesToAdd;
 };
