@@ -256,63 +256,51 @@ where
             let mutations: Vec<_> = challenges
                 .iter()
                 .filter_map(|(key, mutation)| match mutation {
-                    Some(mutation) if forest_keys_proven.contains(key) => Some((*key, mutation)),
+                    Some(mutation) if forest_keys_proven.contains(key) => {
+                        Some((*key, mutation.clone()))
+                    }
                     Some(_) | None => None,
                 })
                 .collect();
 
             if !mutations.is_empty() {
-                let mut mutations_applied = Vec::new();
-                let new_root = mutations.iter().try_fold(root, |acc_root, mutation| {
-                    // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
-                    forest_keys_proven.remove(&mutation.0);
+                let converted_mutations = mutations
+                    .iter()
+                    .map(|(key, mutation)| (key.clone(), mutation.clone().into()))
+                    .collect::<Vec<(KeyFor<T>, TrieMutation)>>();
 
-                    // Add mutation to list of mutations applied.
-                    mutations_applied.push((mutation.0, mutation.1.clone()));
+                // Apply the mutations to the Forest.
+                let (_, new_root, mutated_keys_and_values) = <T::ForestVerifier as TrieProofDeltaApplier<
+                    T::MerkleTrieHashing,
+                >>::apply_delta(
+                    &root, converted_mutations.as_slice(), forest_proof
+                )
+                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 
-                    // Apply the mutation to the Forest.
-                    let apply_delta_result = <T::ForestVerifier as TrieProofDeltaApplier<
-                        T::MerkleTrieHashing,
-                    >>::apply_delta(
-                        &acc_root,
-                        &[(mutation.0, mutation.1.clone().into())],
-                        forest_proof,
-                    )
-                    .map_err(|_| Error::<T>::FailedToApplyDelta);
+                // Check that the number of mutated keys is the same as the mutations expected.
+                ensure!(
+                    mutated_keys_and_values.len() == mutations.len(),
+                    Error::<T>::UnexpectedNumberOfRemoveMutations
+                );
 
-                    // If the mutation was correctly applied, update the Provider's info and return the new root.
-                    match apply_delta_result {
-                        Ok((_, new_root, mutated_keys_and_values)) => {
-                            // Check that the mutated key is the same as the mutation (and is the only one).
-                            ensure!(
-                                mutated_keys_and_values.len() == 1,
-                                Error::<T>::FailedToApplyDelta
-                            );
-                            ensure!(
-                                mutated_keys_and_values[0].0 == mutation.0,
-                                Error::<T>::FailedToApplyDelta
-                            );
+                for (key, maybe_value) in mutated_keys_and_values.iter() {
+                    // Remove the mutated key from the list of `forest_keys_proven` to avoid having to verify the key proof.
+                    forest_keys_proven.remove(key);
 
-                            // Use the interface exposed by the Providers pallet to update the submitting Provider
-                            // after the key removal if the key had a value.
-                            let removed_trie_value = &mutated_keys_and_values[0].1;
-                            if let Some(trie_value) = removed_trie_value {
-                                ProvidersPalletFor::<T>::update_provider_after_key_removal(
-                                    submitter, trie_value,
-                                )
-                                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
-                            }
-
-                            Ok(new_root)
-                        }
-                        Err(err) => Err(err),
+                    // Use the interface exposed by the Providers pallet to update the submitting Provider
+                    // after the key removal if the key had a value.
+                    if let Some(trie_value) = maybe_value {
+                        ProvidersPalletFor::<T>::update_provider_after_key_removal(
+                            submitter, trie_value,
+                        )
+                        .map_err(|_| Error::<T>::FailedToApplyDelta)?;
                     }
-                })?;
+                }
 
                 // Emit event of mutation applied.
                 Self::deposit_event(Event::<T>::MutationsApplied {
                     provider: *submitter,
-                    mutations: mutations_applied,
+                    mutations,
                     new_root,
                 });
 

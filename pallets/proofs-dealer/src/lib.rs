@@ -557,6 +557,10 @@ pub mod pallet {
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
 
+        /// After successfully applying delta for a set of mutations, the number of mutated keys is
+        /// not the same as the number of mutations expected to have been applied.
+        UnexpectedNumberOfRemoveMutations,
+
         /// Failed to update the provider after a key removal mutation.
         FailedToUpdateProviderAfterKeyRemoval,
 
