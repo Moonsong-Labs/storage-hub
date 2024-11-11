@@ -5264,7 +5264,6 @@ mod bsp_confirm {
 
                 // Setup BSP
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Set global parameters
                 FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(1), Some(1)).unwrap();
