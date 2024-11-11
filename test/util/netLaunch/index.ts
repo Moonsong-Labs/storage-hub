@@ -31,7 +31,7 @@ import {
 } from "../pjsKeyring";
 import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 export type ShEntity = {
   port: number;
@@ -314,6 +314,11 @@ export class NetworkLauncher {
   private async runMigrations() {
     invariant(this.config.indexer, "Indexer must be enabled to run migrations");
 
+    const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
+    invariant(
+      dieselCheck.status === 0,
+      "Error running Diesel CLI. Visit https://diesel.rs/guides/getting-started for install instructions."
+    );
     // TODO Poll this with a ping
     await sleep(2000);
 
