@@ -21,7 +21,7 @@ use sp_runtime::{
     Saturating,
 };
 
-use crate::*;
+use crate::{weights::WeightInfo, *};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -1149,39 +1149,64 @@ where
 
     /// This function gets the Providers that submitted a valid proof in the last tick using the `ProofSubmittersInterface`,
     /// and updates the last chargeable tick and last chargeable price index of those Providers.
+    /// It is designed in a way that allows this pallet to quickly catch up with proof submissions if it lags behind because of
+    /// missing `on_poll` calls in the runtime, as if it's behind it will use more of the remaining weight of the block to
+    /// process the Providers that it missed.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
         meter: &mut sp_weights::WeightMeter,
     ) {
-        // Get the previous tick from the Providers Proof Submitters pallet.
-        let submitters_prev_tick =
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
-                .saturating_sub(One::one());
-        meter.consume(T::DbWeight::get().reads(1));
+        // Initialize the variable that will hold the last processed Provider
+        let mut maybe_last_processed_provider: Option<ProviderIdFor<T>> = None;
 
-        // Check if we already registered this tick from the Providers Proof Submitters pallet.
-        let last_submitters_tick_registered = LastSubmittersTickRegistered::<T>::get();
-        meter.consume(T::DbWeight::get().reads(1));
+        // Get the last tick that was processed from the Providers Proof Submitters pallet and if there are any remaining Providers to process.
+        let (last_submitters_tick_registered, maybe_last_provider_of_tick) =
+            LastSubmittersTickRegistered::<T>::get();
 
-        // If we already registered this tick from the Providers Proof Submitters pallet, we don't need to do anything.
-        if submitters_prev_tick <= last_submitters_tick_registered {
-            return;
-        }
+        // Check if there are any unprocessed Providers in the last processed tick.
+        if maybe_last_provider_of_tick.is_some() {
+            // If there are, get all the valid proof submitters of that tick.
+            let proof_submitters = <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&last_submitters_tick_registered).expect("We already processed this tick and found Providers in a previous iteration.");
 
-        // Update the last submitters tick registered.
-        LastSubmittersTickRegistered::<T>::set(submitters_prev_tick);
-        meter.consume(T::DbWeight::get().writes(1));
+            // Keep only those that haven't been processed yet.
+            let mut proof_submitters = proof_submitters
+                .into_iter()
+                .filter(|provider_id| {
+                    maybe_last_provider_of_tick
+                        .map_or(true, |last_provider_id| provider_id > &last_provider_id)
+                })
+                .collect::<Vec<ProviderIdFor<T>>>();
 
-        // Get the Providers that submitted a valid proof in the last tick from the Providers Proof Submitters pallet,
-        // if there's any
-        let proof_submitters =
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&submitters_prev_tick);
-        meter.consume(T::DbWeight::get().reads(1));
+            // Sort them for processing.
+            proof_submitters.sort();
 
-        // If there are any proof submitters in the last tick...
-        if let Some(proof_submitters) = proof_submitters {
-            // Update all Providers
-            // Iterate through the proof submitters and update their last chargeable tick and last chargeable price index
+            // Check if we can process them all in the current call. If we can't, make the required adjustments to only process the ones we can.
+            let proof_submitters_count = proof_submitters.len();
+            let mut weight_needed =
+                T::WeightInfo::n_providers_last_chargeable_info_update_for_already_processed_tick(
+                    proof_submitters_count as u32,
+                );
+            if !meter.can_consume(weight_needed) {
+                // Keep only the amount of Providers we can process.
+                let weight_per_provider = T::WeightInfo::n_providers_last_chargeable_info_update_for_already_processed_tick(1);
+                let weight_left = meter.remaining();
+                let providers_to_process = weight_left
+                    .checked_div_per_component(&weight_per_provider)
+                    .unwrap_or(0);
+                proof_submitters.truncate(providers_to_process as usize);
+
+                // Update the required weight.
+                weight_needed = T::WeightInfo::n_providers_last_chargeable_info_update_for_already_processed_tick(
+					providers_to_process as u32, // The amount of Providers to process will never exceed the maximum unsigned integer representable by the u32 type
+				);
+
+                // Store the last processed Provider to continue processing them in the next call.
+                if !proof_submitters.is_empty() {
+                    maybe_last_processed_provider = proof_submitters.last().cloned();
+                }
+            }
+
+            // Process the Providers, updating their last chargeable info.
             for provider_id in proof_submitters {
                 // Update the last chargeable tick and last chargeable price index of the Provider.
                 // The last chargeable tick is set to the current tick of THIS PALLET. That means, if the tick from
@@ -1198,41 +1223,142 @@ where
                     last_chargeable_tick: n,
                     last_chargeable_price_index: accumulated_price_index,
                 });
-                meter.consume(T::DbWeight::get().reads_writes(1, 1));
             }
 
-            // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
-            // TODO: needed weight in the block for this, such as what `on_initialize` does.
-            // TODO: Solve when benchmarking.
+            // Update the last processed tick of the Providers Proof Submitters pallet.
+            LastSubmittersTickRegistered::<T>::put((
+                last_submitters_tick_registered,
+                maybe_last_processed_provider,
+            ));
+
+            // Consume the used weight.
+            meter.consume(weight_needed);
+
+            // If there's remaining weight for at least one Provider of the next tick, recursively call this function.
+            if meter
+                .remaining()
+                .all_gt(T::WeightInfo::n_providers_last_chargeable_info_update(1))
+                && maybe_last_processed_provider.is_none()
+            {
+                Self::do_update_last_chargeable_info(n, meter);
+            }
+        } else {
+            // If there are no leftover Providers to process from the last processed tick, keep advancing one tick and check for Providers there, until there's no remaining weight or the tick we are processing is the last one.
+            let submitters_last_tick =
+                <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
+                    .saturating_sub(One::one());
+            let mut current_tick_to_be_processed =
+                last_submitters_tick_registered.saturating_add(One::one());
+            while current_tick_to_be_processed < submitters_last_tick && <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&current_tick_to_be_processed).is_none() {
+				match meter.try_consume(T::DbWeight::get().reads_writes(1, 0)){
+					Ok(_) => {},
+					Err(_) => {
+						// If there's not enough weight to keep iterating ticks to check for valid proof submitters,
+						// update the LastSubmittersTickRegistered storage to continue processing the Providers in the next call.
+						LastSubmittersTickRegistered::<T>::put((current_tick_to_be_processed, None::<ProviderIdFor<T>>));
+					}
+				} // Consume one DB read for the `get_proof_submitters_for_tick` call, avoid calling this in the benchmark as it would mean double counting.
+				current_tick_to_be_processed = current_tick_to_be_processed.saturating_add(One::one());
+			}
+
+            // At this point either `current_tick_to_be_processed` is equal to a tick smaller than `submitters_last_tick` that has unprocessed Providers, or it is equal to `submitters_last_tick` which could have unprocessed Providers.
+            if let Some(current_tick_providers) = <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&current_tick_to_be_processed) {
+				// Get and sort the Providers to be processed.
+				let mut proof_submitters = current_tick_providers.into_iter().collect::<Vec<ProviderIdFor<T>>>();
+				proof_submitters.sort();
+
+				// Check if they all can processed in the current call. If they can't, make the required adjustments to only process the maximum possible.
+				let proof_submitters_count = proof_submitters.len();
+				let mut weight_needed = T::WeightInfo::n_providers_last_chargeable_info_update(proof_submitters_count as u32);
+				if !meter.can_consume(weight_needed) {
+					// Keep only the amount of Providers that can be processed in this call.
+					let weight_per_provider = T::WeightInfo::n_providers_last_chargeable_info_update(1);
+					let weight_left = meter.remaining();
+					let providers_to_process = weight_left
+						.checked_div_per_component(&weight_per_provider)
+						.unwrap_or(0);
+					proof_submitters.truncate(providers_to_process as usize);
+
+					// Update the required weight.
+					weight_needed = T::WeightInfo::n_providers_last_chargeable_info_update(providers_to_process as u32);
+
+					// Store the last processed Provider to continue processing them in the next call.
+					maybe_last_processed_provider = proof_submitters.last().cloned();
+				}
+
+				// Process the Providers, updating their last chargeable info.
+				for provider_id in proof_submitters {
+					// Update the last chargeable tick and last chargeable price index of the Provider.
+					// The last chargeable tick is set to the current tick of THIS PALLET. That means, if the tick from
+					// the Providers Proof Submitters pallet is stalled for some time, and this pallet continues to increment
+					// its tick, when the Providers Proof Submitters pallet continues to increment its tick, this pallet will
+					// allow Providers to charge for the time that the Providers Proof Submitters pallet has been stalled.
+					let accumulated_price_index = AccumulatedPriceIndex::<T>::get();
+					LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
+						provider_info.last_chargeable_tick = n;
+						provider_info.price_index = accumulated_price_index;
+					});
+					Self::deposit_event(Event::<T>::LastChargeableInfoUpdated {
+						provider_id,
+						last_chargeable_tick: n,
+						last_chargeable_price_index: accumulated_price_index,
+					});
+				}
+
+				// Update the last processed tick of the Providers Proof Submitters pallet.
+				LastSubmittersTickRegistered::<T>::put((current_tick_to_be_processed, maybe_last_processed_provider));
+
+				// Consume the used weight.
+				meter.consume(weight_needed);
+
+				// If there's remaining weight for at least one Provider of the next tick, recursively call this function.
+				if meter
+					.remaining()
+					.all_gt(T::WeightInfo::n_providers_last_chargeable_info_update(1))
+					&& maybe_last_processed_provider.is_none() && current_tick_to_be_processed < submitters_last_tick
+				{
+					Self::do_update_last_chargeable_info(n, meter);
+				}
+			}
         }
     }
 
     pub fn do_update_price_index(meter: &mut sp_weights::WeightMeter) {
+        // Make sure we have enough weight to update the tick
+        let required_weight = T::WeightInfo::price_index_update();
+        assert!(meter.can_consume(required_weight));
+
         // Get the current price
         let current_price = CurrentPricePerUnitPerTick::<T>::get();
-        meter.consume(T::DbWeight::get().reads(1));
 
         // Add it to the accumulated price index
         AccumulatedPriceIndex::<T>::mutate(|price_index| {
             *price_index = price_index.saturating_add(current_price);
         });
-        meter.consume(T::DbWeight::get().reads_writes(1, 1));
+
+        // Consume the required weight
+        meter.consume(required_weight);
     }
 
     /// This function advances the current tick and returns the previous and now-current tick.
     pub fn do_advance_tick(
         meter: &mut sp_weights::WeightMeter,
     ) -> (BlockNumberFor<T>, BlockNumberFor<T>) {
+        // Make sure we have enough weight to update the tick
+        let required_weight = T::WeightInfo::tick_update();
+        assert!(meter.can_consume(required_weight));
+
         // Get the current tick
         let current_tick = OnPollTicker::<T>::get();
-        meter.consume(T::DbWeight::get().reads(1));
 
         // Increment the current tick
         let next_tick = current_tick.saturating_add(One::one());
 
         // Update the current tick
         OnPollTicker::<T>::set(next_tick);
-        meter.consume(T::DbWeight::get().writes(1));
+
+        // Consume the required weight
+        meter.consume(required_weight);
 
         // Return the previous tick (`current_tick`) and the now-current one (`next_tick`)
         (current_tick, next_tick)
