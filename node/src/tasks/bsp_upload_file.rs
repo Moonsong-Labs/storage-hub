@@ -486,22 +486,6 @@ where
     }
 }
 
-/// Handles the `BspRequestedToStopStoring` event.
-///
-/// This event is triggered by the runtime when a bsp decide to stop storing a file.
-// impl<FL, FSH> EventHandler<BspRequestedToStopStoring> for BspUploadFileTask<FL, FSH>
-// where
-//     FL: FileStorageT,
-//     FSH: BspForestStorageHandlerT,
-// {
-//     async fn handle_event(&mut self, event: BspRequestedToStopStoring) -> anyhow::Result<()> {
-//         info!(
-//             target: LOG_TARGET,
-//             "Processing BspRequestedToStopStoring:",
-//         );
-//     }
-// }
-
 impl<FL, FSH> BspUploadFileTask<FL, FSH>
 where
     FL: FileStorageT,

@@ -1,9 +1,5 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-<<<<<<< HEAD:test/suites/integration/bsp/single-volunteer/volunteer.test.ts
-import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../../util";
-=======
-import { bspKey, describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
->>>>>>> 3b95b59 (move event that trigger storage request and add integration test):test/suites/integration/bsp/volunteer.test.ts
+import { bspKey, describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
