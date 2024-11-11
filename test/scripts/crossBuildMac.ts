@@ -8,17 +8,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  const { confirm } = await inquirer.prompt({
-    type: "confirm",
-    name: "confirm",
-    message: "This script will build the project for Linux. Continue?",
-    default: true
-  });
-
-  if (!confirm) {
-    return;
-  }
-
   const ARCH = execSync("uname -m").toString().trim();
   const OS = execSync("uname -s").toString().trim();
 

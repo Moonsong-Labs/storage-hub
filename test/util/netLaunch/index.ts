@@ -564,7 +564,7 @@ export class NetworkLauncher {
     | { bspTwoRpcPort: number; bspThreeRpcPort: number; fileMetadata: FileMetadata }
     | undefined
   > {
-    console.log(`\n\n=== Launching network config ===`);
+    console.log("\n=== Launching network config ===");
     console.table({ config });
     const launchedNetwork = await new NetworkLauncher(type, config)
       .loadComposeFile()

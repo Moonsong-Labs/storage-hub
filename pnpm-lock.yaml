@@ -104,6 +104,9 @@ importers:
       json-bigint:
         specifier: ^1.0.0
         version: 1.0.0
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.5
       strip-ansi:
         specifier: ^7.1.0
         version: 7.1.0
@@ -1609,6 +1612,10 @@ packages:
   picomatch@2.3.1:
     resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
     engines: {node: '>=8.6'}
+
+  postgres@3.4.5:
+    resolution: {integrity: sha512-cDWgoah1Gez9rN3H4165peY9qfpEo+SA61oQv65O3cRUE1pOEoJWwddwcqKE8XZYjbblOJlYDlLV4h67HrEVDg==}
+    engines: {node: '>=12'}
 
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
@@ -3732,6 +3739,8 @@ snapshots:
       uint8arrays: 3.1.1
 
   picomatch@2.3.1: {}
+
+  postgres@3.4.5: {}
 
   process-nextick-args@2.0.1: {}
 
