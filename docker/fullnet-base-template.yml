@@ -109,3 +109,13 @@ services:
         "--sealing=manual",
         "--base-path=/data",
       ]
+
+  sh-postgres:
+    image: postgres:15
+    container_name: docker-sh-postgres-1
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=storage_hub
+    ports:
+      - "5432:5432"

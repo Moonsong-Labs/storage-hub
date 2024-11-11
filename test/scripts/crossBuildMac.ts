@@ -43,8 +43,6 @@ async function main() {
   execSync(`cargo zigbuild --target ${target} --release`, { stdio: "inherit" });
 }
 
-main();
-
 const execCommand = (command: string): string => {
   try {
     return execSync(command, { stdio: "pipe" }).toString().trim();
@@ -106,3 +104,5 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
 
   console.log(`libpq.so has been copied to ${destPath}`);
 };
+
+main();
