@@ -521,14 +521,14 @@ declare module "@polkadot/api-base/types/events" {
           bspId: H256,
           confirmedFileKeys: Vec<H256>,
           skippedFileKeys: Vec<H256>,
-          newRoot: Option<H256>
+          newRoot: H256
         ],
         {
           who: AccountId32;
           bspId: H256;
           confirmedFileKeys: Vec<H256>;
           skippedFileKeys: Vec<H256>;
-          newRoot: Option<H256>;
+          newRoot: H256;
         }
       >;
       /**

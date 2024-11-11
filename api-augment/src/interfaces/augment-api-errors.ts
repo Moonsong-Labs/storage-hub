@@ -324,6 +324,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
       /**
+       * No file keys to confirm storing
+       **/
+      NoFileKeysToConfirm: AugmentedError<ApiType>;
+      /**
        * No global reputation weight set.
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
@@ -371,6 +375,10 @@ declare module "@polkadot/api-base/types/errors" {
        * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
        **/
       RequestWithoutMsp: AugmentedError<ApiType>;
+      /**
+       * Root was not updated after applying delta
+       **/
+      RootNotUpdated: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
