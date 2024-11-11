@@ -45,6 +45,9 @@ describeMspNet(
 
       const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
 
+      // Wait for MSP to download file from user
+      await sleep(2000);
+
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey);
 
       if (!result.isFileFound) {
@@ -84,19 +87,29 @@ describeMspNet(
 
     it("MSP stops storing bucket and deletes bucket from storage", async () => {
       const block = await userApi.sealBlock(
-        mspApi.tx.fileSystem.mspStopStoringBucket(bucketId),
-        mspKey
+        userApi.tx.fileSystem.mspStopStoringBucket(bucketId),
+        mspKey,
+        false
       );
+
+      await sleep(1500);
+
+      const bucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
+
+      // Bucket root should still exist since the block is not finalized
+      strictEqual(bucketRoot.isSome, true);
 
       // Finalise block in MSP node to trigger the event to delete the bucket.
       await mspApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
 
       // Allow time for the MSP to delete files and bucket from storage
-      await sleep(3000);
+      await sleep(1500);
 
-      const maybeBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
+      const nonExistantBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
+        bucketId.toString()
+      );
 
-      strictEqual(maybeBucketRoot.isNone, true);
+      strictEqual(nonExistantBucketRoot.isNone, true);
     });
   }
 );
