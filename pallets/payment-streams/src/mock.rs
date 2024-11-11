@@ -19,7 +19,7 @@ use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage, DispatchError, Perbill,
+    BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -412,6 +412,7 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;
     type RuntimeHoldReason = RuntimeHoldReason;

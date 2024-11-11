@@ -10,6 +10,7 @@
 
 pub mod types;
 mod utils;
+pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -43,6 +44,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
@@ -179,10 +183,11 @@ pub mod pallet {
     ///
     /// This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
     /// registered. For the tick in this storage element, this pallet already knows the Providers that submitted
-    /// a valid proof.
+    /// a valid proof. If that tick wasn't completely processed because of remaining weight limits, this storage will
+    /// also hold the last processed Provider of that tick.
     #[pallet::storage]
     pub type LastSubmittersTickRegistered<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+        StorageValue<_, (BlockNumberFor<T>, Option<ProviderIdFor<T>>), ValueQuery>;
 
     /// The mapping from a user to if it has been flagged for not having enough funds to pay for its requested services.
     ///
@@ -402,9 +407,7 @@ pub mod pallet {
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
         fn on_poll(_n: BlockNumberFor<T>, meter: &mut sp_weights::WeightMeter) {
-            // TODO: Benchmark computational weight cost of this hook.
-
-            // Update the current tick since we are executing the `on_poll` hook.
+            // Update the current tick since we are executing the `on_poll` hook
             let (previous_tick, _new_tick) = Self::do_advance_tick(meter);
 
             // Update the last chargeable info of Providers that have sent a valid proof in the previous tick
