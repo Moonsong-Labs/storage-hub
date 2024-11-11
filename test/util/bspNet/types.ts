@@ -8,6 +8,10 @@ import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { SealedBlock } from "./block";
 import type { BspNetTestApi } from "./test-api";
 import type { NetworkLauncher } from "../netLaunch";
+import type postgres from "postgres";
+
+// biome-ignore lint/complexity/noBannedTypes: Good enough untill we integrate ORM
+export type SqlClient = postgres.Sql<{}>;
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -173,6 +177,11 @@ export type BspNetConfig = {
    * Only applies when `noisy` is set to true.
    */
   toxics?: ToxicInfo[];
+
+  /**
+   * If true, runs launched userNode has attached indexer service enabled.
+   */
+  indexer?: boolean;
 };
 
 /**
@@ -204,6 +213,12 @@ export type BspNetContext = {
   createApi: (
     endpoint: `ws://${string}` | `wss://${string}`
   ) => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
+   * Creates and returns a sql client connected to the local postgres database.
+   * @returns A sql client instance for interacting with the indexer db.
+   */
+  createSqlClient: () => SqlClient;
 
   /**
    * The current configuration of the BSP network for this test run.
@@ -266,6 +281,13 @@ export type FullNetContext = {
   createApi: (
     endpoint: `ws://${string}` | `wss://${string}`
   ) => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
+   * Creates and returns a sql client connected to the local postgres database.
+   * @returns A sql client instance for interacting with the indexer db.
+   */
+  // biome-ignore lint/complexity/noBannedTypes: Good enough untill we integrate ORM
+  createSqlClient: () => postgres.Sql<{}>;
 
   /**
    * The current configuration of the BSP network for this test run.
@@ -344,6 +366,8 @@ export type TestOptions = {
   toxics?: ToxicInfo[];
   /** Set a custom timeout interval for submit extrinsic retries */
   extrinsicRetryTimeout?: number;
+  /** If true, runs launched userNode has attached indexer service enabled. */
+  indexer?: boolean;
 };
 
 /**

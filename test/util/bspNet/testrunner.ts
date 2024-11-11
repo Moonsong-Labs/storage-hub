@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
-import { cleardownTest, verifyContainerFreshness } from "./helpers";
+import { cleardownTest, createSqlClient, verifyContainerFreshness } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetContext, FullNetContext, TestOptions } from "./types";
 import * as ShConsts from "./consts";
@@ -49,6 +49,7 @@ export async function describeBspNet<
     bspNetConfig.capacity = options.capacity;
     bspNetConfig.bspStartingWeight = options.bspStartingWeight;
     bspNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
+    bspNetConfig.indexer = options.indexer;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
@@ -98,6 +99,7 @@ export async function describeBspNet<
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createSqlClient: () => createSqlClient(),
         bspNetConfig,
         before,
         after,
@@ -160,6 +162,7 @@ export async function describeMspNet<
           api: [await userApiPromise, await bspApiPromise, await mspApiPromise],
           keepNetworkAlive: options?.keepAlive
         });
+
         if (options?.keepAlive) {
           if (fullNetConfigCases.length > 1) {
             console.error(
@@ -180,6 +183,7 @@ export async function describeMspNet<
         createBspApi: () => bspApiPromise,
         createMspApi: () => mspApiPromise,
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createSqlClient: () => createSqlClient(),
         bspNetConfig: fullNetConfig,
         before,
         after,

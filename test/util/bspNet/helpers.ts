@@ -16,6 +16,7 @@ import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
 import { sleep } from "../timer.ts";
+import postgres from "postgres";
 
 const exec = util.promisify(child_process.exec);
 
@@ -134,6 +135,10 @@ export const closeSimpleBspNet = async (verbose = false) => {
     container.Names.some((name) => name.includes("toxiproxy"))
   );
 
+  const postgresContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes("docker-sh-postgres-1"))
+  );
+
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
   const logPromises = existingNodes.map(async (node) => {
@@ -168,6 +173,13 @@ export const closeSimpleBspNet = async (verbose = false) => {
     promises.push(docker.getContainer(toxiproxyContainer.Id).stop());
   } else {
     verbose && console.log("No running toxiproxy container found, skipping");
+  }
+
+  if (postgresContainer) {
+    console.log("Stopping postgres container");
+    promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No postgres container found, skipping");
   }
 
   await Promise.all(promises);
@@ -283,6 +295,16 @@ export const cleardownTest = async (cleardownOptions: {
       throw new Error("Failed to clean up test environment");
     }
   }
+};
+
+export const createSqlClient = () => {
+  return postgres({
+    host: "localhost",
+    port: 5432,
+    database: "storage_hub",
+    username: "postgres",
+    password: "postgres"
+  });
 };
 
 export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {

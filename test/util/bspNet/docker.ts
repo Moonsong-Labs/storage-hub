@@ -232,7 +232,7 @@ export const waitForLog = async (options: {
     const container = docker.getContainer(options.containerName);
 
     container.logs(
-      { follow: true, stdout: true, stderr: true, tail: 0, timestamps: false },
+      { follow: true, stdout: true, stderr: true, tail: undefined, timestamps: false },
       (err, stream) => {
         if (err) {
           return reject(err);
