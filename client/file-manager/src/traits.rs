@@ -132,6 +132,8 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     /// Remove a file from storage.
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError>;
 
+    fn delete_files_with_prefix(&mut self, prefix: &[u8; 32]) -> Result<(), FileStorageError>;
+
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError>;
 

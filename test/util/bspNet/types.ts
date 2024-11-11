@@ -50,7 +50,7 @@ export interface BspNetApi extends ApiPromise {
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to file metadata.
    */
-  sendNewStorageRequest(
+  createBucketAndSendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string,
