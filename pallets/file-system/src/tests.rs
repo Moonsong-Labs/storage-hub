@@ -4933,7 +4933,7 @@ mod bsp_confirm {
                         )])
                         .unwrap(),
                     ),
-                    Error::<Test>::StorageRequestNotFound
+                    Error::<Test>::NoFileKeysToConfirm
                 );
             });
         }
@@ -5128,7 +5128,7 @@ mod bsp_confirm {
                         )])
                         .unwrap(),
                     ),
-                    Error::<Test>::StorageRequestNotFound
+                    Error::<Test>::NoFileKeysToConfirm
                 );
             });
         }
@@ -5232,6 +5232,91 @@ mod bsp_confirm {
                         file_keys_and_proofs,
                     ),
                     Error::<Test>::InsufficientAvailableCapacity
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_confirm_storing_fails_with_no_file_keys_to_confirm() {
+            new_test_ext().execute_with(|| {
+                // Setup accounts
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Setup common test parameters
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_ids =
+                    BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                // Setup MSP and bucket
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+                let bucket_id = create_bucket(
+                    &owner_account_id,
+                    BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
+                    msp_id,
+                    value_prop_id,
+                );
+
+                // Setup BSP
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Set global parameters
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(1), Some(1)).unwrap();
+                assert_eq!(ReplicationTarget::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
+
+                // Create file keys with different file locations
+                let location =
+                    FileLocation::<Test>::try_from(format!("test-location").into_bytes()).unwrap();
+
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Pre-confirm one file key to simulate a previous BSP already confirming it
+                file_system::StorageRequests::<Test>::mutate(file_key, |maybe_metadata| {
+                    if let Some(metadata) = maybe_metadata {
+                        metadata.bsps_confirmed = 1;
+                    }
+                });
+
+                assert_noop!(
+                    FileSystem::bsp_confirm_storing(
+                        bsp_signed,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        },
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
+                    ),
+                    Error::<Test>::NoFileKeysToConfirm
                 );
             });
         }
@@ -5352,7 +5437,7 @@ mod bsp_confirm {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: Default::default(),
-                        new_root: Some(new_root)
+                        new_root
                     }
                     .into(),
                 );
@@ -5411,7 +5496,7 @@ mod bsp_confirm {
                 assert_eq!(ReplicationTarget::<Test>::get(), 1);
                 assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
-                // Create file keys
+                // Create file keys with different file locations
                 let locations: Vec<FileLocation<Test>> = (0..3)
                     .map(|i| {
                         FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap()
@@ -5445,7 +5530,7 @@ mod bsp_confirm {
                     })
                     .collect();
 
-                // Pre-confirm one file key to simulate a previous BSP already confirming it, forcing the current one to skip it.
+                // Pre-confirm one file key to simulate a previous BSP already confirming it
                 let pre_confirmed_file_key = file_keys[0];
                 file_system::StorageRequests::<Test>::mutate(
                     pre_confirmed_file_key,
@@ -5479,7 +5564,6 @@ mod bsp_confirm {
                     BoundedVec::try_from(file_proofs).unwrap(),
                 ));
 
-                // Verify event
                 let successful_file_keys: Vec<_> = file_keys
                     .iter()
                     .filter(|&&file_key| file_key != pre_confirmed_file_key)
@@ -5487,6 +5571,7 @@ mod bsp_confirm {
                     .collect();
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
+
                 System::assert_last_event(
                     Event::BspConfirmedStoring {
                         who: bsp_account_id,
@@ -5494,12 +5579,12 @@ mod bsp_confirm {
                         confirmed_file_keys: BoundedVec::try_from(successful_file_keys).unwrap(),
                         skipped_file_keys: BoundedVec::try_from(vec![pre_confirmed_file_key])
                             .unwrap(),
-                        new_root: Some(new_root),
+                        new_root,
                     }
                     .into(),
                 );
 
-                // Verify root was updated even with skipped file keys
+                // Verify root was updated while there being a skipped file key
                 assert_ne!(old_root, new_root);
             });
         }
@@ -5612,7 +5697,7 @@ mod bsp_confirm {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: BoundedVec::default(),
-                        new_root: Some(new_root)
+                        new_root
                     }
                         .into(),
                 );
@@ -5715,7 +5800,7 @@ mod bsp_confirm {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: Default::default(),
-                        new_root: Some(new_root)
+                        new_root
                     }
                         .into(),
                 );
@@ -8178,7 +8263,7 @@ mod stop_storing_for_insolvent_user {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: Default::default(),
-                        new_root: Some(new_root),
+                        new_root,
                     }
                     .into(),
                 );
@@ -8506,7 +8591,7 @@ mod stop_storing_for_insolvent_user {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: Default::default(),
-                        new_root: Some(new_root),
+                        new_root,
                     }
                     .into(),
                 );
@@ -8733,7 +8818,7 @@ mod stop_storing_for_insolvent_user {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: Default::default(),
-                        new_root: Some(new_root),
+                        new_root,
                     }
                     .into(),
                 );
@@ -8927,7 +9012,7 @@ mod stop_storing_for_insolvent_user {
                         bsp_id,
                         confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         skipped_file_keys: Default::default(),
-                        new_root: Some(new_root),
+                        new_root,
                     }
                     .into(),
                 );

@@ -431,7 +431,7 @@ where
                             let skipped_set: HashSet<_> = skipped_file_keys.into_iter().collect();
                             file_metadatas.retain(|file_key, _| !skipped_set.contains(file_key));
                         }
-                        new_root
+                        Some(new_root)
                     } else {
                         None
                     }

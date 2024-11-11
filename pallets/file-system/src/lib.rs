@@ -548,7 +548,7 @@ pub mod pallet {
             bsp_id: ProviderIdFor<T>,
             confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
-            new_root: Option<MerkleHash<T>>,
+            new_root: MerkleHash<T>,
         },
         /// Notifies that a storage request for a file key has been fulfilled.
         StorageRequestFulfilled { file_key: MerkleHash<T> },
@@ -767,6 +767,10 @@ pub mod pallet {
         FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
+        /// No file keys to confirm storing
+        NoFileKeysToConfirm,
+        /// Root was not updated after applying delta
+        RootNotUpdated,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

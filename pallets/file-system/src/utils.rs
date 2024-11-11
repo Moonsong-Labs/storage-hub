@@ -1438,23 +1438,27 @@ where
                 });
             }
 
+            let mutations = file_keys_and_metadatas
+                .iter()
+                .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+                .collect::<Vec<_>>();
+
             // Compute new root after inserting new file keys in forest partial trie.
             let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
                 &bsp_id,
-                file_keys_and_metadatas
-                    .iter()
-                    .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
-                    .collect::<Vec<_>>()
-                    .as_slice(),
+                mutations.as_slice(),
                 &non_inclusion_forest_proof,
             )?;
+
+            // Root should have changed.
+            ensure!(old_root != new_root, Error::<T>::RootNotUpdated);
 
             // Update root of BSP.
             <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
-            Some(new_root)
+            new_root
         } else {
-            None
+            return Err(Error::<T>::NoFileKeysToConfirm.into());
         };
 
         // This should not fail since `skipped_file_keys` purpously share the same bound as `file_keys_and_metadatas`.
