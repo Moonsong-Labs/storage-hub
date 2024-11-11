@@ -956,7 +956,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register storage request
-            let file_key = Self::do_request_storage(
+            Self::do_request_storage(
                 who.clone(),
                 bucket_id,
                 location.clone(),
@@ -966,17 +966,6 @@ pub mod pallet {
                 None,
                 Some(peer_ids.clone()),
             )?;
-
-            // BSPs listen to this event and volunteer to store the file
-            Self::deposit_event(Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-            });
 
             Ok(())
         }

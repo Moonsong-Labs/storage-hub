@@ -18,7 +18,7 @@ import { DOCKER_IMAGE } from "../constants.ts";
 const exec = util.promisify(child_process.exec);
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
-  const maxRetries = 60;
+  const maxRetries = 120;
   const sleepTime = 500;
 
   for (let i = 0; i < maxRetries; i++) {
@@ -54,7 +54,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
 
 export const getContainerPeerId = async (url: string, verbose = false) => {
-  const maxRetries = 60;
+  const maxRetries = 120;
   const sleepTime = 500;
 
   const payload = {
