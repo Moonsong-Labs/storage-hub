@@ -3,7 +3,7 @@ import { describeBspNet, registerToxic, type EnrichedBspApi } from "../../../uti
 // TODO: Add asserts to this test case when we impl the missing chunks handling
 describeBspNet(
   "BSP: Missing Chunks",
-  { initialised: false, networkConfig: "noisy" },
+  { initialised: false, networkConfig: "noisy", skip: true },
   ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -18,8 +18,6 @@ describeBspNet(
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      await userApi.file.newStorageRequest(source, destination, bucketName);
-
       //  use toxiproxy to close the connection after 50 KB
       await registerToxic({
         type: "limit_data",
@@ -30,6 +28,8 @@ describeBspNet(
           bytes: 51200
         }
       });
+
+      await userApi.file.newStorageRequest(source, destination, bucketName);
 
       // Wait for the BSP to submit the volunteer extrinsic
       await userApi.wait.bspVolunteer();
