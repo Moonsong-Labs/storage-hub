@@ -1,0 +1,44 @@
+[package]
+name = "pallet-cr-randomness"
+description = "This pallet provides verifiable commit reveal randomness to the runtime"
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+log = { workspace = true }
+scale-info = { workspace = true, features = ["derive"] }
+serde = { workspace = true, optional = true }
+shp-session-keys = { workspace = true }
+sp-core = { workspace = true }
+sp-io = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+codec = { workspace = true }
+
+[dev-dependencies]
+pallet-balances = { workspace = true, features = ["std", "insecure_zero_ed"] }
+
+[features]
+default = ["std"]
+std = [
+	"frame-support/std",
+	"frame-system/std",
+	"codec/std",
+	"scale-info/std",
+	"serde",
+	"shp-session-keys/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-std/std",
+]
+runtime-benchmarks = [
+	"shp-session-keys/runtime-benchmarks",
+]
+try-runtime = ["frame-support/try-runtime"]
