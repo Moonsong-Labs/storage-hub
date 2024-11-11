@@ -1151,17 +1151,17 @@ where
     /// and updates the last chargeable tick and last chargeable price index of those Providers.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
-        weight: &mut sp_weights::WeightMeter,
+        meter: &mut sp_weights::WeightMeter,
     ) {
         // Get the previous tick from the Providers Proof Submitters pallet.
         let submitters_prev_tick =
             <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
                 .saturating_sub(One::one());
-        weight.consume(T::DbWeight::get().reads(1));
+        meter.consume(T::DbWeight::get().reads(1));
 
         // Check if we already registered this tick from the Providers Proof Submitters pallet.
         let last_submitters_tick_registered = LastSubmittersTickRegistered::<T>::get();
-        weight.consume(T::DbWeight::get().reads(1));
+        meter.consume(T::DbWeight::get().reads(1));
 
         // If we already registered this tick from the Providers Proof Submitters pallet, we don't need to do anything.
         if submitters_prev_tick <= last_submitters_tick_registered {
@@ -1170,13 +1170,13 @@ where
 
         // Update the last submitters tick registered.
         LastSubmittersTickRegistered::<T>::set(submitters_prev_tick);
-        weight.consume(T::DbWeight::get().writes(1));
+        meter.consume(T::DbWeight::get().writes(1));
 
         // Get the Providers that submitted a valid proof in the last tick from the Providers Proof Submitters pallet,
         // if there's any
         let proof_submitters =
             <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&submitters_prev_tick);
-        weight.consume(T::DbWeight::get().reads(1));
+        meter.consume(T::DbWeight::get().reads(1));
 
         // If there are any proof submitters in the last tick...
         if let Some(proof_submitters) = proof_submitters {
@@ -1198,7 +1198,7 @@ where
                     last_chargeable_tick: n,
                     last_chargeable_price_index: accumulated_price_index,
                 });
-                weight.consume(T::DbWeight::get().reads_writes(1, 1));
+                meter.consume(T::DbWeight::get().reads_writes(1, 1));
             }
 
             // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
@@ -1207,36 +1207,35 @@ where
         }
     }
 
-    /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
-    pub fn do_update_current_price_per_unit_per_tick(weight: &mut sp_weights::WeightMeter) {
-        // Get the total used capacity of the network
-        let _total_used_capacity =
-            <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
-        weight.consume(T::DbWeight::get().reads(1));
-
-        // Get the total capacity of the network
-        let _total_capacity = <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
-        weight.consume(T::DbWeight::get().reads(1));
-
-        // Calculate the current price per unit per tick
-        // TODO: Once the curve of price per unit per tick is defined, implement it here
-        let current_price_per_unit_per_tick: BalanceOf<T> = CurrentPricePerUnitPerTick::<T>::get();
-
-        // Update it in storage
-        CurrentPricePerUnitPerTick::<T>::put(current_price_per_unit_per_tick);
-        weight.consume(T::DbWeight::get().writes(1));
-    }
-
-    pub fn do_update_price_index(weight: &mut sp_weights::WeightMeter) {
+    pub fn do_update_price_index(meter: &mut sp_weights::WeightMeter) {
         // Get the current price
         let current_price = CurrentPricePerUnitPerTick::<T>::get();
-        weight.consume(T::DbWeight::get().reads(1));
+        meter.consume(T::DbWeight::get().reads(1));
 
         // Add it to the accumulated price index
         AccumulatedPriceIndex::<T>::mutate(|price_index| {
             *price_index = price_index.saturating_add(current_price);
         });
-        weight.consume(T::DbWeight::get().reads_writes(1, 1));
+        meter.consume(T::DbWeight::get().reads_writes(1, 1));
+    }
+
+    /// This function advances the current tick and returns the previous and now-current tick.
+    pub fn do_advance_tick(
+        meter: &mut sp_weights::WeightMeter,
+    ) -> (BlockNumberFor<T>, BlockNumberFor<T>) {
+        // Get the current tick
+        let current_tick = OnPollTicker::<T>::get();
+        meter.consume(T::DbWeight::get().reads(1));
+
+        // Increment the current tick
+        let next_tick = current_tick.saturating_add(One::one());
+
+        // Update the current tick
+        OnPollTicker::<T>::set(next_tick);
+        meter.consume(T::DbWeight::get().writes(1));
+
+        // Return the previous tick (`current_tick`) and the now-current one (`next_tick`)
+        (current_tick, next_tick)
     }
 
     /// This function holds the logic that updates the deposit of a User based on the new deposit that should be held from them.

@@ -10,16 +10,21 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface};
+use shp_traits::{
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier,
+};
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, DispatchError, Perbill,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
-use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_weights::Weight;
+use std::collections::BTreeSet;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -29,27 +34,6 @@ type AccountId = u64;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
-pub struct MockRandomness;
-impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
-    fn random(subject: &[u8]) -> (H256, BlockNumberFor<Test>) {
-        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
-
-        // Concatenate the subject with the block number to get a unique hash for each block
-        let subject_concat_block = [
-            subject,
-            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
-        ]
-        .concat();
-
-        let hashed_subject = blake2_256(&subject_concat_block);
-
-        (
-            H256::from_slice(&hashed_subject),
-            frame_system::Pallet::<Test>::block_number()
-                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
-        )
-    }
-}
 
 // Configure a mock runtime to test the pallet.
 #[frame_support::runtime]
@@ -78,6 +62,8 @@ mod test_runtime {
     pub type PaymentStreams = crate;
     #[runtime::pallet_index(4)]
     pub type Nfts = pallet_nfts;
+    #[runtime::pallet_index(5)]
+    pub type ProofsDealer = pallet_proofs_dealer;
 }
 
 parameter_types! {
@@ -178,6 +164,28 @@ impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
     }
 }
 
+pub struct MockRandomness;
+impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
+    fn random(subject: &[u8]) -> (H256, BlockNumberFor<Test>) {
+        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
+
+        // Concatenate the subject with the block number to get a unique hash for each block
+        let subject_concat_block = [
+            subject,
+            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
+        ]
+        .concat();
+
+        let hashed_subject = blake2_256(&subject_concat_block);
+
+        (
+            H256::from_slice(&hashed_subject),
+            frame_system::Pallet::<Test>::block_number()
+                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
+        )
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
@@ -248,6 +256,118 @@ impl pallet_nfts::Config for Test {
     pallet_nfts::runtime_benchmarks_enabled! {
         type Helper = ();
     }
+}
+
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        Weight::from_parts(10_000, 0)
+            + <Test as frame_system::Config>::DbWeight::get().reads_writes(0, 1)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        Perbill::from_percent(50)
+    }
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
+}
+
+/// Structure to mock a verifier that returns `true` when `proof` is not empty
+/// and `false` otherwise.
+pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
+    _phantom: core::marker::PhantomData<(C, T)>,
+}
+
+/// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
+impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifier<C, T, H_LENGTH>
+where
+    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
+{
+    type Proof = CompactProof;
+    type Commitment = H256;
+    type Challenge = H256;
+
+    fn verify_proof(
+        _root: &Self::Commitment,
+        _challenges: &[Self::Challenge],
+        proof: &CompactProof,
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+        if proof.encoded_nodes.len() > 0 {
+            Ok(proof
+                .encoded_nodes
+                .iter()
+                .map(|node| H256::from_slice(&node[..]))
+                .collect())
+        } else {
+            Err("Proof is empty".into())
+        }
+    }
+}
+
+impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
+    for MockVerifier<C, T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
+
+    fn apply_delta(
+        root: &Self::Key,
+        _mutations: &[(Self::Key, TrieMutation)],
+        _proof: &Self::Proof,
+    ) -> Result<
+        (
+            MemoryDB<T::Hash>,
+            Self::Key,
+            Vec<(Self::Key, Option<Vec<u8>>)>,
+        ),
+        DispatchError,
+    > {
+        // Just return the root as is with no mutations
+        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+    }
+}
+
+const UNITS: Balance = 1_000_000_000_000;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
+impl pallet_proofs_dealer::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type ProvidersPallet = StorageProviders;
+    type NativeBalance = Balances;
+    type MerkleTrieHash = H256;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    type RandomChallengesPerBlock = ConstU32<10>;
+    type MaxCustomChallengesPerBlock = ConstU32<10>;
+    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type TargetTicksStorageOfSubmitters = ConstU32<3>;
+    type ChallengeHistoryLength = ConstU64<30>;
+    type ChallengesQueueLength = ConstU32<25>;
+    type CheckpointChallengePeriod = ConstU64<20>;
+    type ChallengesFee = ConstU128<1_000_000>;
+    type Treasury = TreasuryAccount;
+    type RandomnessProvider = MockRandomness;
+    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type MinChallengePeriod = ConstU64<4>;
+    type ChallengeTicksTolerance = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
 }
 
 parameter_types! {

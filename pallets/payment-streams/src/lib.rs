@@ -401,20 +401,17 @@ pub mod pallet {
         /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
-        fn on_poll(_n: BlockNumberFor<T>, weight: &mut sp_weights::WeightMeter) {
+        fn on_poll(_n: BlockNumberFor<T>, meter: &mut sp_weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
             // Update the current tick since we are executing the `on_poll` hook.
-            let mut last_tick = OnPollTicker::<T>::get();
-            last_tick.saturating_inc();
-            OnPollTicker::<T>::set(last_tick);
+            let (previous_tick, _new_tick) = Self::do_advance_tick(meter);
 
             // Update the last chargeable info of Providers that have sent a valid proof in the previous tick
-            Self::do_update_last_chargeable_info(last_tick, weight);
+            Self::do_update_last_chargeable_info(previous_tick, meter);
 
-            // Update the current global price and the global price index of the system
-            Self::do_update_current_price_per_unit_per_tick(weight);
-            Self::do_update_price_index(weight);
+            // Update the global price index of the system
+            Self::do_update_price_index(meter);
         }
     }
 

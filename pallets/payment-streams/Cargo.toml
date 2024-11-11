@@ -20,6 +20,7 @@ scale-info = { workspace = true }
 
 # Local
 pallet-payment-streams-runtime-api = { workspace = true }
+pallet-proofs-dealer = { workspace = true, optional = true }
 pallet-storage-providers = { workspace = true, optional = true }
 shp-traits = { workspace = true }
 shp-treasury-funding = { workspace = true }
@@ -55,6 +56,7 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
+	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"shp-file-metadata/runtime-benchmarks",
 	"shp-traits/runtime-benchmarks",
@@ -69,6 +71,7 @@ std = [
 	"pallet-balances/std",
 	"pallet-nfts/std",
 	"pallet-payment-streams-runtime-api/std",
+	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
 	"shp-traits/std",

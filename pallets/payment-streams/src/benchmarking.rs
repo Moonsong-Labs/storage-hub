@@ -6,12 +6,14 @@ use super::*;
 use frame_benchmarking::v2::*;
 
 #[benchmarks(where
-	// Runtime `T` implements `pallet_storage_providers::Config` and this pallet's `Config`.
-	T: pallet_storage_providers::Config + crate::Config,
+	// Runtime `T` implements `pallet_storage_providers::Config`, `pallet_proofs_dealer::Config` and this pallet's `Config`.
+	T: pallet_storage_providers::Config + pallet_proofs_dealer::Config + crate::Config,
 	// The Storage Providers pallet is the `Providers` pallet that this pallet requires.
 	T: crate::Config<ProvidersPallet = pallet_storage_providers::Pallet<T>>,
 	// The `ProviderId` inner type of the `ReadProvidersInterface` trait is `ProviderId` from `pallet-storage-providers`.
 	<<T as crate::Config>::ProvidersPallet as shp_traits::ReadProvidersInterface>::ProviderId: From<<T as pallet_storage_providers::Config>::ProviderId>,
+	// The `ProviderId` inner type of the `ReadChallengeableProvidersInterface` trait used in `pallet-proofs-dealer` is `ProviderId` from `pallet-storage-providers`.
+	<<T as pallet_proofs_dealer::Config>::ProvidersPallet as shp_traits::ReadChallengeableProvidersInterface>::ProviderId: From<<T as pallet_storage_providers::Config>::ProviderId>,
 )]
 mod benchmarks {
     use frame_support::{
@@ -31,6 +33,7 @@ mod benchmarks {
     use sp_runtime::{
         format,
         traits::{Hash, One},
+        BoundedBTreeSet,
     };
 
     use super::*;
@@ -62,9 +65,17 @@ mod benchmarks {
         UsedBspsCapacity::<T>::put(total_capacity);
     }
 
-    fn register_provider<T>(index: u32) -> Result<(T::AccountId, ProviderIdFor<T>), BenchmarkError>
+    fn register_provider<T>(
+        index: u32,
+    ) -> Result<
+        (
+            T::AccountId,
+            <T as pallet_storage_providers::Config>::ProviderId,
+        ),
+        BenchmarkError,
+    >
     where
-        T: pallet_storage_providers::Config + crate::Config,
+        T: pallet_storage_providers::Config + pallet_proofs_dealer::Config + crate::Config,
         <<T as crate::Config>::ProvidersPallet as shp_traits::ReadProvidersInterface>::ProviderId:
             From<<T as pallet_storage_providers::Config>::ProviderId>,
     {
@@ -125,7 +136,7 @@ mod benchmarks {
             },
         );
 
-        Ok((sp_account, sp_id.into()))
+        Ok((sp_account, sp_id))
     }
 
     fn run_to_block<T: crate::Config>(n: BlockNumberFor<T>) {
@@ -161,6 +172,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (_provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Rate of the to-be-created payment stream
         let rate = 100u32;
@@ -208,6 +220,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (_provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Rate of the to-be-created payment stream
         let initial_rate = 100u32;
@@ -304,6 +317,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (_provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Rate of the to-be-created payment stream
         let rate = 100u32;
@@ -375,6 +389,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (_provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Amount of the to-be-created payment stream
         let amount_provided = 1000u32;
@@ -426,6 +441,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (_provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Amount of the to-be-created payment stream
         let initial_amount = 1000u32;
@@ -526,6 +542,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (_provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Amount of the to-be-created payment stream
         let amount_provided = 1000u32;
@@ -614,6 +631,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Worst case scenario: the provider has to charge both types of payment streams in the extrinsic:
         // Create the dynamic-rate payment stream
@@ -680,6 +698,7 @@ mod benchmarks {
 
         // Set up a Provider with an account with some balance.
         let (provider_account, provider_id) = register_provider::<T>(0)?;
+        let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Set up `max_users` accounts with some balance and create a fixed-rate and a dynamic-rate
         // payment stream with each one
@@ -781,6 +800,7 @@ mod benchmarks {
         let mut provider_ids: Vec<ProviderIdFor<T>> = Vec::new();
         for i in 0..n {
             let (_provider_account, provider_id) = register_provider::<T>(i)?;
+            let provider_id: ProviderIdFor<T> = provider_id.into();
             let amount_provided = 1000u32;
 
             // Ensure that a payment stream between the user and this provider does not exist
@@ -837,6 +857,135 @@ mod benchmarks {
 
         // Verify that the user has no remaining payment streams
         assert_eq!(RegisteredUsers::<T>::get(user_account), 0);
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn clear_insolvent_flag() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Make the user insolvent
+        set_user_as_insolvent::<T>(user_account.clone());
+
+        // Advance enough blocks to allow the user to clear the insolvent flag
+        run_to_block::<T>(
+            frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::UserWithoutFundsCooldown::get(),
+        );
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(RawOrigin::Signed(user_account.clone()));
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the user is no longer marked as insolvent
+        assert!(!UsersWithoutFunds::<T>::contains_key(user_account.clone()));
+
+        // Verify that the `UserSolvent` event was emitted
+        let user_solvent_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::UserSolvent {
+                who: user_account.clone(),
+            });
+        frame_system::Pallet::<T>::assert_has_event(user_solvent_event.into());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn price_index_update() {
+        let mut meter: WeightMeter = WeightMeter::new();
+        let current_price_index = AccumulatedPriceIndex::<T>::get();
+        #[block]
+        {
+            Pallet::<T>::do_update_price_index(&mut meter);
+        }
+        assert_ne!(current_price_index, AccumulatedPriceIndex::<T>::get());
+    }
+
+    #[benchmark]
+    fn tick_update() {
+        let mut meter: WeightMeter = WeightMeter::new();
+        let current_tick = OnPollTicker::<T>::get();
+        #[block]
+        {
+            Pallet::<T>::do_advance_tick(&mut meter);
+        }
+        assert_ne!(current_tick, OnPollTicker::<T>::get());
+    }
+
+    #[benchmark]
+    fn n_providers_last_chargeable_info_update(
+        n: Linear<0, { <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
+        use sp_runtime::Saturating;
+        /***********  Setup initial conditions: ***********/
+        // Set up a full weight meter
+        let mut meter: WeightMeter = WeightMeter::new();
+
+        // For each provider, set up an account with some balance.
+        let mut provider_ids: BoundedBTreeSet<
+            ProofsDealerProviderIdFor<T>,
+            <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick,
+        > = BoundedBTreeSet::new();
+        let mut provider_ids_payment_stream: Vec<ProviderIdFor<T>> = Vec::new();
+        for i in 0..n.into() {
+            let (_provider_account, provider_id) = register_provider::<T>(i)?;
+            provider_ids
+                .try_insert(provider_id.into())
+                .map_err(|_| BenchmarkError::Stop("Max size of bounded set is accounted for."))?;
+            provider_ids_payment_stream.push(provider_id.into());
+        }
+
+        // Set up the tickers to simulate a real scenario
+        pallet_proofs_dealer::ChallengesTicker::<T>::set(10u32.into());
+        LastSubmittersTickRegistered::<T>::set(5u32.into());
+        OnPollTicker::<T>::set(20u32.into());
+
+        // Simulate all providers having submitted a valid proof in the current tick
+        pallet_proofs_dealer::ValidProofSubmittersLastTicks::<T>::insert(
+            pallet_proofs_dealer::ChallengesTicker::<T>::get(),
+            provider_ids.clone(),
+        );
+
+        // Advance the challenge ticker to the next tick
+        pallet_proofs_dealer::ChallengesTicker::<T>::put(
+            pallet_proofs_dealer::ChallengesTicker::<T>::get() + 1u32.into(),
+        );
+
+        // Make sure the ChallengesTicker is ahead of the LastSubmittersTickRegistered
+        assert!(
+            pallet_proofs_dealer::ChallengesTicker::<T>::get()
+                > LastSubmittersTickRegistered::<T>::get()
+        );
+
+        /*********** Call the function to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::do_update_last_chargeable_info(20u32.into(), &mut meter);
+        }
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the last chargeable info was updated for each provider
+        for provider_id in provider_ids_payment_stream.iter() {
+            let last_chargeable_info = ProviderLastChargeableInfo {
+                last_chargeable_tick: 20u32.into(),
+                price_index: AccumulatedPriceIndex::<T>::get(),
+            };
+            let last_chargeable_info_in_storage = LastChargeableInfo::<T>::get(provider_id);
+            assert_eq!(last_chargeable_info, last_chargeable_info_in_storage);
+        }
 
         Ok(())
     }
