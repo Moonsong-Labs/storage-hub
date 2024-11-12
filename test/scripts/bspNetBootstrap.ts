@@ -51,7 +51,11 @@ async function bootStrapNetwork() {
 
   await using api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
-  await api.file.newStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
+  await api.file.createBucketAndSendNewStorageRequest(
+    CONFIG.localPath,
+    CONFIG.remotePath,
+    CONFIG.bucketName
+  );
 
   await api.wait.bspVolunteer();
   await api.wait.bspStored();

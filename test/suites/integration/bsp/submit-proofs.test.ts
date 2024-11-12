@@ -240,7 +240,9 @@ describeBspNet(
 
     it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
-      { skip: "Dropping transactions is not implemented as testing utility yet." },
+      {
+        skip: "Dropping transactions is not implemented as testing utility yet."
+      },
       async () => {}
     );
 
@@ -253,7 +255,11 @@ describeBspNet(
       const source = "res/adolphus.jpg";
       const location = "test/adolphus.jpg";
       const bucketName = "nothingmuch-2";
-      const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName);
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+        source,
+        location,
+        bucketName
+      );
       oneBspfileMetadata = fileMetadata;
     });
 
@@ -320,7 +326,9 @@ describeBspNet(
 
       // Resume BSP-Two and BSP-Three.
       await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
+      await userApi.docker.resumeBspContainer({
+        containerName: "sh-bsp-three"
+      });
 
       // Wait for BSPs to resync.
       await sleep(1000);

@@ -47,7 +47,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
           type: "Option<H256>"
         }
       ],
-      type: "H256"
+      type: "Option<H256>"
     },
     isFileInForest: {
       description: "Check if a file is in the forest.",
