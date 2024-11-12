@@ -222,8 +222,8 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
   }
 
   const { events } = await sealBlock(api);
-  assertEventPresent(api, "providers", "Slashed", events);
-  const [provider, _amountSlashed] = fetchEventData(
+  assertEventPresent(api, "providers", "SlashedAndAwaitingTopUp", events);
+  const [provider, _endBlockGracePeriod, _outstandingSlashAmount] = fetchEventData(
     api.events.providers.Slashed,
     await api.query.system.events()
   );
@@ -243,6 +243,8 @@ export const assertDockerLog = async (
       timeout
     });
   } catch {
-    throw `No matches for ${searchString} in container ${containerName} after ${timeout / 1000} seconds.`;
+    throw `No matches for ${searchString} in container ${containerName} after ${
+      timeout / 1000
+    } seconds.`;
   }
 };
