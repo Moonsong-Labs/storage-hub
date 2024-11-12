@@ -10,7 +10,7 @@ import {
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 import invariant from "tiny-invariant";
-import { createType } from '@polkadot/types';
+import { createType } from "@polkadot/types";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
@@ -271,7 +271,7 @@ describeBspNet(
     it("Only one BSP confirms it", async () => {
       await userApi.wait.bspVolunteer(1);
 
-      let address = userApi.createType("Address", NODE_INFOS.bsp.AddressId);
+      const address = userApi.createType("Address", NODE_INFOS.bsp.AddressId);
       await userApi.wait.bspStored(1, address);
     });
 
