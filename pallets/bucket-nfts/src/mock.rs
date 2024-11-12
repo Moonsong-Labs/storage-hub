@@ -310,6 +310,7 @@ impl pallet_nfts::Config for Test {
 // Payment streams pallet:
 impl pallet_payment_streams::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
     type RuntimeHoldReason = RuntimeHoldReason;

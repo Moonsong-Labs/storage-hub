@@ -2215,19 +2215,19 @@ mod fixed_rate_streams {
                 let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
 
-                // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice_on_poll, 100);
-                let alice_msp_id =
+                // Register Alice as a BSP with 100 units of data and get her BSP ID
+                register_account_as_bsp(alice_on_poll, 100);
+                let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
 
-                // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
+                // Create a payment stream from Bob to Alice of 10 units provided
+                let amount_provided: u32 = 10;
                 assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
                         &bob,
-                        rate
+                        &amount_provided.into()
                     )
                 );
 
@@ -2238,12 +2238,12 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
                 // The payment stream should be updated with the correct last valid proof
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_tick,
-                    System::block_number()
+                    System::block_number() - 1
                 );
             });
         }
@@ -2255,18 +2255,18 @@ mod fixed_rate_streams {
                 let bob: AccountId = 1;
 
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice_on_poll, 100);
-                let alice_msp_id =
+                register_account_as_bsp(alice_on_poll, 100);
+                let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
+                let amount_provided: u32 = 10;
                 assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
                         &bob,
-                        rate
+                        &amount_provided.into()
                     )
                 );
 
@@ -2291,14 +2291,14 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
                 let current_tick = crate::OnPollTicker::<Test>::get();
 
                 // The payment stream should be updated and considering that the last chargeable tick
                 // is the current tick for the Payment Streams pallet.
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_tick,
-                    current_tick
+                    current_tick - 1
                 );
             });
         }

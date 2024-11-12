@@ -1210,7 +1210,11 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
        **/
-      UserPaidDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      UserPaidAllDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      /**
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid some (but not all) of its outstanding debt.
+       **/
+      UserPaidSomeDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
        * Event emitted when multiple payment streams have been charged from a Provider. Provides information about
        * the charged users, the Provider that received the funds and the tick when the charge happened.

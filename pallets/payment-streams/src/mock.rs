@@ -205,7 +205,7 @@ impl pallet_storage_providers::Config for Test {
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -396,7 +396,11 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
         <StorageProviders as ReadProvidersInterface>::get_provider_id(*block_number + 1)
             .map(|id| set.try_insert(id));
-        Some(set)
+        if set.len() == 0 {
+            None
+        } else {
+            Some(set)
+        }
     }
 
     fn get_current_tick() -> Self::TickNumber {
@@ -443,14 +447,14 @@ impl ExtBuilder {
             .unwrap();
         pallet_balances::GenesisConfig::<Test> {
             balances: vec![
-                (0, 5_000_000),       // Alice = 0
-                (1, 10_000_000),      // Bob = 1
-                (2, 20_000_000),      // Charlie = 2
-                (3, 30_000_000),      // David = 3
-                (4, 400_000_000),     // Eve = 4
-                (5, 5_000_000_000),   // Ferdie = 5
-                (6, 600_000_000_000), // George = 6
-                (123, 5_000_000),     // Alice for `on_poll` testing = 123
+                (0, 5_000_000 * UNITS),   // Alice = 0
+                (1, 10_000_000 * UNITS),  // Bob = 1
+                (2, 20_000_000 * UNITS),  // Charlie = 2
+                (3, 30_000_000 * UNITS),  // David = 3
+                (4, 40_000_000 * UNITS),  // Eve = 4
+                (5, 50_000_000 * UNITS),  // Ferdie = 5
+                (6, 60_000_000 * UNITS),  // George = 6
+                (123, 5_000_000 * UNITS), // Alice for `on_poll` testing = 123
                 (TreasuryAccount::get(), ExistentialDeposit::get()),
             ],
         }
