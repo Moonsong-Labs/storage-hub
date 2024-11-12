@@ -5,26 +5,12 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
-use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 use scale_info::TypeInfo;
 use sp_runtime::BoundedVec;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
 
 pub type ValuePropId<T> = HashId<T>;
-
-/// Top up metadata for a provider tracked in storage.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
-#[scale_info(skip_type_params(T))]
-pub struct TopUpMetadata<T: Config> {
-    /// The last block at which the provider will either forcibly top up their deposit or be marked as
-    /// insolvent.
-    ///
-    /// This is the relay chain block number which the parachain is anchored to.
-    pub end_block_grace_period: RelayChainBlockNumber,
-    /// Current amount of the deposit that has been slashed.
-    pub slashed_amount: BalanceOf<T>,
-}
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
@@ -202,6 +188,3 @@ pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;
 
 /// Type alias for the `StartingReputationWeight` type used in the Storage Providers pallet.
 pub type StartingReputationWeight<T> = <T as crate::Config>::StartingReputationWeight;
-
-/// Type alias for the `RelayBlockGetter` type used in the Storage Providers pallet.
-pub type RelayBlockGetter<T> = <T as crate::Config>::RelayBlockGetter;

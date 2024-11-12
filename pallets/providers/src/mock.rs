@@ -17,7 +17,7 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, IdentityLookup},
+    traits::{BlakeTwo256, Convert, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -116,19 +116,6 @@ pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
         1000
-    }
-}
-
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
     }
 }
 
@@ -280,7 +267,6 @@ impl crate::Config for Test {
     type PaymentStreams = PaymentStreams;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
@@ -299,7 +285,6 @@ impl crate::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

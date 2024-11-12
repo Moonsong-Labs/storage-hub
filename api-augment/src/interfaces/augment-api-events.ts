@@ -1732,21 +1732,12 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SignUpRequestCanceled: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
-       * Event emitted when a provider has been slashed, signaling the end of the grace period and the current
-       * top up outstanding top up slash amount.
+       * Event emitted when an SP has been slashed.
        **/
-      SlashedAndAwaitingTopUp: AugmentedEvent<
+      Slashed: AugmentedEvent<
         ApiType,
-        [providerId: H256, endBlockGracePeriod: u32, outstandingSlashAmount: u128],
-        { providerId: H256; endBlockGracePeriod: u32; outstandingSlashAmount: u128 }
-      >;
-      /**
-       * Event emitted when an SP has topped up its deposit based on slash amount.
-       **/
-      TopUpFulfilled: AugmentedEvent<
-        ApiType,
-        [providerId: H256, amount: u128],
-        { providerId: H256; amount: u128 }
+        [providerId: H256, amountSlashed: u128],
+        { providerId: H256; amountSlashed: u128 }
       >;
       /**
        * Event emitted when an MSP adds a new value proposition.

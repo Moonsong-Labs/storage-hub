@@ -462,12 +462,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       startingReputationWeight: u32 & AugmentedConst<ApiType>;
       /**
-       * Period of time for a provider to top up their deposit after being slashed.
-       *
-       * If the provider does not top up their deposit within this period, they will be marked as insolvent.
-       **/
-      topUpGracePeriod: u32 & AugmentedConst<ApiType>;
-      /**
        * The Treasury AccountId.
        * The account to which:
        * - The fees for submitting a challenge are transferred.
