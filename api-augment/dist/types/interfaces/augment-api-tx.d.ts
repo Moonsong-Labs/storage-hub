@@ -492,13 +492,6 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
-       * Add yourself as a data server for providing the files of the bucket requested to be moved.
-       **/
-      bspAddDataServerForMoveBucketRequest: AugmentedSubmittable<
-        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
-      >;
-      /**
        * Executed by a BSP to confirm to stop storing a file.
        *
        * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
@@ -691,6 +684,10 @@ declare module "@polkadot/api-base/types/submittable" {
               ][]
         ) => SubmittableExtrinsic<ApiType>,
         [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
+      >;
+      mspStopStoringBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
@@ -3699,6 +3696,14 @@ declare module "@polkadot/api-base/types/submittable" {
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
+      /**
+       * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
+       *
+       * The dispatch origin for this call must be signed.
+       *
+       * This is a free transaction if the user successfully tops up their deposit.
+       **/
+      topUpDeposit: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
        * Generic tx
        **/

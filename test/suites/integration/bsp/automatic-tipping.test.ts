@@ -13,7 +13,11 @@ describeBspNet(
 
     it("Confirm storing failure results in increased tip", async () => {
       // Make a storage request and wait for the bsp to volunteer
-      await userApi.file.newStorageRequest("res/whatsup.jpg", "test/whatsup.jpg", "nothingmuch-2");
+      await userApi.file.createBucketAndSendNewStorageRequest(
+        "res/whatsup.jpg",
+        "test/whatsup.jpg",
+        "nothingmuch-2"
+      );
       await userApi.wait.bspVolunteer(1);
 
       // Wait for the bsp to send the first confirm storing extrinsic (after it has stored the file)

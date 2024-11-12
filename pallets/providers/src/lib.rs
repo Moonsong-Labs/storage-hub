@@ -43,9 +43,10 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
+    use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
-    use sp_runtime::traits::{Bounded, CheckedDiv};
+    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -153,6 +154,9 @@ pub mod pallet {
             + Ord
             + Bounded;
 
+        /// Interface to get the relay chain block number which was used as an anchor for the last block in the parachain.
+        type RelayBlockGetter: BlockNumberProvider<BlockNumber = RelayChainBlockNumber>;
+
         /// The Treasury AccountId.
         /// The account to which:
         /// - The fees for submitting a challenge are transferred.
@@ -189,10 +193,6 @@ pub mod pallet {
         /// The maximum number of protocols the MSP can support (at least within the runtime).
         #[pallet::constant]
         type MaxProtocols: Get<u32>;
-
-        /// The maximum amount of Buckets that a MSP can have.
-        #[pallet::constant]
-        type MaxBuckets: Get<u32>;
 
         /// The amount that an account has to deposit to create a bucket.
         #[pallet::constant]
@@ -232,6 +232,17 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxCommitmentSize: Get<u32>;
+
+        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base  
+        /// fee for a bucket that doesn't have any files yet)
+        #[pallet::constant]
+        type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
+
+        /// Period of time for a provider to top up their deposit after being slashed.
+        ///
+        /// If the provider does not top up their deposit within this period, they will be marked as insolvent.
+        #[pallet::constant]
+        type TopUpGracePeriod: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -289,7 +300,7 @@ pub mod pallet {
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
-    /// The mapping from a MainStorageProviderId to a vector of BucketIds.
+    /// The double mapping from a MainStorageProviderId to a BucketIds.
     ///
     /// This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
     ///
@@ -297,11 +308,13 @@ pub mod pallet {
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
     /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
     #[pallet::storage]
-    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         MainStorageProviderId<T>,
-        BoundedVec<BucketId<T>, T::MaxBuckets>,
+        Blake2_128Concat,
+        BucketId<T>,
+        (),
     >;
 
     /// The mapping from an AccountId to a BackupStorageProviderId.
@@ -386,6 +399,35 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    /// Providers that have been slashed and are required to top up their deposit to the required amount given their current
+    /// max capacity.
+    ///
+    /// The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
+    /// marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
+    /// `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
+    /// buckets to another MSP or delete their buckets.
+    ///
+    /// The relay chain block is used to ensure we have a predictive way to determine how much time we allocate to the provider to
+    /// top up their deposit.
+    #[pallet::storage]
+    pub type GracePeriodToSlashedProviders<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        RelayChainBlockNumber,
+        Blake2_128Concat,
+        HashId<T>,
+        (),
+    >;
+
+    /// Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
+    /// slashed for.
+    ///
+    /// This is primarily used to lookup providers, restrict certain operations while they are in this state and to keep track of the
+    /// amount that they were slashed for `top_up_deposit` operation.
+    #[pallet::storage]
+    pub type AwaitingTopUpFromProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, HashId<T>, TopUpMetadata<T>>;
+
     // Events & Errors:
 
     /// The events that can be emitted by this pallet
@@ -455,10 +497,19 @@ pub mod pallet {
             next_block_when_change_allowed: BlockNumberFor<T>,
         },
 
-        /// Event emitted when an SP has been slashed.
-        Slashed {
+        /// Event emitted when a provider has been slashed, signaling the end of the grace period and the current
+        /// top up outstanding top up slash amount.
+        SlashedAndAwaitingTopUp {
             provider_id: HashId<T>,
-            amount_slashed: BalanceOf<T>,
+            end_block_grace_period: RelayChainBlockNumber,
+            outstanding_slash_amount: BalanceOf<T>,
+        },
+
+        /// Event emitted when an SP has topped up its deposit based on slash amount.
+        TopUpFulfilled {
+            provider_id: HashId<T>,
+            /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
+            amount: BalanceOf<T>,
         },
 
         /// Event emitted when a Provider has added a new MultiAddress to its account.
@@ -533,6 +584,8 @@ pub mod pallet {
         NotEnoughTimePassed,
         /// Error thrown when a SP tries to change its capacity but the new capacity is not enough to store the used storage.
         NewUsedCapacityExceedsStorageCapacity,
+        /// Deposit too low to determine capacity.
+        DepositTooLow,
 
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
@@ -547,10 +600,14 @@ pub mod pallet {
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
+        /// Bucket cannot be deleted because it is not empty.
+        BucketNotEmpty,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when an operation requires an MSP to be storing the bucket.
+        BucketMustHaveMspForOperation,
         /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
         MultiAddressesMaxAmountReached,
         /// Error thrown when a Provider tries to delete a MultiAddress from its account but it does not have that MultiAddress.
@@ -565,6 +622,14 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a fixed payment stream is not found.
+        FixedRatePaymentStreamNotFound,
+        /// Error thrown when changing the MSP of a bucket to the same assigned MSP.
+        MspAlreadyAssignedToBucket,
+        /// Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+        BucketSizeExceedsLimit,
+        /// Error thrown when a provider attempted to top up their deposit when they are not required to.
+        TopUpNotRequired,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -635,7 +700,6 @@ pub mod pallet {
 
             // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
-                buckets: BoundedVec::default(),
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
@@ -1083,7 +1147,6 @@ pub mod pallet {
 
             // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
-                buckets: BoundedVec::default(),
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
@@ -1203,6 +1266,20 @@ pub mod pallet {
             ensure_signed(origin)?;
 
             Self::do_slash(&provider_id)
+        }
+
+        /// Dispatchable extrinsic to top-up the deposit of a Storage Provider.
+        ///
+        /// The dispatch origin for this call must be signed.
+        ///
+        /// This is a free transaction if the user successfully tops up their deposit.
+        #[pallet::call_index(14)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            Self::do_top_up_deposit(&who)
         }
     }
 }

@@ -458,7 +458,6 @@ parameter_types! {
     pub const MaxProtocols: u32 = 100;
     pub const MaxBsps: u32 = 100;
     pub const MaxMsps: u32 = 100;
-    pub const MaxBuckets: u32 = 10000;
     pub const BucketNameLimit: u32 = 100;
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const SpMinCapacity: u64 = 2;
@@ -475,6 +474,7 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
         sp_trie::empty_trie_root::<T>()
     }
 }
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
@@ -492,6 +492,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = SpMinCapacity;
@@ -500,7 +501,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
-    type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = BucketNameLimit;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -511,6 +511,8 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
+    type TopUpGracePeriod = ConstU32<5>;
 }
 
 parameter_types! {

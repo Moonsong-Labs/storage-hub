@@ -9,9 +9,9 @@ use crate::{
         PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
         StorageRequestMetadata, StorageRequestTtl, ThresholdType, ValuePropId,
     },
-    Config, DataServersForMoveBucket, Error, Event, PendingBucketsToMove,
-    PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
-    StorageRequestExpirations, StorageRequests, TickRangeToMaximumThreshold,
+    Config, Error, Event, PendingBucketsToMove, PendingMoveBucketRequests,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations, StorageRequests,
+    TickRangeToMaximumThreshold,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -27,8 +27,9 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::{Bucket, ValueProposition};
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface, ReadStorageProvidersInterface, TrieRemoveMutation,
+    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    TrieRemoveMutation,
 };
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -141,15 +142,17 @@ mod create_bucket_tests {
                     ),
                     bucket_creation_deposit
                 );
+
+                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 assert_eq!(
                     <Test as Config>::Currency::free_balance(&owner),
-                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128
                 );
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::NewBucket {
-                        who: owner,
+                        who: owner.clone(),
                         msp_id,
                         bucket_id,
                         name,
@@ -159,6 +162,9 @@ mod create_bucket_tests {
                     }
                     .into(),
                 );
+
+                // Check fixed rate payment stream is created
+                assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
             });
         }
 
@@ -1117,209 +1123,6 @@ mod request_move_bucket {
     }
 }
 
-mod bsp_add_data_server_for_move_bucket_request {
-    use super::*;
-
-    mod failure {
-        use super::*;
-
-        #[test]
-        fn not_a_bsp() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let bucket_id = H256::zero();
-
-                assert_noop!(
-                    FileSystem::bsp_add_data_server_for_move_bucket_request(origin, bucket_id),
-                    Error::<Test>::NotABsp
-                );
-            });
-        }
-
-        #[test]
-        fn no_move_bucket_request_found() {
-            new_test_ext().execute_with(|| {
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let origin = RuntimeOrigin::signed(bsp_account_id.clone());
-                let bucket_id = H256::zero();
-
-                assert_ok!(bsp_sign_up(origin.clone(), 1000));
-
-                assert_noop!(
-                    FileSystem::bsp_add_data_server_for_move_bucket_request(origin, bucket_id),
-                    Error::<Test>::MoveBucketRequestNotFound
-                );
-            });
-        }
-
-        #[test]
-        fn bsp_already_data_server() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp_charlie = Keyring::Charlie.to_account_id();
-                let msp_dave = Keyring::Dave.to_account_id();
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    1000
-                ));
-
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
-
-                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
-
-                // Check bucket is stored by Charlie
-                assert!(Providers::is_bucket_stored_by_msp(
-                    &msp_charlie_id,
-                    &bucket_id
-                ));
-
-                assert_ok!(FileSystem::request_move_bucket(
-                    origin.clone(),
-                    bucket_id,
-                    msp_dave_id
-                ));
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
-                    })
-                );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MoveBucketRequested {
-                        who: owner.clone(),
-                        bucket_id,
-                        new_msp_id: msp_dave_id,
-                    }
-                    .into(),
-                );
-
-                assert_ok!(FileSystem::bsp_add_data_server_for_move_bucket_request(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    bucket_id,
-                ));
-
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata { requester: owner })
-                );
-                assert_eq!(
-                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
-                    Some(bsp_id)
-                );
-
-                assert_noop!(
-                    FileSystem::bsp_add_data_server_for_move_bucket_request(
-                        RuntimeOrigin::signed(bsp_account_id.clone()),
-                        bucket_id,
-                    ),
-                    Error::<Test>::BspAlreadyDataServer
-                );
-            });
-        }
-    }
-
-    mod success {
-        use crate::DataServersForMoveBucket;
-
-        use super::*;
-
-        #[test]
-        fn add_bsp_as_data_server() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp_charlie = Keyring::Charlie.to_account_id();
-                let msp_dave = Keyring::Dave.to_account_id();
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    1000
-                ));
-
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
-
-                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
-
-                // Check bucket is stored by Charlie
-                assert!(Providers::is_bucket_stored_by_msp(
-                    &msp_charlie_id,
-                    &bucket_id
-                ));
-
-                // Dispatch a signed extrinsic.
-                assert_ok!(FileSystem::request_move_bucket(
-                    origin.clone(),
-                    bucket_id,
-                    msp_dave_id
-                ));
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
-                    })
-                );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MoveBucketRequested {
-                        who: owner.clone(),
-                        bucket_id,
-                        new_msp_id: msp_dave_id,
-                    }
-                    .into(),
-                );
-
-                // Dispatch a signed extrinsic.
-                assert_ok!(FileSystem::bsp_add_data_server_for_move_bucket_request(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    bucket_id,
-                ));
-
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata { requester: owner })
-                );
-                assert_eq!(
-                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
-                    Some(bsp_id)
-                );
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id }.into(),
-                );
-            });
-        }
-    }
-}
-
 mod update_bucket_privacy_tests {
     use super::*;
 
@@ -1876,10 +1679,13 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
+                let new_stream_deposit: u64 =
+                    <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 let balance_to_mint: crate::types::BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
                         crate::types::BalanceOf<Test>,
                     >>::get()
+                    .saturating_add(new_stream_deposit as u128)
                     .saturating_add(<Test as pallet_balances::Config>::ExistentialDeposit::get());
                 <Test as file_system::Config>::Currency::mint_into(
                     &owner_without_funds,
@@ -5165,7 +4971,6 @@ mod bsp_confirm {
                     let location =
                         FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
                     let fingerprint = H256::repeat_byte(i as u8);
-
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
                     let bucket_id =
                         create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -9052,6 +8857,129 @@ mod stop_storing_for_insolvent_user {
     }
 }
 
+mod msp_stop_storing_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn msp_not_registered() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let none_registered_msp = Keyring::Dave.to_account_id();
+                let none_registered_msp_signed = RuntimeOrigin::signed(none_registered_msp.clone());
+
+                // Try to stop storing for the bucket.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket(none_registered_msp_signed, bucket_id),
+                    Error::<Test>::NotAMsp
+                );
+            });
+        }
+
+        #[test]
+        fn msp_not_storing_bucket() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let another_msp = Keyring::Dave.to_account_id();
+                add_msp_to_provider_storage(&another_msp);
+                let another_msp_signed = RuntimeOrigin::signed(another_msp.clone());
+
+                // Try to stop storing for the bucket.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket(another_msp_signed, bucket_id),
+                    Error::<Test>::MspNotStoringBucket
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn msp_stop_storing_bucket_works_payment_stream_deleted() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Dispatch MSP stop storing bucket.
+                assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStoppedStoringBucket {
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                    }
+                    .into(),
+                );
+
+                // Check that the payment stream between the user and the MSP was deleted since there are no more buckets stored by the MSP for the user.
+                assert!(!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner_account_id));
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_works_payment_stream_updated() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let another_name = BoundedVec::try_from(b"another_bucket".to_vec()).unwrap();
+                create_bucket(&owner_account_id.clone(), another_name, msp_id, value_prop_id);
+
+                // Dispatch MSP stop storing bucket.
+                assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStoppedStoringBucket {
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                    }
+                    .into(),
+                );
+
+                // Check that the payment stream between the user and the MSP was updated since there are still buckets stored by the MSP for the user.
+                assert!(
+                    <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner_account_id)
+                );
+            });
+        }
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -9096,7 +9024,6 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        buckets: BoundedVec::default(),
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
@@ -9112,12 +9039,12 @@ fn add_msp_to_provider_storage(
         msp_hash,
     );
 
-    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10000);
     let value_prop_id = value_prop.derive_id();
     pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
         msp_hash,
         value_prop_id,
-        ValueProposition::<Test>::new(1, bounded_vec![], 100),
+        value_prop,
     );
 
     (msp_hash, value_prop_id)
@@ -9149,12 +9076,17 @@ fn create_bucket(
         Some(Bucket {
             root: <Test as pallet_storage_providers::pallet::Config>::DefaultMerkleRoot::get(),
             user_id: owner.clone(),
-            msp_id,
+            msp_id: Some(msp_id),
             private: false,
             read_access_group_id: None,
             size: 0,
             value_prop_id
         })
+    );
+
+    assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
+    assert!(
+        <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner).is_some()
     );
 
     bucket_id

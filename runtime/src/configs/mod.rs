@@ -477,6 +477,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;
@@ -485,7 +486,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -496,6 +496,9 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate =
+        runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
+    type TopUpGracePeriod = ConstU32<600>; // 1 hour with 6 second timeslots.
 }
 
 parameter_types! {

@@ -7,18 +7,19 @@ import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
 import invariant from "tiny-invariant";
 import { PassThrough, type Readable } from "node:stream";
+import { sleep } from "../timer";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
   const loc = path.join("/storage", filePath);
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 100; i++) {
     try {
       // TODO: Replace with dockerode
       execSync(`docker exec ${containerId} ls ${loc}`, { stdio: "ignore" });
       return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(100);
     }
   }
   throw `File not found: ${loc} in ${containerId}`;
@@ -113,12 +114,12 @@ export const addBspContainer = async (options?: {
   await container.start();
 
   let peerId: string | undefined;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 200; i++) {
     try {
       peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
       break;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await sleep(50);
     }
   }
 
@@ -231,7 +232,7 @@ export const waitForLog = async (options: {
     const container = docker.getContainer(options.containerName);
 
     container.logs(
-      { follow: true, stdout: true, stderr: true, tail: 0, timestamps: false },
+      { follow: true, stdout: true, stderr: true, tail: undefined, timestamps: false },
       (err, stream) => {
         if (err) {
           return reject(err);

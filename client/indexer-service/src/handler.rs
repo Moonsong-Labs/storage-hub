@@ -238,6 +238,7 @@ impl IndexerService {
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::DataServerRegisteredForMoveBucket { .. } => {}
+            pallet_file_system::Event::MspStoppedStoringBucket { .. } => {}
             pallet_file_system::Event::BucketDeleted { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
@@ -443,9 +444,10 @@ impl IndexerService {
             } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
-            pallet_storage_providers::Event::Slashed {
+            pallet_storage_providers::Event::SlashedAndAwaitingTopUp {
                 provider_id,
-                amount_slashed: _amount_slashed,
+                end_block_grace_period: _end_block_grace_period,
+                outstanding_slash_amount: _outstanding_slash_amount,
             } => {
                 let stake = self
                     .client
@@ -457,6 +459,7 @@ impl IndexerService {
 
                 Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
             }
+            pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}

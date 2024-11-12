@@ -673,6 +673,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a MSP has stopped storing a bucket.
+       **/
+      MspStoppedStoringBucket: AugmentedEvent<
+        ApiType,
+        [mspId: H256, owner: AccountId32, bucketId: H256],
+        {
+          mspId: H256;
+          owner: AccountId32;
+          bucketId: H256;
+        }
+      >;
+      /**
        * Notifies that a new bucket has been created.
        **/
       NewBucket: AugmentedEvent<
@@ -2231,14 +2243,27 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Event emitted when an SP has been slashed.
+       * Event emitted when a provider has been slashed, signaling the end of the grace period and the current
+       * top up outstanding top up slash amount.
        **/
-      Slashed: AugmentedEvent<
+      SlashedAndAwaitingTopUp: AugmentedEvent<
         ApiType,
-        [providerId: H256, amountSlashed: u128],
+        [providerId: H256, endBlockGracePeriod: u32, outstandingSlashAmount: u128],
         {
           providerId: H256;
-          amountSlashed: u128;
+          endBlockGracePeriod: u32;
+          outstandingSlashAmount: u128;
+        }
+      >;
+      /**
+       * Event emitted when an SP has topped up its deposit based on slash amount.
+       **/
+      TopUpFulfilled: AugmentedEvent<
+        ApiType,
+        [providerId: H256, amount: u128],
+        {
+          providerId: H256;
+          amount: u128;
         }
       >;
       /**

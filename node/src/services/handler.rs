@@ -8,10 +8,10 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, LastChargeableInfoUpdated, MultipleNewChallengeSeeds,
-        NewStorageRequest, ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
-        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
-        SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated,
+        MultipleNewChallengeSeeds, NewStorageRequest, ProcessConfirmStoringRequest,
+        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -24,9 +24,9 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
     bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-    msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
-    user_sends_file::UserSendsFileTask, BspForestStorageHandlerT, FileStorageT,
-    MspForestStorageHandlerT,
+    msp_delete_bucket::MspStoppedStoringTask, msp_upload_file::MspUploadFileTask,
+    sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
+    BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
 
 /// Configuration paramaters for Storage Providers.
@@ -157,6 +157,17 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         process_confirm_storing_request_event_bus_listener.start();
+
+        // MspStoppedStoringTask handles events for handling data deletion.
+        let msp_stopped_storing_task = MspStoppedStoringTask::new(self.clone());
+        // Subscribing to FinalisedMspStoppedStoringBucket event from the BlockchainService.
+        let finalised_msp_stopped_storing_bucket_event_bus_listener: EventBusListener<
+            FinalisedMspStoppedStoringBucket,
+            _,
+        > = msp_stopped_storing_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        finalised_msp_stopped_storing_bucket_event_bus_listener.start();
     }
 }
 
