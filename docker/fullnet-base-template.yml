@@ -111,11 +111,25 @@ services:
       ]
 
   sh-postgres:
-      image: postgres:15
-      container_name: docker-sh-postgres-1
-      environment:
-        - POSTGRES_USER=postgres
-        - POSTGRES_PASSWORD=postgres
-        - POSTGRES_DB=storage_hub
-      ports:
-        - "5432:5432"
+    image: postgres:15
+    container_name: docker-sh-postgres-1
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=storage_hub
+    ports:
+      - "5432:5432"
+
+  toxiproxy:
+    image: shopify/toxiproxy
+    container_name: toxiproxy
+    ports:
+      - "8474:8474"
+      - "30350:30350"
+    volumes:
+      - ./toxiproxy.json:/etc/toxiproxy.json
+    command: -config /etc/toxiproxy.json -host=0.0.0.0
+    networks:
+      storage-hub-network:
+        aliases:
+          - toxiproxy

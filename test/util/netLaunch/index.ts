@@ -50,30 +50,18 @@ export class NetworkLauncher {
 
   private loadComposeFile() {
     invariant(this.type, "Network type has not been set yet");
-
     const composeFiles = {
       bspnet: "bspnet-base-template.yml",
-      fullnet: "fullnet-base-template.yml",
-      noisy: "noisy-bsp-template.yml"
+      fullnet: "fullnet-base-template.yml"
     } as const;
 
-    if (this.config.noisy && this.type === "fullnet") {
-      invariant(false, "Noisy fullnet not supported");
-    }
+    // if (this.config.noisy && this.type === "fullnet") {
+    //   invariant(false, "Noisy fullnet not supported");
+    // }
 
-    const file =
-      this.config.noisy && this.type === "bspnet"
-        ? composeFiles.noisy
-        : this.type === "fullnet" && !this.config.noisy
-          ? composeFiles.fullnet
-          : this.type === "bspnet" && !this.config.noisy
-            ? composeFiles.bspnet
-            : undefined;
+    const file = this.type === "fullnet" ? composeFiles.fullnet : composeFiles.bspnet;
 
-    invariant(
-      file,
-      `Compose file not found for ${this.type}  ${this.config.noisy ? "noisy" : "non-noisy"} network`
-    );
+    invariant(file, `Compose file not found for ${this.type} network`);
 
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
@@ -113,6 +101,7 @@ export class NetworkLauncher {
     return this;
   }
 
+  // TODO: Turn this into a submodule system with separate handlers for each option
   private remapComposeYaml() {
     invariant(
       this.composeYaml,
@@ -153,34 +142,43 @@ export class NetworkLauncher {
       );
     }
 
+    if (this.config.noisy) {
+      for (const svcName of Object.keys(composeYaml.services)) {
+        if (svcName === "toxiproxy") {
+          continue;
+        }
+        composeYaml.services[`${svcName}`].ports = composeYaml.services[`${svcName}`].ports.filter(
+          (portMapping: `${string}:${string}`) =>
+            !portMapping
+              .split(":")
+              .some((port: string) => port.startsWith("30") && port.length === 5)
+        );
+        composeYaml.services[`${svcName}`].networks = {
+          "storage-hub-network": { aliases: [`${svcName}`] }
+        };
+      }
+    }
+
     const cwd = path.resolve(process.cwd(), "..", "docker");
-    const entries = Object.entries(composeYaml.services)
-      .filter(
-        ([_serviceName, serviceValue]: [any, any]) => serviceValue.image === "storage-hub:local"
-      )
-      .map(([key, value]: any) => {
-        const remappedValue = {
+    const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
+      let remappedValue: any;
+      if ("volumes" in value) {
+        remappedValue = {
           ...value,
           volumes: value.volumes.map((volume: any) => volume.replace("./", `${cwd}/`))
         };
-        return { node: key, spec: remappedValue };
-      });
-    const remainingEntries = Object.entries(composeYaml.services).filter(
-      ([_serviceName, serviceValue]: [any, any]) => serviceValue.image !== "storage-hub:local"
-    );
+      }
+      return { node: key, spec: remappedValue ?? value };
+    });
+
     const remappedYamlContents = entries.reduce(
       (acc, curr) => ({ ...acc, [curr.node]: curr.spec }),
       {}
     );
 
-    const allServices = remainingEntries.reduce(
-      (acc, [key, value]) => ({ ...acc, [key]: value }),
-      remappedYamlContents
-    );
-
     let composeContents = {
       name: "docker",
-      services: allServices
+      services: remappedYamlContents
     };
 
     if (this.config.noisy) {

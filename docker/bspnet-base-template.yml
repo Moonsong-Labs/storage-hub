@@ -53,3 +53,17 @@ services:
         "--sealing=manual",
         "--base-path=/data",
       ]
+
+  toxiproxy:
+    image: shopify/toxiproxy
+    container_name: toxiproxy
+    ports:
+      - "8474:8474"
+      - "30350:30350"
+    volumes:
+      - ./toxiproxy.json:/etc/toxiproxy.json
+    command: -config /etc/toxiproxy.json -host=0.0.0.0
+    networks:
+      storage-hub-network:
+        aliases:
+          - toxiproxy

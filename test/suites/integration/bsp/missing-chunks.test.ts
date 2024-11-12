@@ -3,7 +3,7 @@ import { describeBspNet, registerToxic, type EnrichedBspApi } from "../../../uti
 // TODO: Add asserts to this test case when we impl the missing chunks handling
 describeBspNet(
   "BSP: Missing Chunks",
-  { initialised: false, networkConfig: "noisy", skip: true },
+  { initialised: false, networkConfig: "noisy" },
   ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
