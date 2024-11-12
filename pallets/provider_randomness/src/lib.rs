@@ -22,9 +22,9 @@ pub use pallet::*;
 
 #[cfg(test)]
 mod mock;
+mod queue;
 #[cfg(test)]
 mod tests;
-mod queue;
 
 pub trait RandomSeedMixer<Seed> {
     /// Mix randomeness seed 1 and seed 2 to generate new seed.
@@ -40,18 +40,15 @@ pub trait VerifiableSeed {
 
 #[pallet]
 pub mod pallet {
-    use codec::FullCodec;
     use super::*;
+    use codec::FullCodec;
     use frame_support::pallet_prelude::*;
     use frame_support::traits::Len;
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use frame_system::WeightInfo;
     use shp_session_keys::{InherentError, INHERENT_IDENTIFIER};
     use sp_runtime::traits::Saturating;
-    use sp_std::{
-        collections::{btree_set::BTreeSet},
-        prelude::*,
-    };
+    use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 
     #[pallet::pallet]
     #[pallet::without_storage_info]
@@ -69,16 +66,19 @@ pub mod pallet {
         type SeedId: FullCodec + TypeInfo;
 
         /// Commitment of a seed
-        type SeedCommitment: FullCodec + TypeInfo;
+        type SeedCommitment: FullCodec + TypeInfo + Clone;
 
         /// Randomness seed type
-        type Seed: VerifiableSeed<SeedCommitment=Self::SeedCommitment> + FullCodec + TypeInfo + Clone;
+        type Seed: VerifiableSeed<SeedCommitment = Self::SeedCommitment>
+            + FullCodec
+            + TypeInfo
+            + Clone;
 
         /// Get the BABE data from the runtime
         type RandomSeedMixer: RandomSeedMixer<<Self as Config>::Seed>;
 
-        /// Size of the queue must be greater than or equal to tolerance size
-        type QueueSize: Get<u32>;
+        /// Seed tolerance window
+        type MaxSeedTolerance: Get<u32>;
 
         /// Weight info
         type WeightInfo: WeightInfo;
@@ -88,82 +88,122 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a new random seed is available from the relay chain
-        NewRandomnessSeedGenerated {
-            randomness_seed: String,
-        },
+        NewRandomnessSeedGenerated { randomness_seed: String },
+    }
+
+    #[pallet::error]
+    pub enum Error<T> {
+        /// Seed provided by the storage provider is not valid
+        NotAValidSeed,
+        /// We cannot find corresponding end block for provided seed commitment
+        NoEndBlockForSeedCommitment,
+        /// Storage provider is late in submitting the seed commitment
+        LateSubmissionOfSeed,
+        /// We are not able to convert block number to u32 for arithmetic
+        UnableToConvertBlockNumberForArithmetic,
+        /// We encountered an error while modifying seed queue
+        QueueError(queue::QueueError),
     }
 
     /// End block (where the seed will be in effect) to set of seed commitment
     #[pallet::storage]
-    type EndBlocks<T: Config> = StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
+    type EndBlocks<T: Config> =
+        StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
 
     #[pallet::storage]
-    type ReceivedCommitments<T: Config> = StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
+    type ReceivedCommitments<T: Config> =
+        StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
 
     #[pallet::storage]
-    type ExpiredCommitments<T: Config> = StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
+    type ExpiredCommitments<T: Config> =
+        StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
 
     /// Seed commitment to end block number (when the seed must be submitted and at which seed must take effect)
     #[pallet::storage]
-    type SeedCommitmentToEndBlockMapping<T: Config> = StorageMap<_, Identity, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
+    type SeedCommitmentToEndBlockMapping<T: Config> =
+        StorageMap<_, Identity, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
 
     /// Commitments that we need to have seed for before next tick
     #[pallet::storage]
-    type PendingCommitments<T: Config> = StorageMap<_, Identity, T::SeedCommitment, T::StorageProviderId, OptionQuery>;
+    type PendingCommitments<T: Config> =
+        StorageMap<_, Identity, T::SeedCommitment, T::StorageProviderId, OptionQuery>;
 
     /// New seed commitments for storage provider ids for whom new tick is not yet started
     #[pallet::storage]
-    type NewCommitments<T: Config> = StorageMap<_, Identity, T::StorageProviderId, T::SeedCommitment, OptionQuery>;
+    type NewCommitments<T: Config> =
+        StorageMap<_, Identity, T::StorageProviderId, T::SeedCommitment, OptionQuery>;
 
     /// Internal storage to manage queue elements
     #[pallet::storage]
-    type RandomnessSeedsQueue<T: Config> = StorageValue<_, BoundedVec<T::Seed, T::QueueSize>, ValueQuery>;
+    type RandomnessSeedsQueue<T: Config> =
+        StorageValue<_, BoundedVec<T::Seed, T::MaxSeedTolerance>, ValueQuery>;
 
     /// Internal storage to manage current head and tail of queue
     #[pallet::storage]
     type QueueParameters<T: Config> = StorageValue<_, (u32, u32), ValueQuery>;
 
     /// Bounded Queue which uses two storage value underneath to maintain logical queue.
-    pub type BoundedQueue<T: Config> = queue::BoundedQueue<<T as frame_system::Config>::DbWeight, T::Seed, T::QueueSize, RandomnessSeedsQueue<T>, QueueParameters<T>>;
-
+    pub type BoundedQueue<T: Config> = queue::BoundedQueue<
+        <T as frame_system::Config>::DbWeight,
+        T::Seed,
+        T::MaxSeedTolerance,
+        RandomnessSeedsQueue<T>,
+        QueueParameters<T>,
+    >;
 
     impl<T: Config> Pallet<T> {
-        fn add_randomness(sp_id: T::StorageProviderId, seed: T::Seed, corresponding_seed_commitment: T::SeedCommitment, new_seed_commitment: T::SeedCommitment) -> Weight {
-            let is_valid_seed = seed.verify(corresponding_seed_commitment);
-            if !is_valid_seed {
-                // TODO: Handle the error
-            }
-
-            let maybe_end_block_number = SeedCommitmentToEndBlockMapping::<T>::take(corresponding_seed_commitment);
+        fn add_randomness(
+            sp_id: T::StorageProviderId,
+            seed: T::Seed,
+            corresponding_seed_commitment: T::SeedCommitment,
+            new_seed_commitment: T::SeedCommitment,
+        ) -> Result<Weight, Error<T>> {
+            let maybe_end_block_number =
+                SeedCommitmentToEndBlockMapping::<T>::take(&corresponding_seed_commitment);
             let end_block_number = if let Some(block_number) = maybe_end_block_number {
                 block_number
             } else {
                 // Storage provider does not have new seed commitment (likely because they were slashed)
-                // TODO: Have proper error handling in place
-                return Weight::zero();
+                return Err(Error::<T>::NoEndBlockForSeedCommitment.into());
             };
+            PendingCommitments::<T>::remove(&corresponding_seed_commitment);
+
+            let is_valid_seed = seed.verify(corresponding_seed_commitment);
+            if !is_valid_seed {
+                return Err(Error::<T>::NotAValidSeed.into());
+            }
 
             // Storage provider is late
             if end_block_number <= frame_system::Pallet::<T>::block_number() {
-                // TODO: Return an error
+                return Err(Error::<T>::LateSubmissionOfSeed.into());
             }
 
-            PendingCommitments::<T>::remove(corresponding_seed_commitment);
-            PendingCommitments::<T>::insert(new_seed_commitment, sp_id);
-
+            PendingCommitments::<T>::insert(new_seed_commitment.clone(), sp_id.clone());
             ReceivedCommitments::<T>::append(end_block_number, sp_id);
 
             // Calculating new end block for new seed commitment
-            let queue_size_in_block = BlockNumberFor::<T>::from(T::QueueSize::get());
-            let new_end_block = frame_system::Pallet::<T>::block_number().saturating_add(tolerance_in_block);
+            let seed_tolerance = BlockNumberFor::<T>::from(T::MaxSeedTolerance::get());
+            let new_end_block = end_block_number.saturating_add(seed_tolerance);
             SeedCommitmentToEndBlockMapping::<T>::insert(new_seed_commitment, new_end_block);
 
-            let distance_from_head = end_block_number.saturating_sub(frame_system::Pallet::<T>::block_number());
-            BoundedQueue::<T>::overwrite_queue(|element| {
-                *element = T::RandomSeedMixer::mix_randomness_seed(&element, &seed, None);
-                // TODO: Put better weight
-                (true, Weight::zero())
-            }, distance_from_head)
+            let distance_from_head: u32 = end_block_number
+                .saturating_sub(frame_system::Pallet::<T>::block_number())
+                .try_into()
+                .map_err(|_e| Error::<T>::UnableToConvertBlockNumberForArithmetic.into())?;
+
+            let _ = BoundedQueue::<T>::overwrite_queue(
+                &|element: &mut <T as Config>::Seed| {
+                    *element =
+                        T::RandomSeedMixer::mix_randomness_seed(&element, &seed, None::<T::Seed>);
+                    // TODO: Put better weight
+                    (true, Weight::zero())
+                },
+                distance_from_head,
+            )
+            .map_err(|queue_error| Error::<T>::QueueError(queue_error).into())?;
+
+            // TODO: Measure weight and return it
+            Ok(Weight::zero())
         }
 
         fn get_head_randomness() -> (T::Seed, Weight) {
@@ -180,11 +220,17 @@ pub mod pallet {
             let queue_shift_weight = BoundedQueue::<T>::shift_queue();
 
             let block_to_target = now;
-            let storage_provider_ids =  BTreeSet::from_iter(EndBlocks::<T>::take(block_to_target).into_iter());
-            let received_commitments = BTreeSet::from_iter(ReceivedCommitments::<T>::take(block_to_target).into_iter());
+            let storage_provider_ids =
+                BTreeSet::from_iter(EndBlocks::<T>::take(block_to_target).into_iter());
+            let received_commitments =
+                BTreeSet::from_iter(ReceivedCommitments::<T>::take(block_to_target).into_iter());
 
             // Minus the set in order to find storage providers who did not submit
-            let expired_commitments = storage_provider_ids.difference(&received_commitments).into_iter().cloned().collect();
+            let expired_commitments = storage_provider_ids
+                .difference(&received_commitments)
+                .into_iter()
+                .cloned()
+                .collect();
             // TODO: Expired commitments should have reasonable bound to prevent bloating
             ExpiredCommitments::<T>::set(block_to_target, expired_commitments);
 

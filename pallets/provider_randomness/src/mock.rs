@@ -105,7 +105,7 @@ impl Config for Test {
     type SeedCommitment = ();
     type Seed = ();
     type RandomSeedMixer = ();
-    type QueueSize = ();
+    type MaxSeedTolerance = ();
 }
 
 /// Panics if an event is not found in the system log of events
