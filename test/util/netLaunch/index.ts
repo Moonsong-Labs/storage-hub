@@ -110,6 +110,26 @@ export class NetworkLauncher {
 
     const composeYaml = this.composeYaml;
 
+    if (this.config.noisy) {
+      for (const svcName of Object.keys(composeYaml.services)) {
+        if (svcName === "toxiproxy") {
+          continue;
+        }
+        composeYaml.services[`${svcName}`].ports = composeYaml.services[`${svcName}`].ports.filter(
+          (portMapping: `${string}:${string}`) =>
+            !portMapping
+              .split(":")
+              .some((port: string) => port.startsWith("30") && port.length === 5)
+        );
+        composeYaml.services[`${svcName}`].networks = {
+          "storage-hub-network": { aliases: [`${svcName}`] }
+        };
+      }
+    } else {
+      // biome-ignore lint/performance/noDelete: to ensure compose file is valid
+      delete composeYaml.services.toxiproxy;
+    }
+
     if (this.config.extrinsicRetryTimeout) {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
@@ -140,23 +160,6 @@ export class NetworkLauncher {
       composeYaml.services["sh-user"].command.push(
         "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
       );
-    }
-
-    if (this.config.noisy) {
-      for (const svcName of Object.keys(composeYaml.services)) {
-        if (svcName === "toxiproxy") {
-          continue;
-        }
-        composeYaml.services[`${svcName}`].ports = composeYaml.services[`${svcName}`].ports.filter(
-          (portMapping: `${string}:${string}`) =>
-            !portMapping
-              .split(":")
-              .some((port: string) => port.startsWith("30") && port.length === 5)
-        );
-        composeYaml.services[`${svcName}`].networks = {
-          "storage-hub-network": { aliases: [`${svcName}`] }
-        };
-      }
     }
 
     const cwd = path.resolve(process.cwd(), "..", "docker");
