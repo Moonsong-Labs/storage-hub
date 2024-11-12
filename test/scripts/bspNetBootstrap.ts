@@ -4,8 +4,7 @@ import { NetworkLauncher, type NetLaunchConfig } from "../util/netLaunch";
 
 const bspNetConfig: NetLaunchConfig = {
   noisy: process.env.NOISY === "1",
-  rocksdb: process.env.ROCKSDB === "1",
-  indexer: process.env.INDEXER === "1"
+  rocksdb: process.env.ROCKSDB === "1"
 };
 
 const CONFIG = {

@@ -49,7 +49,6 @@ export async function describeBspNet<
     bspNetConfig.capacity = options.capacity;
     bspNetConfig.bspStartingWeight = options.bspStartingWeight;
     bspNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
-    bspNetConfig.indexer = options.indexer;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
@@ -99,7 +98,6 @@ export async function describeBspNet<
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
-        createSqlClient: () => createSqlClient(),
         bspNetConfig,
         before,
         after,
@@ -132,6 +130,7 @@ export async function describeMspNet<
     fullNetConfig.capacity = options.capacity;
     fullNetConfig.bspStartingWeight = options.bspStartingWeight;
     fullNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
+    fullNetConfig.indexer = options.indexer;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 

@@ -122,7 +122,7 @@ export const checkSHRunningContainers = async (docker: Docker) => {
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 };
 
-export const closeSimpleBspNet = async (verbose = false) => {
+export const cleanupEnvironment = async (verbose = false) => {
   await printDockerStatus();
 
   const docker = new Docker();
@@ -279,7 +279,7 @@ export const cleardownTest = async (cleardownOptions: {
   }
 
   if (!cleardownOptions.keepNetworkAlive) {
-    await closeSimpleBspNet();
+    await cleanupEnvironment();
 
     const docker = new Docker();
     const remainingContainers = await docker.listContainers({ all: true });

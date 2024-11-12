@@ -215,12 +215,6 @@ export type BspNetContext = {
   ) => ReturnType<typeof BspNetTestApi.create>;
 
   /**
-   * Creates and returns a sql client connected to the local postgres database.
-   * @returns A sql client instance for interacting with the indexer db.
-   */
-  createSqlClient: () => SqlClient;
-
-  /**
    * The current configuration of the BSP network for this test run.
    */
   bspNetConfig: BspNetConfig;
@@ -286,8 +280,7 @@ export type FullNetContext = {
    * Creates and returns a sql client connected to the local postgres database.
    * @returns A sql client instance for interacting with the indexer db.
    */
-  // biome-ignore lint/complexity/noBannedTypes: Good enough untill we integrate ORM
-  createSqlClient: () => postgres.Sql<{}>;
+  createSqlClient: () => SqlClient;
 
   /**
    * The current configuration of the BSP network for this test run.
