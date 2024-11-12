@@ -3697,6 +3697,14 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
+       * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
+       *
+       * The dispatch origin for this call must be signed.
+       *
+       * This is a free transaction if the user successfully tops up their deposit.
+       **/
+      topUpDeposit: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
        * Generic tx
        **/
       [key: string]: SubmittableExtrinsicFunction<ApiType>;

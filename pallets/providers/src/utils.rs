@@ -5,7 +5,7 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     sp_runtime::{
-        traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
+        traits::{BlockNumberProvider, CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
         ArithmeticError, BoundedVec, DispatchError,
     },
     traits::{
@@ -26,11 +26,11 @@ use shp_traits::{
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
-use sp_std::vec::Vec;
+use sp_std::{prelude::ToOwned, vec::Vec};
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderId, RateDeltaParam, SignUpRequestSpParams, StorageProviderId,
-    ValuePropId, ValueProposition, ValuePropositionWithId,
+    Multiaddresses, ProviderId, RateDeltaParam, RelayBlockGetter, SignUpRequestSpParams,
+    StorageProviderId, TopUpMetadata, ValuePropId, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -662,16 +662,7 @@ where
             Error::<T>::NewCapacityLessThanUsedStorage
         );
 
-        // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = new_capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let new_deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let new_deposit = Self::compute_deposit_needed_for_capacity(new_capacity)?;
 
         // Check how much has the used already deposited for the current capacity
         let current_deposit = T::NativeBalance::balance_on_hold(
@@ -852,7 +843,8 @@ where
         // responded with two file key proofs given a random or custom challenge.
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
 
-        let amount_slashed = T::NativeBalance::transfer_on_hold(
+        // Slash account's held deposit and transfer to Treasury.
+        let actual_slashed_amount = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
             &T::Treasury::get(),
@@ -862,17 +854,131 @@ where
             Fortitude::Polite,
         )?;
 
+        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id);
+        let top_up_slash_amount = top_up_metadata
+            .as_ref()
+            .map(|metadata| metadata.slashed_amount)
+            .unwrap_or_default()
+            .saturating_add(actual_slashed_amount);
+
+        // Automatically top up slash amount if the account has enough funds
+        if T::NativeBalance::can_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &account_id,
+            top_up_slash_amount,
+        ) {
+            // Hold the slashable amount from the free balance
+            T::NativeBalance::hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+                top_up_slash_amount,
+            )?;
+
+            // Clear the accrued failed proof submissions for the Storage Provider
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+
+            // Delete the grace period and the top up metadata
+            if let Some(metadata) = top_up_metadata {
+                GracePeriodToSlashedProviders::<T>::remove(
+                    metadata.end_block_grace_period,
+                    provider_id,
+                );
+                AwaitingTopUpFromProviders::<T>::remove(provider_id);
+            }
+
+            // Signal that the slashed amount has been topped up
+            Self::deposit_event(Event::<T>::TopUpFulfilled {
+                provider_id: *provider_id,
+                amount: top_up_slash_amount,
+            });
+
+            return Ok(Pays::No.into());
+        }
+
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        // Provider held funds have been completely depleted.
-        if amount_slashed <= slashable_amount {
-            // TODO: Force sign off the provider.
-        }
+        let current_relay_block_number = RelayBlockGetter::<T>::current_block_number();
 
-        Self::deposit_event(Event::<T>::Slashed {
+        // Add provider to grace period if they are not already in it
+        let top_up_metadata = if !AwaitingTopUpFromProviders::<T>::contains_key(provider_id) {
+            let end_block_grace_period =
+                current_relay_block_number.saturating_add(T::TopUpGracePeriod::get());
+            GracePeriodToSlashedProviders::<T>::insert(
+                current_relay_block_number.saturating_add(T::TopUpGracePeriod::get()),
+                provider_id,
+                (),
+            );
+
+            let metadata = TopUpMetadata {
+                end_block_grace_period,
+                slashed_amount: slashable_amount,
+            };
+            AwaitingTopUpFromProviders::<T>::insert(
+                provider_id,
+                TopUpMetadata {
+                    end_block_grace_period,
+                    slashed_amount: slashable_amount,
+                },
+            );
+
+            metadata
+        } else {
+            // Accrue the slashable amount
+            AwaitingTopUpFromProviders::<T>::try_mutate(provider_id, |metadata| {
+                let metadata = metadata.as_mut().ok_or(Error::<T>::TopUpNotRequired)?;
+                metadata.slashed_amount = metadata.slashed_amount.saturating_add(slashable_amount);
+                Ok::<_, DispatchError>(metadata.to_owned())
+            })?
+        };
+
+        // Signal to the provider that they have been slashed and are awaiting a top up
+        Self::deposit_event(Event::<T>::SlashedAndAwaitingTopUp {
             provider_id: *provider_id,
-            amount_slashed,
+            end_block_grace_period: top_up_metadata.end_block_grace_period,
+            outstanding_slash_amount: top_up_metadata.slashed_amount,
+        });
+
+        Ok(Pays::No.into())
+    }
+
+    pub(crate) fn do_top_up_deposit(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
+        let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
+            .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
+            .ok_or(Error::<T>::NotRegistered)?;
+
+        // Check if the provider is in the grace period
+        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id)
+            .ok_or(Error::<T>::TopUpNotRequired)?;
+
+        // Check if the provider has enough free balance to top up the slashed amount
+        ensure!(
+            T::NativeBalance::can_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+                top_up_metadata.slashed_amount
+            ),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the slashable amount from the free balance
+        T::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &account_id,
+            top_up_metadata.slashed_amount,
+        )?;
+
+        // Remove the provider top up storages
+        GracePeriodToSlashedProviders::<T>::remove(
+            top_up_metadata.end_block_grace_period,
+            provider_id,
+        );
+        AwaitingTopUpFromProviders::<T>::remove(provider_id);
+
+        // Signal that the slashed amount has been topped up
+        Self::deposit_event(Event::<T>::TopUpFulfilled {
+            provider_id,
+            amount: top_up_metadata.slashed_amount,
         });
 
         Ok(Pays::No.into())
@@ -1153,6 +1259,21 @@ where
         }
 
         Ok(())
+    }
+
+    /// Compute the deposit needed for a given capacity.
+    fn compute_deposit_needed_for_capacity(
+        capacity: T::StorageDataUnit,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        let capacity_over_minimum = capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(ArithmeticError::Overflow)?;
+        T::SpMinDeposit::get()
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(ArithmeticError::Overflow.into())
     }
 }
 
