@@ -261,11 +261,12 @@ export class BspNetTestApi implements AsyncDisposable {
       bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
 
       /**
-       * Waits for a MSP to respond to storage requests.
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has responded to storage requests.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
        */
-      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.

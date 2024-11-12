@@ -1,5 +1,6 @@
 import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP accepting storage request",
@@ -72,7 +73,7 @@ describeMspNet(
         userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
       if (!newStorageRequestDataBlob) {
-        throw new Error("Event doesn't match Type");
+        throw new Error("NewStorageRequest event data does not match expected type");
       }
 
       strictEqual(
@@ -99,6 +100,79 @@ describeMspNet(
       if (!result.isFileFound) {
         throw new Error("File not found in storage");
       }
+
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
+
+      let mspAcceptedStorageRequestDataBlob;
+      let storageRequestFulfilledDataBlob;
+
+      try {
+        const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(
+          "fileSystem",
+          "MspAcceptedStorageRequest"
+        );
+        mspAcceptedStorageRequestDataBlob =
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedStorageRequestEvent) &&
+          mspAcceptedStorageRequestEvent.data;
+      } catch {
+        // Event not found, continue
+      }
+
+      try {
+        const { event: storageRequestFulfilledEvent } = await userApi.assert.eventPresent(
+          "fileSystem",
+          "StorageRequestFulfilled"
+        );
+        storageRequestFulfilledDataBlob =
+          userApi.events.fileSystem.StorageRequestFulfilled.is(storageRequestFulfilledEvent) &&
+          storageRequestFulfilledEvent.data;
+      } catch {
+        // Event not found, continue
+      }
+
+      let acceptedFileKey: string | null = null;
+      // We expect either the MSP accepted the storage request or the storage request was fulfilled
+      if (mspAcceptedStorageRequestDataBlob) {
+        acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
+      } else if (storageRequestFulfilledDataBlob) {
+        acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
+      } else {
+        throw new Error(
+          "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
+        );
+      }
+
+      strictEqual(acceptedFileKey.toString(), event.data.fileKey.toString());
+
+      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+        "providers",
+        "BucketRootChanged"
+      );
+
+      const bucketRootChangedDataBlob =
+        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+        bucketRootChangedEvent.data;
+
+      if (!bucketRootChangedDataBlob) {
+        throw new Error("Expected BucketRootChanged event but received event of different type");
+      }
+
+      // Allow time for the MSP to update the local forest root
+      await sleep(3000);
+
+      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
+        newBucketEventDataBlob.bucketId.toString()
+      );
+
+      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), local_bucket_root.toString());
+
+      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
+        newBucketEventDataBlob.bucketId.toString(),
+        event.data.fileKey.toString()
+      );
+
+      invariant(isFileInForest.isTrue, "File is not in forest");
     });
   }
 );

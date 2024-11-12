@@ -35,7 +35,9 @@ describeMspNet(
 
       invariant(bucketId, "Bucket ID not found");
 
-      await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
+      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
+        bucketId.toString()
+      );
 
       await userApi.sealBlock(
         userApi.tx.fileSystem.issueStorageRequest(
@@ -73,6 +75,31 @@ describeMspNet(
       strictEqual(
         newStorageRequestDataBlob.size_.toBigInt(),
         userApi.shConsts.TEST_ARTEFACTS[source].size
+      );
+
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
+
+      const { event: storageRequestRejectedEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "StorageRequestRejected"
+      );
+
+      const storageRequestRejectedDataBlob =
+        userApi.events.fileSystem.StorageRequestRejected.is(storageRequestRejectedEvent) &&
+        storageRequestRejectedEvent.data;
+
+      if (!storageRequestRejectedDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      // Allow time for the MSP to update the local forest root
+      await sleep(3000);
+
+      // Check that the MSP has not updated the local forest root of the bucket
+      strictEqual(
+        local_bucket_root.toString(),
+        (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).toString()
       );
     });
   }

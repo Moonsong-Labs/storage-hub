@@ -405,7 +405,8 @@ export class NetworkLauncher {
     if (this.type === "fullnet") {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
-      await api.wait.mspResponse();
+      await api.wait.mspResponseInTxPool();
+      await api.sealBlock();
       await api.wait.bspStored();
     }
 
