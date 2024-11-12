@@ -48,10 +48,6 @@ mod benchmarks {
         UsersWithoutFunds::<T>::insert(user, frame_system::Pallet::<T>::block_number());
     }
 
-    fn unset_user_as_insolvent<T: crate::Config>(user: <T as frame_system::Config>::AccountId) {
-        UsersWithoutFunds::<T>::remove(user);
-    }
-
     fn update_last_chargeable_info<T: crate::Config>(
         sp_id: ProviderIdFor<T>,
         new_info: ProviderLastChargeableInfo<T>,

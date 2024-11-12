@@ -30,6 +30,7 @@ use types::*;
 #[frame_support::pallet]
 pub mod pallet {
     use super::types::*;
+    use crate::weights::WeightInfo;
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::fungible::*,
@@ -440,7 +441,7 @@ pub mod pallet {
         ///
         /// Emits `FixedRatePaymentStreamCreated` event when successful.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_fixed_rate_payment_stream())]
         pub fn create_fixed_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -481,7 +482,7 @@ pub mod pallet {
         ///
         /// Emits `FixedRatePaymentStreamUpdated` event when successful.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_fixed_rate_payment_stream())]
         pub fn update_fixed_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -521,7 +522,7 @@ pub mod pallet {
         ///
         /// Emits `FixedRatePaymentStreamDeleted` event when successful.
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_fixed_rate_payment_stream())]
         pub fn delete_fixed_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -562,7 +563,7 @@ pub mod pallet {
         ///
         /// Emits `DynamicRatePaymentStreamCreated` event when successful.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_dynamic_rate_payment_stream())]
         pub fn create_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -607,7 +608,7 @@ pub mod pallet {
         ///
         /// Emits `DynamicRatePaymentStreamUpdated` event when successful.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_dynamic_rate_payment_stream())]
         pub fn update_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -651,7 +652,7 @@ pub mod pallet {
         ///
         /// Emits `DynamicRatePaymentStreamDeleted` event when successful.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_dynamic_rate_payment_stream())]
         pub fn delete_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -702,7 +703,7 @@ pub mod pallet {
         /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
         /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::charge_payment_streams())]
         pub fn charge_payment_streams(
             origin: OriginFor<T>,
             user_account: T::AccountId,
@@ -766,7 +767,7 @@ pub mod pallet {
         /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
         /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::charge_multiple_users_payment_streams())]
         pub fn charge_multiple_users_payment_streams(
             origin: OriginFor<T>,
             user_accounts: BoundedVec<T::AccountId, T::MaxUsersToCharge>,
@@ -815,7 +816,7 @@ pub mod pallet {
         /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
         /// finds more convenient to wait for Providers to get its deposits one by one instead.
         #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::pay_outstanding_debt(*amount_of_streams_to_pay))]
         pub fn pay_outstanding_debt(
             origin: OriginFor<T>,
             amount_of_streams_to_pay: u32,
@@ -853,7 +854,7 @@ pub mod pallet {
         ///
         /// Emits a 'UserSolvent' event when successful.
         #[pallet::call_index(9)]
-        #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::clear_insolvent_flag())]
         pub fn clear_insolvent_flag(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
             let user_account = ensure_signed(origin)?;
