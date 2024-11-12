@@ -38,7 +38,7 @@ use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{Get, Hasher, H256};
+use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -458,7 +458,6 @@ parameter_types! {
     pub const MaxProtocols: u32 = 100;
     pub const MaxBsps: u32 = 100;
     pub const MaxMsps: u32 = 100;
-    pub const MaxBuckets: u32 = 10000;
     pub const BucketNameLimit: u32 = 100;
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const SpMinCapacity: u64 = 2;
@@ -500,7 +499,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
-    type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = BucketNameLimit;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -511,6 +509,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 parameter_types! {
@@ -707,6 +706,8 @@ impl pallet_file_system::Config for Runtime {
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
+    type BspStopStoringFilePenalty = ConstU128<1>;
+    type TreasuryAccount = TreasuryAccount;
     type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;

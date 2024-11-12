@@ -18,7 +18,7 @@ describeBspNet(
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      await userApi.file.newStorageRequest(source, destination, bucketName);
+      await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
 
       //  use toxiproxy to close the connection after 50 KB
       await registerToxic({

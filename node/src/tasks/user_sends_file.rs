@@ -79,7 +79,7 @@ where
             event.location,
         );
 
-        let msp_id = self
+        let Some(msp_id) = self
             .storage_hub_handler
             .blockchain
             .query_msp_id_of_bucket_id(event.bucket_id)
@@ -90,7 +90,15 @@ where
                     event.bucket_id,
                     e
                 )
-            })?;
+            })?
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "Skipping storage request - no MSP ID found for bucket ID {:?}",
+                event.bucket_id
+            );
+            return Ok(());
+        };
 
         let msp_multiaddresses = self
             .storage_hub_handler

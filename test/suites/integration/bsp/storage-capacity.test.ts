@@ -1,12 +1,5 @@
 import assert from "node:assert";
-import {
-  bspKey,
-  describeBspNet,
-  type EnrichedBspApi,
-  ferdie,
-  skipBlocksToMinChangeTime,
-  sleep
-} from "../../../util";
+import { bspKey, describeBspNet, type EnrichedBspApi, ferdie, sleep } from "../../../util";
 
 describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
   let userApi: EnrichedBspApi;
@@ -71,13 +64,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const source = "res/cloud.jpg";
     const location = "test/cloud.jpg";
     const bucketName = "toobig-1";
-    await userApi.file.newStorageRequest(source, location, bucketName);
+    await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
     //To allow for BSP to react to request
     await sleep(500);
 
     // Skip block height until BSP sends a call to change capacity.
-    await skipBlocksToMinChangeTime(userApi);
+    await userApi.block.skipToMinChangeTime();
     // Allow BSP enough time to send call to change capacity.
     await sleep(500);
     // Assert BSP has sent a call to increase its capacity.
@@ -119,7 +112,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + bspApi.shConsts.CAPACITY_512;
 
     // Skip block height past threshold
-    await skipBlocksToMinChangeTime(userApi);
+    await userApi.block.skipToMinChangeTime();
 
     await userApi.sealBlock(userApi.tx.providers.changeCapacity(newCapacity), bspKey);
 
@@ -135,7 +128,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const source = "res/adolphus.jpg";
     const location = "test/adolphus.jpg";
     const bucketName = "nothingmuch-2";
-    await userApi.file.newStorageRequest(source, location, bucketName);
+    await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
     await userApi.wait.bspVolunteer();
     await userApi.wait.bspStored();
@@ -183,13 +176,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const source1 = "res/cloud.jpg";
     const location1 = "test/cloud.jpg";
     const bucketName1 = "bucket-1";
-    await userApi.file.newStorageRequest(source1, location1, bucketName1);
+    await userApi.file.createBucketAndSendNewStorageRequest(source1, location1, bucketName1);
 
     // Second storage request
     const source2 = "res/adolphus.jpg";
     const location2 = "test/adolphus.jpg";
     const bucketName2 = "bucket-2";
-    await userApi.file.newStorageRequest(source2, location2, bucketName2);
+    await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
 
     //To allow for BSP to react to request
     await sleep(500);

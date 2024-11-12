@@ -3,9 +3,9 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{
-        fungible::{InspectHold, MutateHold},
+        fungible::{InspectHold, Mutate, MutateHold},
         nonfungibles_v2::Create,
-        tokens::Precision,
+        tokens::{Precision, Preservation},
         Get,
     },
 };
@@ -35,23 +35,21 @@ use shp_traits::{
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
-use crate::types::{AcceptedStorageRequestParameters, ValuePropId};
 use crate::{
     pallet,
     types::{
-        BatchResponses, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher,
-        FileKeyResponsesInput, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata,
-        MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
+        AcceptedStorageRequestParameters, BatchResponses, BucketIdFor, BucketMoveRequestResponse,
+        BucketNameFor, CollectionConfigFor, CollectionIdFor, EitherAccountIdOrMspId,
+        ExpirationItem, FileKeyHasher, FileKeyResponsesInput, FileLocation, Fingerprint,
+        ForestProof, KeyProof, MaxBatchMspRespondStorageRequests, MerkleHash,
+        MoveBucketRequestMetadata, MspAcceptedBatchStorageRequests, MspFailedBatchStorageRequests,
         MspRejectedBatchStorageRequests, MspRespondStorageRequestsResult, MultiAddresses, PeerIds,
         ProviderIdFor, RejectedStorageRequestReason, ReplicationTargetType, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber,
+        StorageRequestBspsMetadata, StorageRequestMetadata, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, DataServersForMoveBucket, Error, Event, HoldReason, Pallet,
-    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
-    TickRangeToMaximumThreshold,
+    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
+    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    ReplicationTarget, StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -274,7 +272,7 @@ where
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
-            sender,
+            sender.clone(),
             bucket_id,
             private,
             maybe_collection_id.clone(),
@@ -343,37 +341,6 @@ where
         Ok(())
     }
 
-    pub(crate) fn do_bsp_add_data_server_for_move_bucket_request(
-        sender: T::AccountId,
-        bucket_id: BucketIdFor<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
-            .ok_or(Error::<T>::NotABsp)?;
-
-        // Check if the sender is a Storage Provider.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
-            Error::<T>::NotABsp
-        );
-
-        // Check if the move bucket request exists.
-        ensure!(
-            <PendingBucketsToMove<T>>::contains_key(&bucket_id),
-            Error::<T>::MoveBucketRequestNotFound,
-        );
-
-        // Check if the BSP is already a data server for the move bucket request.
-        ensure!(
-            !DataServersForMoveBucket::<T>::contains_key(&bucket_id, &bsp_id),
-            Error::<T>::BspAlreadyDataServer
-        );
-
-        // Add the data server to the move bucket request.
-        DataServersForMoveBucket::<T>::insert(&bucket_id, &bsp_id, ());
-
-        Ok(bsp_id)
-    }
-
     pub(crate) fn do_msp_respond_move_bucket_request(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
@@ -402,10 +369,18 @@ where
             return Ok(msp_id);
         }
 
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+
         let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
 
-        // Decrease the used capacity of the current MSP.
-        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+        // Update the previous MSP's capacity used.
+        if let Some(msp_id) = previous_msp_id {
+            // Decrease the used capacity of the previous MSP.
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &msp_id,
+                bucket_size,
+            )?;
+        }
 
         // Check if MSP has enough available capacity to store the bucket.
         ensure!(
@@ -415,13 +390,7 @@ where
         );
 
         // Change the MSP that stores the bucket.
-        <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
-
-        // Decrease the used capacity of the previous MSP.
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &previous_msp_id,
-            bucket_size,
-        )?;
+        <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
 
         // Increase the used capacity of the new MSP.
         <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -824,6 +793,42 @@ where
         };
 
         Ok(result)
+    }
+
+    pub(crate) fn do_msp_stop_storing_bucket(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
+        // Check if the sender is a Provider.
+        let msp_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotAMsp)?;
+
+        // Check if the MSP is indeed an MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check if the MSP is storing the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
+            Error::<T>::MspNotStoringBucket
+        );
+
+        let bucket_owner = <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        // Decrease the used capacity of the MSP.
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
+
+        // Remove the MSP from the bucket.
+        <T::Providers as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id)?;
+
+        Ok((msp_id, bucket_owner))
     }
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
@@ -1590,7 +1595,19 @@ where
             Error::<T>::NotABsp
         );
 
-        // TODO: charge SP for this action.
+        let bsp_account_id = expect_or_err!(
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_owner_account(bsp_id),
+            "Failed to get owner account for BSP",
+            Error::<T>::FailedToGetOwnerAccount
+        );
+
+        // Penalise the BSP for stopping storing the file and send the funds to the treasury.
+        T::Currency::transfer(
+            &bsp_account_id,
+            &T::TreasuryAccount::get(),
+            T::BspStopStoringFilePenalty::get(),
+            Preservation::Preserve,
+        )?;
 
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
@@ -2237,9 +2254,9 @@ mod hooks {
         pallet,
         types::MerkleHash,
         utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
-        DataServersForMoveBucket, Event, FileDeletionRequestExpirations,
-        NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests,
-        ReplicationTarget, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        Event, FileDeletionRequestExpirations, NextStartingBlockToCleanUp, Pallet,
+        PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -2446,7 +2463,6 @@ mod hooks {
 
             PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
             PendingBucketsToMove::<T>::remove(&bucket_id);
-            DataServersForMoveBucket::<T>::drain_prefix(&bucket_id);
 
             remaining_weight.saturating_reduce(potential_weight);
 

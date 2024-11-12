@@ -79,7 +79,11 @@ describeBspNet(
       )
         .unwrap()
         .reputationWeight.toBigInt();
-      await userApi.file.newStorageRequest("res/cloud.jpg", "test/cloud.jpg", "bucket-1");
+      await userApi.file.createBucketAndSendNewStorageRequest(
+        "res/cloud.jpg",
+        "test/cloud.jpg",
+        "bucket-1"
+      );
       await userApi.wait.bspVolunteer();
       await userApi.wait.bspStored();
 
@@ -112,7 +116,7 @@ describeBspNet(
       // Wait for it to catch up to the tip of the chain
       await userApi.wait.bspCatchUpToChainTip(bspDownApi);
 
-      const { fileKey } = await userApi.file.newStorageRequest(
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/smile.jpg",
         "test/smile.jpg",
         "bucket-1"
@@ -175,7 +179,7 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
 
       // Create a new storage request
-      const { fileKey } = await userApi.file.newStorageRequest(
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/cloud.jpg",
         "test/cloud.jpg",
         "bucket-2"
@@ -263,7 +267,7 @@ describeBspNet(
       );
 
       // Create a new storage request
-      const { fileKey } = await userApi.file.newStorageRequest(
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/adolphus.jpg",
         "test/adolphus.jpg",
         "bucket-4"
@@ -322,7 +326,7 @@ describeBspNet(
           userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 50))
         );
 
-        const { fileKey } = await userApi.file.newStorageRequest(
+        const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
           "res/cloud.jpg",
           "test/cloud.jpg",
           "bucket-3"
