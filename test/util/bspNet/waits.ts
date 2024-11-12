@@ -135,7 +135,7 @@ export const waitForBspStored = async (
       if (bspAccount) {
         const txs = await api.rpc.author.pendingExtrinsics();
         const match = txs.filter(
-          (tx) => tx.method.method === "submitProof" && tx.signer === bspAccount
+          (tx) => tx.method.method === "submitProof" && tx.signer.eq(bspAccount)
         );
 
         // If we have a submit proof event at the same time we are trying to confirm storage
