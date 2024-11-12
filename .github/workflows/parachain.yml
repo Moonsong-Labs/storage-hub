@@ -427,9 +427,6 @@ jobs:
         run: |
           cd test
           pnpm typegen
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: diesel_cli
       - name: Run BSPNet Tests
         id: run_tests
         run: |
