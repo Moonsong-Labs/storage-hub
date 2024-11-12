@@ -1245,7 +1245,7 @@ where
         } else {
             // If there are no leftover Providers to process from the last processed tick, keep advancing one tick and check for Providers there, until there's no remaining weight or the tick we are processing is the last one:
 
-			// Get the last tick for which there might be a finished set of valid proof submitters.
+            // Get the last tick for which there might be a finished set of valid proof submitters.
             let submitters_last_tick =
                 <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
                     .saturating_sub(One::one());
@@ -1255,11 +1255,11 @@ where
                 return;
             }
 
-			// Get the next tick to be processed.
+            // Get the next tick to be processed.
             let mut current_tick_to_be_processed =
                 last_submitters_tick_registered.saturating_add(One::one());
 
-			// Advance the current tick to be processed as long as there are no valid proof submitters for it and it's less than the last tick for which there might be a finished set of valid proof submitters.
+            // Advance the current tick to be processed as long as there are no valid proof submitters for it and it's less than the last tick for which there might be a finished set of valid proof submitters.
             while current_tick_to_be_processed < submitters_last_tick && <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&current_tick_to_be_processed).is_none() {
 				match meter.try_consume(T::DbWeight::get().reads_writes(1, 0)){
 					Ok(_) => {},
@@ -1335,7 +1335,6 @@ where
 				// If this gets executed, it means that the latest tick of the Providers Proof Submitters pallet has no Providers to process.
 				// Update the LastSubmittersTickRegistered storage to continue processing the Providers in the next call.
 					LastSubmittersTickRegistered::<T>::put((current_tick_to_be_processed, None::<ProviderIdFor<T>>));
-				
 			}
         }
     }
