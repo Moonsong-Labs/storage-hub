@@ -10,7 +10,6 @@ import {
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 import invariant from "tiny-invariant";
-import { createType } from "@polkadot/types";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
