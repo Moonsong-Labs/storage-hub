@@ -268,8 +268,8 @@ export const waitForBspToCatchUpToChainTip = async (
   bspBehindApi: ApiPromise
 ) => {
   // To allow time for BSP to catch up to the tip of the chain (10s)
-  const iterations = 10;
-  const delay = 1000;
+  const iterations = 100;
+  const delay = 100;
   for (let i = 0; i < iterations + 1; i++) {
     try {
       await sleep(delay);
