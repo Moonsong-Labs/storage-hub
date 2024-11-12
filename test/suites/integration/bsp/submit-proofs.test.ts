@@ -10,6 +10,7 @@ import {
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 import invariant from "tiny-invariant";
+import { createType } from '@polkadot/types';
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
@@ -245,7 +246,7 @@ describeBspNet(
     it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
       { skip: "Dropping transactions is not implemented as testing utility yet." },
-      async () => {}
+      async () => { }
     );
 
     it("New storage request sent by user, to only one BSP", async () => {
@@ -263,7 +264,9 @@ describeBspNet(
 
     it("Only one BSP confirms it", async () => {
       await userApi.wait.bspVolunteer(1);
-      await userApi.wait.bspStored(1, NODE_INFOS.bsp.AddressId);
+
+      let address = userApi.createType("Address", NODE_INFOS.bsp.AddressId);
+      await userApi.wait.bspStored(1, address);
     });
 
     it("BSP correctly responds to challenge with new forest root", async () => {
