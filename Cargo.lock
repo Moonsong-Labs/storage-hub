@@ -7623,7 +7623,6 @@ dependencies = [
  "frame-benchmarking 38.0.0",
  "frame-support 38.0.0",
  "frame-system 38.0.0",
- "log",
  "pallet-balances 39.0.0",
  "pallet-payment-streams",
  "pallet-proofs-dealer-runtime-api",

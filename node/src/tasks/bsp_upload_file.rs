@@ -409,7 +409,7 @@ where
             )
             .await?;
 
-        let new_root: Option<H256> = events.and_then(|events| {
+        let maybe_new_root: Option<H256> = events.and_then(|events| {
             events.into_iter().find_map(|event| {
                 if let storage_hub_runtime::RuntimeEvent::FileSystem(
                     pallet_file_system::Event::BspConfirmedStoring {
@@ -433,16 +433,35 @@ where
                         }
                         Some(new_root)
                     } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Received confirmation for another BSP: {:?}",
+                            bsp_id
+                        );
                         None
                     }
                 } else {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Received unexpected event: {:?}",
+                        event.event
+                    );
                     None
                 }
             })
         });
 
+        let new_root = match maybe_new_root {
+            Some(new_root) => new_root,
+            None => {
+                let err_msg = "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. Failed to query BspConfirmedStoring new forest root after confirming storing.";
+                error!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow!(err_msg));
+            }
+        };
+
         // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
-        if !file_metadatas.is_empty() && new_root.is_some() {
+        if !file_metadatas.is_empty() {
             fs.write().await.insert_files_metadata(
                 file_metadatas
                     .into_iter()
@@ -451,8 +470,7 @@ where
                     .as_slice(),
             )?;
 
-            if fs.read().await.root() != new_root.expect("Impossible for new_root to be None; qed")
-            {
+            if fs.read().await.root() != new_root {
                 let err_msg =
                     "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. \nError forest root mismatch after confirming storing.";
                 error!(target: LOG_TARGET, err_msg);

@@ -1242,7 +1242,7 @@ where
             )?;
 
         // Create a queue to store the file keys and metadata to be processed.
-        let mut file_keys_and_metadatas: BoundedVec<
+        let mut file_keys_and_metadata: BoundedVec<
             (MerkleHash<T>, Vec<u8>),
             T::MaxBatchConfirmStorageRequests,
         > = BoundedVec::new();
@@ -1361,7 +1361,7 @@ where
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
             expect_or_err!(
-                file_keys_and_metadatas.try_push((file_key.0, encoded_trie_value)),
+                file_keys_and_metadata.try_push((file_key.0, encoded_trie_value)),
                 "Failed to push file key and metadata",
                 Error::<T>::FileMetadataProcessingQueueFull,
                 result
@@ -1418,55 +1418,53 @@ where
             }
         }
 
-        // Remove all the skipped file keys from file_keys_and_metadatas
-        file_keys_and_metadatas.retain(|(fk, _)| !skipped_file_keys.contains(fk));
+        // Remove all the skipped file keys from file_keys_and_metadata
+        file_keys_and_metadata.retain(|(fk, _)| !skipped_file_keys.contains(fk));
 
-        let new_root = if !file_keys_and_metadatas.is_empty() {
-            // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
-            let old_root = expect_or_err!(
-                <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
-                "Failed to get root for BSP, when it was already checked to be a BSP",
-                Error::<T>::NotABsp
-            );
+        ensure!(
+            !file_keys_and_metadata.is_empty(),
+            Error::<T>::NoFileKeysToConfirm
+        );
 
-            if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
-            {
-                // This means that this is the first file added to the BSP's Forest.
-                <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
-                    &bsp_id,
-                )?;
+        // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
+        let old_root = expect_or_err!(
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
+            "Failed to get root for BSP, when it was already checked to be a BSP",
+            Error::<T>::NotABsp
+        );
 
-                // Emit the corresponding event.
-                Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
-                    who: sender.clone(),
-                    bsp_id,
-                });
-            }
-
-            let mutations = file_keys_and_metadatas
-                .iter()
-                .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
-                .collect::<Vec<_>>();
-
-            // Compute new root after inserting new file keys in forest partial trie.
-            let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+        if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // This means that this is the first file added to the BSP's Forest.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
                 &bsp_id,
-                mutations.as_slice(),
-                &non_inclusion_forest_proof,
             )?;
 
-            // Root should have changed.
-            ensure!(old_root != new_root, Error::<T>::RootNotUpdated);
+            // Emit the corresponding event.
+            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+                who: sender.clone(),
+                bsp_id,
+            });
+        }
 
-            // Update root of BSP.
-            <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
+        let mutations = file_keys_and_metadata
+            .iter()
+            .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+            .collect::<Vec<_>>();
 
-            new_root
-        } else {
-            return Err(Error::<T>::NoFileKeysToConfirm.into());
-        };
+        // Compute new root after inserting new file keys in forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &bsp_id,
+            mutations.as_slice(),
+            &non_inclusion_forest_proof,
+        )?;
 
-        // This should not fail since `skipped_file_keys` purpously share the same bound as `file_keys_and_metadatas`.
+        // Root should have changed.
+        ensure!(old_root != new_root, Error::<T>::RootNotUpdated);
+
+        // Update root of BSP.
+        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
+
+        // This should not fail since `skipped_file_keys` purposely share the same bound as `file_keys_and_metadata`.
         let skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
             skipped_file_keys.into_iter().collect::<Vec<_>>().try_into(),
             "Failed to convert skipped_file_keys to BoundedVec",
@@ -1475,12 +1473,12 @@ where
         );
 
         let file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
-            file_keys_and_metadatas
+            file_keys_and_metadata
                 .into_iter()
                 .map(|(fk, _)| fk)
                 .collect::<Vec<_>>()
                 .try_into(),
-            "Failed to convert file_keys_and_metadatas to BoundedVec",
+            "Failed to convert file_keys_and_metadata to BoundedVec",
             Error::<T>::TooManyStorageRequestResponses,
             result
         );
