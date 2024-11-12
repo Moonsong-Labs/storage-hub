@@ -183,11 +183,6 @@ pub type StorageDataUnit<T> = <T as crate::Config>::StorageDataUnit;
 pub type MaxProtocols<T> = <T as crate::Config>::MaxProtocols;
 pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type for protocols")
 
-/// MaxBuckets is the maximum amount of buckets that a Main Storage Provider can have.
-pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
-/// Buckets is a vector of the buckets that a Main Storage Provider has.
-pub type Buckets<T> = BoundedVec<Bucket<T>, MaxBuckets<T>>;
-
 /// Type alias for the `ValuePropId` type used in the Storage Providers pallet.
 pub type ValuePropIdFor<T> = <T as crate::Config>::ValuePropId;
 
