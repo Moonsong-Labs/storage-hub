@@ -2,7 +2,7 @@ import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -258,7 +258,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspAccount?: string) =>
+      bspStored: (expectedExts?: number, bspAccount?: Address) =>
         Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**

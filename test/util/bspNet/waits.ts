@@ -3,7 +3,7 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
-import type { H256 } from "@polkadot/types/interfaces";
+import type { Address, H256 } from "@polkadot/types/interfaces";
 
 /**
  * Waits for a BSP to volunteer for a storage request.
@@ -115,19 +115,17 @@ export const waitForBspVolunteerWithoutSealing = async (
 export const waitForBspStored = async (
   api: ApiPromise,
   checkQuantity?: number,
-  bspAccount?: string
+  bspAccount?: Address
 ) => {
-  // TODO: add bsp ID to check if is not confirming storing
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
   const delay = 200;
 
-  if (bspAccount && checkQuantity && checkQuantity > 1) {
-    // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
-    throw new Error(
-      "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
-    );
-  }
+  // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
+  invariant(
+    bspAccount && checkQuantity && checkQuantity > 1,
+    "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
+  );
 
   for (let i = 0; i < iterations + 1; i++) {
     try {
@@ -137,7 +135,7 @@ export const waitForBspStored = async (
       if (bspAccount) {
         const txs = await api.rpc.author.pendingExtrinsics();
         const match = txs.filter(
-          (tx) => tx.method.method === "submitProof" && tx.signer.toString() === bspAccount
+          (tx) => tx.method.method === "submitProof" && tx.signer === bspAccount
         );
 
         // If we have a submit proof event at the same time we are trying to confirm storage
