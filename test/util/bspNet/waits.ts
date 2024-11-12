@@ -123,7 +123,7 @@ export const waitForBspStored = async (
 
   // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
   invariant(
-    bspAccount && checkQuantity && checkQuantity > 1,
+    !(bspAccount && checkQuantity && checkQuantity > 1),
     "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
   );
 
