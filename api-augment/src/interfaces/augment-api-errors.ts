@@ -1027,6 +1027,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Deposit too low to determine capacity.
+       **/
+      DepositTooLow: AugmentedError<ApiType>;
+      /**
        * Error thrown when a fixed payment stream is not found.
        **/
       FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
@@ -1142,6 +1146,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
        **/
       StorageTooLow: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a provider attempted to top up their deposit when they are not required to.
+       **/
+      TopUpNotRequired: AugmentedError<ApiType>;
       /**
        * Error thrown when value proposition under a given id already exists.
        **/
