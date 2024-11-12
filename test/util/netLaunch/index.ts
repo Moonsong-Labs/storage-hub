@@ -33,7 +33,6 @@ import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
 import { DUMMY_BSP_ID } from "../bspNet/consts";
 import { spawn, spawnSync } from "node:child_process";
-import { DUMMY_BSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
