@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
-import { cleardownTest, createSqlClient, verifyContainerFreshness } from "./helpers";
+import { cleardownTest } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetContext, FullNetContext, TestOptions } from "./types";
 import * as ShConsts from "./consts";
 import { NetworkLauncher } from "../netLaunch";
+import { createSqlClient, verifyContainerFreshness } from "..";
 
 export const launchEventEmitter = new EventEmitter();
 
