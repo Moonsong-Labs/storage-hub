@@ -414,10 +414,6 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
        **/
       maxBlocksForRandomness: u32 & AugmentedConst<ApiType>;
-      /**
-       * The maximum amount of Buckets that a MSP can have.
-       **/
-      maxBuckets: u32 & AugmentedConst<ApiType>;
       maxCommitmentSize: u32 & AugmentedConst<ApiType>;
       /**
        * The estimated maximum size of an unknown file.
@@ -464,6 +460,11 @@ declare module "@polkadot/api-base/types/consts" {
        * - The slashed funds are transferred.
        **/
       treasury: AccountId32 & AugmentedConst<ApiType>;
+      /**
+       * 0-size bucket fixed rate payment stream (i.e. the amount charged as a base
+       * fee for a bucket that doesn't have any files yet)
+       **/
+      zeroSizeBucketFixedRate: u128 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

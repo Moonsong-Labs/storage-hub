@@ -406,7 +406,7 @@ impl_runtime_apis! {
             Providers::get_storage_provider_id(who)
         }
 
-        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<ProviderIdFor<Runtime>, QueryMspIdOfBucketIdError> {
+        fn query_msp_id_of_bucket_id(bucket_id: &BucketId<Runtime>) -> Result<Option<ProviderIdFor<Runtime>>, QueryMspIdOfBucketIdError> {
             Providers::query_msp_id_of_bucket_id(bucket_id)
         }
 

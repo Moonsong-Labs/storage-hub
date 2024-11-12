@@ -64,6 +64,20 @@ pub struct NewStorageRequest {
 
 impl EventBusMessage for NewStorageRequest {}
 
+/// MSP stopped storing bucket event.
+///
+/// This event is emitted when an MSP stops storing a bucket.
+#[derive(Debug, Clone)]
+pub struct FinalisedMspStoppedStoringBucket {
+    /// MSP ID who stopped storing the bucket.
+    pub msp_id: ProviderId,
+    /// Account ID owner of the bucket.
+    pub owner: AccountId32,
+    pub bucket_id: BucketId,
+}
+
+impl EventBusMessage for FinalisedMspStoppedStoringBucket {}
+
 /// Accepted BSP volunteer event.
 ///
 /// This event is emitted when a BSP volunteer is accepted to store a file.
@@ -253,6 +267,7 @@ pub struct BlockchainServiceEventBusProvider {
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
     user_without_funds_event_bus: EventBus<UserWithoutFunds>,
     sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
+    finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -272,6 +287,7 @@ impl BlockchainServiceEventBusProvider {
             last_chargeable_info_updated_event_bus: EventBus::new(),
             user_without_funds_event_bus: EventBus::new(),
             sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
+            finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
         }
     }
 }
@@ -359,5 +375,11 @@ impl ProvidesEventBus<UserWithoutFunds> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<SpStopStoringInsolventUser> {
         &self.sp_stop_storing_insolvent_user_event_bus
+    }
+}
+
+impl ProvidesEventBus<FinalisedMspStoppedStoringBucket> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FinalisedMspStoppedStoringBucket> {
+        &self.finalised_msp_stopped_storing_bucket_event_bus
     }
 }

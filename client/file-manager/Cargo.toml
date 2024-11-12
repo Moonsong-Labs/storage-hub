@@ -20,7 +20,7 @@ codec = { workspace = true }
 hash-db = { workspace = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
-kvdb-memorydb = { workspace =  true }
+kvdb-memorydb = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -33,3 +33,13 @@ sp-trie = { workspace = true, default-features = true }
 
 shp-traits = { workspace = true }
 shc-common = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-state-machine/std",
+    "sp-trie/std",
+    "shc-common/std",
+]

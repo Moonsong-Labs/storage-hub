@@ -425,17 +425,6 @@ pub mod pallet {
         MoveBucketRequestMetadata<T>,
     >;
 
-    /// BSP data servers for move bucket requests.
-    #[pallet::storage]
-    pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        BucketIdFor<T>,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        (),
-    >;
-
     /// Bookkeeping of buckets that are pending to be moved to a new MSP.
     #[pallet::storage]
     pub type PendingBucketsToMove<T: Config> =
@@ -628,6 +617,12 @@ pub mod pallet {
             bsp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
         },
+        /// Notifies that a MSP has stopped storing a bucket.
+        MspStoppedStoringBucket {
+            msp_id: ProviderIdFor<T>,
+            owner: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -758,6 +753,8 @@ pub mod pallet {
         InvalidBucketIdFileKeyPair,
         /// Key already exists in mapping when it should not.
         InconsistentStateKeyAlreadyExists,
+        /// Failed to fetch the rate for the payment stream.
+        FixedRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
         /// Failed to get owner account of ID of provider
@@ -979,23 +976,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Add yourself as a data server for providing the files of the bucket requested to be moved.
-        #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn bsp_add_data_server_for_move_bucket_request(
-            origin: OriginFor<T>,
-            bucket_id: BucketIdFor<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let bsp_id =
-                Self::do_bsp_add_data_server_for_move_bucket_request(who.clone(), bucket_id)?;
-
-            Self::deposit_event(Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id });
-
-            Ok(())
-        }
-
         /// Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
         ///
         /// This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
@@ -1005,7 +985,7 @@ pub mod pallet {
         /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
         /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -1018,6 +998,25 @@ pub mod pallet {
                 Self::do_msp_respond_storage_request(who.clone(), file_key_responses_input)?;
 
             Self::deposit_event(Event::MspRespondedToStorageRequests { results });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(9)]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        pub fn msp_stop_storing_bucket(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let (msp_id, owner) = Self::do_msp_stop_storing_bucket(who.clone(), bucket_id)?;
+
+            Self::deposit_event(Event::MspStoppedStoringBucket {
+                msp_id,
+                owner,
+                bucket_id,
+            });
 
             Ok(())
         }
