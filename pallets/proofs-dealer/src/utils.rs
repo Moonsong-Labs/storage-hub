@@ -438,7 +438,7 @@ where
 
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
 
-        // Count last checkpoint challenges tick challenges. This is to consider if slashable Providers should
+        // Count last checkpoint challenges tick's challenges. This is to consider if slashable Providers should
         // have responses to checkpoint challenges, and slash them for the corresponding number of missed challenges.
         let checkpoint_challenges_count =
             TickToCheckpointChallenges::<T>::get(last_checkpoint_tick)
