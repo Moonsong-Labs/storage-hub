@@ -12,7 +12,7 @@ pub struct Bucket {
     /// The ID of the Bucket as stored in the database. For the runtime id, use `onchain_bucket_id`.
     pub id: i32,
     /// The ID of the MSP (column in the database) that the bucket belongs to.
-    pub msp_id: i32,
+    pub msp_id: Option<i32>,
     pub account: String,
     pub onchain_bucket_id: String,
     pub name: Vec<u8>,
@@ -25,7 +25,7 @@ pub struct Bucket {
 impl Bucket {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        msp_id: i32,
+        msp_id: Option<i32>,
         account: String,
         onchain_bucket_id: String,
         name: Vec<u8>,

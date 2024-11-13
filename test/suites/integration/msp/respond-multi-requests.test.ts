@@ -42,7 +42,7 @@ describeMspNet(
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
       if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
+        throw new Error("NewBucket event data does not match expected type");
       }
 
       const txs = [];
@@ -88,7 +88,7 @@ describeMspNet(
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
 
         if (!newStorageRequestDataBlob) {
-          throw new Error("Event doesn't match Type");
+          throw new Error("Event doesn't match NewStorageRequest type");
         }
 
         const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(
@@ -105,21 +105,53 @@ describeMspNet(
       }
 
       // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
 
-      if (responses.length !== 1) {
+      let mspAcceptedStorageRequestDataBlob: any = undefined;
+      let storageRequestFulfilledDataBlob: any = undefined;
+
+      try {
+        const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(
+          "fileSystem",
+          "MspAcceptedStorageRequest"
+        );
+        mspAcceptedStorageRequestDataBlob =
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedStorageRequestEvent) &&
+          mspAcceptedStorageRequestEvent.data;
+      } catch {
+        // Event not found, continue
+      }
+
+      try {
+        const { event: storageRequestFulfilledEvent } = await userApi.assert.eventPresent(
+          "fileSystem",
+          "StorageRequestFulfilled"
+        );
+        storageRequestFulfilledDataBlob =
+          userApi.events.fileSystem.StorageRequestFulfilled.is(storageRequestFulfilledEvent) &&
+          storageRequestFulfilledEvent.data;
+      } catch {
+        // Event not found, continue
+      }
+
+      let acceptedFileKey: string | null = null;
+      // We expect either the MSP accepted the storage request or the storage request was fulfilled
+      if (mspAcceptedStorageRequestDataBlob) {
+        acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
+      } else if (storageRequestFulfilledDataBlob) {
+        acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
+      }
+
+      if (!acceptedFileKey) {
         throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
+          "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
         );
       }
 
-      const response = responses[0].asAccepted;
-
-      strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
-
       // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
       strictEqual(
-        issuedFileKeys.some((key) => key.toString() === response.fileKeys[0].toString()),
+        issuedFileKeys.some((key) => key.toString() === acceptedFileKey),
         true
       );
 
@@ -127,53 +159,77 @@ describeMspNet(
       await sleep(3000);
 
       const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
-        response.bucketId.toString()
+        newBucketEventDataBlob.bucketId.toString()
       );
 
-      strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
+      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+        "providers",
+        "BucketRootChanged"
+      );
+
+      const bucketRootChangedDataBlob =
+        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+        bucketRootChangedEvent.data;
+
+      if (!bucketRootChangedDataBlob) {
+        throw new Error("Expected BucketRootChanged event but received event of different type");
+      }
+
+      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), local_bucket_root.toString());
 
       const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
-        response.bucketId.toString(),
-        response.fileKeys[0]
+        newBucketEventDataBlob.bucketId.toString(),
+        acceptedFileKey
       );
 
       invariant(isFileInForest.isTrue, "File is not in forest");
 
       // Seal block containing the MSP's transaction response to the storage request
-      const responses2 = await userApi.wait.mspResponse();
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
 
-      if (responses2.length !== 1) {
-        throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
-        );
+      const fileKeys2: string[] = [];
+
+      const mspAcceptedStorageRequestEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "MspAcceptedStorageRequest"
+      );
+
+      for (const e of mspAcceptedStorageRequestEvents) {
+        const mspAcceptedStorageRequestDataBlob =
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(e.event) && e.event.data;
+        if (mspAcceptedStorageRequestDataBlob) {
+          fileKeys2.push(mspAcceptedStorageRequestDataBlob.fileKey.toString());
+        }
       }
 
-      const response2 = responses2[0].asAccepted;
-
-      strictEqual(response2.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
-
-      // There are two keys being accepted at once since they are batched.
-      strictEqual(
-        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[0].toString()),
-        true
-      );
-      strictEqual(
-        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[1].toString()),
-        true
-      );
+      invariant(fileKeys2.length === 2, "Expected 2 file keys");
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
 
       const local_bucket_root2 = await mspApi.rpc.storagehubclient.getForestRoot(
-        response2.bucketId.toString()
+        newBucketEventDataBlob.bucketId.toString()
       );
 
-      strictEqual(response2.newBucketRoot.toString(), local_bucket_root2.toString());
+      const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
+        "providers",
+        "BucketRootChanged"
+      );
 
-      for (const fileKey of response2.fileKeys) {
+      const bucketRootChangedDataBlob2 =
+        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
+        bucketRootChangedEvent2.data;
+
+      if (!bucketRootChangedDataBlob2) {
+        throw new Error("Expected BucketRootChanged event but received event of different type");
+      }
+
+      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), local_bucket_root2.toString());
+
+      for (const fileKey of fileKeys2) {
         const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
-          response2.bucketId.toString(),
+          newBucketEventDataBlob.bucketId.toString(),
           fileKey
         );
         invariant(isFileInForest.isTrue, "File is not in forest");

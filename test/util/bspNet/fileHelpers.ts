@@ -69,16 +69,19 @@ export const createBucketAndSendNewStorageRequest = async (
   source: string,
   location: string,
   bucketName: string,
-  valuePropId?: HexString,
-  mspId?: HexString,
+  valuePropId?: HexString | null,
+  mspId?: HexString | null,
   owner?: KeyringPair
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
+  let localMspId = mspId;
+
+  if (localMspId === undefined) {
+    localMspId = ShConsts.DUMMY_MSP_ID;
+  }
 
   if (localValuePropId === undefined) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId ?? ShConsts.DUMMY_MSP_ID
-    );
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(localMspId);
 
     localValuePropId = valueProps[0].id;
   }
@@ -87,7 +90,13 @@ export const createBucketAndSendNewStorageRequest = async (
     throw new Error("No value proposition found");
   }
 
-  const newBucketEventEvent = await createBucket(api, bucketName, localValuePropId, mspId, owner);
+  const newBucketEventEvent = await createBucket(
+    api,
+    bucketName,
+    localValuePropId,
+    localMspId,
+    owner
+  );
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
@@ -107,7 +116,7 @@ export const createBucketAndSendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      mspId ?? ShConsts.DUMMY_MSP_ID,
+      localMspId,
       [ShConsts.NODE_INFOS.user.expectedPeerId]
     ),
     owner ?? shUser
@@ -138,8 +147,8 @@ export const createBucketAndSendNewStorageRequest = async (
 export const createBucket = async (
   api: ApiPromise,
   bucketName: string,
-  valuePropId?: HexString,
-  mspId: HexString = ShConsts.DUMMY_MSP_ID,
+  valuePropId?: HexString | null,
+  mspId: HexString | null = ShConsts.DUMMY_MSP_ID,
   owner: KeyringPair = shUser
 ) => {
   let localValuePropId = valuePropId;
