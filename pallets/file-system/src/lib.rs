@@ -425,17 +425,6 @@ pub mod pallet {
         MoveBucketRequestMetadata<T>,
     >;
 
-    /// BSP data servers for move bucket requests.
-    #[pallet::storage]
-    pub type DataServersForMoveBucket<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        BucketIdFor<T>,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        (),
-    >;
-
     /// Bookkeeping of buckets that are pending to be moved to a new MSP.
     #[pallet::storage]
     pub type PendingBucketsToMove<T: Config> =
@@ -486,12 +475,12 @@ pub mod pallet {
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: Option<ValuePropId<T>>,
         },
         /// Notifies that an empty bucket has been deleted.
         BucketDeleted {
@@ -528,10 +517,16 @@ pub mod pallet {
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
         },
-        /// Notifies that a MSP has responded to storage request(s).
-        MspRespondedToStorageRequests {
-            results: MspRespondStorageRequestsResult<T>,
-        },
+        /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
+        ///
+        /// This event is emitted when an MSP agrees to store a file, but the storage request
+        /// is not yet fully fulfilled (i.e., the required number of Backup Storage Providers
+        /// have not yet confirmed storage).
+        ///
+        /// # Note
+        /// This event is not emitted when the storage request is immediately fulfilled upon
+        /// MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
+        MspAcceptedStorageRequest { file_key: MerkleHash<T> },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
             bsp_id: ProviderIdFor<T>,
@@ -550,12 +545,26 @@ pub mod pallet {
             new_root: MerkleHash<T>,
         },
         /// Notifies that a storage request for a file key has been fulfilled.
+        /// This means that the storage request has been accepted by the MSP and the BSP target
+        /// has been reached.
         StorageRequestFulfilled { file_key: MerkleHash<T> },
-        /// Notifies the expiration of a storage request.
+        /// Notifies the expiration of a storage request. This means that the storage request has
+        /// been accepted by the MSP but the BSP target has not been reached (possibly 0 BSPs).
+        /// Note: This is a valid storage outcome, the user being responsible to track the number
+        /// of BSPs and choose to either delete the file and re-issue a storage request or continue.
         StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
+        /// Note: the BSPs who confirmed the file are also issued a priority challenge to delete the
+        /// file.
         StorageRequestRevoked { file_key: MerkleHash<T> },
-        /// Notifies that a BSP has opened a request to stop storing a file.
+        /// Notifies that a storage request has either been directly rejected by the MSP or
+        /// the MSP did not respond to the storage request in time.
+        /// Note: There might be BSPs that have volunteered and confirmed the file already, for
+        /// which a priority challenge to delete the file will be issued.
+        StorageRequestRejected {
+            file_key: MerkleHash<T>,
+            reason: RejectedStorageRequestReason,
+        },
         BspRequestedToStopStoring {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
@@ -591,7 +600,7 @@ pub mod pallet {
             user: T::AccountId,
             file_key: MerkleHash<T>,
             bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a proof has been submitted for a pending file deletion request.
@@ -623,9 +632,10 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
         },
-        /// Notifies that a data server has been registered for a move bucket request.
-        DataServerRegisteredForMoveBucket {
-            bsp_id: ProviderIdFor<T>,
+        /// Notifies that a MSP has stopped storing a bucket.
+        MspStoppedStoringBucket {
+            msp_id: ProviderIdFor<T>,
+            owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
     }
@@ -758,6 +768,8 @@ pub mod pallet {
         InvalidBucketIdFileKeyPair,
         /// Key already exists in mapping when it should not.
         InconsistentStateKeyAlreadyExists,
+        /// Failed to fetch the rate for the payment stream.
+        FixedRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
         /// Failed to get owner account of ID of provider
@@ -783,10 +795,10 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn create_bucket(
             origin: OriginFor<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             name: BucketNameFor<T>,
             private: bool,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: Option<ValuePropId<T>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -928,7 +940,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -941,7 +953,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
-                Some(msp_id),
+                msp_id,
                 None,
                 Some(peer_ids.clone()),
             )?;
@@ -979,23 +991,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Add yourself as a data server for providing the files of the bucket requested to be moved.
-        #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn bsp_add_data_server_for_move_bucket_request(
-            origin: OriginFor<T>,
-            bucket_id: BucketIdFor<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let bsp_id =
-                Self::do_bsp_add_data_server_for_move_bucket_request(who.clone(), bucket_id)?;
-
-            Self::deposit_event(Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id });
-
-            Ok(())
-        }
-
         /// Used by a MSP to accept or decline storage requests in batches, grouped by bucket.
         ///
         /// This follows a best-effort strategy, meaning that all file keys will be processed and declared to have successfully be
@@ -1005,19 +1000,35 @@ pub mod pallet {
         /// in the bucket's Merkle Patricia Forest. The file proofs for the file keys is necessary to verify that
         /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
-        #[pallet::call_index(9)]
+        #[pallet::call_index(8)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
-            file_key_responses_input: FileKeyResponsesInput<T>,
+            storage_request_msp_response: StorageRequestMspResponse<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            let results =
-                Self::do_msp_respond_storage_request(who.clone(), file_key_responses_input)?;
+            Self::do_msp_respond_storage_request(who.clone(), storage_request_msp_response)?;
 
-            Self::deposit_event(Event::MspRespondedToStorageRequests { results });
+            Ok(())
+        }
+
+        #[pallet::call_index(9)]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        pub fn msp_stop_storing_bucket(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let (msp_id, owner) = Self::do_msp_stop_storing_bucket(who.clone(), bucket_id)?;
+
+            Self::deposit_event(Event::MspStoppedStoringBucket {
+                msp_id,
+                owner,
+                bucket_id,
+            });
 
             Ok(())
         }

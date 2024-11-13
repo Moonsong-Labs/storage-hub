@@ -458,7 +458,6 @@ parameter_types! {
     pub const MaxProtocols: u32 = 100;
     pub const MaxBsps: u32 = 100;
     pub const MaxMsps: u32 = 100;
-    pub const MaxBuckets: u32 = 10000;
     pub const BucketNameLimit: u32 = 100;
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const SpMinCapacity: u64 = 2;
@@ -500,7 +499,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
-    type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = BucketNameLimit;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -511,6 +509,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 parameter_types! {

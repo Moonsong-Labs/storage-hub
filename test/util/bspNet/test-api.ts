@@ -2,7 +2,7 @@ import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -105,16 +105,22 @@ export class BspNetTestApi implements AsyncDisposable {
     return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
-  private async sendNewStorageRequest(
+  private async createBucketAndSendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string,
     valuePropId: HexString
   ) {
-    return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
+    return Files.createBucketAndSendNewStorageRequest(
+      this._api,
+      source,
+      location,
+      bucketName,
+      valuePropId
+    );
   }
 
-  private async createBucket(bucketName: string, valuePropId?: HexString) {
+  private async createBucket(bucketName: string, valuePropId?: HexString | null) {
     return Files.createBucket(this._api, bucketName, valuePropId);
   }
 
@@ -258,14 +264,16 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
+      bspStored: (expectedExts?: number, bspAccount?: Address) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**
-       * Waits for a MSP to respond to storage requests.
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has responded to storage requests.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
        */
-      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -313,8 +321,26 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString) =>
+      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString | null) =>
         Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
+
+      /**
+       * Issue a new storage request.
+       *
+       * @param source - The local path to the file to be uploaded.
+       * @param location - The StorageHub "location" field of the file to be uploaded.
+       * @param bucketID - The ID of the bucket to use for the new storage request.
+       * @param owner - Signer with which to issue the newStorageRequest Defaults to SH_USER.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @returns A promise that resolves to file metadata.
+       */
+      newStorageRequest: (
+        source: string,
+        location: string,
+        bucketId: H256,
+        owner?: KeyringPair,
+        msp_id?: HexString
+      ) => Files.sendNewStorageRequest(this._api, source, location, bucketId, owner, msp_id),
 
       /**
        * Creates a new bucket and submits a new storage request.
@@ -326,15 +352,15 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to file metadata.
        */
-      newStorageRequest: (
+      createBucketAndSendNewStorageRequest: (
         source: string,
         location: string,
         bucketName: string,
-        valuePropId?: HexString,
-        msp_id?: HexString,
+        valuePropId?: HexString | null,
+        msp_id?: HexString | null,
         owner?: KeyringPair
       ) =>
-        Files.sendNewStorageRequest(
+        Files.createBucketAndSendNewStorageRequest(
           this._api,
           source,
           location,
@@ -445,9 +471,9 @@ export class BspNetTestApi implements AsyncDisposable {
       sealBlock: this.sealBlock.bind(this),
       /**
        * Soon Deprecated. Use api.file.newStorageRequest() instead.
-       * @see {@link sendNewStorageRequest}
+       * @see {@link createBucketAndSendNewStorageRequest}
        */
-      sendNewStorageRequest: this.sendNewStorageRequest.bind(this),
+      createBucketAndSendNewStorageRequest: this.createBucketAndSendNewStorageRequest.bind(this),
       /**
        * Soon Deprecated. Use api.file.newBucket() instead.
        * @see {@link createBucket}

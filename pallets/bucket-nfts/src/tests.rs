@@ -29,15 +29,14 @@ mod share_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 true,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -81,15 +80,14 @@ mod share_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 true,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -117,11 +115,10 @@ mod share_access_tests {
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let msp = Keyring::Charlie.to_account_id();
 
-            let (msp_id, _) = add_msp_to_provider_storage(&msp);
+            let _ = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -154,15 +151,14 @@ mod share_access_tests {
             // Create a public bucket (no collection ID)
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 false,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -194,15 +190,14 @@ mod share_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 true,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -245,15 +240,14 @@ mod update_read_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 true,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -307,15 +301,14 @@ mod update_read_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 true,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -350,11 +343,10 @@ mod update_read_access_tests {
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let msp = Keyring::Charlie.to_account_id();
 
-            let (msp_id, _) = add_msp_to_provider_storage(&msp);
+            let _ = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -384,15 +376,14 @@ mod update_read_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp_id,
+                Some(msp_id),
                 bucket_name.clone(),
                 true,
-                value_prop_id
+                Some(value_prop_id)
             ));
 
             let bucket_id =
                 <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &issuer,
                     bucket_name,
                 );
@@ -421,7 +412,6 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        buckets: BoundedVec::default(),
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),

@@ -193,7 +193,6 @@ impl pallet_storage_providers::Config for Test {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
@@ -203,6 +202,7 @@ impl pallet_storage_providers::Config for Test {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

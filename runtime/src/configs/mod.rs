@@ -485,7 +485,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -496,6 +495,8 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate =
+        runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
 }
 
 parameter_types! {

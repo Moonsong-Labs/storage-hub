@@ -22,6 +22,7 @@ use codec::{Decode, Encode};
 const METADATA_COLUMN: u32 = 0;
 const ROOTS_COLUMN: u32 = 1;
 const CHUNKS_COLUMN: u32 = 2;
+const BUCKET_PREFIX_COLUMN: u32 = 3;
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
@@ -29,7 +30,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     path.push(db_path.as_str());
     path.push("storagehub/file_storage/");
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(3);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(4);
 
     let path_str = path
         .to_str()
@@ -62,7 +63,7 @@ where
         Ok(())
     }
 
-    fn read(&self, column: u32, key: HasherOutT<T>) -> Result<Option<Vec<u8>>, ErrorT<T>> {
+    fn read(&self, column: u32, key: &[u8]) -> Result<Option<Vec<u8>>, ErrorT<T>> {
         let value = self.db.get(column, key.as_ref()).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
             FileStorageError::FailedToReadStorage
@@ -493,7 +494,7 @@ where
 
         let raw_partial_root = self
             .storage
-            .read(ROOTS_COLUMN, final_root)
+            .read(ROOTS_COLUMN, final_root.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -532,7 +533,7 @@ where
 
         let raw_partial_root = self
             .storage
-            .read(ROOTS_COLUMN, final_root)
+            .read(ROOTS_COLUMN, final_root.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageWriteError::FailedToReadStorage
@@ -617,7 +618,9 @@ where
         })?;
 
         let mut transaction = DBTransaction::new();
+
         transaction.put(METADATA_COLUMN, key.as_ref(), &raw_metadata);
+
         // Stores the current root of the trie.
         // if the file is complete, key and value will be equal.
         transaction.put(
@@ -625,6 +628,16 @@ where
             metadata.fingerprint.as_ref(),
             file_data.get_root().as_ref(),
         );
+
+        let full_key = metadata
+            .bucket_id
+            .into_iter()
+            .chain(key.as_ref().into_iter().cloned())
+            .collect::<Vec<_>>();
+
+        // Store the key prefixed by bucket id
+        transaction.put(BUCKET_PREFIX_COLUMN, full_key.as_ref(), &[]);
+
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageError::FailedToWriteToStorage
@@ -648,10 +661,13 @@ where
     }
 
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError> {
-        let raw_metadata = self.storage.read(METADATA_COLUMN, *key).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToReadStorage
-        })?;
+        let raw_metadata = self
+            .storage
+            .read(METADATA_COLUMN, key.as_ref())
+            .map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
         match raw_metadata {
             None => return Ok(None),
             Some(metadata) => {
@@ -682,7 +698,7 @@ where
 
         let raw_partial_root = self
             .storage
-            .read(ROOTS_COLUMN, final_root)
+            .read(ROOTS_COLUMN, final_root.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -740,11 +756,49 @@ where
         let mut transaction = DBTransaction::new();
         transaction.delete(METADATA_COLUMN, key.as_ref());
         transaction.delete(ROOTS_COLUMN, raw_root);
+        transaction.delete(
+            BUCKET_PREFIX_COLUMN,
+            metadata
+                .bucket_id
+                .into_iter()
+                .chain(key.as_ref().iter().cloned())
+                .collect::<Vec<_>>()
+                .as_ref(),
+        );
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
+
+        Ok(())
+    }
+
+    fn delete_files_with_prefix(&mut self, prefix: &[u8; 32]) -> Result<(), FileStorageError> {
+        let mut keys_to_delete = Vec::new();
+
+        {
+            let mut iter = self
+                .storage
+                .db
+                .iter_with_prefix(BUCKET_PREFIX_COLUMN, prefix);
+
+            while let Some(Ok((key, _))) = iter.next() {
+                // Remove the prefix from the key.
+                let key = key.iter().skip(prefix.len()).copied().collect::<Vec<u8>>();
+
+                let key = convert_raw_bytes_to_hasher_out::<T>(key).map_err(|e| {
+                    error!(target: LOG_TARGET, "{:?}", e);
+                    FileStorageError::FailedToParseFingerprint
+                })?;
+
+                keys_to_delete.push(key);
+            }
+        }
+
+        for key in keys_to_delete {
+            self.delete_file(&key)?;
+        }
 
         Ok(())
     }
@@ -1186,5 +1240,116 @@ mod tests {
         }
 
         assert_ne!(root1, root2)
+    }
+
+    #[test]
+    fn delete_files_with_prefix_works() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(4)),
+            _marker: Default::default(),
+        };
+
+        fn create_file_and_metadata(
+            storage: StorageDb<LayoutV1<BlakeTwo256>, InMemory>,
+            chunks: Vec<Chunk>,
+            bucket_id: [u8; 32],
+            location: &str,
+        ) -> (
+            FileMetadata,
+            H256,
+            Vec<ChunkId>,
+            RocksDbFileDataTrie<LayoutV1<BlakeTwo256>, InMemory>,
+        ) {
+            // Convert chunks into chunk IDs for referencing each chunk in the trie.
+            let chunk_ids: Vec<ChunkId> = chunks
+                .iter()
+                .enumerate()
+                .map(|(id, _)| ChunkId::new(id as u64))
+                .collect();
+
+            // Create a new file trie for storing file chunks.
+            let mut file_trie =
+                RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+            // Write each chunk into the trie.
+            for (i, chunk) in chunks.iter().enumerate() {
+                file_trie.write_chunk(&chunk_ids[i], chunk).unwrap();
+            }
+
+            // Create metadata for the file, including bucket ID, location, and owner.
+            let file_metadata = FileMetadata {
+                file_size: 32u64 * chunks.len() as u64,
+                fingerprint: file_trie.get_root().as_ref().into(),
+                owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+                location: location.to_string().into_bytes(),
+                bucket_id: bucket_id.to_vec(),
+            };
+
+            let key = file_metadata.file_key::<BlakeTwo256>();
+
+            // Return the metadata, key, chunk IDs, and the trie.
+            (file_metadata, key, chunk_ids, file_trie)
+        }
+
+        // Step 2: Define test data for three files.
+        // These are the chunks of data that will be stored in the file trie.
+        let chunks_1 = vec![
+            Chunk::from([5u8; 32]),
+            Chunk::from([6u8; 32]),
+            Chunk::from([7u8; 32]),
+        ];
+        let chunks_2 = vec![
+            Chunk::from([8u8; 32]),
+            Chunk::from([9u8; 32]),
+            Chunk::from([10u8; 32]),
+        ];
+        let chunks_3 = vec![
+            Chunk::from([11u8; 32]),
+            Chunk::from([12u8; 32]),
+            Chunk::from([13u8; 32]),
+        ];
+
+        // Step 3: Create file metadata, keys, and file tries for each of the three files.
+        let (file_metadata_1, key_1, chunk_ids_1, file_trie_1) =
+            create_file_and_metadata(storage.clone(), chunks_1, [1u8; 32], "location");
+        let (file_metadata_2, key_2, chunk_ids_2, file_trie_2) =
+            create_file_and_metadata(storage.clone(), chunks_2, [2u8; 32], "location_2");
+        let (file_metadata_3, key_3, chunk_ids_3, file_trie_3) =
+            create_file_and_metadata(storage.clone(), chunks_3, [3u8; 32], "location_3");
+
+        // Step 4: Create a file storage and insert all three files into the storage.
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+
+        file_storage
+            .insert_file_with_data(key_1, file_metadata_1.clone(), file_trie_1)
+            .unwrap();
+        file_storage
+            .insert_file_with_data(key_2, file_metadata_2.clone(), file_trie_2)
+            .unwrap();
+        file_storage
+            .insert_file_with_data(key_3, file_metadata_3.clone(), file_trie_3)
+            .unwrap();
+
+        // Step 5: Verify that all files and their chunks are inserted properly.
+        assert!(file_storage.get_metadata(&key_1).is_ok());
+        assert!(file_storage.get_metadata(&key_2).is_ok());
+        assert!(file_storage.get_metadata(&key_3).is_ok());
+
+        // Step 6: Delete files with the prefix [1u8; 32], which corresponds to bucket ID 1.
+        file_storage.delete_files_with_prefix(&[1u8; 32]).unwrap();
+
+        // Step 7: Assert that files with bucket_id 1 are deleted.
+        // We expect no metadata or chunks for the file with key_1 after deletion.
+        assert!(file_storage
+            .get_metadata(&key_1)
+            .is_ok_and(|metadata| metadata.is_none()));
+        assert!(file_storage.get_chunk(&key_1, &chunk_ids_1[0]).is_err());
+
+        // Step 8: Assert that files with other bucket_ids (bucket_id 2 and 3) are not deleted.
+        // Files with key_2 and key_3 should remain accessible.
+        assert!(file_storage.get_metadata(&key_2).is_ok());
+        assert!(file_storage.get_metadata(&key_3).is_ok());
+        assert!(file_storage.get_chunk(&key_2, &chunk_ids_2[0]).is_ok());
+        assert!(file_storage.get_chunk(&key_3, &chunk_ids_3[0]).is_ok());
     }
 }

@@ -2,16 +2,15 @@ use crate::{
     self as file_system,
     mock::*,
     types::{
-        AcceptedStorageRequestParameters, BatchResponses, BucketIdFor, BucketMoveRequestResponse,
-        BucketNameFor, FileKeyResponsesInput, FileLocation, MerkleHash, MoveBucketRequestMetadata,
-        MspFailedBatchStorageRequests, MspRejectedBatchStorageRequests,
-        MspRespondStorageRequestsResult, MspStorageRequestResponse, PeerIds,
-        PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl, ThresholdType, ValuePropId,
+        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof, FileLocation,
+        MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
+        ThresholdType, ValuePropId,
     },
-    Config, DataServersForMoveBucket, Error, Event, PendingBucketsToMove,
-    PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget,
-    StorageRequestExpirations, StorageRequests, TickRangeToMaximumThreshold,
+    Config, Error, Event, PendingBucketsToMove, PendingMoveBucketRequests,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations, StorageRequests,
+    TickRangeToMaximumThreshold,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -27,8 +26,9 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::{Bucket, ValueProposition};
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface, ReadStorageProvidersInterface, TrieRemoveMutation,
+    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    TrieRemoveMutation,
 };
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -37,7 +37,6 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get, Zero},
     BoundedVec, DispatchError,
 };
-use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 
 mod create_bucket_tests {
@@ -59,10 +58,10 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        H256::from_slice(&msp.as_slice()),
+                        Some(H256::from_slice(&msp.as_slice())),
                         name,
                         true,
-                        ValuePropId::<Test>::default()
+                        Some(ValuePropId::<Test>::default())
                     ),
                     Error::<Test>::NotAMsp
                 );
@@ -81,7 +80,13 @@ mod create_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 assert_noop!(
-                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
+                    FileSystem::create_bucket(
+                        origin,
+                        Some(msp_id),
+                        name.clone(),
+                        private,
+                        Some(value_prop_id)
+                    ),
                     pallet_storage_providers::Error::<Test>::NotEnoughBalance
                 );
             });
@@ -108,7 +113,6 @@ mod create_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -116,10 +120,10 @@ mod create_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin,
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check if collection was created
@@ -141,24 +145,29 @@ mod create_bucket_tests {
                     ),
                     bucket_creation_deposit
                 );
+
+                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 assert_eq!(
                     <Test as Config>::Currency::free_balance(&owner),
-                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128
                 );
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::NewBucket {
-                        who: owner,
-                        msp_id,
+                        who: owner.clone(),
+                        msp_id: Some(msp_id),
                         bucket_id,
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id,
+                        value_prop_id: Some(value_prop_id),
                     }
                     .into(),
                 );
+
+                // Check fixed rate payment stream is created
+                assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
             });
         }
 
@@ -174,7 +183,6 @@ mod create_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -182,10 +190,10 @@ mod create_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin,
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -201,12 +209,12 @@ mod create_bucket_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner,
-                        msp_id,
+                        msp_id: Some(msp_id),
                         bucket_id,
                         name,
                         collection_id: None,
                         private,
-                        value_prop_id,
+                        value_prop_id: Some(value_prop_id),
                     }
                     .into(),
                 );
@@ -229,10 +237,9 @@ mod delete_bucket_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let (msp_id, _) = add_msp_to_provider_storage(&msp);
+                let _ = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -257,7 +264,6 @@ mod delete_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -265,10 +271,10 @@ mod delete_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     RuntimeOrigin::signed(owner.clone()),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 assert_noop!(
@@ -290,7 +296,6 @@ mod delete_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -298,10 +303,10 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Dispatch a signed extrinsic of a storage request.
@@ -311,36 +316,34 @@ mod delete_bucket_tests {
                     FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                     BlakeTwo256::hash(&b"test".to_vec()),
                     4,
-                    msp_id,
+                    Some(msp_id),
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                 ));
 
                 // Accept the storage request to store the file, so the bucket is not empty.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp),
-                    bounded_vec![(
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
-                                    FileSystem::compute_file_key(
-                                        owner.clone(),
-                                        bucket_id,
-                                        FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
-                                        4,
-                                        BlakeTwo256::hash(&b"test".to_vec())
-                                    ),
-                                    CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                )],
-                                non_inclusion_forest_proof: CompactProof {
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key: FileSystem::compute_file_key(
+                                    owner.clone(),
+                                    bucket_id,
+                                    FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
+                                    4,
+                                    BlakeTwo256::hash(&b"test".to_vec())
+                                ),
+                                proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                },
-                            }),
-                            reject: None
-                        }
-                    )]
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
                 // Make sure the bucket is now not empty.
@@ -376,7 +379,6 @@ mod delete_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -384,10 +386,10 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Dispatch a signed extrinsic.
@@ -424,7 +426,6 @@ mod delete_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -432,10 +433,10 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Get the bucket's collection ID.
@@ -480,7 +481,6 @@ mod delete_bucket_tests {
 				let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
 				let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-					&msp_id,
 					&owner,
 					name.clone(),
 				);
@@ -488,10 +488,10 @@ mod delete_bucket_tests {
 				// Create a new bucket.
 				assert_ok!(FileSystem::create_bucket(
 					origin.clone(),
-					msp_id,
+					Some(msp_id),
 					name.clone(),
 					private,
-					value_prop_id
+					Some(value_prop_id)
 				));
 
 				// Dispatch a signed extrinsic of a storage request.
@@ -501,36 +501,34 @@ mod delete_bucket_tests {
 					FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
 					BlakeTwo256::hash(&b"test".to_vec()),
 					4,
-					msp_id,
+					Some(msp_id),
 					BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
 				));
 
 				// Accept the storage request to store the file, so the bucket is not empty.
 				assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
 					RuntimeOrigin::signed(msp),
-					bounded_vec![(
+					bounded_vec![StorageRequestMspBucketResponse {
 						bucket_id,
-						MspStorageRequestResponse {
-							accept: Some(AcceptedStorageRequestParameters {
-								file_keys_and_proofs: bounded_vec![(
-									FileSystem::compute_file_key(
-										owner.clone(),
-										bucket_id,
-										FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
-										4,
-										BlakeTwo256::hash(&b"test".to_vec())
-									),
-									CompactProof {
-										encoded_nodes: vec![H256::default().as_ref().to_vec()],
-									}
-								)],
-								non_inclusion_forest_proof: CompactProof {
+						accept: Some(StorageRequestMspAcceptedFileKeys {
+							file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+								file_key: FileSystem::compute_file_key(
+									owner.clone(),
+									bucket_id,
+									FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
+									4,
+									BlakeTwo256::hash(&b"test".to_vec())
+								),
+								proof: CompactProof {
 									encoded_nodes: vec![H256::default().as_ref().to_vec()],
-								},
-							}),
-							reject: None
-						}
-					)]
+								}
+							}],
+							non_inclusion_forest_proof: CompactProof {
+								encoded_nodes: vec![H256::default().as_ref().to_vec()],
+							},
+						}),
+						reject: bounded_vec![],
+					}],
 				));
 
 				// Make sure the bucket is now not empty.
@@ -619,7 +617,7 @@ mod request_move_bucket {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_charlie_id,
+                    Some(msp_charlie_id),
                     peer_ids.clone(),
                 ));
 
@@ -764,7 +762,7 @@ mod request_move_bucket {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_charlie_id,
+                    Some(msp_charlie_id),
                     peer_ids.clone(),
                 ));
 
@@ -797,23 +795,21 @@ mod request_move_bucket {
                 // This operation increases the bucket size.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp_charlie),
-                    bounded_vec![(
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
-                                    file_key,
-                                    CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                )],
-                                non_inclusion_forest_proof: CompactProof {
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                },
-                            }),
-                            reject: None
-                        }
-                    )]
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
                 // Check bucket size
@@ -1117,209 +1113,6 @@ mod request_move_bucket {
     }
 }
 
-mod bsp_add_data_server_for_move_bucket_request {
-    use super::*;
-
-    mod failure {
-        use super::*;
-
-        #[test]
-        fn not_a_bsp() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let bucket_id = H256::zero();
-
-                assert_noop!(
-                    FileSystem::bsp_add_data_server_for_move_bucket_request(origin, bucket_id),
-                    Error::<Test>::NotABsp
-                );
-            });
-        }
-
-        #[test]
-        fn no_move_bucket_request_found() {
-            new_test_ext().execute_with(|| {
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let origin = RuntimeOrigin::signed(bsp_account_id.clone());
-                let bucket_id = H256::zero();
-
-                assert_ok!(bsp_sign_up(origin.clone(), 1000));
-
-                assert_noop!(
-                    FileSystem::bsp_add_data_server_for_move_bucket_request(origin, bucket_id),
-                    Error::<Test>::MoveBucketRequestNotFound
-                );
-            });
-        }
-
-        #[test]
-        fn bsp_already_data_server() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp_charlie = Keyring::Charlie.to_account_id();
-                let msp_dave = Keyring::Dave.to_account_id();
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    1000
-                ));
-
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
-
-                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
-
-                // Check bucket is stored by Charlie
-                assert!(Providers::is_bucket_stored_by_msp(
-                    &msp_charlie_id,
-                    &bucket_id
-                ));
-
-                assert_ok!(FileSystem::request_move_bucket(
-                    origin.clone(),
-                    bucket_id,
-                    msp_dave_id
-                ));
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
-                    })
-                );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MoveBucketRequested {
-                        who: owner.clone(),
-                        bucket_id,
-                        new_msp_id: msp_dave_id,
-                    }
-                    .into(),
-                );
-
-                assert_ok!(FileSystem::bsp_add_data_server_for_move_bucket_request(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    bucket_id,
-                ));
-
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata { requester: owner })
-                );
-                assert_eq!(
-                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
-                    Some(bsp_id)
-                );
-
-                assert_noop!(
-                    FileSystem::bsp_add_data_server_for_move_bucket_request(
-                        RuntimeOrigin::signed(bsp_account_id.clone()),
-                        bucket_id,
-                    ),
-                    Error::<Test>::BspAlreadyDataServer
-                );
-            });
-        }
-    }
-
-    mod success {
-        use crate::DataServersForMoveBucket;
-
-        use super::*;
-
-        #[test]
-        fn add_bsp_as_data_server() {
-            new_test_ext().execute_with(|| {
-                let owner = Keyring::Alice.to_account_id();
-                let origin = RuntimeOrigin::signed(owner.clone());
-                let msp_charlie = Keyring::Charlie.to_account_id();
-                let msp_dave = Keyring::Dave.to_account_id();
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                assert_ok!(bsp_sign_up(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    1000
-                ));
-
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
-
-                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
-
-                // Check bucket is stored by Charlie
-                assert!(Providers::is_bucket_stored_by_msp(
-                    &msp_charlie_id,
-                    &bucket_id
-                ));
-
-                // Dispatch a signed extrinsic.
-                assert_ok!(FileSystem::request_move_bucket(
-                    origin.clone(),
-                    bucket_id,
-                    msp_dave_id
-                ));
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
-                    })
-                );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MoveBucketRequested {
-                        who: owner.clone(),
-                        bucket_id,
-                        new_msp_id: msp_dave_id,
-                    }
-                    .into(),
-                );
-
-                // Dispatch a signed extrinsic.
-                assert_ok!(FileSystem::bsp_add_data_server_for_move_bucket_request(
-                    RuntimeOrigin::signed(bsp_account_id.clone()),
-                    bucket_id,
-                ));
-
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
-
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
-                assert_eq!(
-                    pending_move_bucket,
-                    Some(MoveBucketRequestMetadata { requester: owner })
-                );
-                assert_eq!(
-                    DataServersForMoveBucket::<Test>::iter_key_prefix(&bucket_id).next(),
-                    Some(bsp_id)
-                );
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::DataServerRegisteredForMoveBucket { bsp_id, bucket_id }.into(),
-                );
-            });
-        }
-    }
-}
-
 mod update_bucket_privacy_tests {
     use super::*;
 
@@ -1334,10 +1127,9 @@ mod update_bucket_privacy_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let (msp_id, _) = add_msp_to_provider_storage(&msp);
+                let _ = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -1364,7 +1156,6 @@ mod update_bucket_privacy_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -1372,10 +1163,10 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check if collection was created
@@ -1391,12 +1182,12 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id,
+                        msp_id: Some(msp_id),
                         bucket_id,
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id,
+                        value_prop_id: Some(value_prop_id),
                     }
                     .into(),
                 );
@@ -1438,7 +1229,6 @@ mod update_bucket_privacy_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -1446,10 +1236,10 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check if collection was created
@@ -1465,12 +1255,12 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id,
+                        msp_id: Some(msp_id),
                         bucket_id,
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id,
+                        value_prop_id: Some(value_prop_id),
                     }
                     .into(),
                 );
@@ -1539,7 +1329,6 @@ mod update_bucket_privacy_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -1547,10 +1336,10 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -1566,12 +1355,12 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id,
+                        msp_id: Some(msp_id),
                         bucket_id,
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id,
+                        value_prop_id: Some(value_prop_id),
                     }
                     .into(),
                 );
@@ -1645,10 +1434,9 @@ mod create_and_associate_collection_with_bucket_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                let (msp_id, _) = add_msp_to_provider_storage(&msp);
+                let _ = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -1676,7 +1464,6 @@ mod create_and_associate_collection_with_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
                     &owner,
                     name.clone(),
                 );
@@ -1684,10 +1471,10 @@ mod create_and_associate_collection_with_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    msp_id,
+                    Some(msp_id),
                     name.clone(),
                     private,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check if collection was created
@@ -1763,7 +1550,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        msp_id,
+                        Some(msp_id),
                         peer_ids.clone(),
                     ),
                     pallet_storage_providers::Error::<Test>::BucketNotFound
@@ -1796,7 +1583,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        msp_id,
+                        Some(msp_id),
                         peer_ids.clone(),
                     ),
                     Error::<Test>::NotBucketOwner
@@ -1852,7 +1639,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        msp_charlie_id,
+                        Some(msp_charlie_id),
                         peer_ids.clone(),
                     ),
                     Error::<Test>::BucketIsBeingMoved
@@ -1876,10 +1663,13 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
+                let new_stream_deposit: u64 =
+                    <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 let balance_to_mint: crate::types::BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
                         crate::types::BalanceOf<Test>,
                     >>::get()
+                    .saturating_add(new_stream_deposit as u128)
                     .saturating_add(<Test as pallet_balances::Config>::ExistentialDeposit::get());
                 <Test as file_system::Config>::Currency::mint_into(
                     &owner_without_funds,
@@ -1902,7 +1692,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        msp_id,
+                        Some(msp_id),
                         peer_ids.clone(),
                     ),
                     Error::<Test>::CannotHoldDeposit
@@ -1960,7 +1750,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2052,7 +1842,7 @@ mod request_storage {
                     file_1_location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2089,7 +1879,7 @@ mod request_storage {
                     file_2_location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2166,7 +1956,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        msp_id,
+                        Some(msp_id),
                         peer_ids.clone(),
                     ),
                     Error::<Test>::FileSizeCannotBeZero
@@ -2204,7 +1994,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2319,7 +2109,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids,
                 ));
 
@@ -2397,7 +2187,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids,
                 ));
 
@@ -2495,7 +2285,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     Default::default()
                 ));
 
@@ -2545,7 +2335,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     Default::default()
                 ));
 
@@ -2597,7 +2387,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2663,7 +2453,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2718,11 +2508,6 @@ mod msp_respond_storage_request {
 
     mod success {
         use super::*;
-        use crate::types::{
-            AcceptedStorageRequestParameters, MspAcceptedBatchStorageRequests,
-            MspStorageRequestResponse, RejectedStorageRequestReason,
-        };
-        use sp_core::crypto::AccountId32;
 
         #[test]
         fn msp_respond_storage_request_works() {
@@ -2743,7 +2528,8 @@ mod msp_respond_storage_request {
                 // Create the bucket that will hold the file.
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2752,7 +2538,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -2767,23 +2553,24 @@ mod msp_respond_storage_request {
                 );
 
                 // Dispatch the MSP accept request.
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![(
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(
-                                AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(file_key, CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    })],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    },
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
-                            ),
-                            reject: None,
-                        }
-                    )]));
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -2791,28 +2578,6 @@ mod msp_respond_storage_request {
                         .unwrap()
                         .msp,
                     Some((msp_id, true))
-                );
-
-                // Get the new root of the bucket.
-                let new_bucket_root =
-                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
-                        .unwrap();
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![file_key],
-                                    bucket_id,
-                                    new_bucket_root,
-                                    owner: owner_account_id
-                                }
-                            )],
-                        },
-                    }.into(),
                 );
             });
         }
@@ -2824,7 +2589,9 @@ mod msp_respond_storage_request {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let second_location =
+                    FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec())
+                        .unwrap();
                 let size = 4;
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
@@ -2835,7 +2602,8 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold both files.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -2846,56 +2614,63 @@ mod msp_respond_storage_request {
                     fingerprint,
                 );
 
-				// Compute the file key for the second file.
-				let second_file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					second_location.clone(),
-					size,
-					fingerprint,
-				);
+                // Compute the file key for the second file.
+                let second_file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    second_location.clone(),
+                    size,
+                    fingerprint,
+                );
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					first_location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                    owner_signed.clone(),
+                    bucket_id,
+                    first_location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids.clone(),
+                ));
 
-				// Dispatch a storage request for the second file.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					second_location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request for the second file.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    second_location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids.clone(),
+                ));
 
                 // Dispatch the MSP accept request for the first file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-					RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(first_file_key, CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                }), (second_file_key, CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                })],
-                                non_inclusion_forest_proof: CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec(), H256::default().as_ref().to_vec()],
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![
+                                FileKeyWithProof {
+                                    file_key: first_file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
                                 },
-                            }),
-                            reject: None
-                        }
-                    )]
+                                FileKeyWithProof {
+                                    file_key: second_file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }
+                            ],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
                 // Assert that the storage was updated
@@ -2911,28 +2686,6 @@ mod msp_respond_storage_request {
                         .unwrap()
                         .msp,
                     Some((msp_id, true))
-                );
-
-				// Get the new root of the bucket.
-                let new_bucket_root =
-                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
-                    .unwrap();
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![first_file_key, second_file_key],
-                                    bucket_id,
-                                    new_bucket_root,
-                                    owner: owner_account_id
-                                }
-                            )],
-                        },
-                    }.into(),
                 );
 
                 // Assert that the MSP used capacity has been updated.
@@ -2965,12 +2718,17 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id, value_prop_id);
+                let first_bucket_id =
+                    create_bucket(&owner_account_id.clone(), first_name, msp_id, value_prop_id);
 
                 // Create the bucket that will hold the second file.
                 let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-                let second_bucket_id =
-                    create_bucket(&owner_account_id.clone(), second_name, msp_id, value_prop_id);
+                let second_bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    second_name,
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -2997,7 +2755,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_fingerprint,
                     first_size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -3008,41 +2766,44 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_fingerprint,
                     second_size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
-				// Dispatch the MSP accept request for the second file.
-				assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-					RuntimeOrigin::signed(msp.clone()),
-					bounded_vec![(
-                        first_bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(first_file_key, CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    })],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                }),
-                                reject: None,
-                            }
-                        ),
-                        (
-                            second_bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(second_file_key, CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    })],
-                                    non_inclusion_forest_proof: CompactProof {
+                // Dispatch the MSP accept request for the second file.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![
+                        StorageRequestMspBucketResponse {
+                            bucket_id: first_bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key: first_file_key,
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
-                                }),
-                                reject: None,
-                            }
-                        )
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        },
+                        StorageRequestMspBucketResponse {
+                            bucket_id: second_bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key: second_file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }
                     ],
                 ));
 
@@ -3054,47 +2815,19 @@ mod msp_respond_storage_request {
                     Some((msp_id, true))
                 );
 
-				// Assert that the storage was updated
-				assert_eq!(
-					file_system::StorageRequests::<Test>::get(second_file_key).unwrap().msp,
-					Some((msp_id, true))
-				);
-
-                let first_bucket_root = <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
-                    .unwrap();
-				let second_bucket_root =
-					<<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
-					.unwrap();
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![first_file_key],
-                                    bucket_id: first_bucket_id,
-                                    new_bucket_root: first_bucket_root,
-                                    owner: owner_account_id.clone()
-                                }
-                            ), BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![second_file_key],
-                                    bucket_id: second_bucket_id,
-                                    new_bucket_root: second_bucket_root,
-                                    owner: owner_account_id
-                                }
-                            )],
-                        },
-                    }.into(),
+                // Assert that the storage was updated
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(second_file_key)
+                        .unwrap()
+                        .msp,
+                    Some((msp_id, true))
                 );
 
                 // Assert that the MSP used capacity has been updated.
-				assert_eq!(
-					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					first_size + second_size
-				);
+                assert_eq!(
+                    <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+                    first_size + second_size
+                );
             });
         }
 
@@ -3126,13 +2859,21 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id =
-                    create_bucket(&first_owner_account_id.clone(), first_name, msp_id, value_prop_id);
+                let first_bucket_id = create_bucket(
+                    &first_owner_account_id.clone(),
+                    first_name,
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Create the bucket that will hold the second file.
                 let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-                let second_bucket_id =
-                    create_bucket(&second_owner_account_id.clone(), second_name, msp_id, value_prop_id);
+                let second_bucket_id = create_bucket(
+                    &second_owner_account_id.clone(),
+                    second_name,
+                    msp_id,
+                    value_prop_id,
+                );
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -3159,7 +2900,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_fingerprint,
                     first_size,
-                    msp_id,
+                    Some(msp_id),
                     first_peer_ids.clone(),
                 ));
 
@@ -3170,47 +2911,46 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_fingerprint,
                     second_size,
-                    msp_id,
+                    Some(msp_id),
                     second_peer_ids.clone(),
                 ));
 
                 // Dispatch the MSP accept request for the second file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-					RuntimeOrigin::signed(msp.clone()),
-					bounded_vec![(
-                        first_bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
-                                    first_file_key,
-                                    CompactProof {
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![
+                        StorageRequestMspBucketResponse {
+                            bucket_id: first_bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key: first_file_key,
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    },
-                                )],
+                                    }
+                                }],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: None,
-                        }), (
-                            second_bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(
-                                        second_file_key,
-                                        CompactProof {
-                                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                        },
-                                    )],
-                                    non_inclusion_forest_proof: CompactProof {
+                            reject: bounded_vec![],
+                        },
+                        StorageRequestMspBucketResponse {
+                            bucket_id: second_bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key: second_file_key,
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    },
-                                }),
-                                reject: None
-                            },
-                        )
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }
                     ],
-				));
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -3226,38 +2966,6 @@ mod msp_respond_storage_request {
                         .unwrap()
                         .msp,
                     Some((msp_id, true))
-                );
-
-                let first_bucket_root =
-                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
-                    .unwrap();
-
-                let second_bucket_root =
-                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
-                    .unwrap();
-
-                // Check event
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![first_file_key],
-                                    bucket_id: first_bucket_id,
-                                    new_bucket_root: first_bucket_root,
-                                    owner: first_owner_account_id.clone()
-                                }
-                            ), BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![second_file_key],
-                                    bucket_id: second_bucket_id,
-                                    new_bucket_root: second_bucket_root,
-                                    owner: second_owner_account_id.clone()
-                                }
-                            )],
-                        },
-                    }.into(),
                 );
 
                 // Assert that the MSP used capacity has been updated.
@@ -3285,7 +2993,8 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
                 // Set replication target to 1
                 ReplicationTarget::<Test>::put(1);
@@ -3297,7 +3006,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -3338,302 +3047,30 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![(
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(
-                                AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(file_key, CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    })],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    },
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
-                            ),
-                            reject: None,
-                        }
-                    )],
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
-                System::assert_has_event(
-                    Event::StorageRequestFulfilled { file_key }.into(),
-                );
-
-                let new_bucket_root =
-                    <<Test as file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
-                    .unwrap();
-
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Accepted(
-                                MspAcceptedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![file_key],
-                                    bucket_id,
-                                    new_bucket_root,
-                                    owner: owner_account_id
-                                }
-                            )],
-                        },
-                    }.into(),
-                );
+                System::assert_has_event(Event::StorageRequestFulfilled { file_key }.into());
 
                 // Storage request should be removed
                 assert!(file_system::StorageRequests::<Test>::get(file_key).is_none());
                 assert!(
                     file_system::BucketsWithStorageRequests::<Test>::get(bucket_id, file_key)
                         .is_none()
-                );
-            });
-        }
-
-        struct StorageRequestParams {
-            owner_account_id: AccountId32,
-            bucket_name: Vec<u8>,
-            location: Vec<u8>,
-            size: u64,
-            fingerprint: H256,
-            peer_ids: PeerIds<Test>,
-        }
-
-        fn generate_storage_requests(
-            params_list: Vec<StorageRequestParams>,
-            msp_id: ProviderIdFor<Test>,
-            value_prop_id: ValuePropId<Test>,
-        ) -> Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> {
-            let mut results = Vec::new();
-
-            for params in params_list {
-                // Create bucket if not already created
-                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
-                    &msp_id,
-                    &params.owner_account_id.clone().try_into().unwrap(),
-                    params.bucket_name.clone().try_into().unwrap(),
-                );
-
-                if !<Test as file_system::Config>::Providers::bucket_exists(&bucket_id) {
-                    create_bucket(
-                        &params.owner_account_id.clone(),
-                        params.bucket_name.clone().try_into().unwrap(),
-                        msp_id,
-                        value_prop_id,
-                    );
-                }
-
-                // Compute file key
-                let file_key = FileSystem::compute_file_key(
-                    params.owner_account_id.clone(),
-                    bucket_id,
-                    FileLocation::<Test>::try_from(params.location.clone()).unwrap(),
-                    params.size,
-                    params.fingerprint,
-                );
-
-                // Issue storage request
-                assert_ok!(FileSystem::issue_storage_request(
-                    RuntimeOrigin::signed(params.owner_account_id.clone()),
-                    bucket_id,
-                    FileLocation::<Test>::try_from(params.location).unwrap(),
-                    params.fingerprint,
-                    params.size,
-                    msp_id,
-                    params.peer_ids.clone(),
-                ));
-
-                results.push((bucket_id, file_key, params.owner_account_id.clone()));
-            }
-
-            results
-        }
-
-        fn generate_msp_responses_and_results(
-            storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)>,
-            msp_id: ProviderIdFor<Test>,
-        ) -> (
-            FileKeyResponsesInput<Test>,
-            MspRespondStorageRequestsResult<Test>,
-        ) {
-            let mut responses: BTreeMap<BucketIdFor<Test>, MspStorageRequestResponse<Test>> =
-                BTreeMap::new();
-            let mut batch_responses: Vec<BatchResponses<Test>> = Vec::new();
-
-            for (bucket_id, file_key, owner_account_id) in storage_requests {
-                let response: &mut MspStorageRequestResponse<Test> = responses
-                    .entry(bucket_id)
-                    .or_insert_with(|| MspStorageRequestResponse {
-                        accept: None,
-                        reject: None,
-                    });
-
-                if file_key.as_ref()[0] % 2 == 0 {
-                    if let Some(accept) = &mut response.accept {
-                        accept
-                            .file_keys_and_proofs
-                            .try_push((
-                                file_key,
-                                CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                },
-                            ))
-                            .unwrap();
-                    } else {
-                        response.accept = Some(AcceptedStorageRequestParameters {
-                            file_keys_and_proofs: bounded_vec![(
-                                file_key,
-                                CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                }
-                            )],
-                            non_inclusion_forest_proof: CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            },
-                        });
-                    }
-
-                    if let Some(BatchResponses::Accepted(ref mut accepted)) = batch_responses.iter_mut().find(|br| matches!(br, BatchResponses::Accepted(a) if a.bucket_id == bucket_id)) {
-                        accepted.file_keys.try_push(file_key).unwrap();
-                    } else {
-                        batch_responses.push(BatchResponses::Accepted(MspAcceptedBatchStorageRequests {
-                            file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
-                            bucket_id,
-                            new_bucket_root: H256::zero(),
-                            owner: owner_account_id,
-                        }));
-                    }
-                } else {
-                    // Rejected response
-                    let reject_reason = RejectedStorageRequestReason::InternalError;
-
-                    if let Some(reject) = &mut response.reject {
-                        reject.try_push((file_key, reject_reason.clone())).unwrap();
-                    } else {
-                        response.reject = Some(bounded_vec![(file_key, reject_reason.clone())]);
-                    }
-
-                    if let Some(BatchResponses::Rejected(ref mut rejected)) = batch_responses.iter_mut().find(|br| matches!(br, BatchResponses::Rejected(r) if r.bucket_id == bucket_id)) {
-                        rejected.file_keys.try_push((file_key, reject_reason)).unwrap();
-                    } else {
-                        batch_responses.push(BatchResponses::Rejected(MspRejectedBatchStorageRequests {
-                            file_keys: BoundedVec::try_from(vec![(file_key, reject_reason)]).unwrap(),
-                            bucket_id,
-                            owner: owner_account_id,
-                        }));
-                    }
-                }
-            }
-
-            let responses: FileKeyResponsesInput<Test> = responses
-                .into_iter()
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("Should not exceed MaxBatchConfirmStorageRequests");
-
-            let results = MspRespondStorageRequestsResult {
-                msp_id,
-                responses: BoundedVec::try_from(batch_responses).unwrap(),
-            };
-
-            println!("Generated results: {:?}", results);
-
-            (responses, results)
-        }
-
-        #[test]
-        fn msp_respond_storage_request_accepts_and_rejects_failed_mixed_responses() {
-            new_test_ext().execute_with(|| {
-                // Create accounts
-                let msp_account_id = Keyring::Charlie.to_account_id();
-
-                // Register the MSP.
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp_account_id);
-
-                let first_bucket = b"first bucket".to_vec();
-                let second_bucket = b"second bucket".to_vec();
-                let size = 4;
-                let fingerprint = H256::zero();
-
-                // Define storage request parameters
-                let storage_request_params = vec![
-                    StorageRequestParams {
-                        owner_account_id: Keyring::Alice.to_account_id(),
-                        bucket_name: first_bucket,
-                        location: b"location".to_vec(),
-                        size,
-                        fingerprint,
-                        peer_ids: BoundedVec::try_from(
-                            vec![BoundedVec::try_from(vec![1]).unwrap()],
-                        )
-                        .unwrap(),
-                    },
-                    StorageRequestParams {
-                        owner_account_id: Keyring::Bob.to_account_id(),
-                        bucket_name: second_bucket.clone(),
-                        location: b"location2".to_vec(),
-                        size,
-                        fingerprint,
-                        peer_ids: BoundedVec::try_from(
-                            vec![BoundedVec::try_from(vec![2]).unwrap()],
-                        )
-                        .unwrap(),
-                    },
-                    StorageRequestParams {
-                        owner_account_id: Keyring::Bob.to_account_id(),
-                        bucket_name: second_bucket,
-                        location: b"location3".to_vec(),
-                        size,
-                        fingerprint,
-                        peer_ids: BoundedVec::try_from(
-                            vec![BoundedVec::try_from(vec![2]).unwrap()],
-                        )
-                        .unwrap(),
-                    },
-                ];
-
-                // Generate storage requests
-                let storage_requests: Vec<(BucketIdFor<Test>, MerkleHash<Test>, AccountId32)> =
-                    generate_storage_requests(storage_request_params, msp_id, value_prop_id);
-
-                let (responses, expected_results) =
-                    generate_msp_responses_and_results(storage_requests, msp_id);
-
-                // Use `responses` to call the extrinsic
-                FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    RuntimeOrigin::signed(msp_account_id),
-                    responses,
-                )
-                .unwrap();
-
-                let expected_results = MspRespondStorageRequestsResult {
-                    msp_id,
-                    responses: {
-                        let updated_responses: Vec<_> = expected_results
-                            .responses
-                            .into_iter()
-                            .map(|batch_response| match batch_response {
-                                BatchResponses::Accepted(mut accepted) => {
-                                    accepted.new_bucket_root =
-                                        <Test as file_system::Config>::Providers::get_root_bucket(
-                                            &accepted.bucket_id,
-                                        )
-                                        .expect("Root bucket should exist");
-                                    BatchResponses::Accepted(accepted)
-                                }
-                                br => br,
-                            })
-                            .collect();
-
-                        BoundedVec::try_from(updated_responses)
-                            .expect("Number of responses should not exceed the bound")
-                    },
-                };
-
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: expected_results,
-                    }
-                    .into(),
                 );
             });
         }
@@ -3657,44 +3094,26 @@ mod msp_respond_storage_request {
 
                 let file_key = H256::zero();
 
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    msp_signed.clone(),
-                    bounded_vec![(
-                        bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        msp_signed.clone(),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
-                                    CompactProof {
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
-                                )],
+                                }],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: None,
-                        }
-                    )]
-                ));
-
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Failed(
-                                MspFailedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![(
-                                        file_key,
-                                        Error::<Test>::StorageRequestNotFound.into()
-                                    )],
-                                    bucket_id,
-                                    owner: owner_account_id,
-                                }
-                            )],
-                        },
-                    }
-                    .into(),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::StorageRequestNotFound
                 );
             });
         }
@@ -3724,7 +3143,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -3742,23 +3161,21 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         not_msp_signed.clone(),
-                        bounded_vec![(
+                        bounded_vec![StorageRequestMspBucketResponse {
                             bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(
-                                        file_key,
-                                        CompactProof {
-                                            encoded_nodes: vec![],
-                                        }
-                                    )],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![],
-                                    },
-                                }),
-                                reject: None,
-                            }
-                        )]
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }],
                     ),
                     Error::<Test>::NotASp
                 );
@@ -3793,7 +3210,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -3811,23 +3228,21 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         bsp_signed.clone(),
-                        bounded_vec![(
+                        bounded_vec![StorageRequestMspBucketResponse {
                             bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(
-                                        file_key,
-                                        CompactProof {
-                                            encoded_nodes: vec![],
-                                        }
-                                    )],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![],
-                                    },
-                                }),
-                                reject: None,
-                            }
-                        )]
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }],
                     ),
                     Error::<Test>::NotAMsp
                 );
@@ -3878,44 +3293,26 @@ mod msp_respond_storage_request {
                     },
                 );
 
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    msp_signed.clone(),
-                    bounded_vec![(
-                        bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        msp_signed.clone(),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
-                                    CompactProof {
+                                    proof: CompactProof {
                                         encoded_nodes: vec![],
                                     }
-                                )],
+                                }],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: None,
-                        }
-                    )]
-                ),);
-
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Failed(
-                                MspFailedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![(
-                                        file_key,
-                                        Error::<Test>::RequestWithoutMsp.into()
-                                    )],
-                                    bucket_id,
-                                    owner: owner_account_id,
-                                }
-                            )],
-                        },
-                    }
-                    .into(),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::RequestWithoutMsp
                 );
             });
         }
@@ -3952,7 +3349,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    expected_msp_id,
+                    Some(expected_msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -3968,23 +3365,21 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         caller_msp_signed.clone(),
-                        bounded_vec![(
+                        bounded_vec![StorageRequestMspBucketResponse {
                             bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(
-                                        file_key,
-                                        CompactProof {
-                                            encoded_nodes: vec![],
-                                        }
-                                    )],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![],
-                                    },
-                                }),
-                                reject: None,
-                            }
-                        )]
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }],
                     ),
                     Error::<Test>::MspNotStoringBucket
                 );
@@ -4017,7 +3412,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4032,64 +3427,44 @@ mod msp_respond_storage_request {
                 // Accept storing the file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
-                    bounded_vec![(
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
-                                    file_key,
-                                    CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                )],
-                                non_inclusion_forest_proof: CompactProof {
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                },
-                            }),
-                            reject: None,
-                        }
-                    )],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
                 // Try to accept storing the file again.
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    msp_signed.clone(),
-                    bounded_vec![(
-                        bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        msp_signed.clone(),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
-                                    CompactProof {
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
-                                )],
+                                }],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: None,
-                        }
-                    )],
-                ),);
-
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Failed(
-                                MspFailedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![(
-                                        file_key,
-                                        Error::<Test>::MspAlreadyConfirmed.into()
-                                    )],
-                                    bucket_id,
-                                    owner: owner_account_id,
-                                }
-                            )],
-                        },
-                    }
-                    .into(),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::MspAlreadyConfirmed
                 );
             });
         }
@@ -4146,23 +3521,21 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         expected_msp_signed.clone(),
-                        bounded_vec![(
+                        bounded_vec![StorageRequestMspBucketResponse {
                             bucket_id,
-                            MspStorageRequestResponse {
-                                accept: Some(AcceptedStorageRequestParameters {
-                                    file_keys_and_proofs: bounded_vec![(
-                                        file_key,
-                                        CompactProof {
-                                            encoded_nodes: vec![],
-                                        }
-                                    )],
-                                    non_inclusion_forest_proof: CompactProof {
-                                        encoded_nodes: vec![],
-                                    },
-                                }),
-                                reject: None,
-                            }
-                        )]
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }],
                     ),
                     Error::<Test>::MspNotStoringBucket
                 );
@@ -4217,44 +3590,26 @@ mod msp_respond_storage_request {
                 );
 
                 // Try to accept storing a file with a MSP that does not have enough available capacity
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    msp_signed.clone(),
-                    bounded_vec![(
-                        bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        msp_signed.clone(),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
-                                    CompactProof {
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
-                                )],
+                                }],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: None,
-                        }
-                    )]
-                ),);
-
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Failed(
-                                MspFailedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![(
-                                        file_key,
-                                        Error::<Test>::InsufficientAvailableCapacity.into()
-                                    )],
-                                    bucket_id,
-                                    owner: owner_account_id,
-                                }
-                            )],
-                        },
-                    }
-                    .into(),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::InsufficientAvailableCapacity
                 );
             });
         }
@@ -4284,7 +3639,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4297,45 +3652,26 @@ mod msp_respond_storage_request {
                 );
 
                 // Try to accept storing a file with a non-inclusion proof that includes the file key
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    msp_signed.clone(),
-                    bounded_vec![(
-                        bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        msp_signed.clone(),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
                                     file_key,
-                                    CompactProof {
+                                    proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
-                                )],
+                                }],
                                 non_inclusion_forest_proof: CompactProof {
                                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                                 },
                             }),
-                            reject: None,
-                        }
-                    )]
-                ),);
-
-                // Check the event Event::MspRespondedToStorageRequests
-                System::assert_last_event(
-                    Event::MspRespondedToStorageRequests {
-                        results: MspRespondStorageRequestsResult::<Test> {
-                            msp_id,
-                            responses: bounded_vec![BatchResponses::<Test>::Failed(
-                                MspFailedBatchStorageRequests::<Test> {
-                                    file_keys: bounded_vec![(
-                                        file_key,
-                                        Error::<Test>::ExpectedNonInclusionProof.into()
-                                    )],
-                                    bucket_id,
-                                    owner: owner_account_id,
-                                }
-                            )],
-                        },
-                    }
-                    .into(),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::ExpectedNonInclusionProof
                 );
             });
         }
@@ -4375,7 +3711,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4448,7 +3784,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4502,7 +3838,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4567,7 +3903,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4632,7 +3968,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4695,7 +4031,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     4,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4776,7 +4112,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4840,6 +4176,8 @@ mod bsp_volunteer {
 mod bsp_confirm {
     use super::*;
     mod failure {
+        use crate::types::FileKeyWithProof;
+
         use super::*;
         use pallet_storage_providers::types::ReputationWeightType;
 
@@ -4870,7 +4208,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4967,7 +4305,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -5032,7 +4370,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -5047,23 +4385,21 @@ mod bsp_confirm {
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
-                    bounded_vec![(
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
-                                    file_key,
-                                    CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                )],
-                                non_inclusion_forest_proof: CompactProof {
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                },
-                            }),
-                            reject: None,
-                        }
-                    )]
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
                 // Assert that the storage was updated
@@ -5165,7 +4501,6 @@ mod bsp_confirm {
                     let location =
                         FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
                     let fingerprint = H256::repeat_byte(i as u8);
-
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
                     let bucket_id =
                         create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -5177,7 +4512,7 @@ mod bsp_confirm {
                         location.clone(),
                         fingerprint,
                         size,
-                        msp_id,
+                        Some(msp_id),
                         Default::default(),
                     ));
 
@@ -5269,7 +4604,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -5402,7 +4737,7 @@ mod bsp_confirm {
 					location.clone(),
 					fingerprint,
 					size,
-					msp_id,
+					Some(msp_id),
 					peer_ids.clone(),
 				));
 
@@ -5515,7 +4850,7 @@ mod bsp_confirm {
 					location.clone(),
 					fingerprint,
 					new_size,
-					msp_id,
+					Some(msp_id),
 					peer_ids.clone(),
 				));
 
@@ -5628,7 +4963,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -5688,7 +5023,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -5807,7 +5142,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -5929,7 +5264,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -6066,7 +5401,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -6236,7 +5571,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -6393,7 +5728,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -6571,7 +5906,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     Default::default(),
                 ));
 
@@ -6689,7 +6024,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     Default::default(),
                 ));
 
@@ -7198,7 +6533,7 @@ mod delete_file_and_pending_deletions_tests {
                         user: owner_account_id.clone(),
                         file_key,
                         bucket_id,
-                        msp_id,
+                        msp_id: Some(msp_id),
                         proof_of_inclusion: true,
                     }
                     .into(),
@@ -7247,7 +6582,7 @@ mod delete_file_and_pending_deletions_tests {
                         user: owner_account_id.clone(),
                         file_key,
                         bucket_id,
-                        msp_id,
+                        msp_id: Some(msp_id),
                         proof_of_inclusion: false,
                     }
                         .into(),
@@ -7503,7 +6838,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -7561,7 +6896,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -7694,7 +7029,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -7964,7 +7299,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -8140,7 +7475,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -8176,23 +7511,21 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![(
+                    bounded_vec![StorageRequestMspBucketResponse {
                         bucket_id,
-                        MspStorageRequestResponse {
-                            accept: Some(AcceptedStorageRequestParameters {
-                                file_keys_and_proofs: bounded_vec![(
-                                    file_key,
-                                    CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                )],
-                                non_inclusion_forest_proof: CompactProof {
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                },
-                            }),
-                            reject: None
-                        }
-                    )]
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
                 ));
 
                 // Assert that the storage was updated
@@ -8299,7 +7632,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -8517,7 +7850,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -8710,7 +8043,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -8833,6 +8166,129 @@ mod stop_storing_for_insolvent_user {
     }
 }
 
+mod msp_stop_storing_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn msp_not_registered() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let none_registered_msp = Keyring::Dave.to_account_id();
+                let none_registered_msp_signed = RuntimeOrigin::signed(none_registered_msp.clone());
+
+                // Try to stop storing for the bucket.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket(none_registered_msp_signed, bucket_id),
+                    Error::<Test>::NotAMsp
+                );
+            });
+        }
+
+        #[test]
+        fn msp_not_storing_bucket() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let another_msp = Keyring::Dave.to_account_id();
+                add_msp_to_provider_storage(&another_msp);
+                let another_msp_signed = RuntimeOrigin::signed(another_msp.clone());
+
+                // Try to stop storing for the bucket.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket(another_msp_signed, bucket_id),
+                    Error::<Test>::MspNotStoringBucket
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn msp_stop_storing_bucket_works_payment_stream_deleted() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Dispatch MSP stop storing bucket.
+                assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStoppedStoringBucket {
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                    }
+                    .into(),
+                );
+
+                // Check that the payment stream between the user and the MSP was deleted since there are no more buckets stored by the MSP for the user.
+                assert!(!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner_account_id));
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_works_payment_stream_updated() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let owner_account_id = Keyring::Alice.to_account_id();
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let another_name = BoundedVec::try_from(b"another_bucket".to_vec()).unwrap();
+                create_bucket(&owner_account_id.clone(), another_name, msp_id, value_prop_id);
+
+                // Dispatch MSP stop storing bucket.
+                assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStoppedStoringBucket {
+                        msp_id,
+                        bucket_id,
+                        owner: owner_account_id.clone(),
+                    }
+                    .into(),
+                );
+
+                // Check that the payment stream between the user and the MSP was updated since there are still buckets stored by the MSP for the user.
+                assert!(
+                    <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner_account_id)
+                );
+            });
+        }
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -8877,7 +8333,6 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        buckets: BoundedVec::default(),
         capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
@@ -8893,12 +8348,12 @@ fn add_msp_to_provider_storage(
         msp_hash,
     );
 
-    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 100);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10000);
     let value_prop_id = value_prop.derive_id();
     pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
         msp_hash,
         value_prop_id,
-        ValueProposition::<Test>::new(1, bounded_vec![], 100),
+        value_prop,
     );
 
     (msp_hash, value_prop_id)
@@ -8911,17 +8366,17 @@ fn create_bucket(
     value_prop_id: ValuePropId<Test>,
 ) -> BucketIdFor<Test> {
     let bucket_id =
-        <Test as file_system::Config>::Providers::derive_bucket_id(&msp_id, &owner, name.clone());
+        <Test as file_system::Config>::Providers::derive_bucket_id(&owner, name.clone());
 
     let origin = RuntimeOrigin::signed(owner.clone());
 
     // Dispatch a signed extrinsic.
     assert_ok!(FileSystem::create_bucket(
         origin,
-        msp_id,
+        Some(msp_id),
         name.clone(),
         false,
-        value_prop_id
+        Some(value_prop_id)
     ));
 
     // Assert bucket was created
@@ -8930,12 +8385,17 @@ fn create_bucket(
         Some(Bucket {
             root: <Test as pallet_storage_providers::pallet::Config>::DefaultMerkleRoot::get(),
             user_id: owner.clone(),
-            msp_id,
+            msp_id: Some(msp_id),
             private: false,
             read_access_group_id: None,
             size: 0,
-            value_prop_id
+            value_prop_id: Some(value_prop_id),
         })
+    );
+
+    assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(&msp_id, &owner));
+    assert!(
+        <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner).is_some()
     );
 
     bucket_id

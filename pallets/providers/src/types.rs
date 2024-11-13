@@ -61,7 +61,6 @@ pub type Commitment<T> = BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize>
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
-    pub buckets: Buckets<T>,
     pub capacity: StorageDataUnit<T>,
     pub capacity_used: StorageDataUnit<T>,
     pub multiaddresses: Multiaddresses<T>,
@@ -94,11 +93,11 @@ pub struct BackupStorageProvider<T: Config> {
 pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
-    pub msp_id: MainStorageProviderId<T>,
+    pub msp_id: Option<MainStorageProviderId<T>>,
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     pub size: StorageDataUnit<T>,
-    pub value_prop_id: HashId<T>,
+    pub value_prop_id: Option<HashId<T>>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -131,6 +130,20 @@ pub struct MainStorageProviderSignUpRequest<T: Config> {
 pub enum StorageProviderId<T: Config> {
     BackupStorageProvider(BackupStorageProviderId<T>),
     MainStorageProvider(MainStorageProviderId<T>),
+}
+
+/// The delta applied to a fixed rate payment stream via [`Pallet::compute_new_rate_delta`].
+pub enum RateDeltaParam<T: Config> {
+    /// Variant should be used when a new bucket is associated to an MSP.
+    /// The bucket can be of any size, including zero since this variant can be selected when a bucket is being *moved* from one
+    /// MSP to another.
+    NewBucket,
+    /// Variant should be used when a bucket is removed from an MSP.
+    RemoveBucket,
+    /// Variant should be used when a bucket size has increased by some amount.
+    Increase(StorageDataUnit<T>),
+    /// Variant should be used when a bucket size has decreased by some amount.
+    Decrease(StorageDataUnit<T>),
 }
 
 // Type aliases:
@@ -169,11 +182,6 @@ pub type StorageDataUnit<T> = <T as crate::Config>::StorageDataUnit;
 /// Its maximum size is defined in the runtime configuration, as MaxProtocols.
 pub type MaxProtocols<T> = <T as crate::Config>::MaxProtocols;
 pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type for protocols")
-
-/// MaxBuckets is the maximum amount of buckets that a Main Storage Provider can have.
-pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
-/// Buckets is a vector of the buckets that a Main Storage Provider has.
-pub type Buckets<T> = BoundedVec<Bucket<T>, MaxBuckets<T>>;
 
 /// Type alias for the `ReputationWeightType` type used in the Storage Providers pallet.
 pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;

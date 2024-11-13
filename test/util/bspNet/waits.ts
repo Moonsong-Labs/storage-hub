@@ -3,7 +3,7 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
-import type { H256 } from "@polkadot/types/interfaces";
+import type { Address, H256 } from "@polkadot/types/interfaces";
 
 /**
  * Waits for a BSP to volunteer for a storage request.
@@ -112,13 +112,39 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForBspStored = async (
+  api: ApiPromise,
+  checkQuantity?: number,
+  bspAccount?: Address
+) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
   const delay = 200;
+
+  // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
+  invariant(
+    !(bspAccount && checkQuantity && checkQuantity > 1),
+    "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
+  );
+
   for (let i = 0; i < iterations + 1; i++) {
     try {
       await sleep(delay);
+
+      // check if we have a submitProof extrinsic
+      if (bspAccount) {
+        const txs = await api.rpc.author.pendingExtrinsics();
+        const match = txs.filter(
+          (tx) => tx.method.method === "submitProof" && tx.signer.eq(bspAccount)
+        );
+
+        // If we have a submit proof event at the same time we are trying to confirm storage
+        // we need to advance one block because the two event cannot happen at the same time
+        if (match.length === 1) {
+          await sealBlock(api);
+        }
+      }
+
       const matches = await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspConfirmStoring",
@@ -128,7 +154,7 @@ export const waitForBspStored = async (api: ApiPromise, checkQuantity?: number) 
       if (checkQuantity) {
         invariant(
           matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
+          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
         );
       }
       const { events } = await sealBlock(api);
@@ -268,8 +294,8 @@ export const waitForBspToCatchUpToChainTip = async (
   bspBehindApi: ApiPromise
 ) => {
   // To allow time for BSP to catch up to the tip of the chain (10s)
-  const iterations = 10;
-  const delay = 1000;
+  const iterations = 100;
+  const delay = 100;
   for (let i = 0; i < iterations + 1; i++) {
     try {
       await sleep(delay);
@@ -292,7 +318,6 @@ export const waitForBspToCatchUpToChainTip = async (
  * This function performs the following steps:
  * 1. Waits for a short period to allow the node to react.
  * 2. Checks for the presence of a 'mspRespondStorageRequestsMultipleBuckets' extrinsic in the transaction pool.
- * 3. Seals a block and verifies the presence of an 'MspRespondedToStorageRequests' event.
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
@@ -300,7 +325,7 @@ export const waitForBspToCatchUpToChainTip = async (
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
   const iterations = 41;
   const delay = 50;
 
@@ -327,24 +352,4 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
       );
     }
   }
-
-  const { events } = await sealBlock(api);
-  const mspRespondEvent = assertEventPresent(
-    api,
-    "fileSystem",
-    "MspRespondedToStorageRequests",
-    events
-  );
-
-  const mspRespondDataBlob =
-    api.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-    mspRespondEvent.event.data;
-
-  if (!mspRespondDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  const responses = mspRespondDataBlob.results.responses;
-
-  return responses;
 };

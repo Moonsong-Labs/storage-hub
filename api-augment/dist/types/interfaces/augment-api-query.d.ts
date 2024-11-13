@@ -301,18 +301,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * BSP data servers for move bucket requests.
-       **/
-      dataServersForMoveBucket: AugmentedQuery<
-        ApiType,
-        (
-          arg1: H256 | string | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<Null>>,
-        [H256, H256]
-      > &
-        QueryableStorageEntry<ApiType, [H256, H256]>;
-      /**
        * A map of blocks to expired file deletion requests.
        **/
       fileDeletionRequestExpirations: AugmentedQuery<
@@ -1594,7 +1582,7 @@ declare module "@polkadot/api-base/types/storage" {
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The mapping from a MainStorageProviderId to a vector of BucketIds.
+       * The double mapping from a MainStorageProviderId to a BucketIds.
        *
        * This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
        *
@@ -1604,10 +1592,13 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       mainStorageProviderIdsToBuckets: AugmentedQuery<
         ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<Option<Vec<H256>>>,
-        [H256]
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [H256, H256]
       > &
-        QueryableStorageEntry<ApiType, [H256]>;
+        QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
        * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
        *
