@@ -1,5 +1,5 @@
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use trie_db::TrieDBMutBuilder;
 
 use shc_common::types::{
@@ -149,6 +149,7 @@ where
 {
     pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
+    pub bucket_prefix_map: HashSet<[u8; 64]>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T>
@@ -159,6 +160,7 @@ where
         Self {
             metadata: HashMap::new(),
             file_data: HashMap::new(),
+            bucket_prefix_map: HashSet::new(),
         }
     }
 }
@@ -233,13 +235,16 @@ where
         if self.metadata.contains_key(&key) {
             return Err(FileStorageError::FileAlreadyExists);
         }
-        self.metadata.insert(key, metadata);
+        self.metadata.insert(key, metadata.clone());
 
         let empty_file_trie = self.new_file_data_trie();
         let previous = self.file_data.insert(key, empty_file_trie);
         if previous.is_some() {
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
+
+        let full_key = [metadata.bucket_id.as_slice(), key.as_ref()].concat();
+        self.bucket_prefix_map.insert(full_key.try_into().unwrap());
 
         Ok(())
     }
@@ -253,12 +258,15 @@ where
         if self.metadata.contains_key(&key) {
             return Err(FileStorageError::FileAlreadyExists);
         }
-        self.metadata.insert(key, metadata);
+        self.metadata.insert(key, metadata.clone());
 
         let previous = self.file_data.insert(key, file_data);
         if previous.is_some() {
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
+
+        let full_key = [metadata.bucket_id.as_slice(), key.as_ref()].concat();
+        self.bucket_prefix_map.insert(full_key.try_into().unwrap());
 
         Ok(())
     }
@@ -316,6 +324,35 @@ where
         }
 
         Ok(FileStorageWriteOutcome::FileComplete)
+    }
+
+    fn delete_files_with_prefix(&mut self, prefix: &[u8; 32]) -> Result<(), FileStorageError>
+    where
+        HasherOutT<T>: TryFrom<[u8; 32]>,
+    {
+        let keys_to_delete: Vec<HasherOutT<T>> = self
+            .bucket_prefix_map
+            .iter()
+            .filter_map(|full_key| {
+                if full_key.starts_with(prefix) {
+                    let key: [u8; 32] = full_key[32..].try_into().unwrap();
+                    Some(
+                        key.try_into()
+                            .map_err(|_| FileStorageError::FailedToParseKey)
+                            .unwrap(),
+                    )
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for key in keys_to_delete {
+            self.metadata.remove(&key);
+            self.file_data.remove(&key);
+        }
+
+        Ok(())
     }
 }
 
@@ -600,5 +637,94 @@ mod tests {
             assert_eq!(chunk_ids[id], leaf.key);
             assert_eq!(chunks[id], leaf.data);
         }
+    }
+
+    #[test]
+    fn delete_files_with_prefix_works() {
+        fn create_file_data_trie(
+            chunks: &Vec<Chunk>,
+        ) -> InMemoryFileDataTrie<LayoutV1<BlakeTwo256>> {
+            let chunk_ids: Vec<ChunkId> = chunks
+                .iter()
+                .enumerate()
+                .map(|(id, _)| ChunkId::new(id as u64))
+                .collect();
+
+            let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
+            for (chunk_id, chunk) in chunk_ids.iter().zip(chunks) {
+                file_trie.write_chunk(chunk_id, chunk).unwrap();
+            }
+
+            file_trie
+        }
+
+        fn create_file_metadata(
+            file_trie: &InMemoryFileDataTrie<LayoutV1<BlakeTwo256>>,
+            location: &str,
+            bucket_id: [u8; 32],
+        ) -> FileMetadata {
+            FileMetadata {
+                file_size: 1024u64 * 3,
+                fingerprint: file_trie.get_root().as_ref().into(),
+                owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+                location: location.to_string().into_bytes(),
+                bucket_id: bucket_id.to_vec(),
+            }
+        }
+
+        let chunks = vec![
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
+        ];
+
+        let file_trie_1 = create_file_data_trie(&chunks);
+        let file_metadata_1 = create_file_metadata(&file_trie_1, "location_1", [1u8; 32]);
+        let file_key_1 = file_metadata_1.file_key::<BlakeTwo256>();
+
+        let file_trie_2 = create_file_data_trie(&chunks);
+        let file_metadata_2 = create_file_metadata(&file_trie_2, "location_2", [2u8; 32]);
+        let file_key_2 = file_metadata_2.file_key::<BlakeTwo256>();
+
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+
+        file_storage
+            .insert_file_with_data(file_key_1, file_metadata_1, file_trie_1)
+            .unwrap();
+        file_storage
+            .insert_file_with_data(file_key_2, file_metadata_2, file_trie_2)
+            .unwrap();
+
+        assert!(file_storage.get_metadata(&file_key_1).is_ok());
+        assert!(file_storage.get_metadata(&file_key_2).is_ok());
+
+        let prefix = [1u8; 32].to_vec();
+        file_storage
+            .delete_files_with_prefix(prefix.as_slice().try_into().unwrap())
+            .unwrap();
+
+        assert!(file_storage
+            .get_metadata(&file_key_1)
+            .is_ok_and(|metadata| metadata.is_none()));
+        assert!(file_storage
+            .get_chunk(&file_key_1, &ChunkId::new(0u64))
+            .is_err());
+        assert!(file_storage
+            .get_chunk(&file_key_1, &ChunkId::new(1u64))
+            .is_err());
+        assert!(file_storage
+            .get_chunk(&file_key_1, &ChunkId::new(2u64))
+            .is_err());
+
+        assert!(file_storage.get_metadata(&file_key_2).is_ok());
+        assert!(file_storage
+            .get_chunk(&file_key_2, &ChunkId::new(0u64))
+            .is_ok());
+        assert!(file_storage
+            .get_chunk(&file_key_2, &ChunkId::new(1u64))
+            .is_ok());
+        assert!(file_storage
+            .get_chunk(&file_key_2, &ChunkId::new(2u64))
+            .is_ok());
     }
 }

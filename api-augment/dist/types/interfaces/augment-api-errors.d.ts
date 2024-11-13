@@ -255,6 +255,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FileSizeCannotBeZero: AugmentedError<ApiType>;
       /**
+       * Failed to fetch the rate for the payment stream.
+       **/
+      FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
+      /**
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -995,13 +999,33 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
       /**
+       * Error thrown when a bucket has no value proposition.
+       **/
+      BucketHasNoValueProposition: AugmentedError<ApiType>;
+      /**
+       * Error thrown when an operation requires an MSP to be storing the bucket.
+       **/
+      BucketMustHaveMspForOperation: AugmentedError<ApiType>;
+      /**
+       * Bucket cannot be deleted because it is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
+      /**
        * Error thrown when a bucket ID is not found in storage.
        **/
       BucketNotFound: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+       **/
+      BucketSizeExceedsLimit: AugmentedError<ApiType>;
+      /**
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a fixed payment stream is not found.
+       **/
+      FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Error thrown when failing to decode the owner Account ID from the received metadata.
        **/
@@ -1018,6 +1042,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a Provider tries to remove the last MultiAddress from its account.
        **/
       LastMultiAddressCantBeRemoved: AugmentedError<ApiType>;
+      /**
+       * Error thrown when changing the MSP of a bucket to the same assigned MSP.
+       **/
+      MspAlreadyAssignedToBucket: AugmentedError<ApiType>;
       /**
        * Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
        **/

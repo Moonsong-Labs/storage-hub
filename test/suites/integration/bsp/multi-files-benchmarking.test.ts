@@ -34,7 +34,11 @@ describeBspNet(
         const destination = locations[i];
         const bucketName = bucketNames[i];
 
-        const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketName);
+        const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+          source,
+          destination,
+          bucketName
+        );
         fileKeys.push(fileMetadata.fileKey);
 
         await userApi.wait.bspVolunteer(1);
@@ -111,7 +115,9 @@ describeBspNet(
       let challengesStr = "";
       for (const [index, challenges] of challengesCases.entries()) {
         const challengesVec = `"${challenges}".as_bytes().to_vec(),\n            `;
-        challengesStr += `${index + 1} => vec![\n            ${challengesVec}\n        ],\n        `;
+        challengesStr += `${
+          index + 1
+        } => vec![\n            ${challengesVec}\n        ],\n        `;
       }
 
       const template = fs.readFileSync(

@@ -4,7 +4,8 @@ import { NetworkLauncher } from "../util/netLaunch";
 
 const bspNetConfig: BspNetConfig = {
   noisy: process.env.NOISY === "1",
-  rocksdb: process.env.ROCKSDB === "1"
+  rocksdb: process.env.ROCKSDB === "1",
+  indexer: process.env.INDEXER === "1"
 };
 
 const CONFIG = {
@@ -18,7 +19,11 @@ async function bootStrapNetwork() {
 
   await using api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
-  await api.file.newStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
+  await api.file.createBucketAndSendNewStorageRequest(
+    CONFIG.localPath,
+    CONFIG.remotePath,
+    CONFIG.bucketName
+  );
 
   await api.wait.bspVolunteer();
   await api.wait.bspStored();

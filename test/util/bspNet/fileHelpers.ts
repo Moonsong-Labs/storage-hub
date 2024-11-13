@@ -7,8 +7,64 @@ import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
 import type { HexString } from "@polkadot/util/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
+import type { AccountId32, H256 } from "@polkadot/types/interfaces";
+import { GenericAccountId } from "@polkadot/types";
 
 export const sendNewStorageRequest = async (
+  api: ApiPromise,
+  source: string,
+  location: string,
+  bucketId: H256,
+  owner?: KeyringPair,
+  mspId?: HexString
+): Promise<FileMetadata> => {
+  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+    source,
+    location,
+    ShConsts.NODE_INFOS.user.AddressId,
+    bucketId
+  );
+
+  const issueOwner = owner ?? shUser;
+
+  const issueStorageRequestResult = await sealBlock(
+    api,
+    api.tx.fileSystem.issueStorageRequest(
+      bucketId,
+      location,
+      fileMetadata.fingerprint,
+      fileMetadata.file_size,
+      mspId ?? ShConsts.DUMMY_MSP_ID,
+      [ShConsts.NODE_INFOS.user.expectedPeerId]
+    ),
+    issueOwner
+  );
+
+  const accountId: AccountId32 = new GenericAccountId(api.registry, issueOwner.publicKey);
+
+  const newStorageRequestEvent = assertEventPresent(
+    api,
+    "fileSystem",
+    "NewStorageRequest",
+    issueStorageRequestResult.events
+  );
+  const newStorageRequestEventDataBlob =
+    api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
+    newStorageRequestEvent.event.data;
+
+  invariant(newStorageRequestEventDataBlob, "Event doesn't match Type");
+
+  return {
+    fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
+    bucketId: bucketId.toString(),
+    location: newStorageRequestEventDataBlob.location.toString(),
+    owner: accountId.toString(),
+    fingerprint: fileMetadata.fingerprint,
+    fileSize: fileMetadata.file_size
+  };
+};
+
+export const createBucketAndSendNewStorageRequest = async (
   api: ApiPromise,
   source: string,
   location: string,

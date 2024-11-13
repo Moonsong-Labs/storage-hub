@@ -29,8 +29,8 @@ use shp_traits::{
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId,
-    ValueProposition, ValuePropositionWithId,
+    Multiaddresses, ProviderId, RateDeltaParam, SignUpRequestSpParams, StorageProviderId,
+    ValuePropId, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -1003,6 +1003,137 @@ where
             .saturating_mul(accrued_failed_submission_count)
             .saturating_mul(2u32.into()))
     }
+
+    /// Adjust the fixed rate payment stream between a user and an MSP based on the [`RateDeltaParam`].
+    ///
+    /// Handles creating, updating, or deleting the fixed rate payment stream storage.
+    fn apply_delta_fixed_rate_payment_stream(
+        msp_id: &MainStorageProviderId<T>,
+        bucket_id: &BucketId<T>,
+        user_id: &T::AccountId,
+        delta: RateDeltaParam<T>,
+    ) -> Result<(), DispatchError> {
+        let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+            &msp_id,
+            &user_id,
+        )
+        .unwrap_or_default();
+
+        let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        ensure!(
+            bucket.value_prop_id.is_some(),
+            Error::<T>::BucketHasNoValueProposition
+        );
+
+        let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+            &msp_id,
+            &bucket.value_prop_id.unwrap(),
+        )
+        .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+        match delta {
+            RateDeltaParam::NewBucket => {
+                let bucket_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&bucket.size.into())
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                let new_rate = current_rate
+                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_add(&bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                    &msp_id, &user_id,
+                ) {
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                    &msp_id,
+                    &user_id,
+                    new_rate,
+                )?;
+                } else {
+                    <T::PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &msp_id,
+                        &user_id,
+                        new_rate,
+                    )?;
+                }
+            }
+            RateDeltaParam::RemoveBucket => {
+                let bucket_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&bucket.size.into())
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                let new_rate = current_rate
+                    .saturating_sub(T::ZeroSizeBucketFixedRate::get())
+                    .saturating_sub(bucket_rate);
+
+                if new_rate.is_zero() {
+                    <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                    &msp_id,
+                    &user_id,
+                )?;
+                } else {
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                        &msp_id,
+                        &user_id,
+                        new_rate,
+                    )?;
+                }
+            }
+            RateDeltaParam::Increase(delta) => {
+                let new_bucket_size = bucket
+                    .size
+                    .checked_add(&delta)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Ensure the new bucket size does not exceed the bucket data limit of associated value proposition
+                ensure!(
+                    new_bucket_size <= value_prop.bucket_data_limit,
+                    Error::<T>::BucketSizeExceedsLimit
+                );
+
+                let delta_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&delta.into())
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                let new_rate = current_rate
+                    .checked_add(&delta_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                    &msp_id, &user_id, new_rate,
+                )?;
+            }
+            RateDeltaParam::Decrease(delta) => {
+                let delta_rate = value_prop
+                    .price_per_unit_of_data_per_block
+                    .checked_mul(&delta.into())
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                let new_rate = current_rate.saturating_sub(delta_rate);
+
+                if new_rate < T::ZeroSizeBucketFixedRate::get() {
+                    <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                        &msp_id,
+                        &user_id,
+                    )?;
+                } else {
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                        &msp_id,
+                        &user_id,
+                        new_rate,
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
@@ -1173,7 +1304,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             msp_id: provider_id,
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
-            user_id,
+            user_id: user_id.clone(),
             size: T::StorageDataUnit::zero(),
             value_prop_id,
         };
@@ -1181,19 +1312,77 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::insert(&bucket_id, &bucket);
 
         if let Some(provider_id) = provider_id {
-            MainStorageProviderIdsToBuckets::<T>::try_append(&provider_id, bucket_id)
-                .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+            MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+
+            Self::apply_delta_fixed_rate_payment_stream(
+                &provider_id,
+                &bucket_id,
+                &user_id,
+                RateDeltaParam::NewBucket,
+            )?;
         }
 
         Ok(())
     }
 
-    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult {
+    fn assign_msp_to_bucket(
+        bucket_id: &Self::BucketId,
+        new_msp: &Self::ProviderId,
+    ) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            if let Some(msp_id) = bucket.msp_id {
+                if msp_id == *new_msp {
+                    return Err(Error::<T>::MspAlreadyAssignedToBucket.into());
+                }
+
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::RemoveBucket,
+                )?;
+
+                MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+            }
+
             bucket.msp_id = Some(*new_msp);
 
-            Ok(())
+            Self::apply_delta_fixed_rate_payment_stream(
+                new_msp,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::NewBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp, bucket_id, ());
+
+            Ok::<_, DispatchError>(())
+        })
+    }
+
+    fn unassign_msp_from_bucket(bucket_id: &Self::BucketId) -> DispatchResult {
+        Buckets::<T>::try_mutate(bucket_id, |bucket| {
+            let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            // MSP should exist within the context of this execution.
+            let msp_id = bucket
+                .msp_id
+                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
+
+            bucket.msp_id = None;
+
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::RemoveBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+
+            Ok::<_, DispatchError>(())
         })
     }
 
@@ -1214,20 +1403,26 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     }
 
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
-        let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        // Check if the bucket is empty
+        ensure!(
+            bucket.root == T::DefaultMerkleRoot::get(),
+            Error::<T>::BucketNotEmpty
+        );
 
         if let Some(msp_id) = bucket.msp_id {
-            MainStorageProviderIdsToBuckets::<T>::mutate_exists(&msp_id, |buckets| match buckets {
-                Some(b) => {
-                    b.retain(|b| b != &bucket_id);
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::RemoveBucket,
+            )?;
 
-                    if b.is_empty() {
-                        *buckets = None;
-                    }
-                }
-                _ => {}
-            });
-        }
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
+        };
+
+        Buckets::<T>::remove(&bucket_id);
 
         // Release the bucket deposit hold
         T::NativeBalance::release(
@@ -1243,6 +1438,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.private = privacy;
 
             Ok(())
@@ -1255,6 +1451,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.read_access_group_id = maybe_read_access_group_id;
 
             Ok(())
@@ -1265,24 +1462,54 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.size = bucket.size.saturating_add(delta);
 
-            Ok(())
-        })
+            Ok::<_, DispatchError>((
+                bucket
+                    .msp_id
+                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
+                bucket.user_id.clone(),
+            ))
+        })?;
+
+        Self::apply_delta_fixed_rate_payment_stream(
+            &msp_id,
+            bucket_id,
+            &user_id,
+            RateDeltaParam::Increase(delta),
+        )?;
+
+        Ok(())
     }
 
     fn decrease_bucket_size(
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.size = bucket.size.saturating_sub(delta);
 
-            Ok(())
-        })
+            Ok::<_, DispatchError>((
+                bucket
+                    .msp_id
+                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
+                bucket.user_id.clone(),
+            ))
+        })?;
+
+        Self::apply_delta_fixed_rate_payment_stream(
+            &msp_id,
+            bucket_id,
+            &user_id,
+            RateDeltaParam::Decrease(delta),
+        )?;
+
+        Ok(())
     }
 }
 
@@ -1445,13 +1672,10 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
-            let msp_for_bucket = bucket.msp_id;
-            if let Some(msp_id) = msp_for_bucket {
-                if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
-                    Some(msp.owner_account)
-                } else {
-                    None
-                }
+            let msp_id = bucket.msp_id.map(|msp_id| msp_id)?;
+
+            if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
+                Some(msp.owner_account)
             } else {
                 None
             }

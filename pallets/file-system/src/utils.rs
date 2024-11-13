@@ -270,7 +270,7 @@ where
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
-            sender,
+            sender.clone(),
             bucket_id,
             private,
             maybe_collection_id.clone(),
@@ -367,10 +367,18 @@ where
             return Ok(msp_id);
         }
 
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+
         let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
 
-        // Decrease the used capacity of the current MSP.
-        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+        // Update the previous MSP's capacity used.
+        if let Some(msp_id) = previous_msp_id {
+            // Decrease the used capacity of the previous MSP.
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &msp_id,
+                bucket_size,
+            )?;
+        }
 
         // Check if MSP has enough available capacity to store the bucket.
         ensure!(
@@ -380,15 +388,7 @@ where
         );
 
         // Change the MSP that stores the bucket.
-        <T::Providers as MutateBucketsInterface>::change_msp_bucket(&bucket_id, &msp_id)?;
-
-        if let Some(previous_msp_id) = previous_msp_id {
-            // Decrease the used capacity of the previous MSP.
-            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                &previous_msp_id,
-                bucket_size,
-            )?;
-        }
+        <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
 
         // Increase the used capacity of the new MSP.
         <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -713,7 +713,43 @@ where
         Ok(())
     }
 
-    /// Accept all storage requests belonging to the same bucket in an all-or-nothing operation.
+    pub(crate) fn do_msp_stop_storing_bucket(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
+        // Check if the sender is a Provider.
+        let msp_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotAMsp)?;
+
+        // Check if the MSP is indeed an MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check if the MSP is storing the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
+            Error::<T>::MspNotStoringBucket
+        );
+
+        let bucket_owner = <T::Providers as ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        // Decrease the used capacity of the MSP.
+        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
+
+        // Remove the MSP from the bucket.
+        <T::Providers as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id)?;
+
+        Ok((msp_id, bucket_owner))
+    }
+
+    /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
     ///
     /// There should be a single non-inclusion forest proof for all file keys, and finally there should
     /// be a list of file key(s) with a key proof for each of them.

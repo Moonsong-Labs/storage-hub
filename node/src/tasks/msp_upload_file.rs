@@ -667,8 +667,13 @@ where
                 anyhow!(err_msg)
             })?;
 
-        if Some(own_msp_id) != msp_id_of_bucket_id {
-            // Skip the file if the MSP ID of the bucket ID does not match the node's MSP ID.
+        if let Some(msp_id) = msp_id_of_bucket_id {
+            if own_msp_id != msp_id {
+                warn!(target: LOG_TARGET, "Skipping storage request - MSP ID does not match own MSP ID for bucket ID {:?}", event.bucket_id);
+                return Ok(());
+            }
+        } else {
+            warn!(target: LOG_TARGET, "Skipping storage request - MSP ID not found for bucket ID {:?}", event.bucket_id);
             return Ok(());
         }
 

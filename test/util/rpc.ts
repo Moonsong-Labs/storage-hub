@@ -1,8 +1,9 @@
+import { sleep } from "@zombienet/utils";
 import invariant from "tiny-invariant";
 
 export const sendCustomRpc = async (url: string, method: string, params = [], verbose = false) => {
-  const maxRetries = 60;
-  const sleepTime = 500;
+  const maxRetries = 50;
+  const sleepTime = 200;
 
   const payload = {
     id: "1",
@@ -28,7 +29,7 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
       const resp = (await response.json()) as any;
       return resp.result as string;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, sleepTime));
+      await sleep(sleepTime);
     }
   }
 

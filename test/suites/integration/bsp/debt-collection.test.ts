@@ -244,7 +244,7 @@ describeBspNet(
         );
 
       // Add extra files to the user's storage with the three BSPs, waiting for them to be confirmed
-      const cloudFileMetadata = await userApi.file.newStorageRequest(
+      const cloudFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/cloud.jpg",
         "test/cloud.jpg",
         "bucket-1",
@@ -257,7 +257,7 @@ describeBspNet(
       await bspThreeApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
-      const adolphusFileMetadata = await userApi.file.newStorageRequest(
+      const adolphusFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/adolphus.jpg",
         "test/adolphus.jpg",
         "bucket-3",

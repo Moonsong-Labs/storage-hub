@@ -596,6 +596,10 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [Vec<PalletFileSystemStorageRequestMspBucketResponse>]
       >;
+      mspStopStoringBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
           user: AccountId32 | string | Uint8Array,

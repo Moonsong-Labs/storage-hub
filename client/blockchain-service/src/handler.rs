@@ -47,7 +47,6 @@ use shc_common::{
 use shp_file_metadata::FileKey;
 use storage_hub_runtime::RuntimeEvent;
 
-use crate::state::OngoingProcessMspRespondStorageRequestCf;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
@@ -62,6 +61,9 @@ use crate::{
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{StopStoringForInsolventUserRequest, SubmitProofRequest},
+};
+use crate::{
+    events::FinalisedMspStoppedStoringBucket, state::OngoingProcessMspRespondStorageRequestCf,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -1264,6 +1266,21 @@ impl BlockchainService {
                                     provider_id: provider,
                                     mutations: mutations.clone(),
                                     new_root,
+                                })
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MspStoppedStoringBucket {
+                                msp_id,
+                                owner,
+                                bucket_id,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&msp_id) {
+                                self.emit(FinalisedMspStoppedStoringBucket {
+                                    msp_id,
+                                    owner,
+                                    bucket_id,
                                 })
                             }
                         }
