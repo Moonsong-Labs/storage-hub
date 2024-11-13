@@ -3759,30 +3759,29 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Try to add the bucket for Alice with the same bucket id
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ),
                     Error::<Test>::BucketAlreadyExists
                 );
@@ -3795,7 +3794,6 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3803,12 +3801,12 @@ mod add_bucket {
                 // Try to add a bucket to a non-registered MSP
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        MainStorageProviderId::<Test>::default(),
+                        Some(MainStorageProviderId::<Test>::default()),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        HashId::<Test>::default()
+                        Some(HashId::<Test>::default())
                     ),
                     Error::<Test>::NotRegistered
                 );
@@ -3834,19 +3832,18 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check payment stream was added
@@ -3894,7 +3891,7 @@ mod add_bucket {
                         private: false,
                         read_access_group_id: None,
                         size: 0,
-                        value_prop_id
+                        value_prop_id: Some(value_prop_id),
                     }
                 );
 
@@ -3919,17 +3916,16 @@ mod add_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ));
 
                     let expected_hold_amount =
@@ -3973,12 +3969,11 @@ mod unassign_msp_from_bucket {
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
                     register_account_as_msp(alice, storage_amount, None, None);
 
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+                crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4012,18 +4007,17 @@ mod unassign_msp_from_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 assert!(
@@ -4071,7 +4065,6 @@ mod assign_msp_to_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4101,19 +4094,18 @@ mod assign_msp_to_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add bucket
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 assert_noop!(
@@ -4154,19 +4146,18 @@ mod assign_msp_to_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &alice_msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add bucket
                 assert_ok!(StorageProviders::add_bucket(
-                    alice_msp_id,
+                    Some(alice_msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // check payment stream exists for alice
@@ -4243,7 +4234,6 @@ mod remove_root_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4273,19 +4263,18 @@ mod remove_root_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check that the bucket was added to the MSP
@@ -4343,17 +4332,16 @@ mod remove_root_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ));
 
                     let expected_hold_amount =
@@ -4375,7 +4363,6 @@ mod remove_root_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -4445,7 +4432,6 @@ mod increase_bucket_size {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4473,19 +4459,18 @@ mod increase_bucket_size {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Remove the MSP from the bucket
@@ -4531,17 +4516,16 @@ mod increase_bucket_size {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ));
 
                     let expected_hold_amount =
@@ -4563,7 +4547,6 @@ mod increase_bucket_size {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -4612,7 +4595,6 @@ mod decrease_bucket_size {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4640,19 +4622,18 @@ mod decrease_bucket_size {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Remove the MSP from the bucket
@@ -4698,17 +4679,16 @@ mod decrease_bucket_size {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ));
 
                     let expected_hold_amount =
@@ -4730,7 +4710,6 @@ mod decrease_bucket_size {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -4763,7 +4742,6 @@ mod decrease_bucket_size {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -5513,7 +5491,6 @@ mod make_value_prop_unavailable {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -5521,12 +5498,12 @@ mod make_value_prop_unavailable {
                 // Try to add a bucket with an unavailable value proposition
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ),
                     Error::<Test>::ValuePropositionNotAvailable
                 );

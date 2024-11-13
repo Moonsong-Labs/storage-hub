@@ -318,7 +318,6 @@ export const waitForBspToCatchUpToChainTip = async (
  * This function performs the following steps:
  * 1. Waits for a short period to allow the node to react.
  * 2. Checks for the presence of a 'mspRespondStorageRequestsMultipleBuckets' extrinsic in the transaction pool.
- * 3. Seals a block and verifies the presence of an 'MspRespondedToStorageRequests' event.
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
@@ -326,7 +325,7 @@ export const waitForBspToCatchUpToChainTip = async (
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
   const iterations = 41;
   const delay = 50;
 
@@ -353,24 +352,4 @@ export const waitForMspResponse = async (api: ApiPromise, checkQuantity?: number
       );
     }
   }
-
-  const { events } = await sealBlock(api);
-  const mspRespondEvent = assertEventPresent(
-    api,
-    "fileSystem",
-    "MspRespondedToStorageRequests",
-    events
-  );
-
-  const mspRespondDataBlob =
-    api.events.fileSystem.MspRespondedToStorageRequests.is(mspRespondEvent.event) &&
-    mspRespondEvent.event.data;
-
-  if (!mspRespondDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  const responses = mspRespondDataBlob.results.responses;
-
-  return responses;
 };

@@ -77,15 +77,21 @@ describeMspNet(
         userApi.shConsts.TEST_ARTEFACTS[source].size
       );
 
-      // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
 
-      invariant(
-        responses.length === 1,
-        "Expected 1 response since there is only a single bucket and should have been accepted"
+      const { event: storageRequestRejectedEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "StorageRequestRejected"
       );
 
-      const response = responses[0].asRejected;
+      const storageRequestRejectedDataBlob =
+        userApi.events.fileSystem.StorageRequestRejected.is(storageRequestRejectedEvent) &&
+        storageRequestRejectedEvent.data;
+
+      if (!storageRequestRejectedDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
@@ -93,13 +99,8 @@ describeMspNet(
       // Check that the MSP has not updated the local forest root of the bucket
       strictEqual(
         local_bucket_root.toString(),
-        (await mspApi.rpc.storagehubclient.getForestRoot(response.bucketId.toString())).toString()
+        (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).toString()
       );
-
-      strictEqual(response.bucketId.toString(), bucketId.toString());
-
-      strictEqual(response.fileKeys[0][0].toString(), newStorageRequestDataBlob.fileKey.toString());
-      strictEqual(response.fileKeys[0][1].toString(), "FileKeyAlreadyStored");
     });
   }
 );
