@@ -137,7 +137,9 @@ describeMspNet(
         acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
       } else if (storageRequestFulfilledDataBlob) {
         acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
-      } else {
+      }
+
+      if (!acceptedFileKey) {
         throw new Error(
           "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
         );
