@@ -104,8 +104,8 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
 
-      let mspAcceptedStorageRequestDataBlob;
-      let storageRequestFulfilledDataBlob;
+      let mspAcceptedStorageRequestDataBlob: any = undefined;
+      let storageRequestFulfilledDataBlob: any = undefined;
 
       try {
         const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(

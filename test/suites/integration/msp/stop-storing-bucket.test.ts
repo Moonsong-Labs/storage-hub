@@ -20,7 +20,7 @@ describeMspNet(
       }
     });
 
-    it.only("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -28,7 +28,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it.only("Create bucket and issue storage request", async () => {
+    it("Create bucket and issue storage request", async () => {
       const source = "res/adolphus.jpg";
       const destination = "test/adolphus.jpg";
       const bucketName = "nothingmuch-0";
@@ -58,8 +58,8 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
 
-      let mspAcceptedStorageRequestDataBlob;
-      let storageRequestFulfilledDataBlob;
+      let mspAcceptedStorageRequestDataBlob: any = undefined;
+      let storageRequestFulfilledDataBlob: any = undefined;
 
       try {
         const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(
@@ -129,7 +129,7 @@ describeMspNet(
       invariant(isFileInForest.isTrue, "File is not in forest");
     });
 
-    it.only("MSP stops storing bucket and deletes bucket from storage", async () => {
+    it("MSP stops storing bucket and deletes bucket from storage", async () => {
       const block = await userApi.sealBlock(
         userApi.tx.fileSystem.mspStopStoringBucket(bucketId),
         mspKey,

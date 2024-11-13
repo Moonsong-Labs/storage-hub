@@ -18,7 +18,7 @@ describeMspNet(
       }
     });
 
-    it.only("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -26,7 +26,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it.only("MSP receives files from user after issued storage requests", async () => {
+    it("MSP receives files from user after issued storage requests", async () => {
       const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
       const bucketName = "nothingmuch-3";
@@ -108,8 +108,8 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
 
-      let mspAcceptedStorageRequestDataBlob;
-      let storageRequestFulfilledDataBlob;
+      let mspAcceptedStorageRequestDataBlob: any = undefined;
+      let storageRequestFulfilledDataBlob: any = undefined;
 
       try {
         const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(
@@ -186,7 +186,7 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
 
-      let fileKeys2: string[] = [];
+      const fileKeys2: string[] = [];
 
       const mspAcceptedStorageRequestEvents = await userApi.assert.eventMany(
         "fileSystem",
