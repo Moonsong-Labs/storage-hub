@@ -1456,7 +1456,7 @@ declare module "@polkadot/api-base/types/storage" {
        * It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
        * slashable Providers follow.
        **/
-      tickToCheckedForSlashableProviders: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      tickToCheckForSlashableProviders: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A mapping from challenges tick to a vector of custom challenged keys for that tick.
