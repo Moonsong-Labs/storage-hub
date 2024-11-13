@@ -187,6 +187,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspNotConfirmed: AugmentedError<ApiType>;
       /**
+       * BSP cannot volunteer at this current tick.
+       **/
+      BspNotEligibleToVolunteer: AugmentedError<ApiType>;
+      /**
        * BSP has not volunteered to store the given file.
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
@@ -242,6 +246,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to get owner account of ID of provider
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
+      /**
+       * Failed to query earliest volunteer tick
+       **/
+      FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
       /**
        * Failed to convert to primitive type.
        **/
@@ -320,6 +328,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
       /**
+       * No file keys to confirm storing
+       **/
+      NoFileKeysToConfirm: AugmentedError<ApiType>;
+      /**
        * No global reputation weight set.
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
@@ -367,6 +379,10 @@ declare module "@polkadot/api-base/types/errors" {
        * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
        **/
       RequestWithoutMsp: AugmentedError<ApiType>;
+      /**
+       * Root was not updated after applying delta
+       **/
+      RootNotUpdated: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/

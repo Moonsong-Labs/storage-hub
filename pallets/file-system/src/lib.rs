@@ -541,7 +541,8 @@ pub mod pallet {
         BspConfirmedStoring {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
-            file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },
         /// Notifies that a storage request for a file key has been fulfilled.
@@ -675,6 +676,8 @@ pub mod pallet {
         InsufficientAvailableCapacity,
         /// Number of removed BSPs volunteered from storage request prefix did not match the expected number.
         UnexpectedNumberOfRemovedVolunteeredBsps,
+        /// BSP cannot volunteer at this current tick.
+        BspNotEligibleToVolunteer,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
@@ -772,8 +775,14 @@ pub mod pallet {
         FixedRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
+        /// Failed to query earliest volunteer tick
+        FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
+        /// No file keys to confirm storing
+        NoFileKeysToConfirm,
+        /// Root was not updated after applying delta
+        RootNotUpdated,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
