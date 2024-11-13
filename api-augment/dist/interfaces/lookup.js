@@ -1498,7 +1498,8 @@ export default {
       BspConfirmedStoring: {
         who: "AccountId32",
         bspId: "H256",
-        fileKeys: "Vec<H256>",
+        confirmedFileKeys: "Vec<H256>",
+        skippedFileKeys: "Vec<H256>",
         newRoot: "H256"
       },
       StorageRequestFulfilled: {
@@ -4366,6 +4367,7 @@ export default {
       "BspAlreadyVolunteered",
       "InsufficientAvailableCapacity",
       "UnexpectedNumberOfRemovedVolunteeredBsps",
+      "BspNotEligibleToVolunteer",
       "StorageRequestExpiredNoSlotAvailable",
       "StorageRequestNotAuthorized",
       "MaxBlockNumberReached",
@@ -4414,7 +4416,10 @@ export default {
       "InconsistentStateKeyAlreadyExists",
       "FixedRatePaymentStreamNotFound",
       "CannotHoldDeposit",
-      "FailedToGetOwnerAccount"
+      "FailedToQueryEarliestFileVolunteerTick",
+      "FailedToGetOwnerAccount",
+      "NoFileKeysToConfirm",
+      "RootNotUpdated"
     ]
   },
   /**

@@ -1989,7 +1989,8 @@ declare module "@polkadot/types/lookup" {
     readonly asBspConfirmedStoring: {
       readonly who: AccountId32;
       readonly bspId: H256;
-      readonly fileKeys: Vec<H256>;
+      readonly confirmedFileKeys: Vec<H256>;
+      readonly skippedFileKeys: Vec<H256>;
       readonly newRoot: H256;
     } & Struct;
     readonly isStorageRequestFulfilled: boolean;
@@ -5504,6 +5505,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspAlreadyVolunteered: boolean;
     readonly isInsufficientAvailableCapacity: boolean;
     readonly isUnexpectedNumberOfRemovedVolunteeredBsps: boolean;
+    readonly isBspNotEligibleToVolunteer: boolean;
     readonly isStorageRequestExpiredNoSlotAvailable: boolean;
     readonly isStorageRequestNotAuthorized: boolean;
     readonly isMaxBlockNumberReached: boolean;
@@ -5552,7 +5554,10 @@ declare module "@polkadot/types/lookup" {
     readonly isInconsistentStateKeyAlreadyExists: boolean;
     readonly isFixedRatePaymentStreamNotFound: boolean;
     readonly isCannotHoldDeposit: boolean;
+    readonly isFailedToQueryEarliestFileVolunteerTick: boolean;
     readonly isFailedToGetOwnerAccount: boolean;
+    readonly isNoFileKeysToConfirm: boolean;
+    readonly isRootNotUpdated: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5570,6 +5575,7 @@ declare module "@polkadot/types/lookup" {
       | "BspAlreadyVolunteered"
       | "InsufficientAvailableCapacity"
       | "UnexpectedNumberOfRemovedVolunteeredBsps"
+      | "BspNotEligibleToVolunteer"
       | "StorageRequestExpiredNoSlotAvailable"
       | "StorageRequestNotAuthorized"
       | "MaxBlockNumberReached"
@@ -5618,7 +5624,10 @@ declare module "@polkadot/types/lookup" {
       | "InconsistentStateKeyAlreadyExists"
       | "FixedRatePaymentStreamNotFound"
       | "CannotHoldDeposit"
-      | "FailedToGetOwnerAccount";
+      | "FailedToQueryEarliestFileVolunteerTick"
+      | "FailedToGetOwnerAccount"
+      | "NoFileKeysToConfirm"
+      | "RootNotUpdated";
   }
 
   /** @name PalletProofsDealerError (462) */

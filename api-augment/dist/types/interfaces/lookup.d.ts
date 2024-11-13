@@ -1484,7 +1484,8 @@ declare const _default: {
       BspConfirmedStoring: {
         who: string;
         bspId: string;
-        fileKeys: string;
+        confirmedFileKeys: string;
+        skippedFileKeys: string;
         newRoot: string;
       };
       StorageRequestFulfilled: {
