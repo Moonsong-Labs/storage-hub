@@ -1993,7 +1993,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * 1. Check that the extrinsic was signed and get the signer.
        * 2. Check that the user has been flagged as without funds.
        * 3. Check that the cooldown period has passed since the user was flagged as without funds.
-       * 4. Check that there's no remaining outstading debt.
+       * 4. Check that there's no remaining outstanding debt.
        * 5. Unflag the user as without funds.
        *
        * Emits a 'UserSolvent' event when successful.

@@ -29,8 +29,7 @@ use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::types::*;
-    use crate::weights::WeightInfo;
+    use super::{types::*, weights::WeightInfo};
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::fungible::*,
@@ -180,15 +179,15 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// The last tick from the Providers Proof Submitters pallet that was registered.
+    /// The last tick that was processed by this pallet from the Proof Submitters interface.
     ///
-    /// This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
-    /// registered. For the tick in this storage element, this pallet already knows the Providers that submitted
-    /// a valid proof. If that tick wasn't completely processed because of remaining weight limits, this storage will
-    /// also hold the last processed Provider of that tick.
+    /// This is used to keep track of the last tick processed by this pallet from the pallet that implements the from the ProvidersProofSubmitters interface.
+    /// This is done to know the last tick for which this pallet has registered the Providers that submitted a valid proof and updated their last chargeable info.
+    /// In the next `on_poll` hook execution, this pallet will update the last chargeable info of the Providers that submitted a valid proof in the tick that
+    /// follows the one saved in this storage element.
     #[pallet::storage]
     pub type LastSubmittersTickRegistered<T: Config> =
-        StorageValue<_, (BlockNumberFor<T>, Option<ProviderIdFor<T>>), ValueQuery>;
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// The mapping from a user to if it has been flagged for not having enough funds to pay for its requested services.
     ///
@@ -345,6 +344,11 @@ pub mod pallet {
         /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
         /// correctly paid all their outstanding debt and can now contract new services again.
         UserSolvent { who: T::AccountId },
+        /// Event emitted when the `on_poll` hook detects that the tick of the proof submitters that needs to process is not the one immediately after the last processed tick.
+        InconsistentTickProcessing {
+            last_processed_tick: BlockNumberFor<T>,
+            tick_to_process: BlockNumberFor<T>,
+        },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -849,7 +853,7 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the user has been flagged as without funds.
         /// 3. Check that the cooldown period has passed since the user was flagged as without funds.
-        /// 4. Check that there's no remaining outstading debt.
+        /// 4. Check that there's no remaining outstanding debt.
         /// 5. Unflag the user as without funds.
         ///
         /// Emits a 'UserSolvent' event when successful.

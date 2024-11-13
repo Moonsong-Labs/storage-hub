@@ -309,6 +309,7 @@ impl IndexerService {
             pallet_payment_streams::Event::UserPaidAllDebts { .. } => {}
             pallet_payment_streams::Event::UserPaidSomeDebts { .. } => {}
             pallet_payment_streams::Event::UserSolvent { .. } => {}
+            pallet_payment_streams::Event::InconsistentTickProcessing { .. } => {}
             pallet_payment_streams::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -1221,6 +1221,14 @@ declare module "@polkadot/api-base/types/events" {
         { userAccount: AccountId32; providerId: H256; newRate: u128 }
       >;
       /**
+       * Event emitted when the `on_poll` hook detects that the tick of the proof submitters that needs to process is not the one immediately after the last processed tick.
+       **/
+      InconsistentTickProcessing: AugmentedEvent<
+        ApiType,
+        [lastProcessedTick: u32, tickToProcess: u32],
+        { lastProcessedTick: u32; tickToProcess: u32 }
+      >;
+      /**
        * Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
        * the tick number of the last chargeable tick and the price index at that tick.
        **/

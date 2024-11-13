@@ -35,7 +35,6 @@ mod benchmarks {
         traits::{Hash, One},
         BoundedBTreeSet,
     };
-    use weights::WeightInfo;
 
     use super::*;
     use crate::{pallet, Call, Config, Event, Pallet};
@@ -921,10 +920,10 @@ mod benchmarks {
         assert_ne!(current_tick, OnPollTicker::<T>::get());
     }
 
-    /// This benchmarks the execution of the function `do_update_last_chargeable_info` under normal conditions
-    /// where the payment streams pallet is not behind the proof submitters of the proofs dealer pallet.
+    /// This benchmarks the execution of the function `do_update_last_chargeable_info` and its variation
+    /// of weight according to how many Providers have to be updated.
     #[benchmark]
-    fn n_providers_last_chargeable_info_update(
+    fn update_providers_last_chargeable_info(
         n: Linear<0, { <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick::get() }>,
     ) -> Result<(), BenchmarkError> {
         use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
@@ -948,7 +947,7 @@ mod benchmarks {
 
         // Set up the tickers to simulate a real scenario
         pallet_proofs_dealer::ChallengesTicker::<T>::set(10u32.into());
-        LastSubmittersTickRegistered::<T>::set((9u32.into(), None));
+        LastSubmittersTickRegistered::<T>::set(9u32.into());
         OnPollTicker::<T>::set(20u32.into());
 
         // Simulate all providers having submitted a valid proof in the current tick
@@ -957,17 +956,12 @@ mod benchmarks {
             provider_ids.clone(),
         );
 
-        // Advance the challenge ticker to the next tick
-        pallet_proofs_dealer::ChallengesTicker::<T>::put(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get() + 1u32.into(),
-        );
+        // Simulate the `on_poll` hook of the `ProofsDealer` pallet being executed, which
+        // increments the challenge ticker.
+        pallet_proofs_dealer::ChallengesTicker::<T>::mutate(|ticker| *ticker += 1u32.into());
 
-        // Make sure the ChallengesTicker is two ahead of the LastSubmittersTickRegistered
-        assert!(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get()
-                == LastSubmittersTickRegistered::<T>::get().0 + One::one() + One::one()
-        );
-
+        // Simulate calling the `on_poll` hook of this pallet, which should increment the tick BUT call the
+        // `do_update_last_chargeable_info` with the previous tick (which in this case is 20)
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
@@ -976,261 +970,6 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the last chargeable info was updated for each provider
-        for provider_id in provider_ids_payment_stream.iter() {
-            let last_chargeable_info = ProviderLastChargeableInfo {
-                last_chargeable_tick: 20u32.into(),
-                price_index: AccumulatedPriceIndex::<T>::get(),
-            };
-            let last_chargeable_info_in_storage = LastChargeableInfo::<T>::get(provider_id);
-            assert_eq!(last_chargeable_info, last_chargeable_info_in_storage);
-        }
-
-        Ok(())
-    }
-
-    /// This benchmarks the execution of the function `do_update_last_chargeable_info` under normal conditions
-    /// where the payment streams pallet is not behind the proof submitters of the proofs dealer pallet, but in
-    /// the unlikely scenario that the weight remaining is not enough to update all providers.
-    /// The actual weight required for the call should be the maximum between both cases.
-    #[benchmark]
-    fn n_providers_last_chargeable_info_update_not_enough_weight(
-        n: Linear<0, { <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick::get() }>,
-    ) -> Result<(), BenchmarkError> {
-        use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
-        /***********  Setup initial conditions: ***********/
-        // Set up a weight meter with enough weight to process all but one provider
-        let mut meter: WeightMeter = WeightMeter::with_limit(
-            <T as crate::Config>::WeightInfo::n_providers_last_chargeable_info_update(n - 1),
-        );
-
-        // For each provider, set up an account with some balance.
-        let mut provider_ids: BoundedBTreeSet<
-            ProofsDealerProviderIdFor<T>,
-            <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick,
-        > = BoundedBTreeSet::new();
-        let mut provider_ids_payment_stream: Vec<ProviderIdFor<T>> = Vec::new();
-        for i in 0..n.into() {
-            let (_provider_account, provider_id) = register_provider::<T>(i)?;
-            provider_ids
-                .try_insert(provider_id.into())
-                .map_err(|_| BenchmarkError::Stop("Max size of bounded set is accounted for."))?;
-            provider_ids_payment_stream.push(provider_id.into());
-        }
-
-        // Set up the tickers to simulate a real scenario
-        pallet_proofs_dealer::ChallengesTicker::<T>::set(10u32.into());
-        LastSubmittersTickRegistered::<T>::set((9u32.into(), None));
-        OnPollTicker::<T>::set(20u32.into());
-
-        // Simulate all providers having submitted a valid proof in the current tick
-        pallet_proofs_dealer::ValidProofSubmittersLastTicks::<T>::insert(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get(),
-            provider_ids.clone(),
-        );
-
-        // Advance the challenge ticker to the next tick
-        pallet_proofs_dealer::ChallengesTicker::<T>::put(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get() + 1u32.into(),
-        );
-
-        // Make sure the ChallengesTicker is two ahead of the LastSubmittersTickRegistered
-        assert!(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get()
-                == LastSubmittersTickRegistered::<T>::get().0 + One::one() + One::one()
-        );
-
-        /*********** Call the function to benchmark: ***********/
-        #[block]
-        {
-            Pallet::<T>::do_update_last_chargeable_info(20u32.into(), &mut meter);
-        }
-
-        /*********** Post-benchmark checks: ***********/
-        // Verify that the last chargeable info was updated for each provider except the last few ones
-        let weight_per_provider =
-            <T as crate::Config>::WeightInfo::n_providers_last_chargeable_info_update(1);
-        let starting_weight =
-            <T as crate::Config>::WeightInfo::n_providers_last_chargeable_info_update(n - 1);
-        let amount_of_updated_providers = starting_weight
-            .checked_div_per_component(&weight_per_provider)
-            .unwrap_or(0);
-        provider_ids_payment_stream.sort();
-        provider_ids_payment_stream.truncate(amount_of_updated_providers as usize);
-
-        for provider_id in provider_ids_payment_stream.iter() {
-            let last_chargeable_info = ProviderLastChargeableInfo {
-                last_chargeable_tick: 20u32.into(),
-                price_index: AccumulatedPriceIndex::<T>::get(),
-            };
-            let last_chargeable_info_in_storage = LastChargeableInfo::<T>::get(provider_id);
-            assert_eq!(last_chargeable_info, last_chargeable_info_in_storage);
-        }
-
-        Ok(())
-    }
-
-    /// This benchmarks the execution of the function `do_update_last_chargeable_info` under the scenario
-    /// where the payment streams pallet is behind the proof submitters of the proofs dealer pallet.
-    /// This means that the payment streams pallet has to catch up with the proof submitters, which could be a
-    /// more expensive operation.
-    #[benchmark]
-    fn n_providers_last_chargeable_info_update_for_already_processed_tick(
-        n: Linear<0, { <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick::get() }>,
-    ) -> Result<(), BenchmarkError> {
-        use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
-        /***********  Setup initial conditions: ***********/
-        // Set up a full weight meter
-        let mut meter: WeightMeter = WeightMeter::new();
-
-        // For each provider, set up an account with some balance.
-        let mut provider_ids: BoundedBTreeSet<
-            ProofsDealerProviderIdFor<T>,
-            <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick,
-        > = BoundedBTreeSet::new();
-        let mut provider_ids_payment_stream: Vec<ProviderIdFor<T>> = Vec::new();
-        for i in 0..n.into() {
-            let (_provider_account, provider_id) = register_provider::<T>(i)?;
-            provider_ids
-                .try_insert(provider_id.into())
-                .map_err(|_| BenchmarkError::Stop("Max size of bounded set is accounted for."))?;
-            provider_ids_payment_stream.push(provider_id.into());
-        }
-
-        // Sort the provider IDs to simulate what happens in the runtime
-        provider_ids_payment_stream.sort();
-
-        // Set up the tickers to simulate a real scenario, considering that the payment streams pallet is behind
-        // and, as such, it left tick 10 with unprocessed providers (worst case scenario -> it only got to process
-        // the first provider of that tick).
-        pallet_proofs_dealer::ChallengesTicker::<T>::set(10u32.into());
-        LastSubmittersTickRegistered::<T>::set((
-            10u32.into(),
-            provider_ids_payment_stream.first().cloned(),
-        ));
-        OnPollTicker::<T>::set(20u32.into());
-
-        // Simulate all providers having submitted a valid proof in the current tick
-        pallet_proofs_dealer::ValidProofSubmittersLastTicks::<T>::insert(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get(),
-            provider_ids.clone(),
-        );
-
-        // Advance the challenge ticker to the next tick
-        pallet_proofs_dealer::ChallengesTicker::<T>::put(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get() + 1u32.into(),
-        );
-
-        // Make sure the ChallengesTicker is one ahead of the LastSubmittersTickRegistered
-        assert!(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get()
-                == LastSubmittersTickRegistered::<T>::get().0 + One::one()
-        );
-
-        /*********** Call the function to benchmark: ***********/
-        #[block]
-        {
-            Pallet::<T>::do_update_last_chargeable_info(20u32.into(), &mut meter);
-        }
-
-        /*********** Post-benchmark checks: ***********/
-        // Verify that the last chargeable info was updated for each provider except the first one
-        if provider_ids_payment_stream.len() != 0 {
-            provider_ids_payment_stream.remove(0);
-        }
-        for provider_id in provider_ids_payment_stream.iter() {
-            let last_chargeable_info = ProviderLastChargeableInfo {
-                last_chargeable_tick: 20u32.into(),
-                price_index: AccumulatedPriceIndex::<T>::get(),
-            };
-            let last_chargeable_info_in_storage = LastChargeableInfo::<T>::get(provider_id);
-            assert_eq!(last_chargeable_info, last_chargeable_info_in_storage);
-        }
-
-        Ok(())
-    }
-
-    /// This benchmarks the execution of the function `do_update_last_chargeable_info` when the payment streams pallet is
-    /// behind the proof submitters of the proofs dealer pallet and has to catch up to it, which is unlikely already, but
-    /// in the even more unlikely scenario that the weight remaining is not enough to update all providers.
-    /// The actual weight required for the call should be the maximum between both cases.
-    #[benchmark]
-    fn n_providers_last_chargeable_info_update_for_already_processed_tick_not_enough_weight(
-        n: Linear<0, { <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick::get() }>,
-    ) -> Result<(), BenchmarkError> {
-        use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
-        /***********  Setup initial conditions: ***********/
-        // Set up a weight meter with enough weight to process all but two providers (remember that we simulate
-        // that one has already been processed)
-        let maximum_providers_processed: u32 = n - 2;
-        let mut meter: WeightMeter = WeightMeter::with_limit(
-            <T as crate::Config>::WeightInfo::n_providers_last_chargeable_info_update_for_already_processed_tick(maximum_providers_processed),
-        );
-
-        // For each provider, set up an account with some balance.
-        let mut provider_ids: BoundedBTreeSet<
-            ProofsDealerProviderIdFor<T>,
-            <T as pallet_proofs_dealer::Config>::MaxSubmittersPerTick,
-        > = BoundedBTreeSet::new();
-        let mut provider_ids_payment_stream: Vec<ProviderIdFor<T>> = Vec::new();
-        for i in 0..n.into() {
-            let (_provider_account, provider_id) = register_provider::<T>(i)?;
-            provider_ids
-                .try_insert(provider_id.into())
-                .map_err(|_| BenchmarkError::Stop("Max size of bounded set is accounted for."))?;
-            provider_ids_payment_stream.push(provider_id.into());
-        }
-
-        // Sort the provider IDs to simulate what happens in the runtime
-        provider_ids_payment_stream.sort();
-
-        // Set up the tickers to simulate a real scenario, considering that the payment streams pallet is behind
-        // and, as such, it left tick 10 with unprocessed providers (worst case scenario -> it only got to process
-        // the first provider of that tick).
-        pallet_proofs_dealer::ChallengesTicker::<T>::set(10u32.into());
-        LastSubmittersTickRegistered::<T>::set((
-            10u32.into(),
-            provider_ids_payment_stream.first().cloned(),
-        ));
-        OnPollTicker::<T>::set(20u32.into());
-
-        // Simulate all providers having submitted a valid proof in the current tick
-        pallet_proofs_dealer::ValidProofSubmittersLastTicks::<T>::insert(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get(),
-            provider_ids.clone(),
-        );
-
-        // Advance the challenge ticker to the next tick
-        pallet_proofs_dealer::ChallengesTicker::<T>::put(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get() + 1u32.into(),
-        );
-
-        // Make sure the ChallengesTicker is one ahead of the LastSubmittersTickRegistered
-        assert!(
-            pallet_proofs_dealer::ChallengesTicker::<T>::get()
-                == LastSubmittersTickRegistered::<T>::get().0 + One::one()
-        );
-
-        /*********** Call the function to benchmark: ***********/
-        #[block]
-        {
-            Pallet::<T>::do_update_last_chargeable_info(20u32.into(), &mut meter);
-        }
-
-        /*********** Post-benchmark checks: ***********/
-        // Remove the first provider from the list of providers to be checked, since it was already "processed"
-        if provider_ids_payment_stream.len() != 0 {
-            provider_ids_payment_stream.remove(0);
-        }
-        // Verify that the last chargeable info was updated for each provider except the last few ones
-        let weight_per_provider =
-            <T as crate::Config>::WeightInfo::n_providers_last_chargeable_info_update_for_already_processed_tick(1);
-        let starting_weight =
-            <T as crate::Config>::WeightInfo::n_providers_last_chargeable_info_update_for_already_processed_tick(maximum_providers_processed);
-        let amount_of_updated_providers = starting_weight
-            .checked_div_per_component(&weight_per_provider)
-            .unwrap_or(0);
-        provider_ids_payment_stream.truncate(amount_of_updated_providers as usize);
-
         for provider_id in provider_ids_payment_stream.iter() {
             let last_chargeable_info = ProviderLastChargeableInfo {
                 last_chargeable_tick: 20u32.into(),
