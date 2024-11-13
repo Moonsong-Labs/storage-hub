@@ -665,7 +665,7 @@ where
 
     fn apply_delta(
         root: &Self::Key,
-        _mutations: &[(Self::Key, TrieMutation)],
+        mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
     ) -> Result<
         (
@@ -675,8 +675,14 @@ where
         ),
         DispatchError,
     > {
-        // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+        Ok((
+            MemoryDB::<T::Hash>::default(),
+            match mutations.len() {
+                0 => *root,
+                _ => mutations.last().unwrap().0,
+            },
+            Vec::new(),
+        ))
     }
 }
 
