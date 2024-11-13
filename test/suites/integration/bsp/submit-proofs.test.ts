@@ -262,7 +262,9 @@ describeBspNet(
       const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         location,
-        bucketName
+        bucketName,
+        null,
+        null
       );
       oneBspfileMetadata = fileMetadata;
     });

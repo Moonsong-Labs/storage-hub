@@ -464,6 +464,13 @@ pub mod pallet {
             amount_slashed: BalanceOf<T>,
         },
 
+        /// Event emitted when a bucket's root has been changed.
+        BucketRootChanged {
+            bucket_id: BucketId<T>,
+            old_root: MerklePatriciaRoot<T>,
+            new_root: MerklePatriciaRoot<T>,
+        },
+
         /// Event emitted when a Provider has added a new MultiAddress to its account.
         MultiAddressAdded {
             provider_id: HashId<T>,
@@ -578,6 +585,8 @@ pub mod pallet {
         MspAlreadyAssignedToBucket,
         /// Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
         BucketSizeExceedsLimit,
+        /// Error thrown when a bucket has no value proposition.
+        BucketHasNoValueProposition,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
