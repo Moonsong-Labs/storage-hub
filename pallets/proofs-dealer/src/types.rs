@@ -157,3 +157,6 @@ pub type BlockFullnessHeadroomFor<T> = <T as crate::Config>::BlockFullnessHeadro
 
 /// Syntactic sugar for MinNotFullBlocksRatio type used in the ProofsDealer pallet.
 pub type MinNotFullBlocksRatioFor<T> = <T as crate::Config>::MinNotFullBlocksRatio;
+
+/// Syntactic sugar for MaxSlashableProvidersPerTick type used in the ProofsDealer pallet.
+pub type MaxSlashableProvidersPerTickFor<T> = <T as crate::Config>::MaxSlashableProvidersPerTick;

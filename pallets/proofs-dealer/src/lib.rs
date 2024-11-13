@@ -217,11 +217,22 @@ pub mod pallet {
         /// If less than this percentage of blocks are not full, the networks is considered to be presumably
         /// under a spam attack.
         /// This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
-        /// if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+        /// if this is set to `Perbill::from_percent(50)`, then if more than half of the last [`Config::BlockFullnessPeriod`]
         /// blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
-        /// that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+        /// that there was at least one truly _not_ full block in the last [`Config::BlockFullnessPeriod`] blocks.
         #[pallet::constant]
         type MinNotFullBlocksRatio: Get<Perbill>;
+
+        /// The maximum number of Providers that can be slashed per tick.
+        ///
+        /// Providers are marked as slashable if they are found in the [`TickToProvidersDeadlines`] StorageMap
+        /// for the current challenges tick. It is expected that most of the times, there will be little to
+        /// no Providers in the [`TickToProvidersDeadlines`] StorageMap for the current challenges tick. That
+        /// is because Providers are expected to submit proofs in time. However, in the extreme scenario where
+        /// a large number of Providers are missing the proof submissions, this configuration is used to keep
+        /// the execution of the `on_poll` hook bounded.
+        #[pallet::constant]
+        type MaxSlashableProvidersPerTick: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -334,7 +345,6 @@ pub mod pallet {
     /// ticks, where availability only up to the last [`Config::TargetTicksStorageOfSubmitters`] ticks is guaranteed.
     /// This storage is then made available for other pallets to use through the `ProofSubmittersInterface`.
     #[pallet::storage]
-    #[pallet::getter(fn valid_proof_submitters_last_ticks)]
     pub type ValidProofSubmittersLastTicks<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -347,7 +357,6 @@ pub mod pallet {
     /// This is used to know which tick to delete from the [`ValidProofSubmittersLastTicks`] StorageMap when the
     /// `on_idle` hook is called.
     #[pallet::storage]
-    #[pallet::getter(fn last_deleted_tick)]
     pub type LastDeletedTick<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A boolean that represents whether the [`ChallengesTicker`] is paused.
@@ -359,7 +368,6 @@ pub mod pallet {
     /// - No new checkpoint challenges would be emitted and added to [`TickToCheckpointChallenges`].
     /// - Deadlines for proof submissions are indefinitely postponed.
     #[pallet::storage]
-    #[pallet::getter(fn challenges_ticker_paused)]
     pub type ChallengesTickerPaused<T: Config> = StorageValue<_, ()>;
 
     /// A mapping from block number to the weight used in that block.
@@ -367,7 +375,6 @@ pub mod pallet {
     /// This is used to check if the network is presumably under a spam attack.
     /// It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
     #[pallet::storage]
-    #[pallet::getter(fn past_blocks_fullness)]
     pub type PastBlocksWeight<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Weight>;
 
@@ -375,8 +382,21 @@ pub mod pallet {
     ///
     /// This is used to check if the network is presumably under a spam attack.
     #[pallet::storage]
-    #[pallet::getter(fn not_full_blocks_count)]
     pub type NotFullBlocksCount<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    /// The tick to check and see if Providers failed to submit proofs before their deadline.
+    ///
+    /// In a normal situation, this should always be equal to [`ChallengesTicker`].
+    /// However, in the unlikely scenario where a large number of Providers fail to submit proofs (larger
+    /// than [`Config::MaxSlashableProvidersPerTick`]), and all of them had the same deadline, not all of
+    /// them will be marked as slashable. Only the first [`Config::MaxSlashableProvidersPerTick`] will be.
+    /// In that case, this stored tick will lag behind [`ChallengesTicker`].
+    ///
+    /// It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
+    /// slashable Providers follow.
+    #[pallet::storage]
+    pub type TickToCheckForSlashableProviders<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
