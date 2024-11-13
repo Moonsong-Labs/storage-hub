@@ -342,6 +342,17 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
       /**
+       * The maximum number of Providers that can be slashed per tick.
+       *
+       * Providers are marked as slashable if they are found in the [`TickToProvidersDeadlines`] StorageMap
+       * for the current challenges tick. It is expected that most of the times, there will be little to
+       * no Providers in the [`TickToProvidersDeadlines`] StorageMap for the current challenges tick. That
+       * is because Providers are expected to submit proofs in time. However, in the extreme scenario where
+       * a large number of Providers are missing the proof submissions, this configuration is used to keep
+       * the execution of the `on_poll` hook bounded.
+       **/
+      maxSlashableProvidersPerTick: u32 & AugmentedConst<ApiType>;
+      /**
        * The maximum amount of Providers that can submit a proof in a single block.
        * Although this can be seen as an arbitrary limit, if set to the already existing
        * implicit limit that is "how many `submit_proof` extrinsics fit in the weight of
@@ -359,9 +370,9 @@ declare module "@polkadot/api-base/types/consts" {
        * If less than this percentage of blocks are not full, the networks is considered to be presumably
        * under a spam attack.
        * This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
-       * if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+       * if this is set to `Perbill::from_percent(50)`, then if more than half of the last [`Config::BlockFullnessPeriod`]
        * blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
-       * that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+       * that there was at least one truly _not_ full block in the last [`Config::BlockFullnessPeriod`] blocks.
        **/
       minNotFullBlocksRatio: Perbill & AugmentedConst<ApiType>;
       /**

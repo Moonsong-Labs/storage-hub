@@ -30,14 +30,15 @@ use crate::{
     types::{
         BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor,
-        KeyProof, MaxCustomChallengesPerBlockFor, MaxSubmittersPerTickFor, MinChallengePeriodFor,
-        MinNotFullBlocksRatioFor, Proof, ProviderIdFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
+        KeyProof, MaxCustomChallengesPerBlockFor, MaxSlashableProvidersPerTickFor,
+        MaxSubmittersPerTickFor, MinChallengePeriodFor, MinNotFullBlocksRatioFor, Proof,
+        ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor, StakeToChallengePeriodFor,
+        TargetTicksStorageOfSubmittersFor,
     },
     ChallengesTicker, ChallengesTickerPaused, LastCheckpointTick, LastDeletedTick,
     LastTickProviderSubmittedAProofFor, NotFullBlocksCount, SlashableProviders,
-    TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
-    ValidProofSubmittersLastTicks,
+    TickToChallengesSeed, TickToCheckForSlashableProviders, TickToCheckpointChallenges,
+    TickToProvidersDeadlines, ValidProofSubmittersLastTicks,
 };
 
 fn run_to_block(n: u64) {
@@ -4117,6 +4118,170 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
         assert_eq!(
             TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
+        );
+    });
+}
+
+#[test]
+fn slashable_providers_beyond_max_per_tick() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Add more than `MaxSlashableProvidersPerTick` Providers to the next tick.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let max_slashable_providers_per_tick: u32 = MaxSlashableProvidersPerTickFor::<Test>::get();
+        for i in 0..max_slashable_providers_per_tick + 1 {
+            let provider = BlakeTwo256::hash(format!("provider_{}", i).as_bytes());
+
+            // Insert the Provider into `TickToProvidersDeadlines` with the next tick as deadline.
+            TickToProvidersDeadlines::<Test>::insert(current_tick + 1, provider, ());
+
+            // Set the current tick as the last tick it provided a proof for.
+            LastTickProviderSubmittedAProofFor::<Test>::insert(provider, current_tick);
+        }
+
+        let tick_to_checked_for_slashable_providers_before =
+            TickToCheckForSlashableProviders::<Test>::get();
+
+        // Check that `TickToCheckedForSlashableProviders` is caught up with the next tick.
+        assert_eq!(
+            tick_to_checked_for_slashable_providers_before,
+            current_tick + 1
+        );
+
+        // Run to the next tick.
+        run_to_block(current_tick + 1);
+
+        // `TickToCheckedForSlashableProviders` should be the same, as there were more Providers
+        // to mark as slashable than the limit.
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            tick_to_checked_for_slashable_providers_before
+        );
+
+        // There should be just one slashable Provider left under `tick_to_checked_for_slashable_providers_before`.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::iter_prefix(
+                tick_to_checked_for_slashable_providers_before
+            )
+            .count(),
+            1
+        );
+
+        // There should be `MaxSlashableProvidersPerTick` Providers marked as slashable.
+        assert_eq!(
+            SlashableProviders::<Test>::iter().count(),
+            max_slashable_providers_per_tick as usize
+        );
+
+        // Add twice the number of `MaxSlashableProvidersPerTick` Providers to the next tick.
+        let current_tick = ChallengesTicker::<Test>::get();
+        for i in 0..max_slashable_providers_per_tick * 2 {
+            let provider = BlakeTwo256::hash(format!("new_provider_{}", i).as_bytes());
+
+            // Insert the Provider into `TickToProvidersDeadlines` with the next tick as deadline.
+            TickToProvidersDeadlines::<Test>::insert(current_tick + 1, provider, ());
+
+            // Set the current tick as the last tick it provided a proof.
+            LastTickProviderSubmittedAProofFor::<Test>::insert(provider, current_tick);
+        }
+
+        // `TickToCheckedForSlashableProviders` should be equal to the current challenges tick.
+        // i.e. it is one tick behind what it should be in a normal situation.
+        let tick_to_checked_for_slashable_providers_before =
+            TickToCheckForSlashableProviders::<Test>::get();
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            current_tick
+        );
+
+        // Run to the next tick.
+        run_to_block(current_tick + 1);
+
+        // `TickToCheckedForSlashableProviders` should have advance by one tick.
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            tick_to_checked_for_slashable_providers_before + 1
+        );
+
+        // There should be `MaxSlashableProvidersPerTick + 1` Providers left under
+        // `tick_to_checked_for_slashable_providers_before + 1`.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::iter_prefix(
+                tick_to_checked_for_slashable_providers_before + 1
+            )
+            .count(),
+            max_slashable_providers_per_tick as usize + 1
+        );
+
+        // There should be `MaxSlashableProvidersPerTick * 2` Providers marked as slashable.
+        assert_eq!(
+            SlashableProviders::<Test>::iter().count(),
+            max_slashable_providers_per_tick as usize * 2
+        );
+
+        // `TickToCheckedForSlashableProviders` should be equal to the current challenges tick.
+        // i.e. it is one tick behind what it should be in a normal situation.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let tick_to_checked_for_slashable_providers_before =
+            TickToCheckForSlashableProviders::<Test>::get();
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            current_tick
+        );
+
+        // Run to the next tick.
+        run_to_block(current_tick + 1);
+
+        // `TickToCheckedForSlashableProviders` should not have advanced any number of ticks,
+        // given that there were `MaxSlashableProvidersPerTick + 1` Providers left.
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            tick_to_checked_for_slashable_providers_before
+        );
+
+        // There should be just one slashable Provider left under `tick_to_checked_for_slashable_providers_before`.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::iter_prefix(
+                tick_to_checked_for_slashable_providers_before
+            )
+            .count(),
+            1
+        );
+
+        // There should be `MaxSlashableProvidersPerTick * 3` Providers marked as slashable.
+        assert_eq!(
+            SlashableProviders::<Test>::iter().count(),
+            max_slashable_providers_per_tick as usize * 3
+        );
+
+        // `TickToCheckedForSlashableProviders` should be equal to the current challenges tick minus one.
+        // i.e. it is two ticks behind what it should be in a normal situation.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let tick_to_checked_for_slashable_providers_before =
+            TickToCheckForSlashableProviders::<Test>::get();
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            current_tick - 1
+        );
+
+        // Run to the next tick.
+        run_to_block(current_tick + 1);
+
+        // `TickToCheckedForSlashableProviders` should have finally caught up.
+        // i.e. it should have advanced three ticks: the two that was lagging behind, plus one to
+        // be one tick ahead of the current challenges tick.
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            tick_to_checked_for_slashable_providers_before + 3
+        );
+
+        let current_tick = ChallengesTicker::<Test>::get();
+        // Check that it is caught up to the next challenges tick.
+        assert_eq!(
+            TickToCheckForSlashableProviders::<Test>::get(),
+            current_tick + 1
         );
     });
 }
