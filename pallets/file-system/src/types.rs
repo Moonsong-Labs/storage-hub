@@ -180,9 +180,10 @@ impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
 
 /// Input for MSPs to respond to storage request(s).
 ///
-/// The input is a list of ([BucketIdFor], [MspStorageRequestResponse]) elements,
-/// where the [MspStorageRequestResponse] contains the file keys that are accepted
-/// or rejected by the MSP.
+/// The input is a list of bucket responses, where each response contains:
+/// - The bucket ID
+/// - Optional accepted file keys and proof for the whole list
+/// - List of rejected file keys and rejection reasons
 pub type StorageRequestMspResponse<T> =
     BoundedVec<StorageRequestMspBucketResponse<T>, MaxBatchMspRespondStorageRequests<T>>;
 
