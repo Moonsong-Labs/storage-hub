@@ -40,7 +40,7 @@ use crate::{
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
     LastDeletedTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
     PastBlocksWeight, PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed,
-    TickToCheckedForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
+    TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
     ValidProofSubmittersLastTicks,
 };
 
@@ -458,7 +458,7 @@ where
         // If there are Providers left in `TickToProvidersDeadlines` for `TickToCheckedForSlashableProviders`,
         // they will be marked as slashable.
         let mut tick_to_check_for_slashable_providers =
-            TickToCheckedForSlashableProviders::<T>::get();
+            TickToCheckForSlashableProviders::<T>::get();
         let mut slashable_providers =
             TickToProvidersDeadlines::<T>::drain_prefix(tick_to_check_for_slashable_providers);
 
@@ -573,7 +573,7 @@ where
         }
 
         // Update `TickToCheckedForSlashableProviders` to the value resulting from the last iteration of the loop.
-        TickToCheckedForSlashableProviders::<T>::set(tick_to_check_for_slashable_providers);
+        TickToCheckForSlashableProviders::<T>::set(tick_to_check_for_slashable_providers);
     }
 
     /// Check if the network is presumably under a spam attack.

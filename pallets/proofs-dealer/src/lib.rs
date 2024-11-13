@@ -345,7 +345,6 @@ pub mod pallet {
     /// ticks, where availability only up to the last [`Config::TargetTicksStorageOfSubmitters`] ticks is guaranteed.
     /// This storage is then made available for other pallets to use through the `ProofSubmittersInterface`.
     #[pallet::storage]
-    #[pallet::getter(fn valid_proof_submitters_last_ticks)]
     pub type ValidProofSubmittersLastTicks<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -358,7 +357,6 @@ pub mod pallet {
     /// This is used to know which tick to delete from the [`ValidProofSubmittersLastTicks`] StorageMap when the
     /// `on_idle` hook is called.
     #[pallet::storage]
-    #[pallet::getter(fn last_deleted_tick)]
     pub type LastDeletedTick<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A boolean that represents whether the [`ChallengesTicker`] is paused.
@@ -370,7 +368,6 @@ pub mod pallet {
     /// - No new checkpoint challenges would be emitted and added to [`TickToCheckpointChallenges`].
     /// - Deadlines for proof submissions are indefinitely postponed.
     #[pallet::storage]
-    #[pallet::getter(fn challenges_ticker_paused)]
     pub type ChallengesTickerPaused<T: Config> = StorageValue<_, ()>;
 
     /// A mapping from block number to the weight used in that block.
@@ -378,7 +375,6 @@ pub mod pallet {
     /// This is used to check if the network is presumably under a spam attack.
     /// It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
     #[pallet::storage]
-    #[pallet::getter(fn past_blocks_fullness)]
     pub type PastBlocksWeight<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Weight>;
 
@@ -386,7 +382,6 @@ pub mod pallet {
     ///
     /// This is used to check if the network is presumably under a spam attack.
     #[pallet::storage]
-    #[pallet::getter(fn not_full_blocks_count)]
     pub type NotFullBlocksCount<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// The tick to check and see if Providers failed to submit proofs before their deadline.
@@ -400,8 +395,7 @@ pub mod pallet {
     /// It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
     /// slashable Providers follow.
     #[pallet::storage]
-    #[pallet::getter(fn last_tick_checked_for_missing_proofs)]
-    pub type TickToCheckedForSlashableProviders<T: Config> =
+    pub type TickToCheckForSlashableProviders<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Pallets use events to inform users when important changes are made.
