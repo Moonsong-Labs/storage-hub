@@ -361,7 +361,7 @@ where
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
         let current_tick_valid_submitters =
-            ValidProofSubmittersLastTicks::<T>::take(ChallengesTicker::<T>::get());
+            ValidProofSubmittersLastTicks::<T>::get(ChallengesTicker::<T>::get());
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
