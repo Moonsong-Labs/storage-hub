@@ -247,7 +247,9 @@ describeBspNet(
       const cloudFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/cloud.jpg",
         "test/cloud.jpg",
-        "bucket-1"
+        "bucket-1",
+        null,
+        null
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
@@ -258,7 +260,9 @@ describeBspNet(
       const adolphusFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/adolphus.jpg",
         "test/adolphus.jpg",
-        "bucket-3"
+        "bucket-3",
+        null,
+        null
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);

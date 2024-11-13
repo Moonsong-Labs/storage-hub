@@ -2,6 +2,7 @@ import "@polkadot/api-augment/kusama";
 import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import invariant from "tiny-invariant";
+import { sleep } from "./timer";
 
 export type ZombieClients = Promise<{
   [Symbol.asyncDispose]: () => Promise<void>;
@@ -52,7 +53,7 @@ export const waitForChain = async (
         break;
       }
     } catch (e) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1000);
     }
 
     invariant(

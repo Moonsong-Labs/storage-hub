@@ -1019,17 +1019,21 @@ where
         )
         .unwrap_or_default();
 
+        let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        ensure!(
+            bucket.value_prop_id.is_some(),
+            Error::<T>::BucketHasNoValueProposition
+        );
+
+        let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+            &msp_id,
+            &bucket.value_prop_id.unwrap(),
+        )
+        .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
         match delta {
             RateDeltaParam::NewBucket => {
-                let bucket: Bucket<T> =
-                    Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-
-                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                    &msp_id,
-                    &bucket.value_prop_id,
-                )
-                .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
                 let bucket_rate = value_prop
                     .price_per_unit_of_data_per_block
                     .checked_mul(&bucket.size.into())
@@ -1058,15 +1062,6 @@ where
                 }
             }
             RateDeltaParam::RemoveBucket => {
-                let bucket: Bucket<T> =
-                    Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-
-                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                    &msp_id,
-                    &bucket.value_prop_id,
-                )
-                .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
                 let bucket_rate = value_prop
                     .price_per_unit_of_data_per_block
                     .checked_mul(&bucket.size.into())
@@ -1090,14 +1085,6 @@ where
                 }
             }
             RateDeltaParam::Increase(delta) => {
-                let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-
-                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                    &msp_id,
-                    &bucket.value_prop_id,
-                )
-                .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
                 let new_bucket_size = bucket
                     .size
                     .checked_add(&delta)
@@ -1123,13 +1110,6 @@ where
                 )?;
             }
             RateDeltaParam::Decrease(delta) => {
-                let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                    &msp_id,
-                    &bucket.value_prop_id,
-                )
-                .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
                 let delta_rate = value_prop
                     .price_per_unit_of_data_per_block
                     .checked_mul(&delta.into())
@@ -1189,28 +1169,23 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     }
 
     fn derive_bucket_id(
-        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId {
-        let concat = msp_id
+        let concat = owner
             .encode()
             .into_iter()
-            .chain(
-                owner
-                    .encode()
-                    .into_iter()
-                    .chain(bucket_name.encode().into_iter()),
-            )
+            .chain(bucket_name.encode().into_iter())
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
         <<T as crate::Config>::ProviderIdHashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 
-    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
-        let bucket = Buckets::<T>::get(bucket_id).map(|bucket| bucket)?;
-
-        bucket.msp_id.map(|msp_id| msp_id)
+    fn get_msp_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.msp_id)
     }
 
     fn get_read_access_group_id_of_bucket(
@@ -1274,23 +1249,17 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
-        provider_id: Self::ProviderId,
+        provider_id: Option<Self::ProviderId>,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Self::ValuePropId,
+        value_prop_id: Option<Self::ValuePropId>,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
             !Buckets::<T>::contains_key(&bucket_id),
             Error::<T>::BucketAlreadyExists
-        );
-
-        // Check if the MSP exists
-        ensure!(
-            MainStorageProviders::<T>::contains_key(&provider_id),
-            Error::<T>::NotRegistered
         );
 
         let user_balance = T::NativeBalance::reducible_balance(
@@ -1299,14 +1268,26 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
-        let value_prop =
-            MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+        if let Some(provider_id) = provider_id {
+            // Check if the MSP exists
+            ensure!(
+                MainStorageProviders::<T>::contains_key(&provider_id),
+                Error::<T>::NotRegistered
+            );
+
+            if let Some(value_prop_id) = value_prop_id {
+                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+                    &provider_id,
+                    &value_prop_id,
+                )
                 .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-        ensure!(
-            value_prop.available,
-            Error::<T>::ValuePropositionNotAvailable
-        );
+                ensure!(
+                    value_prop.available,
+                    Error::<T>::ValuePropositionNotAvailable
+                );
+            }
+        }
 
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
@@ -1320,7 +1301,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
-            msp_id: Some(provider_id),
+            msp_id: provider_id,
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id: user_id.clone(),
@@ -1329,14 +1310,17 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
-        MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
-        Self::apply_delta_fixed_rate_payment_stream(
-            &provider_id,
-            &bucket_id,
-            &user_id,
-            RateDeltaParam::NewBucket,
-        )?;
+        if let Some(provider_id) = provider_id {
+            MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+
+            Self::apply_delta_fixed_rate_payment_stream(
+                &provider_id,
+                &bucket_id,
+                &user_id,
+                RateDeltaParam::NewBucket,
+            )?;
+        }
 
         Ok(())
     }
@@ -1405,6 +1389,13 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            Self::deposit_event(Event::<T>::BucketRootChanged {
+                bucket_id,
+                old_root: bucket.root,
+                new_root,
+            });
+
             bucket.root = new_root;
 
             Ok(())

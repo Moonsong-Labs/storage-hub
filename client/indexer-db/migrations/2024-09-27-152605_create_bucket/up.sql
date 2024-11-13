@@ -1,7 +1,7 @@
 -- Create Bucket table
 CREATE TABLE bucket (
     id SERIAL PRIMARY KEY,
-    msp_id INTEGER NOT NULL,
+    msp_id INTEGER,
     account VARCHAR NOT NULL,
     onchain_bucket_id VARCHAR NOT NULL,
     name BYTEA NOT NULL,

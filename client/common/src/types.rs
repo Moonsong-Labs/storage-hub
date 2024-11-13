@@ -32,15 +32,17 @@ pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
-pub type FileKeyResponsesInput = pallet_file_system::types::FileKeyResponsesInput<Runtime>;
 pub type MaxBatchMspRespondStorageRequests =
     pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
+pub type StorageRequestMspBucketResponse =
+    pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
+pub type StorageRequestMspResponse = pallet_file_system::types::StorageRequestMspResponse<Runtime>;
 pub type MaxUsersToCharge = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
-pub type MspStorageRequestResponse = pallet_file_system::types::MspStorageRequestResponse<Runtime>;
-pub type AcceptedStorageRequestParameters =
-    pallet_file_system::types::AcceptedStorageRequestParameters<Runtime>;
 pub type RejectedStorageRequestReason = pallet_file_system::types::RejectedStorageRequestReason;
-pub type BatchResponses = pallet_file_system::types::BatchResponses<Runtime>;
+pub type RejectedStorageRequest = pallet_file_system::types::RejectedStorageRequest<Runtime>;
+pub type StorageRequestMspAcceptedFileKeys =
+    pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
+pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;

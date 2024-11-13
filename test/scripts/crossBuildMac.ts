@@ -8,17 +8,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  const { confirm } = await inquirer.prompt({
-    type: "confirm",
-    name: "confirm",
-    message: "This script will build the project for Linux. Continue?",
-    default: true
-  });
-
-  if (!confirm) {
-    return;
-  }
-
   const ARCH = execSync("uname -m").toString().trim();
   const OS = execSync("uname -s").toString().trim();
 
@@ -53,8 +42,6 @@ async function main() {
 
   execSync(`cargo zigbuild --target ${target} --release`, { stdio: "inherit" });
 }
-
-main();
 
 const execCommand = (command: string): string => {
   try {
@@ -117,3 +104,5 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
 
   console.log(`libpq.so has been copied to ${destPath}`);
 };
+
+main();

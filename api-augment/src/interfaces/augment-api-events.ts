@@ -27,7 +27,7 @@ import type {
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   PalletFileSystemEitherAccountIdOrMspId,
-  PalletFileSystemMspRespondStorageRequestsResult,
+  PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
@@ -420,9 +420,6 @@ declare module "@polkadot/api-base/types/events" {
         [bspId: H256, fileKey: H256, newRoot: H256],
         { bspId: H256; fileKey: H256; newRoot: H256 }
       >;
-      /**
-       * Notifies that a BSP has opened a request to stop storing a file.
-       **/
       BspRequestedToStopStoring: AugmentedEvent<
         ApiType,
         [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes],
@@ -445,14 +442,6 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; bucketId: H256; collectionId: Option<u32>; private: bool }
       >;
       /**
-       * Notifies that a data server has been registered for a move bucket request.
-       **/
-      DataServerRegisteredForMoveBucket: AugmentedEvent<
-        ApiType,
-        [bspId: H256, bucketId: H256],
-        { bspId: H256; bucketId: H256 }
-      >;
-      /**
        * Notifies that a priority challenge failed to be queued for pending file deletion.
        **/
       FailedToQueuePriorityChallenge: AugmentedEvent<
@@ -465,8 +454,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       FileDeletionRequest: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256, bucketId: H256, mspId: H256, proofOfInclusion: bool],
-        { user: AccountId32; fileKey: H256; bucketId: H256; mspId: H256; proofOfInclusion: bool }
+        [
+          user: AccountId32,
+          fileKey: H256,
+          bucketId: H256,
+          mspId: Option<H256>,
+          proofOfInclusion: bool
+        ],
+        {
+          user: AccountId32;
+          fileKey: H256;
+          bucketId: H256;
+          mspId: Option<H256>;
+          proofOfInclusion: bool;
+        }
       >;
       /**
        * Notifies that a bucket has been moved to a new MSP.
@@ -501,13 +502,17 @@ declare module "@polkadot/api-base/types/events" {
         { mspId: H256; bucketId: H256 }
       >;
       /**
-       * Notifies that a MSP has responded to storage request(s).
+       * Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
+       *
+       * This event is emitted when an MSP agrees to store a file, but the storage request
+       * is not yet fully fulfilled (i.e., the required number of Backup Storage Providers
+       * have not yet confirmed storage).
+       *
+       * # Note
+       * This event is not emitted when the storage request is immediately fulfilled upon
+       * MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
        **/
-      MspRespondedToStorageRequests: AugmentedEvent<
-        ApiType,
-        [results: PalletFileSystemMspRespondStorageRequestsResult],
-        { results: PalletFileSystemMspRespondStorageRequestsResult }
-      >;
+      MspAcceptedStorageRequest: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Notifies that a MSP has stopped storing a bucket.
        **/
@@ -523,21 +528,21 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
-          mspId: H256,
+          mspId: Option<H256>,
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
           private: bool,
-          valuePropId: H256
+          valuePropId: Option<H256>
         ],
         {
           who: AccountId32;
-          mspId: H256;
+          mspId: Option<H256>;
           bucketId: H256;
           name: Bytes;
           collectionId: Option<u32>;
           private: bool;
-          valuePropId: H256;
+          valuePropId: Option<H256>;
         }
       >;
       /**
@@ -597,15 +602,33 @@ declare module "@polkadot/api-base/types/events" {
         { spId: H256; fileKey: H256; owner: AccountId32; location: Bytes; newRoot: H256 }
       >;
       /**
-       * Notifies the expiration of a storage request.
+       * Notifies the expiration of a storage request. This means that the storage request has
+       * been accepted by the MSP but the BSP target has not been reached (possibly 0 BSPs).
+       * Note: This is a valid storage outcome, the user being responsible to track the number
+       * of BSPs and choose to either delete the file and re-issue a storage request or continue.
        **/
       StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Notifies that a storage request for a file key has been fulfilled.
+       * This means that the storage request has been accepted by the MSP and the BSP target
+       * has been reached.
        **/
       StorageRequestFulfilled: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
+       * Notifies that a storage request has either been directly rejected by the MSP or
+       * the MSP did not respond to the storage request in time.
+       * Note: There might be BSPs that have volunteered and confirmed the file already, for
+       * which a priority challenge to delete the file will be issued.
+       **/
+      StorageRequestRejected: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, reason: PalletFileSystemRejectedStorageRequestReason],
+        { fileKey: H256; reason: PalletFileSystemRejectedStorageRequestReason }
+      >;
+      /**
        * Notifies that a storage request has been revoked by the user who initiated it.
+       * Note: the BSPs who confirmed the file are also issued a priority challenge to delete the
+       * file.
        **/
       StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
@@ -1641,6 +1664,14 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
         { who: AccountId32; bspId: H256; multiaddresses: Vec<Bytes>; capacity: u64 }
+      >;
+      /**
+       * Event emitted when a bucket's root has been changed.
+       **/
+      BucketRootChanged: AugmentedEvent<
+        ApiType,
+        [bucketId: H256, oldRoot: H256, newRoot: H256],
+        { bucketId: H256; oldRoot: H256; newRoot: H256 }
       >;
       /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about

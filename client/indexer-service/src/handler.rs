@@ -187,10 +187,15 @@ impl IndexerService {
                 private,
                 value_prop_id: _,
             } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                let msp = match msp_id {
+                    Some(msp_id) => {
+                        Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?)
+                    }
+                    None => None,
+                };
                 Bucket::create(
                     conn,
-                    msp.id,
+                    msp.map(|m| m.id),
                     who.to_string(),
                     bucket_id.to_string(),
                     name.to_vec(),
@@ -220,14 +225,15 @@ impl IndexerService {
             }
             pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
             pallet_file_system::Event::BspConfirmedStoring { .. } => {}
-            pallet_file_system::Event::MspRespondedToStorageRequests { .. } => {}
             pallet_file_system::Event::NewStorageRequest { .. } => {}
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
             pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
             pallet_file_system::Event::StorageRequestExpired { .. } => {}
+            pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::StorageRequestRevoked { .. } => {}
+            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
@@ -237,7 +243,6 @@ impl IndexerService {
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
-            pallet_file_system::Event::DataServerRegisteredForMoveBucket { .. } => {}
             pallet_file_system::Event::MspStoppedStoringBucket { .. } => {}
             pallet_file_system::Event::BucketDeleted { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
@@ -445,6 +450,7 @@ impl IndexerService {
             } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
+            pallet_storage_providers::Event::BucketRootChanged { .. } => {}
             pallet_storage_providers::Event::Slashed {
                 provider_id,
                 amount_slashed: _amount_slashed,

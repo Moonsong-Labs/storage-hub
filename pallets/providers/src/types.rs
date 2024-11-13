@@ -95,7 +95,7 @@ pub struct Bucket<T: Config> {
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     pub size: StorageDataUnit<T>,
-    pub value_prop_id: ValuePropIdFor<T>,
+    pub value_prop_id: Option<ValuePropIdFor<T>>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]

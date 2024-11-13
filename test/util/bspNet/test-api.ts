@@ -2,7 +2,7 @@ import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -120,7 +120,7 @@ export class BspNetTestApi implements AsyncDisposable {
     );
   }
 
-  private async createBucket(bucketName: string, valuePropId?: HexString) {
+  private async createBucket(bucketName: string, valuePropId?: HexString | null) {
     return Files.createBucket(this._api, bucketName, valuePropId);
   }
 
@@ -264,14 +264,16 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
+      bspStored: (expectedExts?: number, bspAccount?: Address) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**
-       * Waits for a MSP to respond to storage requests.
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has responded to storage requests.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
        */
-      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -319,7 +321,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString) =>
+      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString | null) =>
         Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
 
       /**
@@ -354,8 +356,8 @@ export class BspNetTestApi implements AsyncDisposable {
         source: string,
         location: string,
         bucketName: string,
-        valuePropId?: HexString,
-        msp_id?: HexString,
+        valuePropId?: HexString | null,
+        msp_id?: HexString | null,
         owner?: KeyringPair
       ) =>
         Files.createBucketAndSendNewStorageRequest(

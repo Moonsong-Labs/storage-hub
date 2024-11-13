@@ -1011,6 +1011,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
       /**
+       * Error thrown when a bucket has no value proposition.
+       **/
+      BucketHasNoValueProposition: AugmentedError<ApiType>;
+      /**
        * Error thrown when an operation requires an MSP to be storing the bucket.
        **/
       BucketMustHaveMspForOperation: AugmentedError<ApiType>;
