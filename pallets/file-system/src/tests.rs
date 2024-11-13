@@ -4615,7 +4615,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    msp_id,
+                    Some(msp_id),
                     peer_ids.clone(),
                 ));
 
@@ -4847,7 +4847,7 @@ mod bsp_confirm {
                             location.clone(),
                             fingerprint,
                             size,
-                            msp_id,
+                            Some(msp_id),
                             peer_ids.clone(),
                         ));
 
