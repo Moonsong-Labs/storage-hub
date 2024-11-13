@@ -137,7 +137,10 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_provider(peer_ids, &file_metadata).await
+        self.send_chunks_to_provider(peer_ids, &file_metadata)
+            .await?;
+
+        Ok(())
     }
 }
 

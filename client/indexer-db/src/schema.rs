@@ -23,7 +23,7 @@ diesel::table! {
 diesel::table! {
     bucket (id) {
         id -> Int4,
-        msp_id -> Int4,
+        msp_id -> Nullable<Int4>,
         account -> Varchar,
         onchain_bucket_id -> Varchar,
         name -> Bytea,

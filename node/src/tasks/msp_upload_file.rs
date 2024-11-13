@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::{cmp::max, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
-use pallet_file_system::types::BatchResponses;
+use pallet_file_system::types::RejectedStorageRequest;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
@@ -15,15 +15,16 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use shc_common::types::{
-    AcceptedStorageRequestParameters, FileKey, FileMetadata, HashT, MspStorageRequestResponse,
-    RejectedStorageRequestReason, StorageProofsMerkleTrieLayout, StorageProviderId,
+    FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
+    StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
+    StorageRequestMspBucketResponse,
 };
 use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::{RuntimeEvent, StorageDataUnit};
+use storage_hub_runtime::StorageDataUnit;
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -177,16 +178,16 @@ where
 
                 let call = storage_hub_runtime::RuntimeCall::FileSystem(
                     pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                        file_key_responses_input: bounded_vec![(
-                            bucket_id,
-                            MspStorageRequestResponse {
+                        storage_request_msp_response: bounded_vec![
+                            StorageRequestMspBucketResponse {
+                                bucket_id,
                                 accept: None,
-                                reject: Some(bounded_vec![(
-                                    H256(event.file_key.into()),
-                                    RejectedStorageRequestReason::ReceivedInvalidProof,
-                                )])
+                                reject: bounded_vec![RejectedStorageRequest {
+                                    file_key: H256(event.file_key.into()),
+                                    reason: RejectedStorageRequestReason::ReceivedInvalidProof,
+                                }],
                             }
-                        )],
+                        ],
                     },
                 );
 
@@ -230,16 +231,16 @@ where
                 FileStorageWriteError::FileDoesNotExist => {
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
                         pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            file_key_responses_input: bounded_vec![(
-                                bucket_id,
-                                MspStorageRequestResponse {
+                            storage_request_msp_response: bounded_vec![
+                                StorageRequestMspBucketResponse {
+                                    bucket_id,
                                     accept: None,
-                                    reject: Some(bounded_vec![(
-                                        H256(event.file_key.into()),
-                                        RejectedStorageRequestReason::InternalError
-                                    )])
+                                    reject: bounded_vec![RejectedStorageRequest {
+                                        file_key: H256(event.file_key.into()),
+                                        reason: RejectedStorageRequestReason::InternalError,
+                                    }],
                                 }
-                            )],
+                            ],
                         },
                     );
 
@@ -269,16 +270,16 @@ where
                     // This internal error should not happen.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
                         pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            file_key_responses_input: bounded_vec![(
-                                bucket_id,
-                                MspStorageRequestResponse {
+                            storage_request_msp_response: bounded_vec![
+                                StorageRequestMspBucketResponse {
+                                    bucket_id,
                                     accept: None,
-                                    reject: Some(bounded_vec![(
-                                        H256(event.file_key.into()),
-                                        RejectedStorageRequestReason::InternalError
-                                    )])
+                                    reject: bounded_vec![RejectedStorageRequest {
+                                        file_key: H256(event.file_key.into()),
+                                        reason: RejectedStorageRequestReason::InternalError,
+                                    }],
                                 }
-                            )],
+                            ],
                         },
                     );
 
@@ -303,16 +304,16 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
                         pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            file_key_responses_input: bounded_vec![(
-                                bucket_id,
-                                MspStorageRequestResponse {
+                            storage_request_msp_response: bounded_vec![
+                                StorageRequestMspBucketResponse {
+                                    bucket_id,
                                     accept: None,
-                                    reject: Some(bounded_vec![(
-                                        H256(event.file_key.into()),
-                                        RejectedStorageRequestReason::InternalError
-                                    )])
+                                    reject: bounded_vec![RejectedStorageRequest {
+                                        file_key: H256(event.file_key.into()),
+                                        reason: RejectedStorageRequestReason::InternalError,
+                                    }],
                                 }
-                            )],
+                            ],
                         },
                     );
 
@@ -337,16 +338,16 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
                         pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            file_key_responses_input: bounded_vec![(
-                                bucket_id,
-                                MspStorageRequestResponse {
+                            storage_request_msp_response: bounded_vec![
+                                StorageRequestMspBucketResponse {
+                                    bucket_id,
                                     accept: None,
-                                    reject: Some(bounded_vec![(
-                                        H256(event.file_key.into()),
-                                        RejectedStorageRequestReason::InternalError
-                                    )])
+                                    reject: bounded_vec![RejectedStorageRequest {
+                                        file_key: H256(event.file_key.into()),
+                                        reason: RejectedStorageRequestReason::InternalError,
+                                    }],
                                 }
-                            )],
+                            ],
                         },
                     );
 
@@ -418,10 +419,7 @@ where
             }
         };
 
-        let mut file_key_responses: HashMap<
-            H256,
-            (Vec<(H256, _)>, Vec<(H256, RejectedStorageRequestReason)>),
-        > = HashMap::new();
+        let mut file_key_responses = HashMap::new();
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
@@ -468,19 +466,25 @@ where
                         }
                     };
 
-                    entry.0.push((respond.file_key, proof));
+                    entry.0.push(FileKeyWithProof {
+                        file_key: respond.file_key,
+                        proof,
+                    });
                 }
                 MspRespondStorageRequest::Reject(reason) => {
-                    entry.1.push((respond.file_key, reason.clone()));
+                    entry.1.push(RejectedStorageRequest {
+                        file_key: respond.file_key,
+                        reason: reason.clone(),
+                    });
                 }
             }
         }
 
         drop(read_file_storage);
 
-        let mut final_responses: HashMap<H256, MspStorageRequestResponse> = HashMap::new();
+        let mut storage_request_msp_response = Vec::new();
 
-        for (bucket_id, (accepts, rejects)) in file_key_responses.iter_mut() {
+        for (bucket_id, (accept, reject)) in file_key_responses.iter_mut() {
             let fs = match self
                 .storage_hub_handler
                 .forest_storage_handler
@@ -496,89 +500,75 @@ where
                 }
             };
 
-            let file_keys: Vec<_> = accepts.iter().map(|(file_key, _)| *file_key).collect();
+            let accept = if !accept.is_empty() {
+                let file_keys: Vec<_> = accept
+                    .iter()
+                    .map(|file_key_with_proof| file_key_with_proof.file_key)
+                    .collect();
 
-            let non_inclusion_forest_proof = match fs.read().await.generate_proof(file_keys) {
-                Ok(proof) => proof,
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
-                    continue;
-                }
+                let non_inclusion_forest_proof = match fs.read().await.generate_proof(file_keys) {
+                    Ok(proof) => proof,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
+                        continue;
+                    }
+                };
+
+                Some(StorageRequestMspAcceptedFileKeys {
+                    file_keys_and_proofs: accept
+                        .clone()
+                        .try_into()
+                        .map_err(|_| anyhow!("Failed to convert accepts to bounded vec"))?,
+                    non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                })
+            } else {
+                None
             };
 
-            let response = MspStorageRequestResponse {
-                accept: if !accepts.is_empty() {
-                    Some(AcceptedStorageRequestParameters {
-                        file_keys_and_proofs: accepts
-                            .clone()
-                            .try_into()
-                            .map_err(|_| anyhow!("Failed to convert accepts to bounded vec"))?,
-                        non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                    })
-                } else {
-                    None
-                },
-                reject: if !rejects.is_empty() {
-                    Some(
-                        rejects
-                            .clone()
-                            .try_into()
-                            .map_err(|_| anyhow!("Failed to convert rejects to bounded vec"))?,
-                    )
-                } else {
-                    None
-                },
-            };
-
-            final_responses.insert(*bucket_id, response);
+            storage_request_msp_response.push(StorageRequestMspBucketResponse {
+                bucket_id: *bucket_id,
+                accept,
+                reject: reject
+                    .clone()
+                    .try_into()
+                    .map_err(|_| anyhow!("Failed to convert rejects to bounded vec"))?,
+            });
         }
 
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                file_key_responses_input: final_responses
-                    .into_iter()
-                    .collect::<Vec<_>>()
+                storage_request_msp_response: storage_request_msp_response
+                    .clone()
                     .try_into()
                     .map_err(|_| anyhow!("Failed to convert file key responses to bounded vec"))?,
             },
         );
 
-        let events = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
             .await?
             .with_timeout(Duration::from_secs(60))
-            .watch_for_success_with_events(&self.storage_hub_handler.blockchain)
+            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
         // Apply the necessary deltas to each one of the bucket's forest storage to reflect the result.
-        let results = events
-            .iter()
-            .find_map(|event| match &event.event {
-                RuntimeEvent::FileSystem(
-                    pallet_file_system::Event::MspRespondedToStorageRequests { results },
-                ) => Some(results.clone()),
-                _ => None,
-            })
-            .ok_or_else(|| anyhow!("Failed to find MspRespondedToStorageRequests event"))?;
-
-        if results.msp_id != own_msp_id {
-            let err_msg = format!(
-                "Expected MSP ID {:?} but got {:?}",
-                own_msp_id, results.msp_id
-            );
-            error!(target: LOG_TARGET, "{}", err_msg);
-            return Err(anyhow!(err_msg));
-        }
-
-        for batch_responses in results.responses {
+        for storage_request_msp_bucket_response in storage_request_msp_response {
             // Add the file keys that were accepted to the forest storage of the bucket.
-            if let BatchResponses::Accepted(accepted) = &batch_responses {
+            if let Some(StorageRequestMspAcceptedFileKeys {
+                file_keys_and_proofs,
+                ..
+            }) = &storage_request_msp_bucket_response.accept
+            {
                 let fs = self
                     .storage_hub_handler
                     .forest_storage_handler
-                    .get(&accepted.bucket_id.as_ref().to_vec())
+                    .get(
+                        &storage_request_msp_bucket_response
+                            .bucket_id
+                            .as_ref()
+                            .to_vec(),
+                    )
                     .await
                     .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -586,20 +576,19 @@ where
 
                 let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
-                let file_metadatas: Vec<FileMetadata> = accepted
-                    .file_keys
+                let file_metadatas: Vec<FileMetadata> = file_keys_and_proofs
                     .iter()
-                    .filter_map(|file_key| {
-                        match read_file_storage.get_metadata(&file_key) {
+                    .filter_map(|file_key_with_proof| {
+                        match read_file_storage.get_metadata(&file_key_with_proof.file_key) {
                             Ok(Some(metadata)) => Some(metadata),
                             Ok(None) => {
                                 // TODO: Should probably save this to state and retry later.
-                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ File does not exist after responding to storage request for file key {:?}", file_key);
+                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ File does not exist after responding to storage request for file key {:?}", file_key_with_proof.file_key);
                                 None
                             }
                             Err(e) => {
                                 // TODO: Should probably save this to state and retry later.
-                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get file metadata after responding to storage request for file key {:?}: {:?}", file_key, e);
+                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get file metadata after responding to storage request for file key {:?}: {:?}", file_key_with_proof.file_key, e);
                                 None
                             }
                         }
@@ -612,30 +601,15 @@ where
                     // TODO: Should probably figure out a way to stop storing the file.
                     error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to insert file metadatas after responding to storage requests: {:?}", e);
                 }
-
-                let local_bucket_root = write_fs.root();
-                if local_bucket_root != accepted.new_bucket_root {
-                    // TODO: Should probably figure out a way to stop storing the file.
-                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Local bucket root after applying delta does not match the new bucket root on chain.");
-                    continue;
-                }
             }
 
-            // Delete all files that were rejected from the file manager.
-            if let BatchResponses::Rejected(rejected) = &batch_responses {
-                let mut fs = self.storage_hub_handler.file_storage.write().await;
+            let mut fs = self.storage_hub_handler.file_storage.write().await;
 
-                for (file_key, _reason) in &rejected.file_keys {
-                    if let Err(e) = fs.delete_file(&file_key) {
-                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
-                    }
-                }
-            }
-
-            // Process the failed file keys.
-            if let BatchResponses::Failed(failed) = batch_responses {
-                for (_file_key, _reason) in &failed.file_keys {
-                    // TODO: Handle failed file keys.
+            for RejectedStorageRequest { file_key, .. } in
+                &storage_request_msp_bucket_response.reject
+            {
+                if let Err(e) = fs.delete_file(&file_key) {
+                    error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
                 }
             }
         }
@@ -743,16 +717,14 @@ where
             // Reject the storage request.
             let call = storage_hub_runtime::RuntimeCall::FileSystem(
                 pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                    file_key_responses_input: bounded_vec![(
-                        event.bucket_id,
-                        MspStorageRequestResponse {
-                            accept: None,
-                            reject: Some(bounded_vec![(
-                                H256(file_key.into()),
-                                RejectedStorageRequestReason::FileKeyAlreadyStored,
-                            )])
-                        }
-                    )],
+                    storage_request_msp_response: bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id: event.bucket_id,
+                        accept: None,
+                        reject: bounded_vec![RejectedStorageRequest {
+                            file_key: H256(file_key.into()),
+                            reason: RejectedStorageRequestReason::FileKeyAlreadyStored,
+                        }],
+                    }],
                 },
             );
 
@@ -878,16 +850,16 @@ where
                 // Build extrinsic.
                 let call = storage_hub_runtime::RuntimeCall::FileSystem(
                     pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                        file_key_responses_input: bounded_vec![(
-                            event.bucket_id,
-                            MspStorageRequestResponse {
+                        storage_request_msp_response: bounded_vec![
+                            StorageRequestMspBucketResponse {
+                                bucket_id: event.bucket_id,
                                 accept: None,
-                                reject: Some(bounded_vec![(
-                                    H256(event.file_key.into()),
-                                    RejectedStorageRequestReason::ReachedMaximumCapacity,
-                                )])
+                                reject: bounded_vec![RejectedStorageRequest {
+                                    file_key: H256(event.file_key.into()),
+                                    reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
+                                }],
                             }
-                        )],
+                        ],
                     },
                 );
 
