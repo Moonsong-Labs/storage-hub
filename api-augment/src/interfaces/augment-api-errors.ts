@@ -1151,7 +1151,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageTooLow: AugmentedError<ApiType>;
       /**
-       * Error thrown when a provider attempted to top up their deposit when they are not required to.
+       * Error thrown when a provider attempts to top up their deposit when not required.
        **/
       TopUpNotRequired: AugmentedError<ApiType>;
       /**

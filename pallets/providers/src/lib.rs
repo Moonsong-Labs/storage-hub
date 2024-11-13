@@ -613,6 +613,8 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when a provider attempts to top up their deposit when not required.
+        TopUpNotRequired,
         /// Error thrown when an operation requires an MSP to be storing the bucket.
         BucketMustHaveMspForOperation,
         /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
