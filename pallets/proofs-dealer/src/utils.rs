@@ -474,8 +474,6 @@ where
             // If there are Providers left in `TickToProvidersDeadlines` for `TickToCheckedForSlashableProviders`,
             // they are marked as slashable.
             if let Some((provider, _)) = slashable_providers.next() {
-                // One read for every provider in the prefix, and one write as we're consuming and deleting the entry.
-
                 // Accrue number of failed proof submission for this slashable provider.
                 // Add custom checkpoint challenges if the provider needed to respond to them.
                 SlashableProviders::<T>::mutate(provider, |slashable| {
@@ -497,7 +495,8 @@ where
                                 #[allow(unreachable_code)]
                                 {
                                     // If the Provider has no record of the last tick it submitted a proof for,
-                                    // we set it to the current challenges ticker, so they will not be slashed.
+                                    // we set it to the current challenges ticker, so checkpoint challenges will
+                                    // not be considered in slashing it.
                                     challenges_ticker
                                 }
                             }
@@ -567,6 +566,9 @@ where
                 // goes beyond `ChallengesTicker`, this loop will exit, leaving everything ready for the next tick.
                 tick_to_check_for_slashable_providers =
                     tick_to_check_for_slashable_providers.saturating_add(One::one());
+                slashable_providers = TickToProvidersDeadlines::<T>::drain_prefix(
+                    tick_to_check_for_slashable_providers,
+                );
             }
         }
 
