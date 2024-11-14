@@ -80,6 +80,14 @@ where
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
 
+        // Basic sanity check to make sure the received compact proof won't panic
+        // TODO: remove this after [this PR](https://github.com/paritytech/polkadot-sdk/pull/6486) is merged.
+        for encoded_node in proof.proof.encoded_nodes.iter() {
+            if encoded_node.len() < 2 {
+                return Err("Invalid encoded node in the proof.".into());
+            }
+        }
+
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof
             .proof

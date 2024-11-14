@@ -62,6 +62,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             .try_into()
             .map_err(|_| ProvenFileKeyError::FingerprintAndTrieHashMismatch)?;
 
+        // Basic sanity check to make sure the received compact proof won't panic
+        // TODO: remove this after [this PR](https://github.com/paritytech/polkadot-sdk/pull/6486) is merged.
+        for encoded_node in self.proof.encoded_nodes.iter() {
+            if encoded_node.len() < 2 {
+                return Err(ProvenFileKeyError::FailedToDecodeChunkFromProof);
+            }
+        }
+
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = self
             .proof

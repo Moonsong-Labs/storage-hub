@@ -40,6 +40,14 @@ where
             return Err("No challenges provided.".into());
         }
 
+        // Basic sanity check to make sure the received compact proof won't panic
+        // TODO: remove this after [this PR](https://github.com/paritytech/polkadot-sdk/pull/6486) is merged.
+        for encoded_node in proof.encoded_nodes.iter() {
+            if encoded_node.len() < 2 {
+                return Err("Invalid encoded node in the proof.".into());
+            }
+        }
+
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
@@ -233,6 +241,14 @@ where
         // Check if the root is empty
         if root.as_ref().is_empty() {
             return Err("Root is empty.".into());
+        }
+
+        // Basic sanity check to make sure the received compact proof won't panic
+        // TODO: remove this after [this PR](https://github.com/paritytech/polkadot-sdk/pull/6486) is merged.
+        for encoded_node in proof.encoded_nodes.iter() {
+            if encoded_node.len() < 2 {
+                return Err("Invalid encoded node in the proof.".into());
+            }
         }
 
         // TODO: Understand why `CompactProof` cannot be used directly to construct memdb and modify a partial trie. (it fails with error IncompleteDatabase)
