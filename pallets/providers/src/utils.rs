@@ -9,8 +9,8 @@ use frame_support::{
         ArithmeticError, BoundedVec, DispatchError,
     },
     traits::{
-        fungible::{Inspect, InspectHold, MutateHold},
-        tokens::{Fortitude, Precision, Preservation, Restriction},
+        fungible::{Inspect, InspectHold, Mutate, MutateHold},
+        tokens::{Fortitude, Precision, Preservation, Restriction, WithdrawConsequence},
         Get, Randomness,
     },
 };
@@ -822,13 +822,12 @@ where
 
     /// Slash a Storage Provider.
     ///
-    /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
     /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
     ///
-    /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
+    /// Will short circuit when the Storage Provider is not slashable. In the context of the StorageHub protocol,
     /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
     ///
-    /// Successfully slashing a Storage Provider should be a free operation.
+    /// Successfully slashing a Storage Provider is a free operation.
     pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
         let account_id = if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
             provider.owner_account
@@ -838,98 +837,131 @@ where
             return Err(Error::<T>::ProviderNotSlashable.into());
         };
 
-        // Calculate slashable amount.
-        // Doubling the slash for each failed proof submission is necessary since it is more probabilistic for a Storage Provider to have
-        // responded with two file key proofs given a random or custom challenge.
+        // Calculate slashable amount for the current number of accrued failed proof submissions
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
-
-        // Slash account's held deposit and transfer to Treasury.
-        let actual_slashed_amount = T::NativeBalance::transfer_on_hold(
-            &HoldReason::StorageProviderDeposit.into(),
-            &account_id,
-            &T::Treasury::get(),
-            slashable_amount,
-            Precision::BestEffort,
-            Restriction::Free,
-            Fortitude::Polite,
-        )?;
-
-        Self::deposit_event(Event::<T>::Slashed {
-            provider_id: *provider_id,
-            amount: actual_slashed_amount,
-        });
-
-        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id);
-        let top_up_slash_amount = top_up_metadata
-            .as_ref()
-            .map(|metadata| metadata.outstanding_slash_amount)
-            .unwrap_or_default()
-            .saturating_add(actual_slashed_amount);
-
-        // Automatically top up slash amount if the account has enough funds
-        if T::NativeBalance::can_hold(
-            &HoldReason::StorageProviderDeposit.into(),
-            &account_id,
-            top_up_slash_amount,
-        ) {
-            // Hold the slashable amount from the free balance
-            T::NativeBalance::hold(
-                &HoldReason::StorageProviderDeposit.into(),
-                &account_id,
-                top_up_slash_amount,
-            )?;
-
-            // Clear the accrued failed proof submissions for the Storage Provider
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
-
-            // Delete the grace period and the top up metadata
-            if let Some(metadata) = top_up_metadata {
-                GracePeriodToSlashedProviders::<T>::remove(
-                    metadata.end_block_grace_period,
-                    provider_id,
-                );
-                AwaitingTopUpFromProviders::<T>::remove(provider_id);
-            }
-
-            // Signal that the slashed amount has been topped up
-            Self::deposit_event(Event::<T>::TopUpFulfilled {
-                provider_id: *provider_id,
-                amount: top_up_slash_amount,
-            });
-
-            return Ok(Pays::No.into());
-        }
 
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        let current_relay_block_number = RelayBlockGetter::<T>::current_block_number();
+        let slash_held_fn = || -> Result<BalanceOf<T>, DispatchError> {
+            T::NativeBalance::transfer_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+                &T::Treasury::get(),
+                slashable_amount,
+                Precision::BestEffort,
+                Restriction::Free,
+                Fortitude::Polite,
+            )
+        };
 
-        // Add provider to grace period if they are not already in it
+        match AwaitingTopUpFromProviders::<T>::get(provider_id) {
+            // No outstanding slash amount.
+            // Slash the provider's account directly if there is enough balance.
+            None if matches!(
+                T::NativeBalance::can_withdraw(&account_id, slashable_amount),
+                WithdrawConsequence::Success
+            ) =>
+            {
+                // Transfer the slashable amount from the account to the treasury
+                T::NativeBalance::transfer(
+                    &account_id,
+                    &T::Treasury::get(),
+                    slashable_amount,
+                    Preservation::Preserve,
+                )?;
+
+                // Signal that the provider has been slashed
+                Self::deposit_event(Event::<T>::Slashed {
+                    provider_id: *provider_id,
+                    amount: slashable_amount,
+                });
+
+                // Signal that the slashed amount has been topped up
+                Self::deposit_event(Event::<T>::TopUpFulfilled {
+                    provider_id: *provider_id,
+                    amount: slashable_amount,
+                });
+
+                return Ok(Pays::No.into());
+            }
+            // No outstanding slash amount.
+            // Slash the provider's held deposit if there is not enough free balance to cover the slashable amount.
+            None => {
+                // Slash account's held deposit and transfer to Treasury.
+                let actual_slashed_amount = slash_held_fn()?;
+
+                // Signal that the provider has been slashed
+                Self::deposit_event(Event::<T>::Slashed {
+                    provider_id: *provider_id,
+                    amount: actual_slashed_amount,
+                });
+            }
+            // Outstanding slash amount.
+            // Slash the provider's held deposit and attempt to top up the total outstanding slash amount.
+            Some(TopUpMetadata {
+                end_block_grace_period,
+                outstanding_slash_amount,
+            }) => {
+                // Slash account's held deposit and transfer to Treasury.
+                let actual_slashed_amount = slash_held_fn()?;
+
+                // Signal that the provider has been slashed
+                Self::deposit_event(Event::<T>::Slashed {
+                    provider_id: *provider_id,
+                    amount: actual_slashed_amount,
+                });
+
+                // Total outstanding slash amount needed to be added to the held deposit
+                let total_outstanding_slash_amount =
+                    outstanding_slash_amount.saturating_add(slashable_amount);
+
+                // Automatically top up outstanding slash amount if the account has enough funds
+                if T::NativeBalance::can_hold(
+                    &HoldReason::StorageProviderDeposit.into(),
+                    &account_id,
+                    total_outstanding_slash_amount,
+                ) {
+                    // Hold the slashable amount from the free balance
+                    T::NativeBalance::hold(
+                        &HoldReason::StorageProviderDeposit.into(),
+                        &account_id,
+                        total_outstanding_slash_amount,
+                    )?;
+
+                    // Delete the grace period and the top up metadata
+                    GracePeriodToSlashedProviders::<T>::remove(end_block_grace_period, provider_id);
+                    AwaitingTopUpFromProviders::<T>::remove(provider_id);
+
+                    // Signal that the slashed amount has been topped up
+                    Self::deposit_event(Event::<T>::TopUpFulfilled {
+                        provider_id: *provider_id,
+                        amount: total_outstanding_slash_amount,
+                    });
+
+                    return Ok(Pays::No.into());
+                }
+            }
+        };
+
+        // If we have not returned up to this point, it means the provider has not topped up the outstanding slash amount.
+        // Update storage to set the provider's outstanding slash amount andt the end block grace period
         let top_up_metadata = if !AwaitingTopUpFromProviders::<T>::contains_key(provider_id) {
-            let end_block_grace_period =
-                current_relay_block_number.saturating_add(T::TopUpGracePeriod::get());
-            GracePeriodToSlashedProviders::<T>::insert(
-                current_relay_block_number.saturating_add(T::TopUpGracePeriod::get()),
-                provider_id,
-                (),
-            );
+            let end_block_grace_period = RelayBlockGetter::<T>::current_block_number()
+                .saturating_add(T::TopUpGracePeriod::get());
+
+            GracePeriodToSlashedProviders::<T>::insert(end_block_grace_period, provider_id, ());
 
             let metadata = TopUpMetadata {
                 end_block_grace_period,
                 outstanding_slash_amount: slashable_amount,
             };
-            AwaitingTopUpFromProviders::<T>::insert(
-                provider_id,
-                TopUpMetadata {
-                    end_block_grace_period,
-                    outstanding_slash_amount: slashable_amount,
-                },
-            );
+
+            AwaitingTopUpFromProviders::<T>::insert(provider_id, metadata.clone());
 
             metadata
         } else {
-            // Accrue the slashable amount
+            // Accrue the outstanding slash amount
             AwaitingTopUpFromProviders::<T>::try_mutate(provider_id, |metadata| {
                 let metadata = metadata.as_mut().ok_or(Error::<T>::TopUpNotRequired)?;
                 metadata.outstanding_slash_amount = metadata
@@ -1104,7 +1136,9 @@ where
     /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
     /// submit a proof of storage for the neighbouring file keys of the missing challenged file key.
     ///
-    /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
+    /// The slashing amount is calculated as the product of the [`SlashAmountPerMaxFileSize`](Config::SlashAmountPerMaxFileSize) (an assumption
+    /// that every file is the maximum size allowed by the protocol) and the accrued failed proof submissions multiplied by `2` to
+    /// account for the worst case scenario where the provider would have proved two file keys surrounding the challenged file key.
     pub fn compute_worst_case_scenario_slashable_amount(
         provider_id: &HashId<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {

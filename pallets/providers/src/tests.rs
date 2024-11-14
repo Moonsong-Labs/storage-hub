@@ -4957,6 +4957,15 @@ mod slash_and_top_up {
                     )
                     .is_none());
                     assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+
+                    // Check event TopUpFulfilled is emitted
+                    System::assert_has_event(
+                        Event::<Test>::TopUpFulfilled {
+                            provider_id: self.provider_id,
+                            amount: pre_state_top_up_outstanding_amount + expected_slash_amount,
+                        }
+                        .into(),
+                    );
                 } else {
                     // Check that the held deposit of the provider has not been automatically topped up
                     assert_eq!(
