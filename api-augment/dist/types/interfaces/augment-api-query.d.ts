@@ -1446,6 +1446,20 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * The tick to check and see if Providers failed to submit proofs before their deadline.
+       *
+       * In a normal situation, this should always be equal to [`ChallengesTicker`].
+       * However, in the unlikely scenario where a large number of Providers fail to submit proofs (larger
+       * than [`Config::MaxSlashableProvidersPerTick`]), and all of them had the same deadline, not all of
+       * them will be marked as slashable. Only the first [`Config::MaxSlashableProvidersPerTick`] will be.
+       * In that case, this stored tick will lag behind [`ChallengesTicker`].
+       *
+       * It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
+       * slashable Providers follow.
+       **/
+      tickToCheckForSlashableProviders: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A mapping from challenges tick to a vector of custom challenged keys for that tick.
        *
        * This is used to keep track of the challenges that have been made in the past, specifically

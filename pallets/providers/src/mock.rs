@@ -159,6 +159,7 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = ConstU32<100>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
