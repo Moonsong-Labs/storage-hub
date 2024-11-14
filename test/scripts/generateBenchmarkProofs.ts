@@ -183,20 +183,15 @@ async function generateBenchmarkProofs() {
     const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
       source,
       destination,
-      bucketName
+      bucketName,
+      null,
+      null
     );
     fileKeys.push(fileMetadata.fileKey);
 
     await userApi.wait.bspVolunteer(1);
     await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
     await userApi.wait.bspStored(1);
-
-    // Advance two blocks to give room for proof submission.
-    const currentBlock = await userApi.rpc.chain.getBlock();
-    const currentBlockNumber = currentBlock.block.header.number.toNumber();
-    await userApi.advanceToBlock(currentBlockNumber + 2, {
-      waitForBspProofs: [DUMMY_BSP_ID]
-    });
   }
 
   // Sort the file keys.
@@ -217,6 +212,9 @@ async function generateBenchmarkProofs() {
   if (skipProofGeneration) {
     console.log(`${GRAY_TEXT}Skipping proof generation${RESET_TEXT}`);
     console.log(`${GRAY_TEXT}Exiting...${RESET_TEXT}`);
+
+    await tearDownNetwork();
+
     return;
   }
 
@@ -312,6 +310,9 @@ async function generateBenchmarkProofs() {
   if (skipWritingProofs) {
     console.log(`${GRAY_TEXT}Skipping writing proofs${RESET_TEXT}`);
     console.log(`${GRAY_TEXT}Exiting...${RESET_TEXT}`);
+
+    await tearDownNetwork();
+
     return;
   }
 
@@ -359,6 +360,8 @@ async function generateBenchmarkProofs() {
     `${GREEN_TEXT}◀ ✅ Wrote rust file with seed, provider ID, root, challenges and proofs${RESET_TEXT}`
   );
   console.log("");
+
+  await tearDownNetwork();
 }
 
 async function tearDownNetwork() {
@@ -406,11 +409,11 @@ const removeMutationChallengesToAdd = (existingChallenges: number): number => {
   return challengesToAdd;
 };
 
-await generateBenchmarkProofs().catch((e) => {
+generateBenchmarkProofs().catch((e) => {
   console.error("Error running generate benchmark proofs script:", e);
-  process.exitCode = 1;
-});
-tearDownNetwork().catch((e) => {
-  console.error("Error tearing down network:", e);
+  console.error(
+    "You might need to run `pnpm docker:stop:generateBenchmarkProofs` to stop the network"
+  );
+
   process.exitCode = 1;
 });
