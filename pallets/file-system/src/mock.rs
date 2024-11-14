@@ -383,6 +383,7 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = ConstU32<100>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -427,7 +428,7 @@ where
 
     fn apply_delta(
         root: &Self::Key,
-        _mutations: &[(Self::Key, TrieMutation)],
+        mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
     ) -> Result<
         (
@@ -437,8 +438,14 @@ where
         ),
         DispatchError,
     > {
-        // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+        Ok((
+            MemoryDB::<T::Hash>::default(),
+            match mutations.len() {
+                0 => *root,
+                _ => mutations.last().unwrap().0,
+            },
+            Vec::new(),
+        ))
     }
 }
 

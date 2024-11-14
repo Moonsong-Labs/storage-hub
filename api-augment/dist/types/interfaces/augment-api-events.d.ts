@@ -516,11 +516,18 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspConfirmedStoring: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bspId: H256, fileKeys: Vec<H256>, newRoot: H256],
+        [
+          who: AccountId32,
+          bspId: H256,
+          confirmedFileKeys: Vec<H256>,
+          skippedFileKeys: Vec<H256>,
+          newRoot: H256
+        ],
         {
           who: AccountId32;
           bspId: H256;
-          fileKeys: Vec<H256>;
+          confirmedFileKeys: Vec<H256>;
+          skippedFileKeys: Vec<H256>;
           newRoot: H256;
         }
       >;
