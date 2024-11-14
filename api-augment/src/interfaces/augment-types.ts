@@ -1263,6 +1263,7 @@ import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
 import type {
   BackupStorageProvider,
   BackupStorageProviderId,
+  CheckpointChallenge,
   ChunkId,
   FileMetadata,
   GetBspInfoError,
@@ -1454,6 +1455,7 @@ declare module "@polkadot/types/types/registry" {
     ChangesTrieConfiguration: ChangesTrieConfiguration;
     ChangesTrieSignal: ChangesTrieSignal;
     CheckInherentsResult: CheckInherentsResult;
+    CheckpointChallenge: CheckpointChallenge;
     ChunkId: ChunkId;
     ClassDetails: ClassDetails;
     ClassId: ClassId;

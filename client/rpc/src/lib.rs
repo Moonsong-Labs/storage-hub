@@ -24,7 +24,11 @@ use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, S
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
-type ShouldRemoveFile = bool;
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointChallenge {
+    pub file_key: H256,
+    pub should_remove_file: bool,
+}
 
 pub struct StorageHubClientRpcConfig<FL, FSH> {
     pub file_storage: Arc<RwLock<FL>>,
@@ -144,7 +148,7 @@ pub trait StorageHubClientApi {
         &self,
         provider_id: H256,
         seed: H256,
-        challenged_file_keys: Option<Vec<(H256, ShouldRemoveFile)>>,
+        checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>>;
 
     #[method(name = "insertBcsvKeys")]
@@ -452,7 +456,7 @@ where
         &self,
         provider_id: H256,
         seed: H256,
-        checkpoint_challenges: Option<Vec<(H256, ShouldRemoveFile)>>,
+        checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>> {
         // TODO: Get provider ID itself.
         debug!(target: LOG_TARGET, "Checkpoint challenges: {:?}", checkpoint_challenges);
@@ -467,10 +471,10 @@ where
             .unwrap();
 
         // Merge custom challenges with random challenges.
-        let challenges = if let Some(custom_challenges) = checkpoint_challenges.clone() {
+        let challenges = if let Some(custom_challenges) = checkpoint_challenges.as_ref() {
             let mut challenged_keys = custom_challenges
                 .iter()
-                .map(|(key, _)| *key)
+                .map(|custom_challenge| custom_challenge.file_key)
                 .collect::<Vec<_>>();
 
             challenged_keys.extend(random_challenges.into_iter());
@@ -530,9 +534,12 @@ where
         for file_key in &proven_keys {
             // If the file key is a checkpoint challenge for a file deletion, we should NOT generate a key proof for it.
             let should_generate_key_proof = if let Some(checkpoint_challenges) =
-                checkpoint_challenges.clone()
+                checkpoint_challenges.as_ref()
             {
-                if checkpoint_challenges.contains(&(file_key.clone(), true)) {
+                if checkpoint_challenges.contains(&CheckpointChallenge {
+                    file_key: file_key.clone(),
+                    should_remove_file: true,
+                }) {
                     debug!(target: LOG_TARGET, "File key {} is a checkpoint challenge for a file deletion", file_key);
                     false
                 } else {

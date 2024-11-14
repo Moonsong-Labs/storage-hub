@@ -92,10 +92,10 @@ import type {
 } from "@polkadot/types/interfaces/system";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
+  CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
-  SaveFileToDisk,
-  ShouldRemoveFile
+  SaveFileToDisk
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module "@polkadot/rpc-core/types/jsonrpc" {
@@ -1086,11 +1086,19 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           provider_id: H256 | string | Uint8Array,
           seed: H256 | string | Uint8Array,
           checkpoint_challenges:
-            | Option<Vec<ITuple<[H256, ShouldRemoveFile]>>>
+            | Option<Vec<CheckpointChallenge>>
             | null
             | Uint8Array
-            | Vec<ITuple<[H256, ShouldRemoveFile]>>
-            | [H256 | string | Uint8Array, ShouldRemoveFile | boolean | Uint8Array][]
+            | Vec<CheckpointChallenge>
+            | (
+                | CheckpointChallenge
+                | {
+                    file_key?: any;
+                    should_remove_file?: any;
+                  }
+                | string
+                | Uint8Array
+              )[]
         ) => Observable<Bytes>
       >;
       /**

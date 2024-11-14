@@ -12,6 +12,11 @@ export interface BackupStorageProvider extends Struct {
 }
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
+/** @name CheckpointChallenge */
+export interface CheckpointChallenge extends Struct {
+  readonly file_key: H256;
+  readonly should_remove_file: bool;
+}
 /** @name ChunkId */
 export interface ChunkId extends u64 {}
 /** @name FileMetadata */
