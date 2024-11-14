@@ -355,7 +355,9 @@ async function generateBenchmarkProofs() {
     `${GREEN_TEXT}◀ ✅ Wrote rust file with seed, provider ID, root, challenges and proofs${RESET_TEXT}`
   );
   console.log("");
+}
 
+async function tearDownNetwork() {
   if (keepNetworkAlive) {
     console.log(
       `${GRAY_TEXT}Keeping network alive. Make sure to manually stop the network when you're done.${RESET_TEXT}`
@@ -363,9 +365,7 @@ async function generateBenchmarkProofs() {
     console.log(`${GRAY_TEXT}Exiting...${RESET_TEXT}`);
     return;
   }
-}
 
-async function tearDownNetwork() {
   console.log(`${GREEN_TEXT}▶ 💣 Tearing down network${RESET_TEXT}`);
   exec("pnpm docker:stop:generateBenchmarkProofs");
 
