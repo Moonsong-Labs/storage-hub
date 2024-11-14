@@ -497,12 +497,17 @@ pub mod pallet {
             next_block_when_change_allowed: BlockNumberFor<T>,
         },
 
-        /// Event emitted when a provider has been slashed, signaling the end of the grace period and the current
-        /// top up outstanding top up slash amount.
-        SlashedAndAwaitingTopUp {
+        /// Event emitted when a SP has been slashed.
+        Slashed {
             provider_id: HashId<T>,
-            end_block_grace_period: RelayChainBlockNumber,
-            outstanding_slash_amount: BalanceOf<T>,
+            amount: BalanceOf<T>,
+        },
+
+        /// Event emitted when a provider has been slashed optionally signaling the end of the grace
+        /// period and the current top up outstanding top up slash amount if an automatic top up could not be performed.
+        AwaitingTopUp {
+            provider_id: HashId<T>,
+            top_up_metadata: Option<TopUpMetadata<T>>,
         },
 
         /// Event emitted when an SP has topped up its deposit based on slash amount.

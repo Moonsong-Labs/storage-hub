@@ -4890,7 +4890,7 @@ mod slash_and_top_up {
 
                 let pre_state_top_up_outstanding_amount =
                     match AwaitingTopUpFromProviders::<Test>::get(self.provider_id) {
-                        Some(metadata) => metadata.slashed_amount,
+                        Some(metadata) => metadata.outstanding_slash_amount,
                         None => 0u128,
                     };
 
@@ -4975,7 +4975,7 @@ mod slash_and_top_up {
                         end_block_grace_period
                     );
                     assert_eq!(
-                        top_up_metadata.slashed_amount,
+                        top_up_metadata.outstanding_slash_amount,
                         pre_state_top_up_outstanding_amount + expected_slash_amount
                     );
                 }

@@ -222,8 +222,8 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
   }
 
   const { events } = await sealBlock(api);
-  assertEventPresent(api, "providers", "SlashedAndAwaitingTopUp", events);
-  const [provider, _endBlockGracePeriod, _outstandingSlashAmount] = fetchEventData(
+  assertEventPresent(api, "providers", "Slashed", events);
+  const [provider, _amount] = fetchEventData(
     api.events.providers.Slashed,
     await api.query.system.events()
   );

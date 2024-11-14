@@ -23,7 +23,7 @@ pub struct TopUpMetadata<T: Config> {
     /// This is the relay chain block number which the parachain is anchored to.
     pub end_block_grace_period: RelayChainBlockNumber,
     /// Current amount of the deposit that has been slashed.
-    pub slashed_amount: BalanceOf<T>,
+    pub outstanding_slash_amount: BalanceOf<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]

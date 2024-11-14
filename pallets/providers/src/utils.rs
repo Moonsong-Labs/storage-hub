@@ -854,10 +854,15 @@ where
             Fortitude::Polite,
         )?;
 
+        Self::deposit_event(Event::<T>::Slashed {
+            provider_id: *provider_id,
+            amount: actual_slashed_amount,
+        });
+
         let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id);
         let top_up_slash_amount = top_up_metadata
             .as_ref()
-            .map(|metadata| metadata.slashed_amount)
+            .map(|metadata| metadata.outstanding_slash_amount)
             .unwrap_or_default()
             .saturating_add(actual_slashed_amount);
 
@@ -912,13 +917,13 @@ where
 
             let metadata = TopUpMetadata {
                 end_block_grace_period,
-                slashed_amount: slashable_amount,
+                outstanding_slash_amount: slashable_amount,
             };
             AwaitingTopUpFromProviders::<T>::insert(
                 provider_id,
                 TopUpMetadata {
                     end_block_grace_period,
-                    slashed_amount: slashable_amount,
+                    outstanding_slash_amount: slashable_amount,
                 },
             );
 
@@ -927,16 +932,17 @@ where
             // Accrue the slashable amount
             AwaitingTopUpFromProviders::<T>::try_mutate(provider_id, |metadata| {
                 let metadata = metadata.as_mut().ok_or(Error::<T>::TopUpNotRequired)?;
-                metadata.slashed_amount = metadata.slashed_amount.saturating_add(slashable_amount);
+                metadata.outstanding_slash_amount = metadata
+                    .outstanding_slash_amount
+                    .saturating_add(slashable_amount);
                 Ok::<_, DispatchError>(metadata.to_owned())
             })?
         };
 
         // Signal to the provider that they have been slashed and are awaiting a top up
-        Self::deposit_event(Event::<T>::SlashedAndAwaitingTopUp {
+        Self::deposit_event(Event::<T>::AwaitingTopUp {
             provider_id: *provider_id,
-            end_block_grace_period: top_up_metadata.end_block_grace_period,
-            outstanding_slash_amount: top_up_metadata.slashed_amount,
+            top_up_metadata: Some(top_up_metadata),
         });
 
         Ok(Pays::No.into())
@@ -956,7 +962,7 @@ where
             T::NativeBalance::can_hold(
                 &HoldReason::StorageProviderDeposit.into(),
                 &account_id,
-                top_up_metadata.slashed_amount
+                top_up_metadata.outstanding_slash_amount
             ),
             Error::<T>::CannotHoldDeposit
         );
@@ -965,7 +971,7 @@ where
         T::NativeBalance::hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
-            top_up_metadata.slashed_amount,
+            top_up_metadata.outstanding_slash_amount,
         )?;
 
         // Remove the provider top up storages
@@ -978,7 +984,7 @@ where
         // Signal that the slashed amount has been topped up
         Self::deposit_event(Event::<T>::TopUpFulfilled {
             provider_id,
-            amount: top_up_metadata.slashed_amount,
+            amount: top_up_metadata.outstanding_slash_amount,
         });
 
         Ok(Pays::No.into())

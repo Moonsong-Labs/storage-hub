@@ -33,6 +33,7 @@ import type {
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieRemoveMutation,
@@ -1647,6 +1648,15 @@ declare module "@polkadot/api-base/types/events" {
     };
     providers: {
       /**
+       * Event emitted when a provider has been slashed optionally signaling the end of the grace
+       * period and the current top up outstanding top up slash amount if an automatic top up could not be performed.
+       **/
+      AwaitingTopUp: AugmentedEvent<
+        ApiType,
+        [providerId: H256, topUpMetadata: Option<PalletStorageProvidersTopUpMetadata>],
+        { providerId: H256; topUpMetadata: Option<PalletStorageProvidersTopUpMetadata> }
+      >;
+      /**
        * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
        * that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
        **/
@@ -1763,13 +1773,12 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SignUpRequestCanceled: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
-       * Event emitted when a provider has been slashed, signaling the end of the grace period and the current
-       * top up outstanding top up slash amount.
+       * Event emitted when a SP has been slashed.
        **/
-      SlashedAndAwaitingTopUp: AugmentedEvent<
+      Slashed: AugmentedEvent<
         ApiType,
-        [providerId: H256, endBlockGracePeriod: u32, outstandingSlashAmount: u128],
-        { providerId: H256; endBlockGracePeriod: u32; outstandingSlashAmount: u128 }
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
       >;
       /**
        * Event emitted when an SP has topped up its deposit based on slash amount.

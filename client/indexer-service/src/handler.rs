@@ -450,10 +450,10 @@ impl IndexerService {
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::BucketRootChanged { .. } => {}
-            pallet_storage_providers::Event::SlashedAndAwaitingTopUp {
+            pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::AwaitingTopUp {
                 provider_id,
-                end_block_grace_period: _end_block_grace_period,
-                outstanding_slash_amount: _outstanding_slash_amount,
+                top_up_metadata: _top_up_metadata,
             } => {
                 let stake = self
                     .client
