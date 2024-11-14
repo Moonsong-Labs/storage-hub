@@ -278,7 +278,7 @@ impl IndexerService {
                 File::update_step(
                     conn,
                     file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Fullfilled,
+                    FileStorageRequestStep::Stored,
                 )
                 .await?;
             }
@@ -286,17 +286,12 @@ impl IndexerService {
                 File::update_step(
                     conn,
                     file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Expired,
+                    FileStorageRequestStep::Stored,
                 )
                 .await?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
-                File::update_step(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Revoked,
-                )
-                .await?;
+                File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
