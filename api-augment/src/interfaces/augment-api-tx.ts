@@ -19,7 +19,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
-  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -420,13 +420,6 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
-       * Add yourself as a data server for providing the files of the bucket requested to be moved.
-       **/
-      bspAddDataServerForMoveBucketRequest: AugmentedSubmittable<
-        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
-      >;
-      /**
        * Executed by a BSP to confirm to stop storing a file.
        *
        * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
@@ -516,12 +509,12 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       createBucket: AugmentedSubmittable<
         (
-          mspId: H256 | string | Uint8Array,
+          mspId: Option<H256> | null | Uint8Array | H256 | string,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
-          valuePropId: H256 | string | Uint8Array
+          valuePropId: Option<H256> | null | Uint8Array | H256 | string
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool, H256]
+        [Option<H256>, Bytes, bool, Option<H256>]
       >;
       /**
        * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
@@ -562,10 +555,10 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          mspId: H256 | string | Uint8Array,
+          mspId: Option<H256> | null | Uint8Array | H256 | string,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, H256, Vec<Bytes>]
+        [H256, Bytes, H256, u64, Option<H256>, Vec<Bytes>]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
@@ -592,19 +585,20 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       mspRespondStorageRequestsMultipleBuckets: AugmentedSubmittable<
         (
-          fileKeyResponsesInput:
-            | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
-            | [
-                H256 | string | Uint8Array,
-                (
-                  | PalletFileSystemMspStorageRequestResponse
-                  | { accept?: any; reject?: any }
-                  | string
-                  | Uint8Array
-                )
-              ][]
+          storageRequestMspResponse:
+            | Vec<PalletFileSystemStorageRequestMspBucketResponse>
+            | (
+                | PalletFileSystemStorageRequestMspBucketResponse
+                | { bucketId?: any; accept?: any; reject?: any }
+                | string
+                | Uint8Array
+              )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
+        [Vec<PalletFileSystemStorageRequestMspBucketResponse>]
+      >;
+      mspStopStoringBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (

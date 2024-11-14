@@ -113,7 +113,7 @@ pub trait StorageHubClientApi {
     /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
     /// In the case of an MSP node, the forest key is a bucket id.
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<H256>;
+    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>>;
 
     #[method(name = "isFileInForest")]
     async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool>;
@@ -335,20 +335,18 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<H256> {
+    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>> {
         let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
 
-        let fs = self
-            .forest_storage_handler
-            .get(&forest_key)
-            .await
-            .ok_or_else(|| {
-                into_rpc_error(format!("Forest storage not found for key {:?}", forest_key))
-            })?;
+        // return None if not found
+        let fs = match self.forest_storage_handler.get(&forest_key).await {
+            Some(fs) => fs,
+            None => return Ok(None),
+        };
 
         let read_fs = fs.read().await;
 
-        Ok(read_fs.root())
+        Ok(Some(read_fs.root()))
     }
 
     async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool> {

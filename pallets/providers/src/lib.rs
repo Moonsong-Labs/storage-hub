@@ -190,10 +190,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxProtocols: Get<u32>;
 
-        /// The maximum amount of Buckets that a MSP can have.
-        #[pallet::constant]
-        type MaxBuckets: Get<u32>;
-
         /// The amount that an account has to deposit to create a bucket.
         #[pallet::constant]
         type BucketDeposit: Get<BalanceOf<Self>>;
@@ -232,6 +228,11 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxCommitmentSize: Get<u32>;
+
+        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base  
+        /// fee for a bucket that doesn't have any files yet)
+        #[pallet::constant]
+        type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
     }
 
     #[pallet::pallet]
@@ -289,7 +290,7 @@ pub mod pallet {
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
-    /// The mapping from a MainStorageProviderId to a vector of BucketIds.
+    /// The double mapping from a MainStorageProviderId to a BucketIds.
     ///
     /// This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
     ///
@@ -297,11 +298,13 @@ pub mod pallet {
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
     /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
     #[pallet::storage]
-    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         MainStorageProviderId<T>,
-        BoundedVec<BucketId<T>, T::MaxBuckets>,
+        Blake2_128Concat,
+        BucketId<T>,
+        (),
     >;
 
     /// The mapping from an AccountId to a BackupStorageProviderId.
@@ -461,6 +464,13 @@ pub mod pallet {
             amount_slashed: BalanceOf<T>,
         },
 
+        /// Event emitted when a bucket's root has been changed.
+        BucketRootChanged {
+            bucket_id: BucketId<T>,
+            old_root: MerklePatriciaRoot<T>,
+            new_root: MerklePatriciaRoot<T>,
+        },
+
         /// Event emitted when a Provider has added a new MultiAddress to its account.
         MultiAddressAdded {
             provider_id: HashId<T>,
@@ -547,10 +557,14 @@ pub mod pallet {
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
+        /// Bucket cannot be deleted because it is not empty.
+        BucketNotEmpty,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when an operation requires an MSP to be storing the bucket.
+        BucketMustHaveMspForOperation,
         /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
         MultiAddressesMaxAmountReached,
         /// Error thrown when a Provider tries to delete a MultiAddress from its account but it does not have that MultiAddress.
@@ -565,6 +579,14 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a fixed payment stream is not found.
+        FixedRatePaymentStreamNotFound,
+        /// Error thrown when changing the MSP of a bucket to the same assigned MSP.
+        MspAlreadyAssignedToBucket,
+        /// Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+        BucketSizeExceedsLimit,
+        /// Error thrown when a bucket has no value proposition.
+        BucketHasNoValueProposition,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -635,7 +657,6 @@ pub mod pallet {
 
             // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
-                buckets: BoundedVec::default(),
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
@@ -1083,7 +1104,6 @@ pub mod pallet {
 
             // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
-                buckets: BoundedVec::default(),
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),

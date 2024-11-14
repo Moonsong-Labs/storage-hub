@@ -310,18 +310,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * BSP data servers for move bucket requests.
-       **/
-      dataServersForMoveBucket: AugmentedQuery<
-        ApiType,
-        (
-          arg1: H256 | string | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<Null>>,
-        [H256, H256]
-      > &
-        QueryableStorageEntry<ApiType, [H256, H256]>;
-      /**
        * A map of blocks to expired file deletion requests.
        **/
       fileDeletionRequestExpirations: AugmentedQuery<
@@ -1399,6 +1387,20 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * The tick to check and see if Providers failed to submit proofs before their deadline.
+       *
+       * In a normal situation, this should always be equal to [`ChallengesTicker`].
+       * However, in the unlikely scenario where a large number of Providers fail to submit proofs (larger
+       * than [`Config::MaxSlashableProvidersPerTick`]), and all of them had the same deadline, not all of
+       * them will be marked as slashable. Only the first [`Config::MaxSlashableProvidersPerTick`] will be.
+       * In that case, this stored tick will lag behind [`ChallengesTicker`].
+       *
+       * It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
+       * slashable Providers follow.
+       **/
+      tickToCheckForSlashableProviders: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A mapping from challenges tick to a vector of custom challenged keys for that tick.
        *
        * This is used to keep track of the challenges that have been made in the past, specifically
@@ -1536,7 +1538,7 @@ declare module "@polkadot/api-base/types/storage" {
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The mapping from a MainStorageProviderId to a vector of BucketIds.
+       * The double mapping from a MainStorageProviderId to a BucketIds.
        *
        * This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
        *
@@ -1546,10 +1548,13 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       mainStorageProviderIdsToBuckets: AugmentedQuery<
         ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<Option<Vec<H256>>>,
-        [H256]
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [H256, H256]
       > &
-        QueryableStorageEntry<ApiType, [H256]>;
+        QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
        * Double mapping from a [`MainStorageProviderId`] to [`ValueProposition`]s.
        *

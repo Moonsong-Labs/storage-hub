@@ -187,6 +187,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspNotConfirmed: AugmentedError<ApiType>;
       /**
+       * BSP cannot volunteer at this current tick.
+       **/
+      BspNotEligibleToVolunteer: AugmentedError<ApiType>;
+      /**
        * BSP has not volunteered to store the given file.
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
@@ -243,6 +247,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
       /**
+       * Failed to query earliest volunteer tick
+       **/
+      FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
+      /**
        * Failed to convert to primitive type.
        **/
       FailedTypeConversion: AugmentedError<ApiType>;
@@ -262,6 +270,10 @@ declare module "@polkadot/api-base/types/errors" {
        * File size cannot be zero.
        **/
       FileSizeCannotBeZero: AugmentedError<ApiType>;
+      /**
+       * Failed to fetch the rate for the payment stream.
+       **/
+      FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Failed to get value when just checked it existed.
        **/
@@ -316,6 +328,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
       /**
+       * No file keys to confirm storing
+       **/
+      NoFileKeysToConfirm: AugmentedError<ApiType>;
+      /**
        * No global reputation weight set.
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
@@ -363,6 +379,10 @@ declare module "@polkadot/api-base/types/errors" {
        * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
        **/
       RequestWithoutMsp: AugmentedError<ApiType>;
+      /**
+       * Root was not updated after applying delta
+       **/
+      RootNotUpdated: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
@@ -1012,13 +1032,33 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
       /**
+       * Error thrown when a bucket has no value proposition.
+       **/
+      BucketHasNoValueProposition: AugmentedError<ApiType>;
+      /**
+       * Error thrown when an operation requires an MSP to be storing the bucket.
+       **/
+      BucketMustHaveMspForOperation: AugmentedError<ApiType>;
+      /**
+       * Bucket cannot be deleted because it is not empty.
+       **/
+      BucketNotEmpty: AugmentedError<ApiType>;
+      /**
        * Error thrown when a bucket ID is not found in storage.
        **/
       BucketNotFound: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user exceeded the bucket data limit based on the associated value proposition.
+       **/
+      BucketSizeExceedsLimit: AugmentedError<ApiType>;
+      /**
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a fixed payment stream is not found.
+       **/
+      FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Error thrown when failing to decode the owner Account ID from the received metadata.
        **/
@@ -1035,6 +1075,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a Provider tries to remove the last MultiAddress from its account.
        **/
       LastMultiAddressCantBeRemoved: AugmentedError<ApiType>;
+      /**
+       * Error thrown when changing the MSP of a bucket to the same assigned MSP.
+       **/
+      MspAlreadyAssignedToBucket: AugmentedError<ApiType>;
       /**
        * Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
        **/

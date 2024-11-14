@@ -32,14 +32,16 @@ use crate::{
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
         KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
-        MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof, ProviderIdFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
-        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
+        MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof,
+        ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
+        RandomnessProviderFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
+        TreasuryAccountFor,
     },
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
     LastDeletedTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
     PastBlocksWeight, PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed,
-    TickToCheckpointChallenges, TickToProvidersDeadlines, ValidProofSubmittersLastTicks,
+    TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
+    ValidProofSubmittersLastTicks,
 };
 
 macro_rules! expect_or_err {
@@ -405,18 +407,15 @@ where
         let mut challenges_ticker = ChallengesTicker::<T>::get();
         challenges_ticker.saturating_inc();
         ChallengesTicker::<T>::set(challenges_ticker);
-        weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
         // Store random seed for this tick.
         let (seed, _) = RandomnessProviderFor::<T>::random(challenges_ticker.encode().as_ref());
         TickToChallengesSeed::<T>::set(challenges_ticker, Some(seed));
-        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Remove the oldest challenge seed stored, to clean up the storage.
         let tick_to_remove = challenges_ticker.checked_sub(&ChallengeHistoryLengthFor::<T>::get());
         if let Some(tick_to_remove) = tick_to_remove {
             TickToChallengesSeed::<T>::remove(tick_to_remove);
-            weight.consume(T::DbWeight::get().reads_writes(0, 1));
         }
 
         // Emit new challenge seed event.
@@ -427,14 +426,14 @@ where
 
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
 
-        // Count last checkpoint challenges tick challenges
+        // Count last checkpoint challenges tick's challenges. This is to consider if slashable Providers should
+        // have responses to checkpoint challenges, and slash them for the corresponding number of missed challenges.
         let checkpoint_challenges_count =
             TickToCheckpointChallenges::<T>::get(last_checkpoint_tick)
                 .unwrap_or_else(||
                     // Returning an empty list so slashable providers will not accrue any failed proof submissions for checkpoint challenges.
                     BoundedVec::new())
                 .len();
-        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         // This hook does not return an error, and it cannot fail, that's why we use `saturating_add`.
         let next_checkpoint_tick =
@@ -443,106 +442,126 @@ where
             // This is a checkpoint challenge round, so we also generate new checkpoint challenges.
             Self::do_new_checkpoint_challenge_round(challenges_ticker, weight);
         }
-        weight.consume(T::DbWeight::get().reads_writes(2, 0));
 
-        // If there are providers left in `TickToProvidersDeadlines` for this tick,
-        // they are marked as slashable.
+        // If there are Providers left in `TickToProvidersDeadlines` for `TickToCheckedForSlashableProviders`,
+        // they will be marked as slashable.
+        let mut tick_to_check_for_slashable_providers =
+            TickToCheckForSlashableProviders::<T>::get();
         let mut slashable_providers =
-            TickToProvidersDeadlines::<T>::drain_prefix(challenges_ticker);
-        while let Some((provider, _)) = slashable_providers.next() {
-            // One read for every provider in the prefix, and one write as we're consuming and deleting the entry.
-            weight.consume(T::DbWeight::get().reads_writes(1, 1));
+            TickToProvidersDeadlines::<T>::drain_prefix(tick_to_check_for_slashable_providers);
 
-            // Accrue number of failed proof submission for this slashable provider.
-            // Add custom checkpoint challenges if the provider needed to respond to them.
-            SlashableProviders::<T>::mutate(provider, |slashable| {
-                let mut accrued = slashable.unwrap_or(0);
+        // This loop is expected to run for a low number of iterations, given that normally, there should
+        // be little to no Providers in the `TickToProvidersDeadlines` StorageMap for the `TickToCheckedForSlashableProviders`.
+        // However, in the extreme scenario where a large number of Providers are missing the proof submissions,
+        // this is bounded by the `MaxSlashableProvidersPerTick` configuration.
+        let max_slashable_providers = MaxSlashableProvidersPerTickFor::<T>::get();
+        let mut slashable_providers_count = 0;
+        while tick_to_check_for_slashable_providers <= challenges_ticker
+            && slashable_providers_count < max_slashable_providers
+        {
+            // If there are Providers left in `TickToProvidersDeadlines` for `TickToCheckedForSlashableProviders`,
+            // they are marked as slashable.
+            if let Some((provider, _)) = slashable_providers.next() {
+                // Accrue number of failed proof submission for this slashable provider.
+                // Add custom checkpoint challenges if the provider needed to respond to them.
+                SlashableProviders::<T>::mutate(provider, |slashable| {
+                    let mut accrued = slashable.unwrap_or(0);
 
-                let last_tick_provider_submitted_proof =
-                    match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
-                        Some(tick) => tick,
-                        None => {
-                            Self::deposit_event(Event::NoRecordOfLastSubmittedProof { provider });
+                    let last_tick_provider_submitted_proof =
+                        match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
+                            Some(tick) => tick,
+                            None => {
+                                Self::deposit_event(Event::NoRecordOfLastSubmittedProof {
+                                    provider,
+                                });
 
-                            #[cfg(test)]
-                            unreachable!(
-                                "Provider should have a last tick it submitted a proof for."
-                            );
+                                #[cfg(test)]
+                                unreachable!(
+                                    "Provider should have a last tick it submitted a proof for."
+                                );
 
-                            #[allow(unreachable_code)]
-                            {
-                                // If the Provider has no record of the last tick it submitted a proof for,
-                                // we set it to the current challenges ticker, so they will not be slashed.
-                                challenges_ticker
+                                #[allow(unreachable_code)]
+                                {
+                                    // If the Provider has no record of the last tick it submitted a proof for,
+                                    // we set it to the current challenges ticker, so checkpoint challenges will
+                                    // not be considered in slashing it.
+                                    challenges_ticker
+                                }
                             }
-                        }
-                    };
-                weight.consume(T::DbWeight::get().reads_writes(1, 0));
+                        };
 
-                let challenge_ticker_provider_should_have_responded_to =
+                    let challenge_ticker_provider_should_have_responded_to =
+                        challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+
+                    if checkpoint_challenges_count != 0
+                        && last_tick_provider_submitted_proof <= last_checkpoint_tick
+                        && last_checkpoint_tick < challenge_ticker_provider_should_have_responded_to
+                    {
+                        accrued = accrued.saturating_add(checkpoint_challenges_count as u32);
+                    }
+
+                    accrued = accrued.saturating_add(RandomChallengesPerBlockFor::<T>::get());
+
+                    *slashable = Some(accrued);
+                });
+
+                // Get the stake for this Provider, to know its challenge period.
+                // If a submitter is a registered Provider, it must have a stake, so there shouldn't be an error.
+                let stake = match ProvidersPalletFor::<T>::get_stake(provider) {
+                    Some(stake) => stake,
+                    // But to avoid panics, in the odd case of a Provider not being registered, we
+                    // arbitrarily set the stake to be that which would result in `CheckpointChallengePeriod` ticks of challenge period.
+                    None => {
+                        let checkpoint_challenge_period =
+                            CheckpointChallengePeriodFor::<T>::get().saturated_into::<u32>();
+                        StakeToChallengePeriodFor::<T>::get() * checkpoint_challenge_period.into()
+                    }
+                };
+
+                // Calculate the next challenge deadline for this Provider.
+                // At this point, we are processing all providers who have reached their deadline (i.e. tolerance ticks after the tick they should provide a proof for):
+                // challenge_ticker = last_tick_provider_should_have_submitted_a_proof_for + ChallengeTicksTolerance
+                //
+                // By definition, the next deadline should be tolerance ticks after the next tick they should submit proof for (i.e. one period after the last tick they should have submitted a proof for):
+                // next_challenge_deadline = last_tick_provider_should_have_submitted_a_proof_for + provider_period + ChallengeTicksTolerance
+                //
+                // Therefore, the next deadline is one period from now:
+                // next_challenge_deadline = challenge_ticker + provider_period
+                let next_challenge_deadline =
+                    challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
+
+                // Update this Provider's next challenge deadline.
+                TickToProvidersDeadlines::<T>::set(next_challenge_deadline, provider, Some(()));
+
+                // Calculate the tick for which the Provider should have submitted a proof.
+                let last_interval_tick =
                     challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
 
-                if checkpoint_challenges_count != 0
-                    && last_tick_provider_submitted_proof <= last_checkpoint_tick
-                    && last_checkpoint_tick < challenge_ticker_provider_should_have_responded_to
-                {
-                    accrued = accrued.saturating_add(checkpoint_challenges_count as u32);
-                }
+                // Update this Provider's last interval tick for the next challenge.
+                LastTickProviderSubmittedAProofFor::<T>::set(provider, Some(last_interval_tick));
 
-                accrued = accrued.saturating_add(RandomChallengesPerBlockFor::<T>::get());
+                // Emit slashable provider event.
+                Self::deposit_event(Event::SlashableProvider {
+                    provider,
+                    next_challenge_deadline,
+                });
 
-                *slashable = Some(accrued);
-            });
-
-            weight.consume(T::DbWeight::get().reads_writes(0, 1));
-
-            // Get the stake for this Provider, to know its challenge period.
-            // If a submitter is a registered Provider, it must have a stake, so there shouldn't be an error.
-            let stake = match ProvidersPalletFor::<T>::get_stake(provider) {
-                Some(stake) => stake,
-                // But to avoid panics, in the odd case of a Provider not being registered, we
-                // arbitrarily set the stake to be that which would result in `CheckpointChallengePeriod` ticks of challenge period.
-                None => {
-                    weight.consume(T::DbWeight::get().reads_writes(1, 0));
-                    let checkpoint_challenge_period =
-                        CheckpointChallengePeriodFor::<T>::get().saturated_into::<u32>();
-                    StakeToChallengePeriodFor::<T>::get() * checkpoint_challenge_period.into()
-                }
-            };
-            weight.consume(T::DbWeight::get().reads_writes(1, 0));
-
-            // Calculate the next challenge deadline for this Provider.
-            // At this point, we are processing all providers who have reached their deadline (i.e. tolerance ticks after the tick they should provide a proof for):
-            // challenge_ticker = last_tick_provider_should_have_submitted_a_proof_for + ChallengeTicksTolerance
-            //
-            // By definition, the next deadline should be tolerance ticks after the next tick they should submit proof for (i.e. one period after the last tick they should have submitted a proof for):
-            // next_challenge_deadline = last_tick_provider_should_have_submitted_a_proof_for + provider_period + ChallengeTicksTolerance
-            //
-            // Therefore, the next deadline is one period from now:
-            // next_challenge_deadline = challenge_ticker + provider_period
-            let next_challenge_deadline =
-                challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
-
-            // Update this Provider's next challenge deadline.
-            TickToProvidersDeadlines::<T>::set(next_challenge_deadline, provider, Some(()));
-
-            weight.consume(T::DbWeight::get().reads_writes(0, 1));
-
-            // Calculate the tick for which the Provider should have submitted a proof.
-            let last_interval_tick =
-                challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
-            weight.consume(T::DbWeight::get().reads_writes(1, 0));
-
-            // Update this Provider's last interval tick for the next challenge.
-            LastTickProviderSubmittedAProofFor::<T>::set(provider, Some(last_interval_tick));
-            weight.consume(T::DbWeight::get().reads_writes(0, 1));
-
-            // Emit slashable provider event.
-            Self::deposit_event(Event::SlashableProvider {
-                provider,
-                next_challenge_deadline,
-            });
+                // Increment the number of slashable providers.
+                slashable_providers_count += 1;
+            } else {
+                // If there are no more Providers left in `TickToProvidersDeadlines` for `TickToCheckedForSlashableProviders`,
+                // we increment `TickToCheckedForSlashableProviders` to the next tick. If in doing so, `TickToCheckedForSlashableProviders`
+                // goes beyond `ChallengesTicker`, this loop will exit, leaving everything ready for the next tick.
+                tick_to_check_for_slashable_providers =
+                    tick_to_check_for_slashable_providers.saturating_add(One::one());
+                slashable_providers = TickToProvidersDeadlines::<T>::drain_prefix(
+                    tick_to_check_for_slashable_providers,
+                );
+            }
         }
+
+        // Update `TickToCheckedForSlashableProviders` to the value resulting from the last iteration of the loop.
+        TickToCheckForSlashableProviders::<T>::set(tick_to_check_for_slashable_providers);
     }
 
     /// Check if the network is presumably under a spam attack.
@@ -552,7 +571,7 @@ where
     /// The idea is to track blocks that have not been filled to capacity within a
     /// specific period (`BlockFullnessPeriod`) and determine if there is enough "headroom"
     /// (unused block capacity) to consider the network not under spam.
-    pub fn do_check_spamming_condition(weight: &mut WeightMeter) {
+    pub fn do_check_spamming_condition(_weight: &mut WeightMeter) {
         // Get the maximum weight for the dispatch class of `submit_proof` extrinsics.
         let weights = T::BlockWeights::get();
         let max_weight_for_class = weights
@@ -565,12 +584,10 @@ where
         // Get the number of blocks that have been considered _not_ full in the past `BlockFullnessPeriod`.
         let not_full_blocks_count = NotFullBlocksCount::<T>::get();
         let mut new_not_full_blocks_count = not_full_blocks_count;
-        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         // This would only be `None` if the block number is 0, so this should be safe.
         if let Some(prev_block) = current_block.checked_sub(&1u32.into()) {
             // Get the weight usage in the previous block.
-            weight.consume(T::DbWeight::get().reads_writes(1, 0));
             if let Some(weight_used_in_prev_block) = PastBlocksWeight::<T>::get(prev_block) {
                 // Check how much weight was left in the previous block, compared to the maximum weight.
                 // This is computed both for proof size and ref time.
@@ -596,7 +613,6 @@ where
             current_block.checked_sub(&T::BlockFullnessPeriod::get().saturating_add(1u32.into()))
         {
             // Get the weight usage in the oldest registered block.
-            weight.consume(T::DbWeight::get().reads_writes(1, 0));
             if let Some(weight_used_in_oldest_block) =
                 PastBlocksWeight::<T>::get(oldest_block_fullness_number)
             {
@@ -623,11 +639,9 @@ where
         // If there was a change in the number of blocks that were not full, we need to update the storage.
         if new_not_full_blocks_count != not_full_blocks_count {
             NotFullBlocksCount::<T>::set(new_not_full_blocks_count);
-            weight.consume(T::DbWeight::get().reads_writes(0, 1));
         }
 
         // At this point, we have an updated count of blocks that were not full in the past `BlockFullnessPeriod`.
-        weight.consume(T::DbWeight::get().reads_writes(1, 0));
         if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get() {
             // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
             // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
@@ -643,7 +657,6 @@ where
                 // At this point, the network is presumably under a spam attack, so we pause the `ChallengesTicker`.
                 ChallengesTickerPaused::<T>::set(Some(()));
             }
-            weight.consume(T::DbWeight::get().reads_writes(1, 1));
         }
     }
 
@@ -655,7 +668,7 @@ where
     /// Cleans up the `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
     fn do_new_checkpoint_challenge_round(
         current_tick: BlockNumberFor<T>,
-        weight: &mut WeightMeter,
+        _weight: &mut WeightMeter,
     ) {
         let mut new_checkpoint_challenges: BoundedVec<
             (KeyFor<T>, Option<TrieRemoveMutation>),
@@ -668,7 +681,6 @@ where
         let original_priority_challenges_queue = PriorityChallengesQueue::<T>::get();
         let mut priority_challenges_queue =
             VecDeque::from(original_priority_challenges_queue.to_vec());
-        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         while !new_checkpoint_challenges.is_full() && !priority_challenges_queue.is_empty() {
             let challenge = match priority_challenges_queue.pop_front() {
@@ -695,13 +707,11 @@ where
 
         // Reset the priority challenges queue with the leftovers.
         PriorityChallengesQueue::<T>::set(new_priority_challenges_queue);
-        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Fill up this round's checkpoint challenges with challenges in the `ChallengesQueue`.
         // It gets filled up until the max number of custom challenges for a block is reached, or until
         // there are no more challenges in the `ChallengesQueue`.
         let mut challenges_queue = VecDeque::from(ChallengesQueue::<T>::get().to_vec());
-        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         while !new_checkpoint_challenges.is_full() && !challenges_queue.is_empty() {
             let challenge = match challenges_queue.pop_front() {
@@ -729,20 +739,16 @@ where
 
         // Reset the challenges queue with the leftovers.
         ChallengesQueue::<T>::set(new_challenges_queue);
-        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Store the new checkpoint challenges.
         TickToCheckpointChallenges::<T>::set(current_tick, Some(new_checkpoint_challenges.clone()));
-        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Remove the last checkpoint challenge from storage to clean up.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         TickToCheckpointChallenges::<T>::remove(last_checkpoint_tick);
-        weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
         // Set this tick as the last checkpoint tick.
         LastCheckpointTick::<T>::set(current_tick);
-        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Emit new checkpoint challenge event.
         Self::deposit_event(Event::NewCheckpointChallenge {

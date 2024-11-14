@@ -300,7 +300,6 @@ impl pallet_storage_providers::Config for Test {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
@@ -310,6 +309,7 @@ impl pallet_storage_providers::Config for Test {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -383,6 +383,7 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = ConstU32<100>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -427,7 +428,7 @@ where
 
     fn apply_delta(
         root: &Self::Key,
-        _mutations: &[(Self::Key, TrieMutation)],
+        mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
     ) -> Result<
         (
@@ -437,8 +438,14 @@ where
         ),
         DispatchError,
     > {
-        // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+        Ok((
+            MemoryDB::<T::Hash>::default(),
+            match mutations.len() {
+                0 => *root,
+                _ => mutations.last().unwrap().0,
+            },
+            Vec::new(),
+        ))
     }
 }
 

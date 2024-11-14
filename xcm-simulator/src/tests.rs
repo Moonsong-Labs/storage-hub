@@ -1242,10 +1242,10 @@ mod users {
                 storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
                     storagehub::Runtime,
                 >::create_bucket {
-                    msp_id: alice_msp_id,
+                    msp_id: Some(alice_msp_id),
                     name: bucket_name.clone(),
                     private: false,
-                    value_prop_id,
+                    value_prop_id: Some(value_prop_id),
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1273,7 +1273,6 @@ mod users {
         // We check that the bucket was created
         StorageHub::execute_with(|| {
             bucket_id = storagehub::Providers::derive_bucket_id(
-                &alice_msp_id,
                 &parachain_account_in_sh,
                 bucket_name.clone(),
             );
@@ -1313,7 +1312,7 @@ mod users {
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
                     size: size,
-                    msp_id: alice_msp_id.clone(),
+                    msp_id: Some(alice_msp_id.clone()),
                     peer_ids: parachain_peer_id,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
@@ -1596,10 +1595,10 @@ mod users {
                 storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
                     storagehub::Runtime,
                 >::create_bucket {
-                    msp_id: alice_msp_id,
+                    msp_id: Some(alice_msp_id),
                     name: bucket_name.clone(),
                     private: false,
-                    value_prop_id,
+                    value_prop_id: Some(value_prop_id),
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1638,7 +1637,6 @@ mod users {
         // We check that the bucket was created
         StorageHub::execute_with(|| {
             bucket_id = storagehub::Providers::derive_bucket_id(
-                &alice_msp_id,
                 &charlie_parachain_account_in_sh,
                 bucket_name.clone(),
             );
@@ -1679,7 +1677,7 @@ mod users {
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
                     size: size,
-                    msp_id: alice_msp_id.clone(),
+                    msp_id: Some(alice_msp_id.clone()),
                     peer_ids: parachain_peer_id,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;

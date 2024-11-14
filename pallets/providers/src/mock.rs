@@ -146,6 +146,7 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = ConstU32<100>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -275,7 +276,6 @@ impl crate::Config for Test {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
@@ -285,6 +285,7 @@ impl crate::Config for Test {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

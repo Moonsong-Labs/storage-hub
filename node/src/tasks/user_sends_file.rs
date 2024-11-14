@@ -79,7 +79,7 @@ where
             event.location,
         );
 
-        let msp_id = self
+        let Some(msp_id) = self
             .storage_hub_handler
             .blockchain
             .query_msp_id_of_bucket_id(event.bucket_id)
@@ -90,7 +90,15 @@ where
                     event.bucket_id,
                     e
                 )
-            })?;
+            })?
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "Skipping storage request - no MSP ID found for bucket ID {:?}",
+                event.bucket_id
+            );
+            return Ok(());
+        };
 
         let msp_multiaddresses = self
             .storage_hub_handler
@@ -129,7 +137,10 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_provider(peer_ids, &file_metadata).await
+        self.send_chunks_to_provider(peer_ids, &file_metadata)
+            .await?;
+
+        Ok(())
     }
 }
 

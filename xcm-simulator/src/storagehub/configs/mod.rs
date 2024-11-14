@@ -458,7 +458,6 @@ parameter_types! {
     pub const MaxProtocols: u32 = 100;
     pub const MaxBsps: u32 = 100;
     pub const MaxMsps: u32 = 100;
-    pub const MaxBuckets: u32 = 10000;
     pub const BucketNameLimit: u32 = 100;
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const SpMinCapacity: u64 = 2;
@@ -500,7 +499,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
-    type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = BucketNameLimit;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -511,6 +509,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate = ConstU128<1>;
 }
 
 parameter_types! {
@@ -580,6 +579,8 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 parameter_types! {
     pub const RandomChallengesPerBlock: u32 = 10;
     pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    pub const TargetTicksStorageOfSubmitters: u32 = 3;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 30;
@@ -587,8 +588,7 @@ parameter_types! {
     pub const StakeToChallengePeriod: Balance = 200 * UNIT;
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
-    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
-    pub const TargetTicksStorageOfSubmitters: u32 = 3;
+    pub const MaxSlashableProvidersPerTick: u32 = 1000; // TODO: Change this value after benchmarking the `on_poll` hook for the Proofs Dealer pallet
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
@@ -619,6 +619,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -663,7 +664,7 @@ where
 
     fn apply_delta(
         root: &Self::Key,
-        _mutations: &[(Self::Key, TrieMutation)],
+        mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
     ) -> Result<
         (
@@ -673,8 +674,14 @@ where
         ),
         DispatchError,
     > {
-        // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+        Ok((
+            MemoryDB::<T::Hash>::default(),
+            match mutations.len() {
+                0 => *root,
+                _ => mutations.last().unwrap().0,
+            },
+            Vec::new(),
+        ))
     }
 }
 

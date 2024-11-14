@@ -261,6 +261,7 @@ where
                     .with_max_tip(max_tip as f64)
                     .with_timeout(Duration::from_secs(self.storage_hub_handler.provider_config.extrinsic_retry_timeout))
                     .with_should_retry(Some(Box::new(should_retry))),
+                false
             )
             .await
             .map_err(|e| {

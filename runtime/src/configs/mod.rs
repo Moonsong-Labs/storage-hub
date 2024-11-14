@@ -485,7 +485,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
@@ -496,6 +495,8 @@ impl pallet_storage_providers::Config for Runtime {
     type StartingReputationWeight = ConstU32<1>;
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
+    type ZeroSizeBucketFixedRate =
+        runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
 }
 
 parameter_types! {
@@ -572,6 +573,7 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const ChallengeTicksTolerance: u32 = 50;
+    pub const MaxSlashableProvidersPerTick: u32 = 1000; // TODO: Change this value after benchmarking the `on_poll` hook for the Proofs Dealer pallet
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
@@ -613,6 +615,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
