@@ -180,7 +180,11 @@ async function generateBenchmarkProofs() {
     const destination = locations[i];
     const bucketName = bucketNames[i];
 
-    const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketName);
+    const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+      source,
+      destination,
+      bucketName
+    );
     fileKeys.push(fileMetadata.fileKey);
 
     await userApi.wait.bspVolunteer(1);
