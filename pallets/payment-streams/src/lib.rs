@@ -771,7 +771,7 @@ pub mod pallet {
         /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
         /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
         #[pallet::call_index(7)]
-        #[pallet::weight(T::WeightInfo::charge_multiple_users_payment_streams())]
+        #[pallet::weight(T::WeightInfo::charge_multiple_users_payment_streams(user_accounts.len() as u32))]
         pub fn charge_multiple_users_payment_streams(
             origin: OriginFor<T>,
             user_accounts: BoundedVec<T::AccountId, T::MaxUsersToCharge>,

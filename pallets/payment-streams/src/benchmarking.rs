@@ -687,11 +687,10 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn charge_multiple_users_payment_streams() -> Result<(), BenchmarkError> {
+    fn charge_multiple_users_payment_streams(
+        n: Linear<0, { <T as crate::Config>::MaxUsersToCharge::get() }>,
+    ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
-        // Get the maximum amount of users that can be batch charged
-        let max_users = <T as crate::Config>::MaxUsersToCharge::get();
-
         // Set up a Provider with an account with some balance.
         let (provider_account, provider_id) = register_provider::<T>(0)?;
         let provider_id: ProviderIdFor<T> = provider_id.into();
@@ -708,7 +707,7 @@ mod benchmarks {
         let rate_as_balance: BalanceOf<T> = rate.into();
         let amount_provided = 1000u32;
         let amount_provided_as_balance: BalanceOf<T> = amount_provided.into();
-        for i in 0..max_users {
+        for i in 0..n.into() {
             let user_account: T::AccountId = account("Alice", 0, i);
             assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
                 &user_account,
@@ -965,7 +964,7 @@ mod benchmarks {
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
-            Pallet::<T>::do_update_last_chargeable_info(20u32.into(), &mut meter);
+            Pallet::<T>::do_update_last_chargeable_info(20u32.into(), &mut meter)
         }
 
         /*********** Post-benchmark checks: ***********/

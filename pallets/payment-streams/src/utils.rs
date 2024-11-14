@@ -961,6 +961,11 @@ where
 
         // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
         for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
+            // If the amount of streams to pay has been reached, break the loop
+            if total_streams_paid >= amount_of_streams_to_pay {
+                break;
+            }
+
             // Get the amount that should be charged for this payment stream
             let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(&provider_id);
             let amount_to_charge = fixed_rate_payment_stream
@@ -1022,15 +1027,15 @@ where
 
             // Increase the total amount of streams that have been paid
             total_streams_paid += 1;
-
-            // If the amount of streams to pay has been reached, break the loop
-            if total_streams_paid >= amount_of_streams_to_pay {
-                break;
-            }
         }
 
         // Do the same for the dynamic-rate payment streams
         for (provider_id, dynamic_rate_payment_stream) in dynamic_rate_payment_streams {
+            // If the amount of streams to pay has been reached, break the loop
+            if total_streams_paid >= amount_of_streams_to_pay {
+                break;
+            }
+
             // Get the amount that should be charged for this payment stream
             let price_index_at_last_chargeable_tick =
                 Self::get_last_chargeable_info_with_privilege(&provider_id).price_index;
@@ -1089,11 +1094,6 @@ where
 
             // Increase the total amount of streams that have been paid
             total_streams_paid += 1;
-
-            // If the amount of streams to pay has been reached, break the loop
-            if total_streams_paid >= amount_of_streams_to_pay {
-                break;
-            }
         }
 
         // Hold the difference between the total deposit release and the total deposit used to pay the payment streams
