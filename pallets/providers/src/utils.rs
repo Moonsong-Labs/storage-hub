@@ -821,13 +821,22 @@ where
     }
 
     /// Slash a Storage Provider.
+    /// Successfully slashing a Storage Provider is a free operation.
     ///
-    /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
+    /// Slashing a provider will potentially do one of the following:
+    ///
+    /// - the provider's account is slashed directly iif the provider has enough free balance to cover the slashable amount and there is no outstanding slash amount.
+    /// - the provider's held deposit is slashed iif the provider does not have enough free balance to cover the slashable amount and there is no outstanding slash amount.
+    /// - the provider's held deposit is slashed and the outstanding slash amount is topped up iif the provider has enough free balance to cover the slashable amount and the outstanding slash amount.
     ///
     /// Will short circuit when the Storage Provider is not slashable. In the context of the StorageHub protocol,
     /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
     ///
-    /// Successfully slashing a Storage Provider is a free operation.
+    /// Important events for providers and users to subscribe to:
+    /// - the `Slash` event is emitted when a Storage Provider is successfully slashed.
+    /// - the `TopUpFulfilled` event is emitted when the outstanding slash amount is topped up and there
+    /// is no more outstanding slash amount.
+    /// - the `AwaitingTopUp` event is emitted when the outstanding slash amount has been created (or increased) and has not been topped up yet.
     pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
         let account_id = if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
             provider.owner_account
