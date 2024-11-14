@@ -7945,6 +7945,7 @@ dependencies = [
  "pallet-balances 39.0.0",
  "pallet-payment-streams",
  "pallet-proofs-dealer",
+ "pallet-randomness",
  "pallet-storage-providers-runtime-api",
  "parity-scale-codec",
  "scale-info",

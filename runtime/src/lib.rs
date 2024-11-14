@@ -305,6 +305,7 @@ mod benches {
         [nfts, Nfts]
         [pallet_parameters, Parameters]
         [pallet_proofs_dealer, ProofsDealer]
+        [pallet_storage_providers, Providers]
     );
 }
 
