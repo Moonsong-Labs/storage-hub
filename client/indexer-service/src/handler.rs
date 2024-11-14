@@ -232,12 +232,13 @@ impl IndexerService {
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
-                file_keys,
+                confirmed_file_keys,
+                skipped_file_keys: _,
                 new_root: _,
                 bsp_id,
             } => {
                 let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
-                for file_key in file_keys {
+                for file_key in confirmed_file_keys {
                     let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
