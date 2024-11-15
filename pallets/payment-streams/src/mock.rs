@@ -15,15 +15,15 @@ use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
-    traits::{BlakeTwo256, BlockNumberProvider, IdentityLookup},
-    BuildStorage,
+    traits::{BlakeTwo256, BlockNumberProvider, ConvertBack, IdentityLookup},
+    BuildStorage, SaturatedConversion,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
-type StorageUnit = u64;
+type StorageDataUnit = u64;
 type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
@@ -191,13 +191,25 @@ impl BlockNumberProvider for MockRelaychainDataProvider {
     }
 }
 
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = StorageUnit;
+    type StorageDataUnit = StorageDataUnit;
     type PaymentStreams = PaymentStreams;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
@@ -205,6 +217,7 @@ impl pallet_storage_providers::Config for Test {
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU64<2>;
@@ -305,7 +318,7 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type Units = StorageUnit;
+    type Units = StorageDataUnit;
     type NewStreamDeposit = ConstU64<10>;
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;

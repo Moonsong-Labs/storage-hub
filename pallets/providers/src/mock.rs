@@ -17,7 +17,7 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, IdentityLookup},
+    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -267,6 +267,20 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
     }
 }
 
+type StorageDataUnit = u64;
+
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -274,7 +288,8 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type FileMetadataManager = MockFileMetadataManager;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ReadAccessGroupId = u32;

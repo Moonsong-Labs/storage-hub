@@ -292,6 +292,19 @@ impl BlockNumberProvider for MockRelaychainDataProvider {
     }
 }
 
+type StorageDataUnit = u64;
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = MockRandomness;
@@ -303,13 +316,14 @@ impl pallet_storage_providers::Config for Test {
     >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;

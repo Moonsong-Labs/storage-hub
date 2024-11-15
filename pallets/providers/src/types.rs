@@ -15,15 +15,12 @@ pub type ValuePropId<T> = HashId<T>;
 
 /// Top up metadata for a provider tracked in storage.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
-#[scale_info(skip_type_params(T))]
-pub struct TopUpMetadata<T: Config> {
+pub struct TopUpMetadata {
     /// The last block at which the provider will either forcibly top up their deposit or be marked as
     /// insolvent.
     ///
     /// This is the relay chain block number which the parachain is anchored to.
     pub end_block_grace_period: RelayChainBlockNumber,
-    /// Current amount of the deposit that has been slashed.
-    pub outstanding_slash_amount: BalanceOf<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -205,3 +202,7 @@ pub type StartingReputationWeight<T> = <T as crate::Config>::StartingReputationW
 
 /// Type alias for the `RelayBlockGetter` type used in the Storage Providers pallet.
 pub type RelayBlockGetter<T> = <T as crate::Config>::RelayBlockGetter;
+
+/// Type alias for the `StorageDataUnitAndBalanceConvert` type used in the Storage Providers pallet.
+pub type StorageDataUnitAndBalanceConverter<T> =
+    <T as crate::Config>::StorageDataUnitAndBalanceConvert;

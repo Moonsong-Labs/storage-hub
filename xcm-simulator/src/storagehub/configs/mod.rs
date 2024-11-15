@@ -475,6 +475,18 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
@@ -486,13 +498,14 @@ impl pallet_storage_providers::Config for Runtime {
     >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
     type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = SpMinCapacity;

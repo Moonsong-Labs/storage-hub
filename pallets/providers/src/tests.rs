@@ -3,10 +3,10 @@ use crate::{
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
         MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, RelayBlockGetter,
-        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
+        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata, ValueProposition,
         ValuePropositionWithId,
     },
-    Error, Event,
+    Error, Event, MainStorageProviders,
 };
 
 use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
@@ -23,7 +23,7 @@ use shp_traits::{
     ReadBucketsInterface, ReadProvidersInterface,
 };
 use sp_runtime::bounded_vec;
-use sp_runtime::traits::BlockNumberProvider;
+use sp_runtime::traits::{BlockNumberProvider, Convert};
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -4832,26 +4832,16 @@ mod slash_and_top_up {
         struct TestSetup {
             account: AccountId,
             provider_id: HashId<Test>,
-            accrued_slashes: u32,
-            top_up: bool,
+            /// Sets accrued slashes to have the deposit be slashed completely
+            slash_held_deposit: bool,
+            /// Sets the provider's balance to cover the top up required amount
+            automatic_top_up: bool,
         }
 
         impl Default for TestSetup {
             fn default() -> Self {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount, None, None);
-
-                let provider_id =
-                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                Self {
-                    account: alice,
-                    provider_id,
-                    accrued_slashes: 1,
-                    top_up: false,
-                }
+                Self::new(alice)
             }
         }
 
@@ -4864,39 +4854,63 @@ mod slash_and_top_up {
                 let provider_id =
                     crate::AccountIdToMainStorageProviderId::<Test>::get(&account).unwrap();
 
+                MainStorageProviders::<Test>::mutate(provider_id, |p| {
+                    p.as_mut().unwrap().capacity_used = 50;
+                });
+
                 Self {
                     account,
                     provider_id,
-                    accrued_slashes: 1,
-                    top_up: false,
+                    slash_held_deposit: false,
+                    automatic_top_up: false,
                 }
             }
 
             fn slash_and_verify(&self) {
                 // Set proofs-dealer storage to have a slashable provider with the given accrued slashes
-                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
-                    &self.provider_id,
-                    self.accrued_slashes,
-                );
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&self.provider_id, 1);
 
                 // Expected slash amount based on the accrued slashes
-                let expected_slash_amount: BalanceOf<Test> =
+                let slash_amount_one_accrued_slash: BalanceOf<Test> =
                     StorageProviders::compute_worst_case_scenario_slashable_amount(
                         &self.provider_id,
                     )
                     .expect("Failed to compute slashable amount");
 
+                let worst_case_slash_amount = if self.slash_held_deposit {
+                    let provider = MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+
+                    // Saturate to 1 to avoid 0 accrued slashes
+                    let accrued_slashes = std::cmp::max(
+                        provider.capacity as u128 / slash_amount_one_accrued_slash,
+                        1,
+                    );
+
+                    // Set proofs-dealer storage to have a slashable provider with the given accrued slashes
+                    pallet_proofs_dealer::SlashableProviders::<Test>::insert(
+                        &self.provider_id,
+                        accrued_slashes as u32,
+                    );
+
+                    slash_amount_one_accrued_slash * accrued_slashes
+                } else {
+                    slash_amount_one_accrued_slash
+                };
+
                 let existential_deposit = ExistentialDeposit::get();
 
-                let pre_state_top_up_outstanding_amount =
-                    match AwaitingTopUpFromProviders::<Test>::get(self.provider_id) {
-                        Some(metadata) => metadata.outstanding_slash_amount,
-                        None => 0u128,
-                    };
+                let required_hold_amount_fn = || -> BalanceOf<Test> {
+                    let provider = MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+                    let pre_state_capacity_diff =
+                        provider.capacity_used.saturating_sub(provider.capacity);
+                    StorageDataUnitAndBalanceConverter::convert(pre_state_capacity_diff)
+                };
 
-                if self.top_up {
+                let pre_state_required_hold_amount = required_hold_amount_fn();
+
+                if self.automatic_top_up {
                     let total_top_up_slash_amount =
-                        expected_slash_amount.saturating_add(pre_state_top_up_outstanding_amount);
+                        worst_case_slash_amount.saturating_add(pre_state_required_hold_amount);
                     // Set the provider's balance to cover the top up slash amount to automatically top up
                     NativeBalance::set_balance(
                         &self.account,
@@ -4917,11 +4931,42 @@ mod slash_and_top_up {
                     &self.account,
                 );
 
+                let pre_state_provider =
+                    MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(self.account),
                     self.provider_id
                 ));
+
+                // Calculate total slashable amount from the provider's account and held deposit
+                let total_reducible_balance_with_held = pre_state_balance
+                    .saturating_sub(existential_deposit)
+                    .saturating_add(pre_state_held_deposit);
+
+                let expected_slash_amount =
+                    total_reducible_balance_with_held.min(worst_case_slash_amount);
+
+                // Check that the slash event was emitted
+                let last_slashed_event = System::events()
+                    .iter()
+                    .rev()
+                    .find_map(|event| {
+                        if let RuntimeEvent::StorageProviders(Event::<Test>::Slashed {
+                            provider_id,
+                            amount,
+                        }) = event.event
+                        {
+                            Some((provider_id, amount))
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Expected Slashed event");
+
+                assert_eq!(last_slashed_event.0, self.provider_id);
+                assert_eq!(last_slashed_event.1, expected_slash_amount);
 
                 // Check that the provider is no longer slashable
                 assert_eq!(
@@ -4933,12 +4978,27 @@ mod slash_and_top_up {
                 let end_block_grace_period =
                     RelayBlockGetter::<Test>::current_block_number() + grace_period;
 
-                if self.top_up {
+                if self.automatic_top_up {
+                    let required_hold_amount = required_hold_amount_fn();
+
+                    // Check that the held deposit covers the used capacity
+                    assert_eq!(required_hold_amount, 0);
+
+                    // Check event TopUpFulfilled is emitted
+                    System::assert_has_event(
+                        Event::<Test>::TopUpFulfilled {
+                            provider_id: self.provider_id,
+                            amount: (pre_state_provider.capacity_used - pre_state_provider.capacity)
+                                as u128,
+                        }
+                        .into(),
+                    );
+
                     // Free balance should be reduced by the amount needed to cover the outstanding top up slash amount
                     assert_eq!(
                         NativeBalance::free_balance(self.account),
                         pre_state_balance
-                            - (expected_slash_amount + pre_state_top_up_outstanding_amount)
+                            - (worst_case_slash_amount + pre_state_required_hold_amount)
                     );
 
                     // Check that the held deposit of the provider has been automatically topped up
@@ -4947,7 +5007,7 @@ mod slash_and_top_up {
                             &StorageProvidersHoldReason::get(),
                             &self.account
                         ),
-                        pre_state_held_deposit + pre_state_top_up_outstanding_amount
+                        pre_state_held_deposit + pre_state_required_hold_amount
                     );
 
                     // Check that the storage has been cleared
@@ -4957,23 +5017,25 @@ mod slash_and_top_up {
                     )
                     .is_none());
                     assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
-
-                    // Check event TopUpFulfilled is emitted
+                } else if required_hold_amount_fn() > 0 {
+                    // Check event AwaitingTopUp is emitted
                     System::assert_has_event(
-                        Event::<Test>::TopUpFulfilled {
+                        Event::<Test>::AwaitingTopUp {
                             provider_id: self.provider_id,
-                            amount: pre_state_top_up_outstanding_amount + expected_slash_amount,
+                            top_up_metadata: TopUpMetadata {
+                                end_block_grace_period,
+                            },
                         }
                         .into(),
                     );
-                } else {
+
                     // Check that the held deposit of the provider has not been automatically topped up
                     assert_eq!(
                         NativeBalance::balance_on_hold(
                             &StorageProvidersHoldReason::get(),
                             &self.account
                         ),
-                        pre_state_held_deposit - expected_slash_amount
+                        pre_state_held_deposit - worst_case_slash_amount
                     );
 
                     // Check that the AwaitingTopUpFromProviders storage has been updated
@@ -4983,16 +5045,15 @@ mod slash_and_top_up {
                         top_up_metadata.end_block_grace_period,
                         end_block_grace_period
                     );
-                    assert_eq!(
-                        top_up_metadata.outstanding_slash_amount,
-                        pre_state_top_up_outstanding_amount + expected_slash_amount
-                    );
+
+                    let required_hold_amount = required_hold_amount_fn();
+                    assert_eq!(required_hold_amount, required_hold_amount);
                 }
 
                 // Check that the Treasury has received the slash amount
                 assert_eq!(
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
-                    pre_state_treasury_balance + expected_slash_amount
+                    pre_state_treasury_balance + worst_case_slash_amount
                 );
             }
         }
@@ -5001,7 +5062,11 @@ mod slash_and_top_up {
         fn slash_storage_provider_automatic_top_up() {
             ExtBuilder::build().execute_with(|| {
                 let mut test_setup = TestSetup::default();
-                test_setup.top_up = true;
+
+                test_setup.slash_held_deposit = true;
+                test_setup.slash_and_verify();
+
+                test_setup.automatic_top_up = true;
                 test_setup.slash_and_verify();
             });
         }
@@ -5012,10 +5077,11 @@ mod slash_and_top_up {
                 let mut test_setup = TestSetup::default();
                 // Test accrued slashes
                 test_setup.slash_and_verify();
+                test_setup.slash_held_deposit = true;
                 test_setup.slash_and_verify();
 
                 // Test automatic top up when provider is slashed
-                test_setup.top_up = true;
+                test_setup.automatic_top_up = true;
                 test_setup.slash_and_verify();
             });
         }
@@ -5027,15 +5093,19 @@ mod slash_and_top_up {
                 let mut bob_test_setup = TestSetup::new(accounts::BOB.0);
 
                 alice_test_setup.slash_and_verify();
+
                 bob_test_setup.slash_and_verify();
 
+                alice_test_setup.slash_held_deposit = true;
                 alice_test_setup.slash_and_verify();
+
+                bob_test_setup.slash_held_deposit = true;
                 bob_test_setup.slash_and_verify();
 
-                alice_test_setup.top_up = true;
+                alice_test_setup.automatic_top_up = true;
                 alice_test_setup.slash_and_verify();
 
-                bob_test_setup.top_up = true;
+                bob_test_setup.automatic_top_up = true;
                 bob_test_setup.slash_and_verify();
             });
         }

@@ -1649,12 +1649,12 @@ declare module "@polkadot/api-base/types/events" {
     providers: {
       /**
        * Event emitted when a provider has been slashed optionally signaling the end of the grace
-       * period and the current top up outstanding top up slash amount if an automatic top up could not be performed.
+       * period if an automatic top up could not be performed.
        **/
       AwaitingTopUp: AugmentedEvent<
         ApiType,
-        [providerId: H256, topUpMetadata: Option<PalletStorageProvidersTopUpMetadata>],
-        { providerId: H256; topUpMetadata: Option<PalletStorageProvidersTopUpMetadata> }
+        [providerId: H256, topUpMetadata: PalletStorageProvidersTopUpMetadata],
+        { providerId: H256; topUpMetadata: PalletStorageProvidersTopUpMetadata }
       >;
       /**
        * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about

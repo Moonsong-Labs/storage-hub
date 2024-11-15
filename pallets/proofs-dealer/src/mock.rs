@@ -18,7 +18,7 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, IdentityLookup},
+    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
@@ -184,6 +184,19 @@ impl BlockNumberProvider for MockRelaychainDataProvider {
     }
 }
 
+type StorageDataUnit = u64;
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 // Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -192,13 +205,14 @@ impl pallet_storage_providers::Config for Test {
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;

@@ -10,7 +10,7 @@ use frame_support::{
     },
     traits::{
         fungible::{Inspect, InspectHold, Mutate, MutateHold},
-        tokens::{Fortitude, Precision, Preservation, Restriction, WithdrawConsequence},
+        tokens::{Fortitude, Precision, Preservation, Restriction},
         Get, Randomness,
     },
 };
@@ -26,11 +26,13 @@ use shp_traits::{
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
-use sp_std::{prelude::ToOwned, vec::Vec};
+use sp_runtime::traits::{Convert, ConvertBack};
+use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
     Multiaddresses, ProviderId, RateDeltaParam, RelayBlockGetter, SignUpRequestSpParams,
-    StorageProviderId, TopUpMetadata, ValuePropId, ValueProposition, ValuePropositionWithId,
+    StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropId,
+    ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -821,30 +823,58 @@ where
     }
 
     /// Slash a Storage Provider.
-    /// Successfully slashing a Storage Provider is a free operation.
     ///
-    /// Slashing a provider will potentially do one of the following:
+    /// Penalizes a storage provider based on accrued failed proof submissions.
     ///
-    /// - the provider's account is slashed directly iif the provider has enough free balance to cover the slashable amount and there is no outstanding slash amount.
-    /// - the provider's held deposit is slashed iif the provider does not have enough free balance to cover the slashable amount and there is no outstanding slash amount.
-    /// - the provider's held deposit is slashed and the outstanding slash amount is topped up iif the provider has enough free balance to cover the slashable amount and the outstanding slash amount.
+    /// **Slashing Behavior:**
     ///
-    /// Will short circuit when the Storage Provider is not slashable. In the context of the StorageHub protocol,
-    /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
+    /// - Calculates the slashable amount from the provider's accrued failed proof submissions.
+    /// - Clears the provider's accrued failed proof submissions count.
+    /// - Attempts to slash the provider in the following order:
+    ///   - **First**, deducts as much of the slashable amount as possible from the provider's free balance, respecting preservation rules.
+    ///   - **If the free balance is insufficient**, the remaining amount is taken from the held deposit.
+    /// - The provider's capacity is reduced proportionally to the amount slashed from the held deposit (not from the free balance).
     ///
-    /// Important events for providers and users to subscribe to:
-    /// - the `Slash` event is emitted when a Storage Provider is successfully slashed.
-    /// - the `TopUpFulfilled` event is emitted when the outstanding slash amount is topped up and there
-    /// is no more outstanding slash amount.
-    /// - the `AwaitingTopUp` event is emitted when the outstanding slash amount has been created (or increased) and has not been topped up yet.
+    /// **Automatic Top-Up:**
+    ///
+    /// - If the provider's capacity falls below the used capacity after slashing:
+    ///   - Calculates the required held deposit to match the used capacity.
+    ///   - **If the provider has enough free balance**, automatically holds the required amount:
+    ///     - Increases the provider's capacity to match the used capacity.
+    ///     - Removes any existing top-up metadata and grace period tracking for the provider.
+    ///     - Emits a `TopUpFulfilled` event indicating the provider has fulfilled the top-up and the amount held.
+    ///   - **If insufficient free balance**, initiates a grace period for manual top-up:
+    ///     - Records top-up metadata with the grace period end block.
+    ///     - Emits an `AwaitingTopUp` event.
+    ///
+    /// **Events:**
+    ///
+    /// - `Slashed`: Emitted when the provider is successfully slashed, including the total slash amount.
+    /// - `TopUpFulfilled`: Emitted when an automatic top-up is successful.
+    /// - `AwaitingTopUp`: Emitted when the provider needs to manually top up, including grace period metadata.
+    ///
+    /// **Note:**
+    ///
+    /// - Slashing a provider is a free operation for the caller.
+    /// - The provider's capacity is reduced only when the held deposit is slashed.
+    /// - The provider's capacity is updated in storage after slashing.
     pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
-        let account_id = if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
-            provider.owner_account
-        } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
-            provider.owner_account
-        } else {
-            return Err(Error::<T>::ProviderNotSlashable.into());
-        };
+        let (account_id, mut capacity, used_capacity) =
+            if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
+                (
+                    provider.owner_account,
+                    provider.capacity,
+                    provider.capacity_used,
+                )
+            } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+                (
+                    provider.owner_account,
+                    provider.capacity,
+                    provider.capacity_used,
+                )
+            } else {
+                return Err(Error::<T>::ProviderNotSlashable.into());
+            };
 
         // Calculate slashable amount for the current number of accrued failed proof submissions
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
@@ -852,139 +882,122 @@ where
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        let slash_held_fn = || -> Result<BalanceOf<T>, DispatchError> {
-            T::NativeBalance::transfer_on_hold(
+        let amt_can_slash = T::NativeBalance::reducible_balance(
+            &account_id,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+
+        // Calculate the amount we can slash from the provider's account
+        let amt_to_slash = slashable_amount.min(amt_can_slash);
+
+        // Slash the provider's free balance
+        let actual_slashed = T::NativeBalance::transfer(
+            &account_id,
+            &T::Treasury::get(),
+            amt_to_slash,
+            Preservation::Preserve,
+        )?;
+
+        // Additionally slash the held deposit if the actual slashed amount from the free balance is less than the slashable amount
+        let combined_slash_amt = if actual_slashed < slashable_amount {
+            // Slash the held deposit since there's not enough free balance
+            let slashed = T::NativeBalance::transfer_on_hold(
                 &HoldReason::StorageProviderDeposit.into(),
                 &account_id,
                 &T::Treasury::get(),
-                slashable_amount,
+                slashable_amount - actual_slashed,
                 Precision::BestEffort,
                 Restriction::Free,
                 Fortitude::Polite,
-            )
+            )?;
+
+            // Decrease capacity by the amount slashed from the held deposit
+            capacity = capacity.saturating_sub(
+                StorageDataUnitAndBalanceConverter::<T>::convert_back(slashed),
+            );
+
+            // Total amount slashed from the held deposit and the free balance
+            slashed.saturating_add(actual_slashed)
+        } else {
+            actual_slashed
         };
 
-        match AwaitingTopUpFromProviders::<T>::get(provider_id) {
-            // No outstanding slash amount.
-            // Slash the provider's account directly if there is enough balance.
-            None if matches!(
-                T::NativeBalance::can_withdraw(&account_id, slashable_amount),
-                WithdrawConsequence::Success
-            ) =>
-            {
-                // Transfer the slashable amount from the account to the treasury
-                T::NativeBalance::transfer(
-                    &account_id,
-                    &T::Treasury::get(),
-                    slashable_amount,
-                    Preservation::Preserve,
-                )?;
+        // Slash amount could be 0, but this is still emitted as a signal for the provider and users to be aware
+        Self::deposit_event(Event::<T>::Slashed {
+            provider_id: *provider_id,
+            amount: combined_slash_amt,
+        });
 
-                // Signal that the provider has been slashed
-                Self::deposit_event(Event::<T>::Slashed {
-                    provider_id: *provider_id,
-                    amount: slashable_amount,
-                });
+        // Needed balance to be held to increase capacity back to used_capacity
+        let capacity_deficit = used_capacity.saturating_sub(capacity);
 
-                // Signal that the slashed amount has been topped up
-                Self::deposit_event(Event::<T>::TopUpFulfilled {
-                    provider_id: *provider_id,
-                    amount: slashable_amount,
-                });
+        // Additional balance needed to be held to match the used capacity
+        let required_held_amt = StorageDataUnitAndBalanceConverter::<T>::convert(capacity_deficit);
 
-                return Ok(Pays::No.into());
-            }
-            // No outstanding slash amount.
-            // Slash the provider's held deposit if there is not enough free balance to cover the slashable amount.
-            None => {
-                // Slash account's held deposit and transfer to Treasury.
-                let actual_slashed_amount = slash_held_fn()?;
+        // Short circuit there is nothing left to do if the provider's capacity is above the used capacity
+        if required_held_amt == BalanceOf::<T>::zero() {
+            return Ok(Pays::No.into());
+        }
 
-                // Signal that the provider has been slashed
-                Self::deposit_event(Event::<T>::Slashed {
-                    provider_id: *provider_id,
-                    amount: actual_slashed_amount,
-                });
-            }
-            // Outstanding slash amount.
-            // Slash the provider's held deposit and attempt to top up the total outstanding slash amount.
-            Some(TopUpMetadata {
-                end_block_grace_period,
-                outstanding_slash_amount,
-            }) => {
-                // Slash account's held deposit and transfer to Treasury.
-                let actual_slashed_amount = slash_held_fn()?;
+        // Try to hold the required amount from provider's free balance
+        if T::NativeBalance::can_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &account_id,
+            required_held_amt,
+        ) {
+            // Hold the required amount
+            T::NativeBalance::hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+                required_held_amt,
+            )?;
 
-                // Signal that the provider has been slashed
-                Self::deposit_event(Event::<T>::Slashed {
-                    provider_id: *provider_id,
-                    amount: actual_slashed_amount,
-                });
+            // Increase capacity up to the used capacity
+            capacity = used_capacity;
 
-                // Total outstanding slash amount needed to be added to the held deposit
-                let total_outstanding_slash_amount =
-                    outstanding_slash_amount.saturating_add(slashable_amount);
+            let top_up_metadata = expect_or_err!(
+                AwaitingTopUpFromProviders::<T>::take(provider_id),
+                "Top up metadata should exist when there is a capacity deficit",
+                Error::<T>::TopUpNotRequired
+            );
+            GracePeriodToSlashedProviders::<T>::remove(
+                top_up_metadata.end_block_grace_period,
+                provider_id,
+            );
 
-                // Automatically top up outstanding slash amount if the account has enough funds
-                if T::NativeBalance::can_hold(
-                    &HoldReason::StorageProviderDeposit.into(),
-                    &account_id,
-                    total_outstanding_slash_amount,
-                ) {
-                    // Hold the slashable amount from the free balance
-                    T::NativeBalance::hold(
-                        &HoldReason::StorageProviderDeposit.into(),
-                        &account_id,
-                        total_outstanding_slash_amount,
-                    )?;
-
-                    // Delete the grace period and the top up metadata
-                    GracePeriodToSlashedProviders::<T>::remove(end_block_grace_period, provider_id);
-                    AwaitingTopUpFromProviders::<T>::remove(provider_id);
-
-                    // Signal that the slashed amount has been topped up
-                    Self::deposit_event(Event::<T>::TopUpFulfilled {
-                        provider_id: *provider_id,
-                        amount: total_outstanding_slash_amount,
-                    });
-
-                    return Ok(Pays::No.into());
-                }
-            }
-        };
-
-        // If we have not returned up to this point, it means the provider has not topped up the outstanding slash amount.
-        // Update storage to set the provider's outstanding slash amount andt the end block grace period
-        let top_up_metadata = if !AwaitingTopUpFromProviders::<T>::contains_key(provider_id) {
+            Self::deposit_event(Event::<T>::TopUpFulfilled {
+                provider_id: *provider_id,
+                amount: required_held_amt,
+            });
+        } else {
+            // Cannot hold enough balance, start tracking grace period and awaited top up
             let end_block_grace_period = RelayBlockGetter::<T>::current_block_number()
                 .saturating_add(T::TopUpGracePeriod::get());
 
             GracePeriodToSlashedProviders::<T>::insert(end_block_grace_period, provider_id, ());
 
-            let metadata = TopUpMetadata {
+            let top_up_metadata = TopUpMetadata {
                 end_block_grace_period,
-                outstanding_slash_amount: slashable_amount,
             };
 
-            AwaitingTopUpFromProviders::<T>::insert(provider_id, metadata.clone());
+            AwaitingTopUpFromProviders::<T>::insert(provider_id, top_up_metadata.clone());
 
-            metadata
-        } else {
-            // Accrue the outstanding slash amount
-            AwaitingTopUpFromProviders::<T>::try_mutate(provider_id, |metadata| {
-                let metadata = metadata.as_mut().ok_or(Error::<T>::TopUpNotRequired)?;
-                metadata.outstanding_slash_amount = metadata
-                    .outstanding_slash_amount
-                    .saturating_add(slashable_amount);
-                Ok::<_, DispatchError>(metadata.to_owned())
-            })?
-        };
+            // Signal to the provider that they need to top up their held deposit to match the current used capacity
+            Self::deposit_event(Event::<T>::AwaitingTopUp {
+                provider_id: *provider_id,
+                top_up_metadata,
+            });
+        }
 
-        // Signal to the provider that they have been slashed and are awaiting a top up
-        Self::deposit_event(Event::<T>::AwaitingTopUp {
-            provider_id: *provider_id,
-            top_up_metadata: Some(top_up_metadata),
-        });
+        // Update the provider's capacity
+        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
+            provider.capacity = capacity;
+            MainStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
+        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
+            provider.capacity = capacity;
+            BackupStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
+        }
 
         Ok(Pays::No.into())
     }
@@ -994,16 +1007,35 @@ where
             .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
             .ok_or(Error::<T>::NotRegistered)?;
 
-        // Check if the provider is in the grace period
-        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id)
-            .ok_or(Error::<T>::TopUpNotRequired)?;
+        let (account_id, mut capacity, used_capacity) =
+            if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
+                (
+                    provider.owner_account,
+                    provider.capacity,
+                    provider.capacity_used,
+                )
+            } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+                (
+                    provider.owner_account,
+                    provider.capacity,
+                    provider.capacity_used,
+                )
+            } else {
+                return Err(Error::<T>::ProviderNotSlashable.into());
+            };
+
+        // Need to hold enough balance to increase capacity back to used_capacity
+        let capacity_deficit = used_capacity.saturating_sub(capacity);
+
+        let required_hold_amount =
+            StorageDataUnitAndBalanceConverter::<T>::convert(capacity_deficit);
 
         // Check if the provider has enough free balance to top up the slashed amount
         ensure!(
             T::NativeBalance::can_hold(
                 &HoldReason::StorageProviderDeposit.into(),
                 &account_id,
-                top_up_metadata.outstanding_slash_amount
+                required_hold_amount,
             ),
             Error::<T>::CannotHoldDeposit
         );
@@ -1012,8 +1044,23 @@ where
         T::NativeBalance::hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
-            top_up_metadata.outstanding_slash_amount,
+            required_hold_amount,
         )?;
+
+        // Increase capacity
+        capacity = used_capacity;
+
+        // Update the provider's capacity in storage
+        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
+            provider.capacity = capacity;
+            MainStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
+        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
+            provider.capacity = capacity;
+            BackupStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
+        }
+
+        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id)
+            .ok_or(Error::<T>::TopUpNotRequired)?;
 
         // Remove the provider top up storages
         GracePeriodToSlashedProviders::<T>::remove(
@@ -1025,7 +1072,7 @@ where
         // Signal that the slashed amount has been topped up
         Self::deposit_event(Event::<T>::TopUpFulfilled {
             provider_id,
-            amount: top_up_metadata.outstanding_slash_amount,
+            amount: required_hold_amount,
         });
 
         Ok(Pays::No.into())

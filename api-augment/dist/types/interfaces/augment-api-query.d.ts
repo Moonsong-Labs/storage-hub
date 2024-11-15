@@ -1548,8 +1548,7 @@ declare module "@polkadot/api-base/types/storage" {
        * Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
        * slashed for.
        *
-       * This is primarily used to lookup providers, restrict certain operations while they are in this state and to keep track of the
-       * amount that they were slashed for `top_up_deposit` operation.
+       * This is primarily used to lookup providers, restrict certain operations while they are in this state.
        **/
       awaitingTopUpFromProviders: AugmentedQuery<
         ApiType,

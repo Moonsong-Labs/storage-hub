@@ -46,7 +46,7 @@ pub mod pallet {
     use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
-    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv};
+    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv, ConvertBack};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -99,6 +99,8 @@ pub mod pallet {
             + HasCompact
             + Into<BalanceOf<Self>>
             + Into<u64>;
+
+        type StorageDataUnitAndBalanceConvert: ConvertBack<Self::StorageDataUnit, BalanceOf<Self>>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -422,11 +424,10 @@ pub mod pallet {
     /// Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
     /// slashed for.
     ///
-    /// This is primarily used to lookup providers, restrict certain operations while they are in this state and to keep track of the
-    /// amount that they were slashed for `top_up_deposit` operation.
+    /// This is primarily used to lookup providers, restrict certain operations while they are in this state.
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, HashId<T>, TopUpMetadata<T>>;
+        StorageMap<_, Blake2_128Concat, HashId<T>, TopUpMetadata>;
 
     // Events & Errors:
 
@@ -504,10 +505,10 @@ pub mod pallet {
         },
 
         /// Event emitted when a provider has been slashed optionally signaling the end of the grace
-        /// period and the current top up outstanding top up slash amount if an automatic top up could not be performed.
+        /// period if an automatic top up could not be performed.
         AwaitingTopUp {
             provider_id: HashId<T>,
-            top_up_metadata: Option<TopUpMetadata<T>>,
+            top_up_metadata: TopUpMetadata,
         },
 
         /// Event emitted when an SP has topped up its deposit based on slash amount.
