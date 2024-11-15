@@ -175,7 +175,7 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
 // Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-	type WeightInfo = ();
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
     type FileMetadataManager = MockFileMetadataManager;
