@@ -3,7 +3,7 @@ import { bspKey, describeBspNet, shUser, sleep, type EnrichedBspApi } from "../.
 import invariant from "tiny-invariant";
 
 describeBspNet(
-  "Multiple BSPs working together ",
+  "BSPNet : stop storing file and other BSPs taking the relay",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
@@ -35,7 +35,7 @@ describeBspNet(
       strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
     });
 
-    it("bsp stop storing and other bsp volunteer", async () => {
+    it("bsp one stop storing and bsp two volunteer", async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/whatsup.jpg";
       const bucketName = "tastytest";
@@ -43,71 +43,20 @@ describeBspNet(
       // Pause BSP-Three.
       await userApi.docker.pauseBspContainer("sh-bsp-three");
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const txs = [];
-      const { fingerprint, file_size, location } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
-
-      txs.push(
-        userApi.tx.fileSystem.issueStorageRequest(
-          newBucketEventDataBlob.bucketId,
-          location,
-          fingerprint,
-          file_size,
-          userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
-        )
-      );
-
-      await userApi.sealBlock(txs, shUser);
-
-      // Get the new storage request event
-      const storageRequestEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      strictEqual(storageRequestEvents.length, 1);
-
-      // Get the file keys from the storage request events
-      const fileKeys = storageRequestEvents.map((event) => {
-        const dataBlob =
-          userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
-        if (!dataBlob) {
-          throw new Error("Event doesn't match Type");
-        }
-        return dataBlob.fileKey;
-      });
+      const { fileKey, location, fingerprint, fileSize, bucketId } =
+        await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
 
       // Wait for the two BSP to volunteer
       await userApi.wait.bspVolunteer(2);
       await userApi.wait.bspStored(2);
 
-      // Wait for the BSP to receive and store all files
-      const fileKey = fileKeys[0];
-      await bspApi.wait.bspFileStorageComplete(fileKey);
-
       // Revoke the storage request otherwise the new storage request event is not being triggered
       await userApi.sealBlock(userApi.tx.fileSystem.revokeStorageRequest(fileKey), shUser);
 
-      await sleep(10000);
-      userApi.assert.fetchEventData(
-        userApi.events.fileSystem.StorageRequestRevoked,
-        await userApi.query.system.events()
-      );
+      await sleep(500);
+      userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
 
-      // unpause bsp three
+      // Unpause bsp three
       await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
 
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
@@ -116,11 +65,11 @@ describeBspNet(
       await userApi.sealBlock(
         bspApi.tx.fileSystem.bspRequestStopStoring(
           fileKey,
-          newBucketEventDataBlob.bucketId,
+          bucketId,
           location,
           userApi.shConsts.NODE_INFOS.user.AddressId,
           fingerprint,
-          file_size,
+          fileSize,
           false,
           inclusionForestProof.toString()
         ),
@@ -128,26 +77,20 @@ describeBspNet(
       );
 
       await sleep(500);
-      userApi.assert.fetchEventData(
-        userApi.events.fileSystem.BspRequestedToStopStoring,
-        await userApi.query.system.events()
-      );
+      userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
 
-      // when requested to stop storing a file we should also receive an event new storage request
+      // When requested to stop storing a file we should also receive an event new storage request
       // to replace the bsp leaving
-      userApi.assert.fetchEventData(
-        userApi.events.fileSystem.NewStorageRequest,
-        await userApi.query.system.events()
-      );
+      userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
-      // wait for the irght moment to confirm stop storing
+      // Wait for the right moment to confirm stop storing
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.advanceToBlock(cooldown);
 
-      // confirm stop storing
+      // Confirm stop storing
       await userApi.sealBlock(
         userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, inclusionForestProof),
         bspKey
