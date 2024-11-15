@@ -775,6 +775,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UpdateRateToSameRate: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to clear the flag of being without funds before paying all its remaining debt
+       **/
+      UserHasRemainingDebt: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
        **/
       UserNotFlaggedAsWithoutFunds: AugmentedError<ApiType>;

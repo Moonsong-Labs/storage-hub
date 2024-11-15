@@ -41,6 +41,9 @@ pub type Nonce = u32;
 /// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
 
+/// The hashing algorithm used.
+pub type Hashing = BlakeTwo256;
+
 /// The address format for describing accounts.
 pub type Address = MultiAddress<AccountId, ()>;
 
