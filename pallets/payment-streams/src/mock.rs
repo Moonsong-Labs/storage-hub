@@ -188,6 +188,7 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;

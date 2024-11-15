@@ -5,21 +5,23 @@
 use super::*;
 use frame_benchmarking::v2::*;
 
-#[benchmarks(where T: crate::Config + pallet_randomness::Config)]
+#[benchmarks(where
+	T: crate::Config + pallet_randomness::Config + pallet_proofs_dealer::Config,
+	<<T as pallet_proofs_dealer::Config>::ProvidersPallet as shp_traits::ReadChallengeableProvidersInterface>::ProviderId: From<<T as crate::Config>::ProviderId>
+)]
 mod benchmarks {
     use frame_support::{
         assert_ok,
         traits::{
             fungible::{Inspect, InspectHold, Mutate},
+            tokens::Fortitude,
             Get,
         },
         BoundedVec,
     };
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
-    use sp_runtime::{
-        format,
-        traits::{Bounded, Hash, One},
-    };
+    use sp_runtime::traits::{Bounded, Hash, Zero};
+    use sp_std::vec;
 
     use super::*;
     use crate::{pallet, types::*, Call, Config, Event, Pallet};
@@ -34,71 +36,17 @@ mod benchmarks {
             "Cannot go back in time"
         );
 
-        while frame_system::Pallet::<T>::block_number() < n {
-            frame_system::Pallet::<T>::set_block_number(
-                frame_system::Pallet::<T>::block_number() + One::one(),
-            );
-        }
-    }
-
-    fn register_provider<T: crate::Config>(
-        index: u32,
-    ) -> Result<(T::AccountId, T::ProviderId), BenchmarkError> {
-        let sp_account: T::AccountId = account("SP", index, 0);
-        let sp_id_seed = format!("benchmark_sp_{}", index);
-        let sp_id = <<T as crate::Config>::ProviderIdHashing as Hash>::hash(sp_id_seed.as_bytes());
-        let initial_capacity = 1_000_000u32; // 1 TB
-        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
-            BoundedVec::new();
-        multiaddresses.force_push(
-            "/ip4/127.0.0.1/udp/1234"
-                .as_bytes()
-                .to_vec()
-                .try_into()
-                .ok()
-                .unwrap(),
-        );
-        let sp_balance = match 1_000_000_000_000_000u128.try_into() {
-            Ok(balance) => balance,
-            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
-        };
-        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
-            &sp_account,
-            sp_balance,
-        ));
-
-        // Make sure the sp_account is not already in use
-        if AccountIdToBackupStorageProviderId::<T>::contains_key(&sp_account) {
-            return Err(BenchmarkError::Stop("Provider account already in use."));
-        }
-
-        // Make sure the sp_id is not already in use
-        if BackupStorageProviders::<T>::contains_key(&sp_id) {
-            return Err(BenchmarkError::Stop("Provider ID already in use."));
-        }
-
-        AccountIdToBackupStorageProviderId::<T>::insert(&sp_account, sp_id);
-        BackupStorageProviders::<T>::insert(
-            &sp_id,
-            BackupStorageProvider {
-                capacity: initial_capacity.into(),
-                capacity_used: Default::default(),
-                multiaddresses,
-                root: Default::default(),
-                last_capacity_change: Default::default(),
-                owner_account: sp_account.clone(),
-                payment_account: sp_account.clone(),
-                reputation_weight: <T as crate::Config>::StartingReputationWeight::get(),
-                sign_up_block: Default::default(),
-            },
-        );
-
-        Ok((sp_account, sp_id))
+        frame_system::Pallet::<T>::set_block_number(frame_system::Pallet::<T>::block_number() + n);
     }
 
     #[benchmark]
     fn request_msp_sign_up() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -180,6 +128,11 @@ mod benchmarks {
     #[benchmark]
     fn request_bsp_sign_up() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -253,6 +206,11 @@ mod benchmarks {
     #[benchmark]
     fn confirm_sign_up_bsp() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -327,9 +285,14 @@ mod benchmarks {
         Ok(())
     }
 
-    #[benchmark(extra)]
+    #[benchmark]
     fn confirm_sign_up_msp() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -424,6 +387,11 @@ mod benchmarks {
     #[benchmark]
     fn cancel_sign_up() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -496,6 +464,11 @@ mod benchmarks {
     #[benchmark]
     fn msp_sign_off() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -555,7 +528,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the MSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
 
         // Verify that the MSP is now in the providers' storage
         let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
@@ -585,6 +559,11 @@ mod benchmarks {
     #[benchmark]
     fn bsp_sign_off() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -637,7 +616,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the BSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
 
         // Verify that the BSP is now in the providers' storage
         let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
@@ -673,6 +653,11 @@ mod benchmarks {
     #[benchmark]
     fn change_capacity_bsp_less_deposit() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -725,7 +710,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the BSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
 
         // Verify that the BSP is now in the providers' storage
         let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
@@ -781,6 +767,11 @@ mod benchmarks {
     #[benchmark]
     fn change_capacity_bsp_more_deposit() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -833,7 +824,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the BSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
 
         // Verify that the BSP is now in the providers' storage
         let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
@@ -889,6 +881,11 @@ mod benchmarks {
     #[benchmark]
     fn change_capacity_msp_less_deposit() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -948,7 +945,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the MSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
 
         // Verify that the MSP is now in the providers' storage
         let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
@@ -1004,6 +1002,11 @@ mod benchmarks {
     #[benchmark]
     fn change_capacity_msp_more_deposit() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -1063,7 +1066,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the MSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
 
         // Verify that the MSP is now in the providers' storage
         let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
@@ -1119,6 +1123,11 @@ mod benchmarks {
     #[benchmark]
     fn add_value_prop() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -1178,7 +1187,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the MSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
 
         // Verify that the MSP is now in the providers' storage
         let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
@@ -1236,6 +1246,11 @@ mod benchmarks {
     #[benchmark]
     fn make_value_prop_unavailable() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
         let user_balance = match 1_000_000_000_000_000u128.try_into() {
@@ -1295,7 +1310,8 @@ mod benchmarks {
         )));
 
         // Confirm the sign up of the MSP
-        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None);
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
 
         // Verify that the MSP is now in the providers' storage
         let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
@@ -1303,10 +1319,10 @@ mod benchmarks {
         assert!(msp.is_some());
 
         // Setup the parameters of the value proposition to add.
-        let value_prop_price_per_unit_of_data_per_block = 1u32.into();
+        let value_prop_price_per_unit_of_data_per_block: BalanceOf<T> = 1u32.into();
         let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> =
-            vec![1, 2, 3].try_into().unwrap();
-        let value_prop_max_data_limit = 100u32.into();
+            vec![3, 2, 1].try_into().unwrap();
+        let value_prop_max_data_limit: T::StorageDataUnit = 100u32.into();
 
         // Add the value proposition to the MSP
         Pallet::<T>::add_value_prop(
@@ -1314,9 +1330,9 @@ mod benchmarks {
             value_prop_price_per_unit_of_data_per_block.into(),
             commitment.clone(),
             value_prop_max_data_limit.into(),
-        );
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to add value proposition."))?;
 
-        /*********** Post-benchmark checks: ***********/
         // Verify that the event of the value proposition addition was emitted
         let value_prop = ValueProposition::<T>::new(
             value_prop_price_per_unit_of_data_per_block.into(),
@@ -1353,6 +1369,518 @@ mod benchmarks {
             MainStorageProviderIdsToValuePropositions::<T>::get(&msp_id, &value_prop_id);
         assert!(value_prop_in_storage.is_some());
         assert_eq!(value_prop_in_storage.unwrap().available, false);
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn add_multiaddress() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        // (we register a BSP since the extrinsic first checks if the account is a MSP, so
+        // the worst case scenario is for the provider to be a BSP)
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Setup the multiaddress to add. The worst case scenario is to make it as big as possible since
+        // it has to be copied to storage.
+        let new_multiaddress: MultiAddress<T> = vec![
+            1;
+            <T as crate::Config>::MaxMultiAddressSize::get(
+            )
+            .try_into()
+            .unwrap()
+        ]
+        .try_into()
+        .unwrap();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            RawOrigin::Signed(user_account.clone()),
+            new_multiaddress.clone(),
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the event of the added multiaddress was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MultiAddressAdded {
+                provider_id: bsp_id,
+                new_multiaddress: new_multiaddress.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Verify that the multiaddress was added to the BSP
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id).unwrap();
+        assert!(bsp.multiaddresses.contains(&new_multiaddress));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn remove_multiaddress() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        // (we register a BSP since the extrinsic first checks if the account is a MSP, so
+        // the worst case scenario is for the provider to be a BSP)
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Since the extrinsic iterates over all the provider's multiaddresses to find the one to delete, we fill
+        // the provider with the maximum amount of multiaddresses and try to delete the last one.
+        for i in 0..<T as crate::Config>::MaxMultiAddressAmount::get() - 1 {
+            let new_multiaddress: MultiAddress<T> = vec![
+				i as u8;
+				<T as crate::Config>::MaxMultiAddressSize::get()
+				.try_into()
+				.unwrap()
+			]
+            .try_into()
+            .unwrap();
+            Pallet::<T>::add_multiaddress(
+                RawOrigin::Signed(user_account.clone()).into(),
+                new_multiaddress.clone(),
+            )
+            .map_err(|_| BenchmarkError::Stop("Failed to add multiaddress."))?;
+            // Verify that the multiaddress was added to the BSP
+            let bsp = BackupStorageProviders::<T>::get(&bsp_id).unwrap();
+            assert!(bsp.multiaddresses.contains(&new_multiaddress));
+        }
+
+        // Setup the multiaddress to remove.
+        let multiaddress_to_remove: MultiAddress<T> = vec![
+			(<T as crate::Config>::MaxMultiAddressAmount::get() - 2) as u8;
+			<T as crate::Config>::MaxMultiAddressSize::get()
+			.try_into()
+			.unwrap()
+		]
+        .try_into()
+        .unwrap();
+
+        // Make sure the multiaddress to remove is present in the provider
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id).unwrap();
+        assert!(bsp.multiaddresses.contains(&multiaddress_to_remove));
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            RawOrigin::Signed(user_account.clone()),
+            multiaddress_to_remove.clone(),
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the event of removing a multiaddress was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MultiAddressRemoved {
+                provider_id: bsp_id,
+                removed_multiaddress: multiaddress_to_remove.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Verify that the multiaddress is no longer present in the BSP
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id).unwrap();
+        assert!(!bsp.multiaddresses.contains(&multiaddress_to_remove));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn force_msp_sign_up() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the MSP to register
+        let msp_id_seed = "benchmark_force_msp";
+        let msp_id =
+            <<T as crate::Config>::ProviderIdHashing as Hash>::hash(msp_id_seed.as_bytes());
+        let capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let value_prop_price_per_unit_of_data_per_block = 1u32;
+        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> =
+            vec![1, 2, 3].try_into().unwrap();
+        let value_prop_max_data_limit = 100u32;
+        let payment_account = user_account.clone();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            RawOrigin::Root,
+            user_account.clone(),
+            msp_id,
+            capacity.into(),
+            multiaddresses.clone(),
+            value_prop_price_per_unit_of_data_per_block.into(),
+            commitment.clone(),
+            value_prop_max_data_limit.into(),
+            payment_account,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the event of the MSP requesting to sign up was emitted
+        let msp_request_sign_up_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_has_event(msp_request_sign_up_event.into());
+
+        // Verify that the event of the MSP actually signing up was emitted
+        let msp_sign_up_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignUpSuccess {
+                who: user_account.clone(),
+                msp_id: msp_id,
+                multiaddresses: multiaddresses.clone(),
+                capacity: capacity.into(),
+                value_prop: ValuePropositionWithId::<T>::build(
+                    value_prop_price_per_unit_of_data_per_block.into(),
+                    commitment.clone(),
+                    value_prop_max_data_limit.into(),
+                ),
+            });
+        frame_system::Pallet::<T>::assert_has_event(msp_sign_up_event.into());
+
+        // Verify that the MSP is now in the providers' storage
+        let msp = MainStorageProviders::<T>::get(&msp_id);
+        assert!(msp.is_some());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn force_bsp_sign_up() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        let bsp_seed = "benchmark_force_bsp";
+        let bsp_id = <<T as crate::Config>::ProviderIdHashing as Hash>::hash(bsp_seed.as_bytes());
+        let capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            RawOrigin::Root,
+            user_account.clone(),
+            bsp_id,
+            capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+            None,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let bsp_request_sign_up_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_has_event(bsp_request_sign_up_event.into());
+
+        // Verify that the event of the BSP actually signing up was emitted
+        let bsp_sign_up_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignUpSuccess {
+                who: user_account.clone(),
+                bsp_id: bsp_id,
+                multiaddresses: multiaddresses.clone(),
+                capacity: capacity.into(),
+            });
+        frame_system::Pallet::<T>::assert_has_event(bsp_sign_up_event.into());
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn slash() -> Result<(), BenchmarkError> {
+        // TODO: once provider sign off is implemented for providers that run out of stake,
+        // add a benchmark to check which is the worst case scenario for this extrinsic
+        use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        // (we register a BSP since the extrinsic first checks if the account is a MSP, so
+        // the worst case scenario is for the provider to be a BSP)
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Accrue failed proof submissions for this provider
+        let bsp_id_as_pd: ProofsDealerProviderIdFor<T> = bsp_id.into();
+        pallet_proofs_dealer::SlashableProviders::<T>::insert(bsp_id_as_pd, 3);
+
+        // Get the amount to be slashed
+        let amount_to_slash = Pallet::<T>::compute_worst_case_scenario_slashable_amount(&bsp_id)
+            .map_err(|_| {
+                BenchmarkError::Stop("Failed to compute worst case scenario slashable amount.")
+            })?;
+
+        // The amount slashed will be the minimum between the amount to slash and the available
+        // funds to slash of the provider
+        let provider_stake = <T as pallet::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        let liquid_held_provider_funds =
+            <T as pallet::Config>::NativeBalance::reducible_total_balance_on_hold(
+                &user_account,
+                Fortitude::Polite,
+            );
+        let amount_to_slash = amount_to_slash
+            .min(provider_stake)
+            .min(liquid_held_provider_funds);
+        assert!(amount_to_slash <= provider_stake);
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(RawOrigin::Signed(user_account.clone()), bsp_id);
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the event of the provider being slashed was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::<T>::Slashed {
+            provider_id: bsp_id,
+            amount_slashed: amount_to_slash,
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Verify that the accrued failed proof submissions have been cleared
+        let accrued_failed_proofs =
+            pallet_proofs_dealer::SlashableProviders::<T>::get(bsp_id_as_pd);
+        assert!(accrued_failed_proofs.is_none());
 
         Ok(())
     }

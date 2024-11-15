@@ -295,6 +295,7 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;

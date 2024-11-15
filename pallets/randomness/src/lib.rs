@@ -91,7 +91,7 @@ pub mod pallet {
 
     /// Ensures the mandatory inherent was included in the block
     #[pallet::storage]
-    pub(crate) type InherentIncluded<T: Config> = StorageValue<_, ()>;
+    pub type InherentIncluded<T: Config> = StorageValue<_, ()>;
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {

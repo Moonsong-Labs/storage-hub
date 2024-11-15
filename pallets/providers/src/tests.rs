@@ -5707,6 +5707,7 @@ fn run_to_block(n: u64) {
     assert!(n > System::block_number(), "Cannot go back in time");
 
     while System::block_number() < n {
+        pallet_randomness::InherentIncluded::<Test>::put(());
         AllPalletsWithSystem::on_finalize(System::block_number());
         System::set_block_number(System::block_number() + 1);
         AllPalletsWithSystem::on_initialize(System::block_number());
