@@ -357,7 +357,7 @@ where
         TickToProvidersDeadlines::<T>::set(next_challenges_tick_deadline, submitter, Some(()));
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
-        let current_tick_valid_submitters = ValidProofSubmittersLastTicks::<T>::take(current_tick);
+        let current_tick_valid_submitters = ValidProofSubmittersLastTicks::<T>::get(current_tick);
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
