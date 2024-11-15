@@ -21,7 +21,7 @@ use sp_runtime::{
     Saturating,
 };
 
-use crate::*;
+use crate::{weights::WeightInfo, *};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -901,7 +901,7 @@ where
             if amount_charged > Zero::zero() {
                 Self::deposit_event(Event::<T>::PaymentStreamCharged {
                     user_account: user_account.clone(),
-                    provider_id: provider_id.clone(),
+                    provider_id: *provider_id,
                     amount: amount_charged,
                     last_tick_charged,
                     charged_at_tick: current_tick,
@@ -913,12 +913,16 @@ where
     }
 
     /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider
-    /// the amount owed, deleting the corresponding payment stream and decreasing the user's payment streams count until all outstanding debt is paid.
+    /// the amount owed, deleting the corresponding payment stream and decreasing the user's payment streams count until all outstanding debt is paid
+    /// or the amount of streams to pay has been reached. It returns true if the user has paid all the outstanding debt, false otherwise.
     ///
     /// Note: This could be achieved by calling `manage_user_without_funds` for each payment stream, but this function is more efficient as it
     /// avoids repeating the same checks and operations for each payment stream, such as releasing all the deposit of the user at once instead
     /// of doing it for each payment stream.
-    pub fn do_pay_outstanding_debt(user_account: &T::AccountId) -> DispatchResult {
+    pub fn do_pay_outstanding_debt(
+        user_account: &T::AccountId,
+        amount_of_streams_to_pay: u32,
+    ) -> Result<bool, DispatchError> {
         // Check that the user is flagged as without funds
         ensure!(
             UsersWithoutFunds::<T>::contains_key(user_account),
@@ -926,7 +930,7 @@ where
         );
 
         // Release the total deposit amount that the user has deposited
-        T::NativeBalance::release_all(
+        let total_deposit_released = T::NativeBalance::release_all(
             &HoldReason::PaymentStreamDeposit.into(),
             &user_account,
             Precision::Exact,
@@ -943,8 +947,25 @@ where
         let dynamic_rate_payment_streams =
             Self::get_dynamic_rate_payment_streams_of_user(user_account);
 
+        // Get the amount of streams that the user has still to pay (which should fit in a u32)
+        let total_streams_to_pay: u32 = (fixed_rate_payment_streams.len()
+            + dynamic_rate_payment_streams.len())
+        .try_into()
+        .map_err(|_| ArithmeticError::Overflow)?;
+
+        // Keep track of the deposit that corresponds to the payment streams that have been paid
+        let mut total_deposit_paid: BalanceOf<T> = Zero::zero();
+
+        // And keep track of the total amount of streams that have been paid
+        let mut total_streams_paid: u32 = 0;
+
         // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
         for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
+            // If the amount of streams to pay has been reached, break the loop
+            if total_streams_paid >= amount_of_streams_to_pay {
+                break;
+            }
+
             // Get the amount that should be charged for this payment stream
             let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(&provider_id);
             let amount_to_charge = fixed_rate_payment_stream
@@ -989,6 +1010,11 @@ where
                 Preservation::Preserve,
             )?;
 
+            // Update the total deposit paid
+            total_deposit_paid = total_deposit_paid
+                .checked_add(&fixed_rate_payment_stream.user_deposit)
+                .ok_or(ArithmeticError::Overflow)?;
+
             // Remove the payment stream from the FixedRatePaymentStreams mapping
             FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
 
@@ -998,10 +1024,18 @@ where
                 .checked_sub(1)
                 .ok_or(ArithmeticError::Underflow)?;
             RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+
+            // Increase the total amount of streams that have been paid
+            total_streams_paid += 1;
         }
 
         // Do the same for the dynamic-rate payment streams
         for (provider_id, dynamic_rate_payment_stream) in dynamic_rate_payment_streams {
+            // If the amount of streams to pay has been reached, break the loop
+            if total_streams_paid >= amount_of_streams_to_pay {
+                break;
+            }
+
             // Get the amount that should be charged for this payment stream
             let price_index_at_last_chargeable_tick =
                 Self::get_last_chargeable_info_with_privilege(&provider_id).price_index;
@@ -1043,6 +1077,11 @@ where
                 Preservation::Preserve,
             )?;
 
+            // Update the total deposit paid
+            total_deposit_paid = total_deposit_paid
+                .checked_add(&dynamic_rate_payment_stream.user_deposit)
+                .ok_or(ArithmeticError::Overflow)?;
+
             // Remove the payment stream from the DynamicRatePaymentStreams mapping
             DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
 
@@ -1052,9 +1091,28 @@ where
                 .checked_sub(1)
                 .ok_or(ArithmeticError::Underflow)?;
             RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+
+            // Increase the total amount of streams that have been paid
+            total_streams_paid += 1;
         }
 
-        Ok(())
+        // Hold the difference between the total deposit release and the total deposit used to pay the payment streams
+        let difference = total_deposit_released
+            .checked_sub(&total_deposit_paid)
+            .ok_or(ArithmeticError::Underflow)?;
+        T::NativeBalance::hold(
+            &HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            difference,
+        )?;
+
+        if total_streams_to_pay <= amount_of_streams_to_pay {
+            // If the user has paid all the outstanding debt, return true
+            Ok(true)
+        } else {
+            // If the user has not paid all the outstanding debt, return false
+            Ok(false)
+        }
     }
 
     pub fn do_clear_insolvent_flag(user_account: &T::AccountId) -> DispatchResult {
@@ -1076,8 +1134,12 @@ where
             Error::<T>::CooldownPeriodNotPassed
         );
 
-        // Pay the user outstanding debt
-        Self::do_pay_outstanding_debt(user_account)?;
+        // Make sure the user has no remaining payment streams
+        let user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+        ensure!(
+            user_payment_streams_count == 0,
+            Error::<T>::UserHasRemainingDebt
+        );
 
         // Remove the user from the UsersWithoutFunds mapping
         UsersWithoutFunds::<T>::remove(user_account);
@@ -1086,95 +1148,117 @@ where
     }
 
     /// This function gets the Providers that submitted a valid proof in the last tick using the `ProofSubmittersInterface`,
-    /// and updates the last chargeable tick and last chargeable price index of those Providers.
+    /// and updates the last chargeable tick and last chargeable price index of those Providers. It is bounded by the maximum
+    /// amount of Providers that can submit a proof in a given tick, which is represented by the bounded binary tree set received from
+    /// the `get_proof_submitters_for_tick` function of the `ProofSubmittersInterface` trait.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
-        weight: &mut sp_weights::WeightMeter,
+        meter: &mut sp_weights::WeightMeter,
     ) {
-        // Get the previous tick from the Providers Proof Submitters pallet.
-        let submitters_prev_tick =
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick()
-                .saturating_sub(One::one());
-        weight.consume(T::DbWeight::get().reads(1));
+        // Get the current tick of the pallet that implements the `ProofSubmittersInterface` trait
+        let current_tick_of_proof_submitters =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_current_tick();
 
-        // Check if we already registered this tick from the Providers Proof Submitters pallet.
-        let last_submitters_tick_registered = LastSubmittersTickRegistered::<T>::get();
-        weight.consume(T::DbWeight::get().reads(1));
+        // Since this is the current tick and should have been just updated by the pallet that implements the `ProofSubmittersInterface` trait,
+        // it should not have any valid proof submitters yet, so the required tick for the processing of proof submitters is the previous one.
+        let tick_to_process = current_tick_of_proof_submitters.saturating_sub(One::one());
 
-        // If we already registered this tick from the Providers Proof Submitters pallet, we don't need to do anything.
-        if submitters_prev_tick <= last_submitters_tick_registered {
+        // Check to see if the tick registered as the last processed one by this pallet is the same as the tick to process.
+        // If it is, this tick was already processed and there's nothing to do.
+        let last_processed_tick = LastSubmittersTickRegistered::<T>::get();
+        if last_processed_tick >= tick_to_process {
             return;
         }
+        // If it's not greater (which should never happen) nor equal, it has to be exactly one less than the tick to process. If it's not,
+        // there's an inconsistency in the tick processing and we emit an event to signal it.
+        else if last_processed_tick != tick_to_process.saturating_sub(One::one()) {
+            Self::deposit_event(Event::<T>::InconsistentTickProcessing {
+                last_processed_tick,
+                tick_to_process,
+            });
+        }
 
-        // Update the last submitters tick registered.
-        LastSubmittersTickRegistered::<T>::set(submitters_prev_tick);
-        weight.consume(T::DbWeight::get().writes(1));
+        // Get the Providers that submitted a valid proof in the last tick of the pallet that implements the `ProofSubmittersInterface` trait, if there are any.
+        let maybe_proof_submitters =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&tick_to_process);
 
-        // Get the Providers that submitted a valid proof in the last tick from the Providers Proof Submitters pallet,
-        // if there's any
-        let proof_submitters =
-            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&submitters_prev_tick);
-        weight.consume(T::DbWeight::get().reads(1));
+        // Initialize the variable that holds how many Providers were processed in this call.
+        let mut amount_of_providers_processed: u32 = 0;
 
-        // If there are any proof submitters in the last tick...
-        if let Some(proof_submitters) = proof_submitters {
-            // Update all Providers
-            // Iterate through the proof submitters and update their last chargeable tick and last chargeable price index
-            for provider_id in proof_submitters {
+        // If there are any Providers to process, process them, updating their last chargeable info.
+        if let Some(proof_submitters_to_process) = maybe_proof_submitters {
+            // Update the last chargeable info of all Providers that submitted a valid proof in the tick to process.
+            for provider_id in &proof_submitters_to_process {
                 // Update the last chargeable tick and last chargeable price index of the Provider.
-                // The last chargeable tick is set to the current tick of THIS PALLET. That means, if the tick from
-                // the Providers Proof Submitters pallet is stalled for some time, and this pallet continues to increment
-                // its tick, when the Providers Proof Submitters pallet continues to increment its tick, this pallet will
-                // allow Providers to charge for the time that the Providers Proof Submitters pallet has been stalled.
+                // The last chargeable tick is set to the current tick of THIS PALLET. That means that if the tick from
+                // the pallet that implements the `ProofSubmittersInterface` trait is stalled for some time (and this pallet
+                // continues to increment its tick), when the stalled tick starts to increment again this pallet will
+                // allow Providers to charge for the time that during which the tick was stalled, since they would have
+                // been storing the data during that time even though they have not submitted proofs.
                 let accumulated_price_index = AccumulatedPriceIndex::<T>::get();
                 LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
                     provider_info.last_chargeable_tick = n;
                     provider_info.price_index = accumulated_price_index;
                 });
                 Self::deposit_event(Event::<T>::LastChargeableInfoUpdated {
-                    provider_id,
+                    provider_id: *provider_id,
                     last_chargeable_tick: n,
                     last_chargeable_price_index: accumulated_price_index,
                 });
-                weight.consume(T::DbWeight::get().reads_writes(1, 1));
             }
 
-            // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
-            // TODO: needed weight in the block for this, such as what `on_initialize` does.
-            // TODO: Solve when benchmarking.
+            // Get the amount of Providers just processed (the amount of processed Providers fits in a u32).
+            amount_of_providers_processed += proof_submitters_to_process.len() as u32;
         }
+
+        // Get the weight that was used to process this amount of Providers.
+        let weight_needed =
+            T::WeightInfo::update_providers_last_chargeable_info(amount_of_providers_processed);
+
+        // Consume the used weight.
+        meter.consume(weight_needed);
+
+        // Finally, update the last processed tick of the pallet that implements the `ProofSubmittersInterface` trait to the one that was just processed.
+        LastSubmittersTickRegistered::<T>::put(tick_to_process);
     }
 
-    /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
-    pub fn do_update_current_price_per_unit_per_tick(weight: &mut sp_weights::WeightMeter) {
-        // Get the total used capacity of the network
-        let _total_used_capacity =
-            <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
-        weight.consume(T::DbWeight::get().reads(1));
-
-        // Get the total capacity of the network
-        let _total_capacity = <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
-        weight.consume(T::DbWeight::get().reads(1));
-
-        // Calculate the current price per unit per tick
-        // TODO: Once the curve of price per unit per tick is defined, implement it here
-        let current_price_per_unit_per_tick: BalanceOf<T> = CurrentPricePerUnitPerTick::<T>::get();
-
-        // Update it in storage
-        CurrentPricePerUnitPerTick::<T>::put(current_price_per_unit_per_tick);
-        weight.consume(T::DbWeight::get().writes(1));
-    }
-
-    pub fn do_update_price_index(weight: &mut sp_weights::WeightMeter) {
+    pub fn do_update_price_index(meter: &mut sp_weights::WeightMeter) {
         // Get the current price
         let current_price = CurrentPricePerUnitPerTick::<T>::get();
-        weight.consume(T::DbWeight::get().reads(1));
 
         // Add it to the accumulated price index
         AccumulatedPriceIndex::<T>::mutate(|price_index| {
             *price_index = price_index.saturating_add(current_price);
         });
-        weight.consume(T::DbWeight::get().reads_writes(1, 1));
+
+        // Get the weight required by this function
+        let required_weight = T::WeightInfo::price_index_update();
+
+        // Consume the required weight
+        meter.consume(required_weight);
+    }
+
+    /// This function advances the current tick and returns the previous and now-current tick.
+    pub fn do_advance_tick(
+        meter: &mut sp_weights::WeightMeter,
+    ) -> (BlockNumberFor<T>, BlockNumberFor<T>) {
+        // Get the current tick
+        let current_tick = OnPollTicker::<T>::get();
+
+        // Increment the current tick
+        let next_tick = current_tick.saturating_add(One::one());
+
+        // Update the current tick
+        OnPollTicker::<T>::set(next_tick);
+
+        // Get the weight required by this function
+        let required_weight = T::WeightInfo::tick_update();
+
+        // Consume the required weight
+        meter.consume(required_weight);
+
+        // Return the previous tick (`current_tick`) and the now-current one (`next_tick`)
+        (current_tick, next_tick)
     }
 
     /// This function holds the logic that updates the deposit of a User based on the new deposit that should be held from them.
@@ -1331,7 +1415,7 @@ where
         RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
         // Add the user to the UsersWithoutFunds mapping and emit the UserWithoutFunds event. If the user has no remaining
-        // payment streams, emit the UserPaidDebts event as well.
+        // payment streams, emit the UserPaidAllDebts event as well.
         // Note: once a user is flagged as without funds, it is considered insolvent by the system and every Provider
         // will be incentivised to stop providing services to that user.
         // To be unflagged, the user will have to pay its remaining debt and wait the cooldown period, after which it will
@@ -1344,7 +1428,7 @@ where
             });
         }
         if user_payment_streams_count == 0 {
-            Self::deposit_event(Event::<T>::UserPaidDebts {
+            Self::deposit_event(Event::<T>::UserPaidAllDebts {
                 who: user_account.clone(),
             });
         }
