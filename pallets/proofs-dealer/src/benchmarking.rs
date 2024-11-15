@@ -36,6 +36,7 @@ mod benchmarks {
     use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
     use sp_runtime::{traits::Hash, BoundedVec};
     use sp_std::vec::Vec;
+    use sp_weights::WeightMeter;
 
     use super::*;
     use crate::{
@@ -46,8 +47,8 @@ mod benchmarks {
             MerkleTrieHashingFor, Proof, ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, Config, Event, LastCheckpointTick,
-        LastTickProviderSubmittedAProofFor, Pallet, TickToChallengesSeed,
-        TickToCheckpointChallenges, TickToProvidersDeadlines,
+        LastTickProviderSubmittedAProofFor, Pallet, SlashableProviders, TickToChallengesSeed,
+        TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
     };
 
     #[benchmark]
@@ -83,12 +84,27 @@ mod benchmarks {
         Ok(())
     }
 
+    /// > Assumptions:
+    /// > - In the runtime configuration, [`T::MaxCustomChallengesPerBlock`] = [`T::RandomChallengesPerBlock`].
+    /// > - For the purpose of this benchmark, [`T::MaxCustomChallengesPerBlock`] = 2 * [`T::RandomChallengesPerBlock`].
+    /// > - This allows to "simulate" random challenges with checkpoint challenges, crafting them carefully to
+    /// >   fall exactly where we need them, to benchmark a specific scenario.
+    ///
+    /// * Case: Up to {[`T::MaxCustomChallengesPerBlock`] * 2} file key proofs in proof.
+    ///
+    /// There are [`T::MaxCustomChallengesPerBlock`] random challenges, which can be responded with 1 to
+    /// [`T::MaxCustomChallengesPerBlock`] * 2 file key proofs, depending on the Forest of the BSP and
+    /// where the challenges fall within it. Additionally, in the worst case scenario for this amount
+    /// of file key proofs, there can be [`T::MaxCustomChallengesPerBlock`] more file keys proven in the
+    /// forest proof, that correspond to an exact match of a challenge with TrieRemoveMutation.
+    /// File keys that would be removed from the Forest, are not meant to also send a file key proof, and
+    /// that is the case for an exact match of a custom challenge with TrieRemoveMutation.
     #[benchmark]
     fn submit_proof_no_checkpoint_challenges_key_proofs(
         n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
     ) -> Result<(), BenchmarkError> {
-        let n: u32 = n.into();
-        let (caller, proof) = setup_submit_proof::<T>(n)?;
+        let file_key_proofs_count: u32 = n.into();
+        let (caller, proof) = setup_submit_proof::<T>(file_key_proofs_count)?;
 
         // Call some extrinsic.
         #[extrinsic_call]
@@ -97,6 +113,26 @@ mod benchmarks {
         Ok(())
     }
 
+    /// > Assumptions:
+    /// > - In the runtime configuration, [`T::MaxCustomChallengesPerBlock`] = [`T::RandomChallengesPerBlock`].
+    /// > - For the purpose of this benchmark, [`T::MaxCustomChallengesPerBlock`] = 2 * [`T::RandomChallengesPerBlock`].
+    /// > - This allows to "simulate" random challenges with checkpoint challenges, crafting them carefully to
+    /// >   fall exactly where we need them, to benchmark a specific scenario.
+    ///
+    /// * Case: {[`T::MaxCustomChallengesPerBlock`] * 2 + 1} to {[`T::MaxCustomChallengesPerBlock`] * 4} file key proofs in proof.
+    ///
+    /// If there are more than {[`T::MaxCustomChallengesPerBlock`] * 2} file key proofs, then it means that
+    /// some of those file key proofs are a response to checkpoint challenges, so it is now impossible to
+    /// have [`T::MaxCustomChallengesPerBlock`] file keys proven to be removed from the Forest. For example,
+    /// if {[`T::MaxCustomChallengesPerBlock`] = 10} and there are 21 file key proofs, then at least one of those
+    /// file keys proven is a consequence of a checkpoint challenge either not falling exactly in an existing
+    /// leaf, or not having a TrieRemoveMutation. So the worst case scenario for 21 file keys proven is
+    /// another 9 file keys proven with a TrieRemoveMutation. For 22 file keys proven, the worst case scenario
+    /// is also 9 file keys proven with a TrieRemoveMutation. For 23, 8 file keys proven with a TrieRemoveMutation.
+    /// For 24, also 8 file keys proven with a TrieRemoveMutation. It continues like this until with 40 file keys
+    /// proven, the worst case scenario is 0 file keys proven with a TrieRemoveMutation. Basically, with 40 file
+    /// keys proven, it means that there are 2 file keys proven for every random and checkpoint challenge, so no
+    /// checkpoint challenge fell exactly in an existing leaf.
     #[benchmark]
     fn submit_proof_with_checkpoint_challenges_key_proofs(
         n: Linear<
@@ -104,12 +140,41 @@ mod benchmarks {
             { T::MaxCustomChallengesPerBlock::get() * 2 },
         >,
     ) -> Result<(), BenchmarkError> {
-        let n: u32 = n.into();
-        let (caller, proof) = setup_submit_proof::<T>(n)?;
+        let file_key_proofs_count: u32 = n.into();
+        let (caller, proof) = setup_submit_proof::<T>(file_key_proofs_count)?;
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
+
+        Ok(())
+    }
+
+    /// > Assumptions:
+    /// > - This is not a checkpoint challenge round. That function is benchmarked separately.
+    #[benchmark]
+    fn new_challenges_round(
+        n: Linear<1, { T::MaxSlashableProvidersPerTick::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        let slashable_providers_count: u32 = n.into();
+        register_providers::<T>(slashable_providers_count)?;
+
+        // Check that there are no slashable Providers before the execution.
+        let slashable_providers_count_before = SlashableProviders::<T>::iter().count();
+        assert_eq!(slashable_providers_count_before, 0);
+
+        let mut meter: WeightMeter = WeightMeter::new();
+        #[block]
+        {
+            Pallet::<T>::do_new_challenges_round(&mut meter);
+        }
+
+        // Check that the slashable Providers are updated to be `n` after the execution.
+        let slashable_providers_count_after = SlashableProviders::<T>::iter().count();
+        assert_eq!(
+            slashable_providers_count_after,
+            slashable_providers_count as usize
+        );
 
         Ok(())
     }
@@ -270,5 +335,81 @@ mod benchmarks {
             custom_challenges.push(custom_challenge);
         }
         BoundedVec::try_from(custom_challenges).expect("Length of custom challenges should be less than or equal to MaxCustomChallengesPerBlockFor")
+    }
+
+    fn register_providers<T>(n: u32) -> Result<(), BenchmarkError>
+    where
+    // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
+        T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
+    // The Storage Providers pallet is the `Providers` pallet that this pallet requires.
+        T: crate::Config<ProvidersPallet = pallet_storage_providers::Pallet<T>>,
+    // The `Balances` pallet is the `NativeBalance` pallet that this pallet requires.
+        T: crate::Config<NativeBalance = pallet_balances::Pallet<T>>,
+    // The `Balances` pallet is the `NativeBalance` pallet that `pallet_storage_providers::Config` requires.
+        T: pallet_storage_providers::Config<NativeBalance = pallet_balances::Pallet<T>>,
+    // The `Proof` inner type of the `ForestVerifier` trait is `CompactProof`.
+        <T as crate::Config>::ForestVerifier: shp_traits::CommitmentVerifier<Proof = sp_trie::CompactProof>,
+    // The `Proof` inner type of the `KeyVerifier` trait is `CompactProof`.
+        <<T as crate::Config>::KeyVerifier as shp_traits::CommitmentVerifier>::Proof: From<sp_trie::CompactProof>,
+    // The Storage Providers pallet's `HoldReason` type can be converted into the Native Balance's `Reason`.
+        pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
+    // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
+        T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
+    // The Storage Providers `ProviderId` type is the same as `frame_system::Hash`.
+        T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
+    {
+        let tick_to_check_for_slashable_providers = TickToCheckForSlashableProviders::<T>::get();
+        for i in 0..n {
+            // Setup initial conditions.
+            let provider_account: T::AccountId = account("provider_account", i as u32, i);
+            let provider_balance = match 1_000_000_000_000_000u128.try_into() {
+                Ok(balance) => balance,
+                Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+            };
+            assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+                &provider_account,
+                provider_balance,
+            ));
+
+            // Register caller as a Provider in Providers pallet.
+            let provider_id = <T as frame_system::Config>::Hashing::hash(
+                sp_runtime::format!("provider_id_{:?}", i).as_bytes(),
+            );
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::insert(
+                &provider_account,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<T>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    capacity_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: provider_account.clone(),
+                    payment_account: provider_account.clone(),
+                    reputation_weight:
+                        <T as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                    sign_up_block: Default::default(),
+                },
+            );
+
+            // Hold some of the Provider's balance so it simulates it having a stake.
+            assert_ok!(<T as crate::Config>::NativeBalance::hold(
+                &pallet_storage_providers::HoldReason::StorageProviderDeposit.into(),
+                &provider_account,
+                provider_balance / 100u32.into(),
+            ));
+
+            // Add Provider to the next deadline to check.
+            TickToProvidersDeadlines::<T>::insert(
+                tick_to_check_for_slashable_providers,
+                provider_id,
+                (),
+            );
+        }
+
+        Ok(())
     }
 }

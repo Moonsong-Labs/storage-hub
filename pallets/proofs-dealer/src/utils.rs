@@ -384,14 +384,15 @@ where
         Ok(challenges_tick)
     }
 
-    /// Generate a new round of challenges, be it random or checkpoint.
+    /// Generate a new round of challenges, both random and checkpoint if corresponding.
     ///
     /// Random challenges are automatically generated based on some external source of
-    /// randomness, and are added to [`TickToChallengesSeed`], for this tick's number.
+    /// randomness. To be more precise, a random seed is generated and added to
+    /// [`TickToChallengesSeed`], for this tick's number.
     ///
     /// It also takes care of including the challenges from the `ChallengesQueue` and
     /// `PriorityChallengesQueue`. These custom challenges are only included in "checkpoint"
-    /// ticks
+    /// ticks.
     ///
     /// Additionally, it takes care of checking if there are Providers that have
     /// failed to submit a proof, and should have submitted one by this tick. It does so
