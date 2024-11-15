@@ -52,7 +52,7 @@ use crate::{
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
-        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        NotifyPeriod, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -109,6 +109,8 @@ pub struct BlockchainService {
     /// various edge cases when restarting the node, all originating from the "dynamic" way of
     /// computing the next challenges tick. This case is handled separately.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
+    /// Notify period value to know when to trigger the NotifyPeriod event.
+    notify_period: Option<u32>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -931,6 +933,7 @@ impl BlockchainService {
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
         rocksdb_root_path: impl Into<PathBuf>,
+        notify_period: Option<u32>,
     ) -> Self {
         Self {
             client,
@@ -945,6 +948,7 @@ impl BlockchainService {
             last_block_processed: Zero::zero(),
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
+            notify_period,
         }
     }
 
@@ -1063,6 +1067,9 @@ impl BlockchainService {
 
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
+
+        // Check that trigger an event every X amount of blocks (specified in config).
+        self.check_for_notify(&block_number);
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
@@ -1295,6 +1302,14 @@ impl BlockchainService {
                 // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
                 // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+            }
+        }
+    }
+
+    fn check_for_notify(&self, block_number: &BlockNumber) {
+        if let Some(np) = self.notify_period {
+            if block_number % np == 0 {
+                self.emit(NotifyPeriod {});
             }
         }
     }

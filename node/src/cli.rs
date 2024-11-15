@@ -109,6 +109,12 @@ pub struct ProviderConfigurations {
     /// Extrinsic retry timeout in seconds.
     #[clap(long, default_value = "60")]
     pub extrinsic_retry_timeout: u64,
+
+    /// MSP charging fees frequency.
+    #[clap(long, required_if_eq_any([
+        ("provider_type", "msp"),
+    ]))]
+    pub msp_charging_freq: Option<u32>,
 }
 
 impl ProviderConfigurations {
@@ -128,6 +134,7 @@ impl ProviderConfigurations {
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
             extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+            msp_charging_freq: self.msp_charging_freq,
         }
     }
 }
