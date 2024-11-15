@@ -200,7 +200,7 @@ where
             let should_generate_key_proof = !event
                 .data
                 .checkpoint_challenges
-                .contains(&(file_key.clone(), Some(TrieRemoveMutation::default())));
+                .contains(&(*file_key, Some(TrieRemoveMutation::default())));
 
             if should_generate_key_proof {
                 // Generate the key proof for each file key.

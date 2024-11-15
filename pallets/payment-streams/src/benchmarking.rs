@@ -187,7 +187,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::FixedRatePaymentStreamCreated {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 rate: rate.into(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -274,7 +274,7 @@ mod benchmarks {
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -284,7 +284,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::FixedRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 new_rate: new_rate.into(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -348,7 +348,7 @@ mod benchmarks {
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 amount: rate.into(),
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -358,7 +358,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::FixedRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -404,7 +404,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
             Event::<T>::DynamicRatePaymentStreamCreated {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 amount_provided: amount_provided.into(),
             },
         );
@@ -495,7 +495,7 @@ mod benchmarks {
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -505,7 +505,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
             Event::<T>::DynamicRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 new_amount_provided: new_amount_provided.into(),
             },
         );
@@ -588,7 +588,7 @@ mod benchmarks {
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -599,7 +599,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
             Event::<T>::DynamicRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
             },
         );
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -676,7 +676,7 @@ mod benchmarks {
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id.clone(),
+                provider_id: provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -764,7 +764,7 @@ mod benchmarks {
             let charge_event =
                 <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                     user_account: user_account.clone(),
-                    provider_id: provider_id.clone(),
+                    provider_id: provider_id,
                     amount: amount_charged,
                     last_tick_charged: frame_system::Pallet::<T>::block_number(),
                     charged_at_tick: frame_system::Pallet::<T>::block_number(),

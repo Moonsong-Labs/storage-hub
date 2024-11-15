@@ -20,6 +20,8 @@ use frame_benchmarking::v2::*;
         pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
         // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
         T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
+        // The Storage Providers `ProviderId` type is the same as `frame_system::Hash`.
+        T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
 )]
 mod benchmarks {
     use codec::Decode;
@@ -136,6 +138,8 @@ mod benchmarks {
         pallet_storage_providers::HoldReason: Into<<<T as pallet::Config>::NativeBalance as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
     // The Storage Providers `MerklePatriciaRoot` type is the same as `frame_system::Hash`.
         T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
+    // The Storage Providers `ProviderId` type is the same as `frame_system::Hash`.
+        T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
     {
         // Setup initial conditions.
         let caller: T::AccountId = whitelisted_caller();
@@ -232,7 +236,7 @@ mod benchmarks {
         TickToChallengesSeed::<T>::insert(challenge_block, seed);
 
         // Calculate the custom challenges to respond to, so that we can generate a proof for each.
-        let custom_challenges = generate_challenges::<T>(n.clone());
+        let custom_challenges = generate_challenges::<T>(n);
 
         // Set the custom challenges in the last checkpoint challenge tick,
         // which in this case is going to be 1.
@@ -241,7 +245,7 @@ mod benchmarks {
         TickToCheckpointChallenges::<T>::insert(last_checkpoint_tick, custom_challenges.clone());
 
         // Fetch proof for the challenged keys.
-        let encoded_proof = fetch_proof(n.clone());
+        let encoded_proof = fetch_proof(n);
         let proof =
             <Proof<T>>::decode(&mut encoded_proof.as_ref()).expect("Proof should be decodable");
 

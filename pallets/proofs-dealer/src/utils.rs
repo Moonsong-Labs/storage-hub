@@ -268,7 +268,7 @@ where
             if !mutations.is_empty() {
                 let converted_mutations = mutations
                     .iter()
-                    .map(|(key, mutation)| (key.clone(), mutation.clone().into()))
+                    .map(|(key, mutation)| (*key, mutation.clone().into()))
                     .collect::<Vec<(KeyFor<T>, TrieMutation)>>();
 
                 // Apply the mutations to the Forest.

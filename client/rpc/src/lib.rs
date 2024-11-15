@@ -491,9 +491,10 @@ where
                 .get(&Vec::new().into())
                 .await
                 .ok_or_else(|| {
-                    into_rpc_error(format!(
+                    into_rpc_error(
                         "Forest storage not found for empty key. Make sure you're running a BSP."
-                    ))
+                            .to_string(),
+                    )
                 })?;
 
             let p = fs
@@ -535,7 +536,7 @@ where
                 checkpoint_challenges.as_ref()
             {
                 if checkpoint_challenges.contains(&CheckpointChallenge {
-                    file_key: file_key.clone(),
+                    file_key: *file_key,
                     should_remove_file: true,
                 }) {
                     debug!(target: LOG_TARGET, "File key {} is a checkpoint challenge for a file deletion", file_key);
