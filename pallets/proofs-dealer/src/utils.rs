@@ -37,6 +37,7 @@ use crate::{
         RandomnessProviderFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
         TreasuryAccountFor,
     },
+    weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
     LastDeletedTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
     PastBlocksWeight, PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed,
@@ -563,6 +564,11 @@ where
 
         // Update `TickToCheckedForSlashableProviders` to the value resulting from the last iteration of the loop.
         TickToCheckForSlashableProviders::<T>::set(tick_to_check_for_slashable_providers);
+
+        // Consume weight.
+        weight.consume(T::WeightInfo::new_challenges_round(
+            slashable_providers_count,
+        ));
     }
 
     /// Check if the network is presumably under a spam attack.
@@ -572,7 +578,7 @@ where
     /// The idea is to track blocks that have not been filled to capacity within a
     /// specific period (`BlockFullnessPeriod`) and determine if there is enough "headroom"
     /// (unused block capacity) to consider the network not under spam.
-    pub fn do_check_spamming_condition(_weight: &mut WeightMeter) {
+    pub fn do_check_spamming_condition(weight: &mut WeightMeter) {
         // Get the maximum weight for the dispatch class of `submit_proof` extrinsics.
         let weights = T::BlockWeights::get();
         let max_weight_for_class = weights
@@ -667,9 +673,9 @@ where
     /// and the `ChallengesQueue` if there is space left.
     ///
     /// Cleans up the `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
-    fn do_new_checkpoint_challenge_round(
+    pub(crate) fn do_new_checkpoint_challenge_round(
         current_tick: BlockNumberFor<T>,
-        _weight: &mut WeightMeter,
+        weight: &mut WeightMeter,
     ) {
         let mut new_checkpoint_challenges: BoundedVec<
             (KeyFor<T>, Option<TrieRemoveMutation>),
@@ -699,6 +705,8 @@ where
         }
 
         // Convert priority_challenges_queue back to a bounded vector.
+        // The conversion shouldn't fail because we now have a vector that has even less elements than the original.
+        // Anyway, in case it fails, we just use the original priority challenges queue.
         let new_priority_challenges_queue: BoundedVec<
             (KeyFor<T>, Option<TrieRemoveMutation>),
             ChallengesQueueLengthFor<T>,
@@ -754,8 +762,13 @@ where
         // Emit new checkpoint challenge event.
         Self::deposit_event(Event::NewCheckpointChallenge {
             challenges_ticker: current_tick,
-            challenges: new_checkpoint_challenges,
+            challenges: new_checkpoint_challenges.clone(),
         });
+
+        // Consume weight.
+        weight.consume(T::WeightInfo::new_checkpoint_challenge_round(
+            new_checkpoint_challenges.len() as u32,
+        ));
     }
 
     /// Convert stake to challenge period.

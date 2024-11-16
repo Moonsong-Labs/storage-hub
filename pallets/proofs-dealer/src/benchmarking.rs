@@ -34,8 +34,11 @@ mod benchmarks {
     };
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
-    use sp_runtime::{traits::Hash, BoundedVec};
-    use sp_std::vec::Vec;
+    use sp_runtime::{
+        traits::{Hash, One},
+        BoundedVec,
+    };
+    use sp_std::{vec, vec::Vec};
     use sp_weights::WeightMeter;
 
     use super::*;
@@ -43,8 +46,8 @@ mod benchmarks {
         benchmark_proofs::{fetch_challenges, fetch_proof, get_provider_id, get_root, get_seed},
         pallet,
         types::{
-            ChallengeTicksToleranceFor, KeyFor, MaxCustomChallengesPerBlockFor,
-            MerkleTrieHashingFor, Proof, ProvidersPalletFor,
+            ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, KeyFor,
+            MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, Config, Event, LastCheckpointTick,
         LastTickProviderSubmittedAProofFor, Pallet, SlashableProviders, TickToChallengesSeed,
@@ -152,16 +155,35 @@ mod benchmarks {
 
     /// > Assumptions:
     /// > - This is not a checkpoint challenge round. That function is benchmarked separately.
+    ///
+    /// * Case: There are [`T::MaxCustomChallengesPerBlock`] checkpoint challenges in the last checkpoint tick.
     #[benchmark]
     fn new_challenges_round(
-        n: Linear<1, { T::MaxSlashableProvidersPerTick::get() }>,
+        n: Linear<0, { T::MaxSlashableProvidersPerTick::get() }>,
     ) -> Result<(), BenchmarkError> {
         let slashable_providers_count: u32 = n.into();
         register_providers::<T>(slashable_providers_count)?;
 
+        // Add the maximum number of checkpoint challenges to the last checkpoint tick.
+        let last_checkpoint_tick = LastCheckpointTick::<T>::get();
+        let checkpoint_challenges: BoundedVec<_, T::MaxCustomChallengesPerBlock> = vec![
+            (
+                MerkleTrieHashingFor::<T>::hash(b"checkpoint_challenge"),
+                None,
+            );
+            T::MaxCustomChallengesPerBlock::get()
+                as usize
+        ]
+        .try_into()
+        .expect("Failed to convert checkpoint challenges to BoundedVec, when the size is known.");
+        TickToCheckpointChallenges::<T>::insert(last_checkpoint_tick, checkpoint_challenges);
+
         // Check that there are no slashable Providers before the execution.
         let slashable_providers_count_before = SlashableProviders::<T>::iter().count();
         assert_eq!(slashable_providers_count_before, 0);
+
+        // Get current tick before the execution.
+        let current_tick_before = ChallengesTicker::<T>::get();
 
         let mut meter: WeightMeter = WeightMeter::new();
         #[block]
@@ -175,6 +197,61 @@ mod benchmarks {
             slashable_providers_count_after,
             slashable_providers_count as usize
         );
+
+        // Check that the current tick is incremented by 1 after the execution.
+        let current_tick_after = ChallengesTicker::<T>::get();
+        assert_eq!(current_tick_after, current_tick_before + One::one());
+
+        Ok(())
+    }
+
+    /// > Assumptions:
+    /// > - Filling up the checkpoint challenges vector with custom or priority challenges is the same.
+    /// >   Both represent the same execution complexity.
+    /// > - We call the function with `current_tick` being the first checkpoint challenge period (could be any really).
+    ///
+    /// * Case: Considering up to the maximum number of checkpoint challenges per block.
+    #[benchmark]
+    fn new_checkpoint_challenge_round(
+        n: Linear<0, { T::MaxCustomChallengesPerBlock::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        let custom_challenges_in_queue: u32 = n.into();
+
+        // Add the custom challenges to the queue.
+        let custom_challenges: BoundedVec<_, T::ChallengesQueueLength> =
+            vec![
+                MerkleTrieHashingFor::<T>::hash(b"custom_challenge");
+                custom_challenges_in_queue as usize
+            ]
+            .try_into()
+            .expect("Failed to convert custom challenges to BoundedVec, when the size is known.");
+        ChallengesQueue::<T>::set(custom_challenges);
+
+        // Before executions there shouldn't be any checkpoint challenges in the checkpoint challenge tick.
+        let checkpoint_challenge_tick = CheckpointChallengePeriodFor::<T>::get();
+        let checkpoint_challenges_before =
+            TickToCheckpointChallenges::<T>::get(checkpoint_challenge_tick);
+        assert!(checkpoint_challenges_before.is_none());
+
+        let mut meter: WeightMeter = WeightMeter::new();
+        #[block]
+        {
+            Pallet::<T>::do_new_checkpoint_challenge_round(checkpoint_challenge_tick, &mut meter);
+        }
+
+        // Check that the challenges queue is empty after the execution.
+        let challenges_queue_after = ChallengesQueue::<T>::get();
+        assert!(challenges_queue_after.is_empty());
+
+        // Check that now the checkpoint challenges are in the checkpoint challenge tick.
+        let checkpoint_challenges_after =
+            TickToCheckpointChallenges::<T>::get(checkpoint_challenge_tick)
+                .expect("Checkpoint challenges should be Some() after the execution.");
+        assert!(checkpoint_challenges_after.len() == custom_challenges_in_queue as usize);
+
+        // Check that the checkpoint challenge tick was registered.
+        let checkpoint_challenge_tick_after = LastCheckpointTick::<T>::get();
+        assert_eq!(checkpoint_challenge_tick_after, checkpoint_challenge_tick);
 
         Ok(())
     }
