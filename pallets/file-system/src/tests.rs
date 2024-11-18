@@ -6794,7 +6794,7 @@ mod delete_file_and_pending_deletions_tests {
                     Some(msp_id),
                     peer_ids,
                 ));
-                
+
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
@@ -6887,7 +6887,7 @@ mod delete_file_and_pending_deletions_tests {
                     Providers::get_bucket_size(&bucket_id).unwrap(),
                     bucket_size - size
                 );
-                
+
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
