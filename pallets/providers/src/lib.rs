@@ -422,10 +422,12 @@ pub mod pallet {
         },
 
         /// Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
-        /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
+        /// that BSP's account id, the initial root of the Merkle Patricia Trie that it stores, the total data it can store
+        /// according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
+            root: MerklePatriciaRoot<T>,
             multiaddresses: Multiaddresses<T>,
             capacity: StorageDataUnit<T>,
         },

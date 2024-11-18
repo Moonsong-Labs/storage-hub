@@ -10,6 +10,7 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         onchain_bsp_id -> Varchar,
+        merkle_root -> Bytea,
     }
 }
 
@@ -31,6 +32,7 @@ diesel::table! {
         private -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        merkle_root -> Bytea,
     }
 }
 
