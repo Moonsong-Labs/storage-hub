@@ -1734,11 +1734,18 @@ declare const _default: {
       UserWithoutFunds: {
         who: string;
       };
-      UserPaidDebts: {
+      UserPaidAllDebts: {
+        who: string;
+      };
+      UserPaidSomeDebts: {
         who: string;
       };
       UserSolvent: {
         who: string;
+      };
+      InconsistentTickProcessing: {
+        lastProcessedTick: string;
+        tickToProcess: string;
       };
     };
   };
@@ -3504,7 +3511,9 @@ declare const _default: {
       charge_multiple_users_payment_streams: {
         userAccounts: string;
       };
-      pay_outstanding_debt: string;
+      pay_outstanding_debt: {
+        amountOfStreamsToPay: string;
+      };
       clear_insolvent_flag: string;
     };
   };

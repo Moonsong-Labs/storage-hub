@@ -236,22 +236,72 @@ impl IndexerService {
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
                 bsp_id,
-                confirmed_file_keys: _,
+                confirmed_file_keys,
                 skipped_file_keys: _,
                 new_root,
             } => {
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
+
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
+                for file_key in confirmed_file_keys {
+                    let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                    BspFile::create(conn, bsp.id, file.id).await?;
+                }
             }
-            pallet_file_system::Event::NewStorageRequest { .. } => {}
+            pallet_file_system::Event::NewStorageRequest {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+            } => {
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.to_string()).await?;
+
+                let mut sql_peer_ids = Vec::new();
+                for peer_id in peer_ids {
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                }
+
+                File::create(
+                    conn,
+                    who.to_string(),
+                    file_key.as_ref().to_vec(),
+                    bucket.id,
+                    location.to_vec(),
+                    fingerprint.as_ref().to_vec(),
+                    *size as i64,
+                    FileStorageRequestStep::Requested,
+                    sql_peer_ids,
+                )
+                .await?;
+            }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
-            pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
-            pallet_file_system::Event::StorageRequestExpired { .. } => {}
-            pallet_file_system::Event::StorageRequestRejected { .. } => {}
-            pallet_file_system::Event::StorageRequestRevoked { .. } => {}
+            pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Stored,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestExpired { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Stored,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestRevoked { file_key } => {
+                File::delete(conn, file_key.as_ref().to_vec()).await?;
+            }
             pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
+            pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
@@ -330,8 +380,10 @@ impl IndexerService {
             pallet_payment_streams::Event::UsersCharged { .. } => {}
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
             pallet_payment_streams::Event::UserWithoutFunds { .. } => {}
-            pallet_payment_streams::Event::UserPaidDebts { .. } => {}
+            pallet_payment_streams::Event::UserPaidAllDebts { .. } => {}
+            pallet_payment_streams::Event::UserPaidSomeDebts { .. } => {}
             pallet_payment_streams::Event::UserSolvent { .. } => {}
+            pallet_payment_streams::Event::InconsistentTickProcessing { .. } => {}
             pallet_payment_streams::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -29,8 +29,8 @@ use shp_traits::{
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderId, RateDeltaParam, SignUpRequestSpParams, StorageProviderId,
-    ValuePropId, ValueProposition, ValuePropositionWithId,
+    Multiaddresses, ProviderIdFor, RateDeltaParam, SignUpRequestSpParams, StorageProviderId,
+    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -737,7 +737,7 @@ where
     pub fn do_add_multiaddress(
         who: &T::AccountId,
         new_multiaddress: &MultiAddress<T>,
-    ) -> Result<HashId<T>, DispatchError> {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             // If the provider is a MSP, add the new multiaddress to the MSP's storage,
@@ -779,7 +779,7 @@ where
     pub fn do_remove_multiaddress(
         who: &T::AccountId,
         multiaddress: &MultiAddress<T>,
-    ) -> Result<HashId<T>, DispatchError> {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             // If the provider is a MSP, remove the multiaddress from the MSP's storage.
@@ -839,7 +839,7 @@ where
     /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
     ///
     /// Successfully slashing a Storage Provider should be a free operation.
-    pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
+    pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResultWithPostInfo {
         let account_id = if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
             provider.owner_account
         } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
@@ -906,7 +906,7 @@ where
 
     pub(crate) fn do_make_value_prop_unavailable(
         who: &T::AccountId,
-        value_prop_id: ValuePropId<T>,
+        value_prop_id: ValuePropIdFor<T>,
     ) -> Result<MainStorageProviderId<T>, DispatchError> {
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
@@ -995,7 +995,7 @@ where
     ///
     /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
     pub fn compute_worst_case_scenario_slashable_amount(
-        provider_id: &HashId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         let accrued_failed_submission_count = <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id)
             .ok_or(Error::<T>::ProviderNotSlashable)?.into();
@@ -1160,7 +1160,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type BucketId = BucketId<T>;
     type BucketNameLimit = T::BucketNameLimit;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
@@ -1179,7 +1179,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
             .chain(bucket_name.encode().into_iter())
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
-        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
+        <<T as crate::Config>::ProviderIdHashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 
     fn get_msp_of_bucket(
@@ -1243,11 +1243,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type BucketId = BucketId<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
-    type ValuePropId = ValuePropId<T>;
+    type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
         provider_id: Option<Self::ProviderId>,
@@ -1516,7 +1516,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
 /// Implement the ReadStorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type StorageDataUnit = T::StorageDataUnit;
     type SpCount = T::SpCount;
     type MultiAddress = MultiAddress<T>;
@@ -1593,7 +1593,7 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
 
 /// Implement the MutateStorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> MutateStorageProvidersInterface for pallet::Pallet<T> {
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type StorageDataUnit = T::StorageDataUnit;
 
     fn decrease_capacity_used(
@@ -1661,7 +1661,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -1744,7 +1744,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 /// Implement the MutateProvidersInterface for the Storage Providers pallet.
 impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bucket) = Buckets::<T>::get(&who) {
@@ -1775,7 +1775,7 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
     type AccountId = T::AccountId;
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -1832,7 +1832,7 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
 /// Implement the MutateChallengeableProvidersInterface for the Storage Providers pallet.
 impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet<T> {
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
@@ -1927,7 +1927,7 @@ where
     }
 
     pub fn query_storage_provider_capacity(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<StorageDataUnit<T>, QueryStorageProviderCapacityError> {
         if MainStorageProviders::<T>::contains_key(provider_id) {
             let msp = MainStorageProviders::<T>::get(provider_id)
@@ -1943,7 +1943,7 @@ where
     }
 
     pub fn query_available_storage_capacity(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<StorageDataUnit<T>, QueryAvailableStorageCapacityError> {
         if MainStorageProviders::<T>::contains_key(provider_id) {
             let msp = MainStorageProviders::<T>::get(provider_id)
@@ -1967,7 +1967,7 @@ where
     }
 
     pub fn get_worst_case_scenario_slashable_amount(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         Self::compute_worst_case_scenario_slashable_amount(provider_id)
     }
@@ -1985,7 +1985,7 @@ where
     }
 
     pub fn query_provider_multiaddresses(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<Multiaddresses<T>, QueryProviderMultiaddressesError> {
         if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
             Ok(bsp.multiaddresses)
