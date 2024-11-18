@@ -26,7 +26,7 @@ pub struct TopUpMetadata {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValuePropositionWithId<T: Config> {
-    pub id: ValuePropId<T>,
+    pub id: ValuePropIdFor<T>,
     pub value_prop: ValueProposition<T>,
 }
 
@@ -57,11 +57,11 @@ impl<T: Config> ValueProposition<T> {
     }
 
     /// Produce the ID of the ValueProposition not including the `available` field.
-    pub fn derive_id(&self) -> HashId<T> {
+    pub fn derive_id(&self) -> ValuePropIdFor<T> {
         let mut concat = self.price_per_unit_of_data_per_block.encode();
         concat.extend_from_slice(&self.commitment.encode());
         concat.extend_from_slice(&self.bucket_data_limit.encode());
-        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
+        <<T as crate::Config>::ValuePropIdHashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 }
 
@@ -108,7 +108,7 @@ pub struct Bucket<T: Config> {
     pub private: bool,
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     pub size: StorageDataUnit<T>,
-    pub value_prop_id: Option<HashId<T>>,
+    pub value_prop_id: Option<ValuePropIdFor<T>>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -163,13 +163,13 @@ pub enum RateDeltaParam<T: Config> {
 pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
-pub type ProviderId<T> = HashId<T>;
+pub type ProviderIdFor<T> = <T as crate::Config>::ProviderId;
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
-pub type BackupStorageProviderId<T> = ProviderId<T>;
+pub type BackupStorageProviderId<T> = ProviderIdFor<T>;
 /// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
-pub type MainStorageProviderId<T> = ProviderId<T>;
+pub type MainStorageProviderId<T> = ProviderIdFor<T>;
 /// BucketId is the type that identifies the different buckets that a Main Storage Provider can have.
-pub type BucketId<T> = HashId<T>;
+pub type BucketId<T> = ProviderIdFor<T>;
 
 /// MaxMultiAddressSize is the maximum size of the libp2p multiaddress of a Storage Provider in bytes.
 pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
@@ -184,6 +184,8 @@ pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
 
 /// HashId is the type that uniquely identifies either a Storage Provider (MSP or BSP) or a Bucket.
 pub type HashId<T> = <T as frame_system::Config>::Hash;
+/// Hashing is the hashing algorithm used to get the HashId.
+pub type Hashing<T> = <T as frame_system::Config>::Hashing;
 
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
 /// pallet configuration so the runtime can use any type that implements them.
@@ -193,6 +195,9 @@ pub type StorageDataUnit<T> = <T as crate::Config>::StorageDataUnit;
 /// Its maximum size is defined in the runtime configuration, as MaxProtocols.
 pub type MaxProtocols<T> = <T as crate::Config>::MaxProtocols;
 pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type for protocols")
+
+/// Type alias for the `ValuePropId` type used in the Storage Providers pallet.
+pub type ValuePropIdFor<T> = <T as crate::Config>::ValuePropId;
 
 /// Type alias for the `ReputationWeightType` type used in the Storage Providers pallet.
 pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;

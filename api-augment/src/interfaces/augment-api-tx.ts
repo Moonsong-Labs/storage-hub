@@ -1984,7 +1984,7 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       /**
        * Dispatchable extrinsic that allows a user flagged as without funds long ago enough to clear this flag from its account,
-       * allowing it to begin contracting and paying for services again. If there's any outstanding debt, it will be charged and cleared.
+       * allowing it to begin contracting and paying for services again. It should have previously paid all its outstanding debt.
        *
        * The dispatch origin for this call must be Signed.
        * The origin must be the User that has been flagged as without funds.
@@ -1993,18 +1993,10 @@ declare module "@polkadot/api-base/types/submittable" {
        * 1. Check that the extrinsic was signed and get the signer.
        * 2. Check that the user has been flagged as without funds.
        * 3. Check that the cooldown period has passed since the user was flagged as without funds.
-       * 4. Check if there's any outstanding debt and charge it. This is done by:
-       * a. Releasing any remaining funds held as a deposit for each payment stream.
-       * b. Getting all payment streams of the user and charging them, paying the Providers for the services.
-       * c. Returning the User any remaining funds.
-       * d. Deleting all payment streams of the user.
+       * 4. Check that there's no remaining outstanding debt.
        * 5. Unflag the user as without funds.
        *
        * Emits a 'UserSolvent' event when successful.
-       *
-       * Notes: this extrinsic iterates over all remaining payment streams of the user and charges them, so it can be expensive in terms of weight.
-       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
-       * finds more convenient to wait for Providers to get its deposits one by one instead.
        **/
       clearInsolventFlag: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
@@ -2112,8 +2104,8 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256, AccountId32]
       >;
       /**
-       * Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
-       * its deposits.
+       * Dispatchable extrinsic that allows a user flagged as without funds to pay up to `amount_of_streams_to_pay`
+       * remaining payment streams to be able to recover its deposits.
        *
        * The dispatch origin for this call must be Signed.
        * The origin must be the User that has been flagged as without funds.
@@ -2122,16 +2114,19 @@ declare module "@polkadot/api-base/types/submittable" {
        * 1. Check that the extrinsic was signed and get the signer.
        * 2. Check that the user has been flagged as without funds.
        * 3. Release the user's funds that were held as a deposit for each payment stream.
-       * 4. Get all payment streams of the user and charge them, paying the Providers for the services.
-       * 5. Delete all payment streams of the user.
+       * 4. Get the payment streams of the user and charge them, paying the Providers for the services.
+       * 5. Delete the charged payment streams of the user.
        *
-       * Emits a 'UserPaidDebts' event when successful.
+       * Emits a 'UserPaidAllDebts' event when successful.
        *
-       * Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
+       * Notes: this extrinsic iterates over payment streams of the user and charges them, so it can be expensive in terms of weight.
        * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
        * finds more convenient to wait for Providers to get its deposits one by one instead.
        **/
-      payOutstandingDebt: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      payOutstandingDebt: AugmentedSubmittable<
+        (amountOfStreamsToPay: u32 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [u32]
+      >;
       /**
        * Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
        *

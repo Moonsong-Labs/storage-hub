@@ -1046,11 +1046,12 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
-       * The last tick from the Providers Proof Submitters pallet that was registered.
+       * The last tick that was processed by this pallet from the Proof Submitters interface.
        *
-       * This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
-       * registered. For the tick in this storage element, this pallet already knows the Providers that submitted
-       * a valid proof.
+       * This is used to keep track of the last tick processed by this pallet from the pallet that implements the from the ProvidersProofSubmitters interface.
+       * This is done to know the last tick for which this pallet has registered the Providers that submitted a valid proof and updated their last chargeable info.
+       * In the next `on_poll` hook execution, this pallet will update the last chargeable info of the Providers that submitted a valid proof in the tick that
+       * follows the one saved in this storage element.
        **/
       lastSubmittersTickRegistered: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;

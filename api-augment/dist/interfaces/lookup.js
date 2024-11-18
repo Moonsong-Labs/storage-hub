@@ -1768,11 +1768,18 @@ export default {
       UserWithoutFunds: {
         who: "AccountId32"
       },
-      UserPaidDebts: {
+      UserPaidAllDebts: {
+        who: "AccountId32"
+      },
+      UserPaidSomeDebts: {
         who: "AccountId32"
       },
       UserSolvent: {
         who: "AccountId32"
+      },
+      InconsistentTickProcessing: {
+        lastProcessedTick: "u32",
+        tickToProcess: "u32"
       }
     }
   },
@@ -3593,7 +3600,9 @@ export default {
       charge_multiple_users_payment_streams: {
         userAccounts: "Vec<AccountId32>"
       },
-      pay_outstanding_debt: "Null",
+      pay_outstanding_debt: {
+        amountOfStreamsToPay: "u32"
+      },
       clear_insolvent_flag: "Null"
     }
   },
@@ -4508,7 +4517,8 @@ export default {
       "ChargeOverflow",
       "UserWithoutFunds",
       "UserNotFlaggedAsWithoutFunds",
-      "CooldownPeriodNotPassed"
+      "CooldownPeriodNotPassed",
+      "UserHasRemainingDebt"
     ]
   },
   /**

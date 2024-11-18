@@ -7574,6 +7574,7 @@ dependencies = [
  "pallet-balances 39.0.0",
  "pallet-nfts",
  "pallet-payment-streams-runtime-api",
+ "pallet-proofs-dealer",
  "pallet-storage-providers",
  "parity-scale-codec",
  "scale-info",

@@ -52,7 +52,7 @@ use xcm::latest::prelude::BodyId;
 use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
+    Hashing, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
     PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
     RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
     WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
@@ -487,6 +487,11 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
+    type MerkleTrieHashing = Hashing;
+    type ProviderId = Hash;
+    type ProviderIdHashing = Hashing;
+    type ValuePropId = Hash;
+    type ValuePropIdHashing = Hashing;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
@@ -540,6 +545,7 @@ impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
 
 impl pallet_payment_streams::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_payment_streams::weights::SubstrateWeight<Runtime>;
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
     type RuntimeHoldReason = RuntimeHoldReason;

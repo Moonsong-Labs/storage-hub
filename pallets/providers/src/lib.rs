@@ -23,8 +23,8 @@ mod tests;
 pub use pallet::*;
 pub use scale_info::Type;
 use types::{
-    BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
-    MainStorageProviderId, MerklePatriciaRoot, SignUpRequest, StorageDataUnit,
+    BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, MainStorageProviderId,
+    MerklePatriciaRoot, SignUpRequest, StorageDataUnit,
 };
 
 #[frame_support::pallet]
@@ -46,7 +46,7 @@ pub mod pallet {
     use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
-    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv, ConvertBack};
+    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv, ConvertBack, Hash};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -54,14 +54,14 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// Type to access randomness to salt AccountIds and get the corresponding HashId
-        type ProvidersRandomness: Randomness<HashId<Self>, BlockNumberFor<Self>>;
+        /// Type to access randomness to salt AccountIds and get the corresponding ProviderId
+        type ProvidersRandomness: Randomness<ProviderIdFor<Self>, BlockNumberFor<Self>>;
 
         /// Trait that allows the pallet to update payment streams of its Providers and Users
         type PaymentStreams: PaymentStreamsInterface<
             Balance = Self::NativeBalance,
             AccountId = Self::AccountId,
-            ProviderId = HashId<Self>,
+            ProviderId = ProviderIdFor<Self>,
             Units = Self::StorageDataUnit,
         >;
 
@@ -130,13 +130,51 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen
             + FullCodec;
+        /// The hashing system (algorithm) being used for the Merkle Patricia Roots (e.g. Blake2).
+        type MerkleTrieHashing: Hash<Output = Self::MerklePatriciaRoot> + TypeInfo;
+
+        /// The type that is used to represent a Provider ID.
+        type ProviderId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+        /// The hashing system (algorithm) being used for the Provider IDs (e.g. Blake2).
+        type ProviderIdHashing: Hash<Output = Self::ProviderId> + TypeInfo;
+
+        /// The type that is used to represent a Value Proposition ID.
+        type ValuePropId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+        /// The hashing system (algorithm) being used for the Provider IDs (e.g. Blake2).
+        type ValuePropIdHashing: Hash<Output = Self::ValuePropId> + TypeInfo;
 
         /// The type of the Bucket NFT Collection ID.
         type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
         /// The trait exposing data of which providers failed to respond to challenges for proofs of storage.
         type ProvidersProofSubmitters: ProofSubmittersInterface<
-            ProviderId = HashId<Self>,
+            ProviderId = ProviderIdFor<Self>,
             TickNumber = BlockNumberFor<Self>,
         >;
 
@@ -396,7 +434,7 @@ pub mod pallet {
         Blake2_128Concat,
         MainStorageProviderId<T>,
         Blake2_128Concat,
-        HashId<T>,
+        ValuePropIdFor<T>,
         ValueProposition<T>,
         OptionQuery,
     >;
@@ -417,7 +455,7 @@ pub mod pallet {
         Blake2_128Concat,
         RelayChainBlockNumber,
         Blake2_128Concat,
-        HashId<T>,
+        ProviderIdFor<T>,
         (),
     >;
 
@@ -427,7 +465,7 @@ pub mod pallet {
     /// This is primarily used to lookup providers, restrict certain operations while they are in this state.
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, HashId<T>, TopUpMetadata>;
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata>;
 
     // Events & Errors:
 
@@ -500,20 +538,20 @@ pub mod pallet {
 
         /// Event emitted when a SP has been slashed.
         Slashed {
-            provider_id: HashId<T>,
+            provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
         },
 
         /// Event emitted when a provider has been slashed optionally signaling the end of the grace
         /// period if an automatic top up could not be performed.
         AwaitingTopUp {
-            provider_id: HashId<T>,
+            provider_id: ProviderIdFor<T>,
             top_up_metadata: TopUpMetadata,
         },
 
         /// Event emitted when an SP has topped up its deposit based on slash amount.
         TopUpFulfilled {
-            provider_id: HashId<T>,
+            provider_id: ProviderIdFor<T>,
             /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
             amount: BalanceOf<T>,
         },
@@ -527,27 +565,27 @@ pub mod pallet {
 
         /// Event emitted when a Provider has added a new MultiAddress to its account.
         MultiAddressAdded {
-            provider_id: HashId<T>,
+            provider_id: ProviderIdFor<T>,
             new_multiaddress: MultiAddress<T>,
         },
 
         /// Event emitted when a Provider has removed a MultiAddress from its account.
         MultiAddressRemoved {
-            provider_id: HashId<T>,
+            provider_id: ProviderIdFor<T>,
             removed_multiaddress: MultiAddress<T>,
         },
 
         /// Event emitted when an MSP adds a new value proposition.
         ValuePropAdded {
             msp_id: MainStorageProviderId<T>,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: ValuePropIdFor<T>,
             value_prop: ValueProposition<T>,
         },
 
         /// Event emitted when an MSP's value proposition is made unavailable.
         ValuePropUnavailable {
             msp_id: MainStorageProviderId<T>,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: ValuePropIdFor<T>,
         },
     }
 
@@ -1030,7 +1068,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn make_value_prop_unavailable(
             origin: OriginFor<T>,
-            value_prop_id: ValuePropId<T>,
+            value_prop_id: ValuePropIdFor<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -1276,7 +1314,10 @@ pub mod pallet {
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         #[pallet::call_index(13)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn slash(origin: OriginFor<T>, provider_id: HashId<T>) -> DispatchResultWithPostInfo {
+        pub fn slash(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+        ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
             ensure_signed(origin)?;
 
