@@ -4,7 +4,7 @@ use diesel_async::RunQueryDsl;
 
 use crate::{
     models::PeerId,
-    schema::{file, file_peer_id},
+    schema::{bucket, file, file_peer_id},
     DbConnection,
 };
 
@@ -121,5 +121,29 @@ impl File {
             .execute(conn)
             .await?;
         Ok(())
+    }
+
+    pub async fn get_by_bucket_id<'a>(
+        conn: &mut DbConnection<'a>,
+        bucket_id: i32,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let files = file::table
+            .filter(file::bucket_id.eq(bucket_id))
+            .load(conn)
+            .await?;
+        Ok(files)
+    }
+
+    pub async fn get_by_onchain_bucket_id<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let files = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .select(File::as_select())
+            .load(conn)
+            .await?;
+        Ok(files)
     }
 }
