@@ -2365,8 +2365,32 @@ mod hooks {
                 },
             );
 
-            // Queue a priority challenge to remove the file key from all the providers.
             let user = expired_file_deletion_request.user.clone();
+
+            // Attempt to decrease the bucket size while also reducing the fixed rate payment stream between the user and the MSP
+            if let Err(e) =
+                <T::Providers as shp_traits::MutateBucketsInterface>::decrease_bucket_size(
+                    &expired_file_deletion_request.bucket_id,
+                    expired_file_deletion_request.file_size,
+                )
+            {
+                Self::deposit_event(Event::FailedToDecreaseBucketSize {
+                    user: user.clone(),
+                    bucket_id: expired_file_deletion_request.bucket_id,
+                    file_key: expired_file_deletion_request.file_key,
+                    file_size: expired_file_deletion_request.file_size,
+                    error: e,
+                });
+
+                if !<T::Providers as shp_traits::ReadBucketsInterface>::bucket_exists(
+                    &expired_file_deletion_request.bucket_id,
+                ) {
+                    // Skip expired file deletion request if the bucket does not exist.
+                    return;
+                }
+            }
+
+            // Queue a priority challenge to remove the file key from all the providers.
             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &expired_file_deletion_request.file_key,
                 Some(TrieRemoveMutation),
@@ -2381,21 +2405,6 @@ mod hooks {
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
                 issuer: EitherAccountIdOrMspId::<T>::AccountId(user.clone()),
                 file_key: expired_file_deletion_request.file_key,
-            });
-
-            // Decrease bucket size also reducing the fixed rate payment stream between the user and the MSP
-            let _ = <T::Providers as shp_traits::MutateBucketsInterface>::decrease_bucket_size(
-                &expired_file_deletion_request.bucket_id,
-                expired_file_deletion_request.file_size,
-            )
-            .map_err(|e| {
-                Self::deposit_event(Event::FailedToDecreaseBucketSize {
-                    user,
-                    bucket_id: expired_file_deletion_request.bucket_id,
-                    file_key: expired_file_deletion_request.file_key,
-                    file_size: expired_file_deletion_request.file_size,
-                    error: e,
-                });
             });
 
             remaining_weight.saturating_reduce(potential_weight);

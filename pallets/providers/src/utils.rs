@@ -1489,27 +1489,22 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
             bucket.size = bucket.size.saturating_sub(delta);
 
-            Ok::<_, DispatchError>((
-                bucket
-                    .msp_id
-                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
-                bucket.user_id.clone(),
-            ))
-        })?;
+            if let Some(msp_id) = bucket.msp_id {
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::Decrease(delta),
+                )?;
+            }
 
-        Self::apply_delta_fixed_rate_payment_stream(
-            &msp_id,
-            bucket_id,
-            &user_id,
-            RateDeltaParam::Decrease(delta),
-        )?;
-
-        Ok(())
+            Ok(())
+        })
     }
 }
 
