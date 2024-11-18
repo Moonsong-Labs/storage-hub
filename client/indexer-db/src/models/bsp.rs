@@ -4,7 +4,9 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::{
-    models::multiaddress::MultiAddress, schema::bsp, schema::bsp_multiaddress, DbConnection,
+    models::multiaddress::MultiAddress,
+    schema::{bsp, bsp_file, bsp_multiaddress, file},
+    DbConnection,
 };
 
 /// Table that holds the BSPs.
@@ -106,6 +108,17 @@ impl Bsp {
         Ok(bsp)
     }
 
+    pub async fn get_by_account<'a>(
+        conn: &mut DbConnection<'a>,
+        account: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let bsp = bsp::table
+            .filter(bsp::account.eq(account))
+            .first(conn)
+            .await?;
+        Ok(bsp)
+    }
+
     pub async fn update_stake<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bsp_id: String,
@@ -127,6 +140,50 @@ impl Bsp {
         diesel::update(bsp::table)
             .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
             .set(bsp::last_tick_proven.eq(last_tick_proven))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Queryable, Insertable, Selectable)]
+#[diesel(table_name = bsp_file)]
+pub struct BspFile {
+    pub bsp_id: i32,
+    pub file_id: i32,
+}
+
+impl BspFile {
+    pub async fn create<'a>(
+        conn: &mut DbConnection<'a>,
+        bsp_id: i32,
+        file_id: i32,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::insert_into(bsp_file::table)
+            .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+        onchain_bsp_id: String,
+    ) -> Result<(), diesel::result::Error> {
+        use diesel::dsl::exists;
+
+        diesel::delete(bsp_file::table)
+            .filter(exists(
+                file::table
+                    .filter(file::id.eq(bsp_file::file_id))
+                    .filter(file::file_key.eq(file_key.as_ref())),
+            ))
+            .filter(exists(
+                bsp::table
+                    .filter(bsp::id.eq(bsp_file::bsp_id))
+                    .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id)),
+            ))
             .execute(conn)
             .await?;
         Ok(())
