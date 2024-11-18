@@ -4794,7 +4794,7 @@ mod slash_and_top_up {
                 // Try to slash a provider that is not registered
                 assert_noop!(
                     StorageProviders::slash(RuntimeOrigin::signed(caller), H256::default()),
-                    Error::<Test>::ProviderNotSlashable
+                    Error::<Test>::NotRegistered
                 );
             });
         }
@@ -4813,10 +4813,53 @@ mod slash_and_top_up {
 
                 let caller = accounts::BOB.0;
 
-                // Try to slash the provider
+                // Try to slash an unslashable provider
                 assert_noop!(
                     StorageProviders::slash(RuntimeOrigin::signed(caller), provider_id),
                     Error::<Test>::ProviderNotSlashable
+                );
+            });
+        }
+
+        #[test]
+        fn top_up_when_provider_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let caller = accounts::BOB.0;
+
+                // Try to top up a provider that is not registered
+                assert_noop!(
+                    StorageProviders::top_up_deposit(RuntimeOrigin::signed(caller),),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn top_up_when_not_enough_for_held_deposit() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let alice_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Manually set a capacity deficit to avoid having to slash the provider
+                MainStorageProviders::<Test>::mutate(alice_msp_id, |p| {
+                    let p = p.as_mut().unwrap();
+                    p.capacity_used = 100;
+                    p.capacity = 0;
+                });
+
+                // Set provider's balance to existential deposit to simulate the provider not having enough balance to cover the held deposit
+                NativeBalance::set_balance(&alice, ExistentialDeposit::get());
+
+                // Try to top up a provider that does not have enough balance to cover the held deposit
+                assert_noop!(
+                    StorageProviders::top_up_deposit(RuntimeOrigin::signed(alice)),
+                    Error::<Test>::CannotHoldDeposit
                 );
             });
         }
@@ -4824,6 +4867,8 @@ mod slash_and_top_up {
 
     mod success {
         use core::u32;
+
+        use sp_runtime::traits::ConvertBack;
 
         use crate::{AwaitingTopUpFromProviders, GracePeriodToSlashedProviders};
 
@@ -4978,6 +5023,9 @@ mod slash_and_top_up {
                 let end_block_grace_period =
                     RelayBlockGetter::<Test>::current_block_number() + grace_period;
 
+                let post_state_provider =
+                    MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+
                 if self.automatic_top_up {
                     let required_hold_amount = required_hold_amount_fn();
 
@@ -5017,6 +5065,12 @@ mod slash_and_top_up {
                     )
                     .is_none());
                     assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+
+                    // Check that the provider's capacity is equal to used capacity
+                    assert_eq!(
+                        post_state_provider.capacity_used,
+                        post_state_provider.capacity
+                    );
                 } else if required_hold_amount_fn() > 0 {
                     // Check event AwaitingTopUp is emitted
                     System::assert_has_event(
@@ -5048,6 +5102,14 @@ mod slash_and_top_up {
 
                     let required_hold_amount = required_hold_amount_fn();
                     assert_eq!(required_hold_amount, required_hold_amount);
+
+                    // Check that the provider's capacity was reduced by the converted slash amount (storage data units)
+                    let expected_capacity_delta =
+                        StorageDataUnitAndBalanceConverter::convert_back(expected_slash_amount);
+                    assert_eq!(
+                        post_state_provider.capacity,
+                        pre_state_provider.capacity - expected_capacity_delta
+                    );
                 }
 
                 // Check that the Treasury has received the slash amount
@@ -5055,6 +5117,64 @@ mod slash_and_top_up {
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
                     pre_state_treasury_balance + worst_case_slash_amount
                 );
+            }
+
+            fn top_up(&self) {
+                let grace_period: u32 = TopUpGracePeriod::get();
+                let end_block_grace_period =
+                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+
+                let pre_state_provider =
+                    MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+
+                let pre_state_held_amount = NativeBalance::balance_on_hold(
+                    &StorageProvidersHoldReason::get(),
+                    &self.account,
+                );
+
+                let capacity_deficit =
+                    pre_state_provider.capacity_used - pre_state_provider.capacity;
+
+                let expected_delta_hold_amount =
+                    StorageDataUnitAndBalanceConverter::convert(capacity_deficit);
+
+                let existential_deposit = ExistentialDeposit::get();
+                // Set provider's balance to cover the expected_delta_hold_amount
+                NativeBalance::set_balance(
+                    &self.account,
+                    expected_delta_hold_amount + existential_deposit,
+                );
+
+                // Top up the provider
+                assert_ok!(StorageProviders::top_up_deposit(RuntimeOrigin::signed(
+                    self.account
+                ),));
+
+                // Check event TopUpFulfilled is emitted
+                System::assert_has_event(
+                    Event::<Test>::TopUpFulfilled {
+                        provider_id: self.provider_id,
+                        amount: expected_delta_hold_amount,
+                    }
+                    .into(),
+                );
+
+                // Check that the held deposit covers the used capacity
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &StorageProvidersHoldReason::get(),
+                        &self.account
+                    ),
+                    pre_state_held_amount + expected_delta_hold_amount
+                );
+
+                // Check that the storage has been cleared
+                assert!(GracePeriodToSlashedProviders::<Test>::get(
+                    end_block_grace_period,
+                    self.provider_id
+                )
+                .is_none());
+                assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
             }
         }
 
@@ -5068,6 +5188,18 @@ mod slash_and_top_up {
 
                 test_setup.automatic_top_up = true;
                 test_setup.slash_and_verify();
+            });
+        }
+
+        #[test]
+        fn slash_storage_provider_manual_top_up() {
+            ExtBuilder::build().execute_with(|| {
+                let mut test_setup = TestSetup::default();
+
+                test_setup.slash_held_deposit = true;
+                test_setup.slash_and_verify();
+
+                test_setup.top_up();
             });
         }
 
@@ -5107,6 +5239,27 @@ mod slash_and_top_up {
 
                 bob_test_setup.automatic_top_up = true;
                 bob_test_setup.slash_and_verify();
+            });
+        }
+
+        #[test]
+        fn manual_top_up_after_many_slashes_of_many_storage_providers() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+                let mut bob_test_setup = TestSetup::new(accounts::BOB.0);
+
+                alice_test_setup.slash_and_verify();
+
+                bob_test_setup.slash_and_verify();
+
+                alice_test_setup.slash_held_deposit = true;
+                alice_test_setup.slash_and_verify();
+
+                bob_test_setup.slash_held_deposit = true;
+                bob_test_setup.slash_and_verify();
+
+                alice_test_setup.top_up();
+                bob_test_setup.top_up();
             });
         }
     }

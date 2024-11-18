@@ -873,7 +873,7 @@ where
                     provider.capacity_used,
                 )
             } else {
-                return Err(Error::<T>::ProviderNotSlashable.into());
+                return Err(Error::<T>::NotRegistered.into());
             };
 
         // Calculate slashable amount for the current number of accrued failed proof submissions
@@ -1021,13 +1021,13 @@ where
                     provider.capacity_used,
                 )
             } else {
-                return Err(Error::<T>::ProviderNotSlashable.into());
+                return Err(Error::<T>::NotRegistered.into());
             };
 
         // Need to hold enough balance to increase capacity back to used_capacity
         let capacity_deficit = used_capacity.saturating_sub(capacity);
 
-        let required_hold_amount =
+        let required_delta_hold_amount =
             StorageDataUnitAndBalanceConverter::<T>::convert(capacity_deficit);
 
         // Check if the provider has enough free balance to top up the slashed amount
@@ -1035,7 +1035,7 @@ where
             T::NativeBalance::can_hold(
                 &HoldReason::StorageProviderDeposit.into(),
                 &account_id,
-                required_hold_amount,
+                required_delta_hold_amount,
             ),
             Error::<T>::CannotHoldDeposit
         );
@@ -1044,10 +1044,10 @@ where
         T::NativeBalance::hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
-            required_hold_amount,
+            required_delta_hold_amount,
         )?;
 
-        // Increase capacity
+        // Set the provider's capacity to the used capacity
         capacity = used_capacity;
 
         // Update the provider's capacity in storage
@@ -1059,10 +1059,13 @@ where
             BackupStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
         }
 
-        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(provider_id)
-            .ok_or(Error::<T>::TopUpNotRequired)?;
+        let top_up_metadata = expect_or_err!(
+            AwaitingTopUpFromProviders::<T>::get(provider_id),
+            "Top up metadata should exist when there is a capacity deficit",
+            Error::<T>::TopUpNotRequired
+        );
 
-        // Remove the provider top up storages
+        // Clear provider tracked storage
         GracePeriodToSlashedProviders::<T>::remove(
             top_up_metadata.end_block_grace_period,
             provider_id,
@@ -1072,7 +1075,7 @@ where
         // Signal that the slashed amount has been topped up
         Self::deposit_event(Event::<T>::TopUpFulfilled {
             provider_id,
-            amount: required_hold_amount,
+            amount: required_delta_hold_amount,
         });
 
         Ok(Pays::No.into())
