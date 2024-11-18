@@ -244,10 +244,43 @@ describeBspNet(
 
     it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
-      {
-        skip: "Dropping transactions is not implemented as testing utility yet."
-      },
-      async () => {}
+      async () => {
+        const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+          userApi.shConsts.DUMMY_BSP_ID
+        );
+        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+        const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+          userApi.shConsts.DUMMY_BSP_ID
+        );
+        const challengePeriod = challengePeriodResult.asOk.toNumber();
+        const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+        await userApi.advanceToBlock(nextChallengeTick);
+        await userApi.block.seal({ finaliseBlock: false });
+
+        await userApi.assert.extrinsicPresent({
+          module: "proofsDealer",
+          method: "submitProof"
+        });
+        await userApi.block.reOrg();
+
+        await assert.rejects(
+          async () => {
+            await userApi.assert.extrinsicPresent({
+              module: "proofsDealer",
+              method: "submitProof",
+              timeout: 1000
+            });
+          },
+          /No matching extrinsic found for proofsDealer\.submitProof/,
+          "No submit proof extrinsics after re-org"
+        );
+
+        await userApi.block.seal();
+        await userApi.assert.extrinsicPresent({
+          module: "proofsDealer",
+          method: "submitProof"
+        });
+      }
     );
 
     it("New storage request sent by user, to only one BSP", async () => {
