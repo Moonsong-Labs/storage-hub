@@ -1827,6 +1827,7 @@ declare module "@polkadot/types/lookup" {
     readonly asBspSignUpSuccess: {
       readonly who: AccountId32;
       readonly bspId: H256;
+      readonly root: H256;
       readonly multiaddresses: Vec<Bytes>;
       readonly capacity: u64;
     } & Struct;
@@ -1932,6 +1933,7 @@ declare module "@polkadot/types/lookup" {
       readonly mspId: Option<H256>;
       readonly bucketId: H256;
       readonly name: Bytes;
+      readonly root: H256;
       readonly collectionId: Option<u32>;
       readonly private: bool;
       readonly valuePropId: Option<H256>;
