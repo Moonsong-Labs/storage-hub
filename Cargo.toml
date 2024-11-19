@@ -74,7 +74,8 @@ sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "st
 sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 sp-std = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
-sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
+# TODO: Change sp-trie to the next stable version when it's released with the applied fix of this [PR](https://github.com/paritytech/polkadot-sdk/pull/6486)
+sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "master", default-features = false }
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 sp-arithmetic = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 sp-blockchain = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
