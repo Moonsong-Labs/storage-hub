@@ -42,6 +42,7 @@ import type {
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -315,7 +316,9 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       fileDeletionRequestExpirations: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<ITuple<[AccountId32, H256]>>>,
+        (
+          arg: u32 | AnyNumber | Uint8Array
+        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
