@@ -8074,7 +8074,7 @@ mod stop_storing_for_insolvent_user {
                     }],
                 ));
 
-                // TODO: Fix the 
+                // TODO: Fix the
                 // TODO: Uncommenting this would result in test failing with the error `UserWithoutFunds`
                 // pallet_payment_streams::UsersWithoutFunds::<Test>::insert(
                 //     owner_account_id.clone(),
