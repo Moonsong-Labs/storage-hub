@@ -838,6 +838,11 @@ where
             amount: actual_slashed,
         });
 
+        // No need to top up if the provider's used capacity is below the minimum capacity
+        if used_capacity < T::SpMinCapacity::get() {
+            return Ok(());
+        }
+
         // Additional balance needed to be held to match the used capacity
         let required_held_amt = Self::compute_deposit_needed_for_capacity(used_capacity)?;
 
