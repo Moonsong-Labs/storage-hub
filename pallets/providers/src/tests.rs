@@ -752,6 +752,7 @@ mod sign_up {
                     System::assert_last_event(
                         Event::<Test>::BspSignUpSuccess {
                             who: alice,
+                            root: DefaultMerkleRoot::get(),
                             multiaddresses,
                             capacity: storage_amount,
                             bsp_id: alice_sp_id.unwrap(),
@@ -856,6 +857,7 @@ mod sign_up {
                     System::assert_last_event(
                         Event::<Test>::BspSignUpSuccess {
                             who: alice,
+                            root: DefaultMerkleRoot::get(),
                             multiaddresses,
                             capacity: storage_amount,
                             bsp_id: alice_sp_id.unwrap(),
@@ -1369,6 +1371,7 @@ mod sign_up {
                         Event::<Test>::BspSignUpSuccess {
                             who: bob,
                             multiaddresses,
+                            root: DefaultMerkleRoot::get(),
                             capacity: storage_amount_bob,
                             bsp_id: bob_sp_id.unwrap(),
                         }
@@ -5945,6 +5948,7 @@ fn register_account_as_bsp(
         Event::<Test>::BspSignUpSuccess {
             who: account,
             bsp_id,
+            root: DefaultMerkleRoot::get(),
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
         }

@@ -478,6 +478,7 @@ pub mod pallet {
             msp_id: Option<ProviderIdFor<T>>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
+            root: MerkleHash<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
             value_prop_id: Option<ValuePropId<T>>,
@@ -819,6 +820,7 @@ pub mod pallet {
                 msp_id,
                 bucket_id,
                 name,
+                root: <T::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                 collection_id: maybe_collection_id,
                 private,
                 value_prop_id,
@@ -956,7 +958,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register storage request
-            let file_key = Self::do_request_storage(
+            Self::do_request_storage(
                 who.clone(),
                 bucket_id,
                 location.clone(),
@@ -966,17 +968,6 @@ pub mod pallet {
                 None,
                 Some(peer_ids.clone()),
             )?;
-
-            // BSPs listen to this event and volunteer to store the file
-            Self::deposit_event(Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-            });
 
             Ok(())
         }

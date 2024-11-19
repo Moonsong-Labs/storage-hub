@@ -377,6 +377,7 @@ where
         Self::deposit_event(Event::<T>::BspSignUpSuccess {
             who: who.clone(),
             bsp_id,
+            root: bsp_info.root,
             multiaddresses: bsp_info.multiaddresses.clone(),
             capacity: bsp_info.capacity,
         });
