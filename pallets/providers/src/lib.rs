@@ -439,8 +439,10 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// Providers that have been slashed and are required to top up their deposit to the required amount given their current
-    /// max capacity.
+    /// Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+    ///
+    /// Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+    /// As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
     ///
     /// The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
     /// marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
@@ -1312,6 +1314,8 @@ pub mod pallet {
         ///
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
+        ///
+        /// This is a free operation.
         #[pallet::call_index(13)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn slash(
@@ -1321,7 +1325,9 @@ pub mod pallet {
             // Check that the extrinsic was sent with root origin.
             ensure_signed(origin)?;
 
-            Self::do_slash(&provider_id)
+            Self::do_slash(&provider_id)?;
+
+            Ok(Pays::No.into())
         }
 
         /// Dispatchable extrinsic to top-up the deposit of a Storage Provider.
@@ -1335,7 +1341,9 @@ pub mod pallet {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            Self::do_top_up_deposit(&who)
+            Self::do_top_up_deposit(&who)?;
+
+            Ok(Pays::No.into())
         }
     }
 }

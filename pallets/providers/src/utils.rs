@@ -1,7 +1,6 @@
 use crate::*;
 use codec::Encode;
 use frame_support::{
-    dispatch::{DispatchResultWithPostInfo, Pays},
     ensure,
     pallet_prelude::DispatchResult,
     sp_runtime::{
@@ -9,7 +8,7 @@ use frame_support::{
         ArithmeticError, BoundedVec, DispatchError,
     },
     traits::{
-        fungible::{Inspect, InspectHold, Mutate, MutateHold},
+        fungible::{Inspect, InspectHold, MutateHold},
         tokens::{Fortitude, Precision, Preservation, Restriction},
         Get, Randomness,
     },
@@ -114,17 +113,7 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = sign_up_request
-            .msp_info
-            .capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let deposit = Self::compute_deposit_needed_for_capacity(sign_up_request.msp_info.capacity)?;
 
         // Check if the user has enough balance to pay the deposit
         let user_balance =
@@ -195,16 +184,7 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = bsp_info
-            .capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let deposit = Self::compute_deposit_needed_for_capacity(bsp_info.capacity)?;
 
         // Check if the user has enough balance to pay the deposit
         let user_balance =
@@ -589,15 +569,7 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = new_capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let new_deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let new_deposit = Self::compute_deposit_needed_for_capacity(new_capacity)?;
 
         // Check how much has the MSP already deposited for the current capacity
         let current_deposit = T::NativeBalance::balance_on_hold(
@@ -822,59 +794,20 @@ where
         Ok(provider_id)
     }
 
-    /// Slash a Storage Provider.
+    /// Slash a storage provider based on accrued failed proof submissions.
     ///
-    /// Penalizes a storage provider based on accrued failed proof submissions.
+    /// Calculates the slashable amount and slashes the provider's held deposit, consequentially reducing the provider's capacity.
+    /// If the provider's capacity drops below their used capacity after slashing, we will hold the required amount needed to cover the used capacity deficit
+    /// if they have enough free balance. If they don't have enough free balance, we will initiate a grace period for manual top-up.
     ///
-    /// **Slashing Behavior:**
+    /// # Events
     ///
-    /// - Calculates the slashable amount from the provider's accrued failed proof submissions.
-    /// - Clears the provider's accrued failed proof submissions count.
-    /// - Attempts to slash the provider in the following order:
-    ///   - **First**, deducts as much of the slashable amount as possible from the provider's free balance, respecting preservation rules.
-    ///   - **If the free balance is insufficient**, the remaining amount is taken from the held deposit.
-    /// - The provider's capacity is reduced proportionally to the amount slashed from the held deposit (not from the free balance).
-    ///
-    /// **Automatic Top-Up:**
-    ///
-    /// - If the provider's capacity falls below the used capacity after slashing:
-    ///   - Calculates the required held deposit to match the used capacity.
-    ///   - **If the provider has enough free balance**, automatically holds the required amount:
-    ///     - Increases the provider's capacity to match the used capacity.
-    ///     - Removes any existing top-up metadata and grace period tracking for the provider.
-    ///     - Emits a `TopUpFulfilled` event indicating the provider has fulfilled the top-up and the amount held.
-    ///   - **If insufficient free balance**, initiates a grace period for manual top-up:
-    ///     - Records top-up metadata with the grace period end block.
-    ///     - Emits an `AwaitingTopUp` event.
-    ///
-    /// **Events:**
-    ///
-    /// - `Slashed`: Emitted when the provider is successfully slashed, including the total slash amount.
-    /// - `TopUpFulfilled`: Emitted when an automatic top-up is successful.
-    /// - `AwaitingTopUp`: Emitted when the provider needs to manually top up, including grace period metadata.
-    ///
-    /// **Note:**
-    ///
-    /// - Slashing a provider is a free operation for the caller.
-    /// - The provider's capacity is reduced only when the held deposit is slashed.
-    /// - The provider's capacity is updated in storage after slashing.
-    pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResultWithPostInfo {
-        let (account_id, mut capacity, used_capacity) =
-            if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
-                (
-                    provider.owner_account,
-                    provider.capacity,
-                    provider.capacity_used,
-                )
-            } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
-                (
-                    provider.owner_account,
-                    provider.capacity,
-                    provider.capacity_used,
-                )
-            } else {
-                return Err(Error::<T>::NotRegistered.into());
-            };
+    /// - `Slashed`: Emitted when the provider is slashed, indicating the amount slashed.
+    /// - `TopUpFulfilled`: Emitted when the provider's held deposit is topped up to match the used capacity, indicating the amount topped up.
+    /// - `AwaitingTopUp`: Emitted if there is a capacity deficit (i.e. the provider's capacity is falls below the used capacity) and therefore are required to top up their held deposit.
+    /// This can be done manually by executing the `top_up_deposit` extrinsic.
+    pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResult {
+        let (account_id, mut capacity, used_capacity) = Self::get_provider_details(*provider_id)?;
 
         // Calculate slashable amount for the current number of accrued failed proof submissions
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
@@ -882,75 +815,54 @@ where
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        let amt_can_slash = T::NativeBalance::reducible_balance(
-            &account_id,
-            Preservation::Preserve,
-            Fortitude::Polite,
-        );
-
-        // Calculate the amount we can slash from the provider's account
-        let amt_to_slash = slashable_amount.min(amt_can_slash);
-
-        // Slash the provider's free balance
-        let actual_slashed = T::NativeBalance::transfer(
+        // Slash the held deposit since there's not enough free balance
+        let actual_slashed = T::NativeBalance::transfer_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
             &account_id,
             &T::Treasury::get(),
-            amt_to_slash,
-            Preservation::Preserve,
+            slashable_amount,
+            Precision::BestEffort,
+            Restriction::Free,
+            Fortitude::Force,
         )?;
 
-        // Additionally slash the held deposit if the actual slashed amount from the free balance is less than the slashable amount
-        let combined_slash_amt = if actual_slashed < slashable_amount {
-            // Slash the held deposit since there's not enough free balance
-            let slashed = T::NativeBalance::transfer_on_hold(
-                &HoldReason::StorageProviderDeposit.into(),
-                &account_id,
-                &T::Treasury::get(),
-                slashable_amount - actual_slashed,
-                Precision::BestEffort,
-                Restriction::Free,
-                Fortitude::Polite,
-            )?;
-
-            // Decrease capacity by the amount slashed from the held deposit
-            capacity = capacity.saturating_sub(
-                StorageDataUnitAndBalanceConverter::<T>::convert_back(slashed),
-            );
-
-            // Total amount slashed from the held deposit and the free balance
-            slashed.saturating_add(actual_slashed)
-        } else {
-            actual_slashed
-        };
+        // Decrease capacity by the amount slashed from the held deposit
+        capacity = capacity.saturating_sub(StorageDataUnitAndBalanceConverter::<T>::convert_back(
+            actual_slashed,
+        ));
 
         // Slash amount could be 0, but this is still emitted as a signal for the provider and users to be aware
         Self::deposit_event(Event::<T>::Slashed {
             provider_id: *provider_id,
-            amount: combined_slash_amt,
+            amount: actual_slashed,
         });
 
-        // Needed balance to be held to increase capacity back to used_capacity
-        let capacity_deficit = used_capacity.saturating_sub(capacity);
-
         // Additional balance needed to be held to match the used capacity
-        let required_held_amt = StorageDataUnitAndBalanceConverter::<T>::convert(capacity_deficit);
+        let required_held_amt = Self::compute_deposit_needed_for_capacity(used_capacity)?;
+
+        // Needed balance to be held to increase capacity back to used_capacity
+        let held_deposit_difference =
+            required_held_amt.saturating_sub(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+            ));
 
         // Short circuit there is nothing left to do if the provider's capacity is above the used capacity
-        if required_held_amt == BalanceOf::<T>::zero() {
-            return Ok(Pays::No.into());
+        if held_deposit_difference == BalanceOf::<T>::zero() {
+            return Ok(());
         }
 
         // Try to hold the required amount from provider's free balance
         if T::NativeBalance::can_hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
-            required_held_amt,
+            held_deposit_difference,
         ) {
             // Hold the required amount
             T::NativeBalance::hold(
                 &HoldReason::StorageProviderDeposit.into(),
                 &account_id,
-                required_held_amt,
+                held_deposit_difference,
             )?;
 
             // Increase capacity up to the used capacity
@@ -961,6 +873,7 @@ where
                 "Top up metadata should exist when there is a capacity deficit",
                 Error::<T>::TopUpNotRequired
             );
+
             GracePeriodToSlashedProviders::<T>::remove(
                 top_up_metadata.end_block_grace_period,
                 provider_id,
@@ -968,7 +881,7 @@ where
 
             Self::deposit_event(Event::<T>::TopUpFulfilled {
                 provider_id: *provider_id,
-                amount: required_held_amt,
+                amount: held_deposit_difference,
             });
         } else {
             // Cannot hold enough balance, start tracking grace period and awaited top up
@@ -999,30 +912,21 @@ where
             BackupStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
         }
 
-        Ok(Pays::No.into())
+        Ok(())
     }
 
-    pub(crate) fn do_top_up_deposit(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
+    /// Allows a storage provider to manually top up their held deposit to restore capacity up to their currentlt used capacity.
+    ///
+    /// The provider must be within a grace period due to insufficient capacity.
+    /// Holds the required amount from the provider's free balance to match their used capacity.
+    ///
+    /// This will short circuit if the provider is not registered, doesn't need a top-up, or lacks sufficient balance.
+    pub(crate) fn do_top_up_deposit(account_id: &T::AccountId) -> DispatchResult {
         let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
             .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
             .ok_or(Error::<T>::NotRegistered)?;
 
-        let (account_id, mut capacity, used_capacity) =
-            if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
-                (
-                    provider.owner_account,
-                    provider.capacity,
-                    provider.capacity_used,
-                )
-            } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
-                (
-                    provider.owner_account,
-                    provider.capacity,
-                    provider.capacity_used,
-                )
-            } else {
-                return Err(Error::<T>::NotRegistered.into());
-            };
+        let (account_id, mut capacity, used_capacity) = Self::get_provider_details(provider_id)?;
 
         // Need to hold enough balance to increase capacity back to used_capacity
         let capacity_deficit = used_capacity.saturating_sub(capacity);
@@ -1078,7 +982,7 @@ where
             amount: required_delta_hold_amount,
         });
 
-        Ok(Pays::No.into())
+        Ok(())
     }
 
     pub(crate) fn do_add_value_prop(
@@ -1341,7 +1245,7 @@ where
     }
 
     /// Compute the deposit needed for a given capacity.
-    fn compute_deposit_needed_for_capacity(
+    pub(crate) fn compute_deposit_needed_for_capacity(
         capacity: T::StorageDataUnit,
     ) -> Result<BalanceOf<T>, DispatchError> {
         let capacity_over_minimum = capacity
@@ -1353,6 +1257,29 @@ where
         T::SpMinDeposit::get()
             .checked_add(&deposit_for_capacity_over_minimum)
             .ok_or(ArithmeticError::Overflow.into())
+    }
+
+    fn get_provider_details(
+        provider_id: ProviderIdFor<T>,
+    ) -> Result<(T::AccountId, StorageDataUnit<T>, StorageDataUnit<T>), DispatchError>
+    where
+        T: pallet::Config,
+    {
+        if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
+            Ok((
+                provider.owner_account,
+                provider.capacity,
+                provider.capacity_used,
+            ))
+        } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            Ok((
+                provider.owner_account,
+                provider.capacity,
+                provider.capacity_used,
+            ))
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
     }
 }
 

@@ -1554,8 +1554,10 @@ declare module "@polkadot/api-base/types/storage" {
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * Providers that have been slashed and are required to top up their deposit to the required amount given their current
-       * max capacity.
+       * Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+       *
+       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+       * As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
        *
        * The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
        * marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
