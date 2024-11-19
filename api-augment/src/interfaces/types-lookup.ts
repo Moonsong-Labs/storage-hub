@@ -1827,6 +1827,7 @@ declare module "@polkadot/types/lookup" {
     readonly asBspSignUpSuccess: {
       readonly who: AccountId32;
       readonly bspId: H256;
+      readonly root: H256;
       readonly multiaddresses: Vec<Bytes>;
       readonly capacity: u64;
     } & Struct;
@@ -1932,6 +1933,7 @@ declare module "@polkadot/types/lookup" {
       readonly mspId: Option<H256>;
       readonly bucketId: H256;
       readonly name: Bytes;
+      readonly root: H256;
       readonly collectionId: Option<u32>;
       readonly private: bool;
       readonly valuePropId: Option<H256>;
@@ -2305,13 +2307,22 @@ declare module "@polkadot/types/lookup" {
     readonly asUserWithoutFunds: {
       readonly who: AccountId32;
     } & Struct;
-    readonly isUserPaidDebts: boolean;
-    readonly asUserPaidDebts: {
+    readonly isUserPaidAllDebts: boolean;
+    readonly asUserPaidAllDebts: {
+      readonly who: AccountId32;
+    } & Struct;
+    readonly isUserPaidSomeDebts: boolean;
+    readonly asUserPaidSomeDebts: {
       readonly who: AccountId32;
     } & Struct;
     readonly isUserSolvent: boolean;
     readonly asUserSolvent: {
       readonly who: AccountId32;
+    } & Struct;
+    readonly isInconsistentTickProcessing: boolean;
+    readonly asInconsistentTickProcessing: {
+      readonly lastProcessedTick: u32;
+      readonly tickToProcess: u32;
     } & Struct;
     readonly type:
       | "FixedRatePaymentStreamCreated"
@@ -2324,8 +2335,10 @@ declare module "@polkadot/types/lookup" {
       | "UsersCharged"
       | "LastChargeableInfoUpdated"
       | "UserWithoutFunds"
-      | "UserPaidDebts"
-      | "UserSolvent";
+      | "UserPaidAllDebts"
+      | "UserPaidSomeDebts"
+      | "UserSolvent"
+      | "InconsistentTickProcessing";
   }
 
   /** @name PalletBucketNftsEvent (161) */
@@ -4484,6 +4497,9 @@ declare module "@polkadot/types/lookup" {
       readonly userAccounts: Vec<AccountId32>;
     } & Struct;
     readonly isPayOutstandingDebt: boolean;
+    readonly asPayOutstandingDebt: {
+      readonly amountOfStreamsToPay: u32;
+    } & Struct;
     readonly isClearInsolventFlag: boolean;
     readonly type:
       | "CreateFixedRatePaymentStream"
@@ -5711,6 +5727,7 @@ declare module "@polkadot/types/lookup" {
     readonly isUserWithoutFunds: boolean;
     readonly isUserNotFlaggedAsWithoutFunds: boolean;
     readonly isCooldownPeriodNotPassed: boolean;
+    readonly isUserHasRemainingDebt: boolean;
     readonly type:
       | "PaymentStreamAlreadyExists"
       | "PaymentStreamNotFound"
@@ -5727,7 +5744,8 @@ declare module "@polkadot/types/lookup" {
       | "ChargeOverflow"
       | "UserWithoutFunds"
       | "UserNotFlaggedAsWithoutFunds"
-      | "CooldownPeriodNotPassed";
+      | "CooldownPeriodNotPassed"
+      | "UserHasRemainingDebt";
   }
 
   /** @name PalletBucketNftsError (469) */

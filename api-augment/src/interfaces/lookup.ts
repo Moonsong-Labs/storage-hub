@@ -1361,6 +1361,7 @@ export default {
       BspSignUpSuccess: {
         who: "AccountId32",
         bspId: "H256",
+        root: "H256",
         multiaddresses: "Vec<Bytes>",
         capacity: "u64"
       },
@@ -1445,6 +1446,7 @@ export default {
         mspId: "Option<H256>",
         bucketId: "H256",
         name: "Bytes",
+        root: "H256",
         collectionId: "Option<u32>",
         private: "bool",
         valuePropId: "Option<H256>"
@@ -1756,11 +1758,18 @@ export default {
       UserWithoutFunds: {
         who: "AccountId32"
       },
-      UserPaidDebts: {
+      UserPaidAllDebts: {
+        who: "AccountId32"
+      },
+      UserPaidSomeDebts: {
         who: "AccountId32"
       },
       UserSolvent: {
         who: "AccountId32"
+      },
+      InconsistentTickProcessing: {
+        lastProcessedTick: "u32",
+        tickToProcess: "u32"
       }
     }
   },
@@ -3580,7 +3589,9 @@ export default {
       charge_multiple_users_payment_streams: {
         userAccounts: "Vec<AccountId32>"
       },
-      pay_outstanding_debt: "Null",
+      pay_outstanding_debt: {
+        amountOfStreamsToPay: "u32"
+      },
       clear_insolvent_flag: "Null"
     }
   },
@@ -4493,7 +4504,8 @@ export default {
       "ChargeOverflow",
       "UserWithoutFunds",
       "UserNotFlaggedAsWithoutFunds",
-      "CooldownPeriodNotPassed"
+      "CooldownPeriodNotPassed",
+      "UserHasRemainingDebt"
     ]
   },
   /**

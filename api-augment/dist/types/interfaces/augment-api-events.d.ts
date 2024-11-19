@@ -694,6 +694,7 @@ declare module "@polkadot/api-base/types/events" {
           mspId: Option<H256>,
           bucketId: H256,
           name: Bytes,
+          root: H256,
           collectionId: Option<u32>,
           private: bool,
           valuePropId: Option<H256>
@@ -703,6 +704,7 @@ declare module "@polkadot/api-base/types/events" {
           mspId: Option<H256>;
           bucketId: H256;
           name: Bytes;
+          root: H256;
           collectionId: Option<u32>;
           private: bool;
           valuePropId: Option<H256>;
@@ -1577,6 +1579,17 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when the `on_poll` hook detects that the tick of the proof submitters that needs to process is not the one immediately after the last processed tick.
+       **/
+      InconsistentTickProcessing: AugmentedEvent<
+        ApiType,
+        [lastProcessedTick: u32, tickToProcess: u32],
+        {
+          lastProcessedTick: u32;
+          tickToProcess: u32;
+        }
+      >;
+      /**
        * Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
        * the tick number of the last chargeable tick and the price index at that tick.
        **/
@@ -1613,7 +1626,17 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
        **/
-      UserPaidDebts: AugmentedEvent<
+      UserPaidAllDebts: AugmentedEvent<
+        ApiType,
+        [who: AccountId32],
+        {
+          who: AccountId32;
+        }
+      >;
+      /**
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid some (but not all) of its outstanding debt.
+       **/
+      UserPaidSomeDebts: AugmentedEvent<
         ApiType,
         [who: AccountId32],
         {
@@ -2151,14 +2174,16 @@ declare module "@polkadot/api-base/types/events" {
       >;
       /**
        * Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
-       * that BSP's account id, the total data it can store according to its stake, and its multiaddress.
+       * that BSP's account id, the initial root of the Merkle Patricia Trie that it stores, the total data it can store
+       * according to its stake, and its multiaddress.
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
+        [who: AccountId32, bspId: H256, root: H256, multiaddresses: Vec<Bytes>, capacity: u64],
         {
           who: AccountId32;
           bspId: H256;
+          root: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
         }
