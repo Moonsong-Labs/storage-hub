@@ -274,6 +274,7 @@ mod benchmarks {
                 bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
+                root: T::DefaultMerkleRoot::get(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -1756,6 +1757,7 @@ mod benchmarks {
                 bsp_id: bsp_id,
                 multiaddresses: multiaddresses.clone(),
                 capacity: capacity.into(),
+                root: T::DefaultMerkleRoot::get(),
             });
         frame_system::Pallet::<T>::assert_has_event(bsp_sign_up_event.into());
 
