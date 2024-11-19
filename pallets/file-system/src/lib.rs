@@ -640,6 +640,14 @@ pub mod pallet {
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
+        /// Failed to decrease bucket size for expired file deletion request
+        FailedToDecreaseBucketSize {
+            user: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
+            error: DispatchError,
+        },
     }
 
     // Errors inform users that something went wrong.

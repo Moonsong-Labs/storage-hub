@@ -1579,6 +1579,13 @@ export default {
         mspId: "H256",
         owner: "AccountId32",
         bucketId: "H256"
+      },
+      FailedToDecreaseBucketSize: {
+        user: "AccountId32",
+        bucketId: "H256",
+        fileKey: "H256",
+        fileSize: "u64",
+        error: "SpRuntimeDispatchError"
       }
     }
   },
@@ -4347,6 +4354,15 @@ export default {
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: "bool"
+  },
+  /**
+   * Lookup449: pallet_file_system::types::PendingFileDeletionRequest<T>
+   **/
+  PalletFileSystemPendingFileDeletionRequest: {
+    user: "AccountId32",
+    fileKey: "H256",
+    bucketId: "H256",
+    fileSize: "u64"
   },
   /**
    * Lookup455: pallet_file_system::types::MoveBucketRequestMetadata<T>

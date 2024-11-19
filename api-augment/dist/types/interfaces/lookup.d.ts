@@ -1564,6 +1564,13 @@ declare const _default: {
         owner: string;
         bucketId: string;
       };
+      FailedToDecreaseBucketSize: {
+        user: string;
+        bucketId: string;
+        fileKey: string;
+        fileSize: string;
+        error: string;
+      };
     };
   };
   /**
@@ -4134,6 +4141,15 @@ declare const _default: {
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: string;
+  };
+  /**
+   * Lookup449: pallet_file_system::types::PendingFileDeletionRequest<T>
+   **/
+  PalletFileSystemPendingFileDeletionRequest: {
+    user: string;
+    fileKey: string;
+    bucketId: string;
+    fileSize: string;
   };
   /**
    * Lookup455: pallet_file_system::types::MoveBucketRequestMetadata<T>
