@@ -1345,6 +1345,7 @@ declare const _default: {
       BspSignUpSuccess: {
         who: string;
         bspId: string;
+        root: string;
         multiaddresses: string;
         capacity: string;
       };
@@ -1429,6 +1430,7 @@ declare const _default: {
         mspId: string;
         bucketId: string;
         name: string;
+        root: string;
         collectionId: string;
         private: string;
         valuePropId: string;
