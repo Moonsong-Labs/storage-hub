@@ -22,6 +22,8 @@ use frame_benchmarking::v2::*;
         T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
         // The Storage Providers `ProviderId` type is the same as `frame_system::Hash`.
         T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
+        // The events from this pallet can be converted into events of the Runtime.
+        <T as frame_system::Config>::RuntimeEvent: From<pallet::Event<T>>
 )]
 mod benchmarks {
     use codec::Decode;
@@ -33,6 +35,7 @@ mod benchmarks {
         },
     };
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
+    use pallet_storage_providers::types::ProviderIdFor;
     use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
     use sp_runtime::{
         traits::{Hash, One},
@@ -107,11 +110,22 @@ mod benchmarks {
         n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, proof) = setup_submit_proof::<T>(file_key_proofs_count)?;
+        let (caller, provider_id, challenged_tick, proof) =
+            setup_submit_proof::<T>(file_key_proofs_count)?;
 
         // Call some extrinsic.
         #[extrinsic_call]
-        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
+        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
+
+        // Check that the proof submission was successful.
+        frame_system::Pallet::<T>::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+                last_tick_proven: challenged_tick,
+            }
+            .into(),
+        );
 
         Ok(())
     }
@@ -144,11 +158,22 @@ mod benchmarks {
         >,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, proof) = setup_submit_proof::<T>(file_key_proofs_count)?;
+        let (caller, provider_id, challenged_tick, proof) =
+            setup_submit_proof::<T>(file_key_proofs_count)?;
 
         // Call some extrinsic.
         #[extrinsic_call]
-        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof, None);
+        Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
+
+        // Check that the proof submission was successful.
+        frame_system::Pallet::<T>::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+                last_tick_proven: challenged_tick,
+            }
+            .into(),
+        );
 
         Ok(())
     }
@@ -262,7 +287,7 @@ mod benchmarks {
             crate::mock::Test,
     }
 
-    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, Proof<T>), BenchmarkError>
+    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
     where
     // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
         T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
@@ -394,7 +419,7 @@ mod benchmarks {
         // Check that the proof has the expected number of file key proofs.
         assert_eq!(proof.key_proofs.len() as u32, n);
 
-        Ok((caller, proof))
+        Ok((caller, provider_id, challenge_block, proof))
     }
 
     fn generate_challenges<T: Config>(

@@ -30,7 +30,8 @@ pub mod pallet {
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
-        ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
+        ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+        TrieRemoveMutation,
     };
     use sp_runtime::{
         traits::{CheckedSub, Convert, Saturating, Zero},
@@ -477,7 +478,7 @@ pub mod pallet {
         /// A set of mutations has been applied to the Forest.
         MutationsApplied {
             provider: ProviderIdFor<T>,
-            mutations: Vec<(KeyFor<T>, TrieRemoveMutation)>,
+            mutations: Vec<(KeyFor<T>, TrieMutation)>,
             new_root: KeyFor<T>,
         },
 

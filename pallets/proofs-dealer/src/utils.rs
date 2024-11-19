@@ -256,27 +256,22 @@ where
         // Apply the delta to the Forest root for all mutations that are in checkpoint challenges.
         if let Some(challenges) = checkpoint_challenges {
             // Aggregate all mutations to apply to the Forest root.
-            let mutations: Vec<_> = challenges
+            let mutations = challenges
                 .iter()
                 .filter_map(|(key, mutation)| match mutation {
                     Some(mutation) if forest_keys_proven.contains(key) => {
-                        Some((*key, mutation.clone()))
+                        Some((*key, Into::<TrieMutation>::into(mutation.clone())))
                     }
                     Some(_) | None => None,
                 })
-                .collect();
+                .collect::<Vec<_>>();
 
             if !mutations.is_empty() {
-                let converted_mutations = mutations
-                    .iter()
-                    .map(|(key, mutation)| (*key, mutation.clone().into()))
-                    .collect::<Vec<(KeyFor<T>, TrieMutation)>>();
-
                 // Apply the mutations to the Forest.
                 let (_, new_root, mutated_keys_and_values) = <T::ForestVerifier as TrieProofDeltaApplier<
                     T::MerkleTrieHashing,
                 >>::apply_delta(
-                    &root, converted_mutations.as_slice(), forest_proof
+                    &root, mutations.as_slice(), forest_proof
                 )
                 .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 

@@ -1490,7 +1490,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 provider: provider_id,
                 mutations: custom_challenges
                     .iter()
-                    .map(|(key, mutation)| (*key, mutation.clone().unwrap()))
+                    .map(|(key, mutation)| (*key, mutation.clone().unwrap().into()))
                     .collect(),
                 new_root: challenges.last().unwrap().clone(),
             }
@@ -2341,7 +2341,7 @@ fn submit_proof_forest_proof_verification_fail() {
 }
 
 #[test]
-fn submit_proof_number_of_key_proofs_lowe_than_keys_verified_in_forest_fail() {
+fn submit_proof_number_of_key_proofs_lower_than_keys_verified_in_forest_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);

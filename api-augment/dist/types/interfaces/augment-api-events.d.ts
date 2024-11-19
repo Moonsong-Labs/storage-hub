@@ -29,6 +29,7 @@ import type {
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -694,6 +695,7 @@ declare module "@polkadot/api-base/types/events" {
           mspId: Option<H256>,
           bucketId: H256,
           name: Bytes,
+          root: H256,
           collectionId: Option<u32>,
           private: bool,
           valuePropId: Option<H256>
@@ -703,6 +705,7 @@ declare module "@polkadot/api-base/types/events" {
           mspId: Option<H256>;
           bucketId: H256;
           name: Bytes;
+          root: H256;
           collectionId: Option<u32>;
           private: bool;
           valuePropId: Option<H256>;
@@ -2041,14 +2044,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [
-          provider: H256,
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
-          newRoot: H256
-        ],
+        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
         {
           provider: H256;
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
           newRoot: H256;
         }
       >;
@@ -2172,14 +2171,16 @@ declare module "@polkadot/api-base/types/events" {
       >;
       /**
        * Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
-       * that BSP's account id, the total data it can store according to its stake, and its multiaddress.
+       * that BSP's account id, the initial root of the Merkle Patricia Trie that it stores, the total data it can store
+       * according to its stake, and its multiaddress.
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
+        [who: AccountId32, bspId: H256, root: H256, multiaddresses: Vec<Bytes>, capacity: u64],
         {
           who: AccountId32;
           bspId: H256;
+          root: H256;
           multiaddresses: Vec<Bytes>;
           capacity: u64;
         }
