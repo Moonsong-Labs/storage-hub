@@ -769,9 +769,8 @@ pub mod pallet {
 
         /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
         /// let block builders know how much weight to reserve for it
-        /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
         fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
-            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(0, 2)
+            T::WeightInfo::on_finalize()
         }
 
         fn on_finalize(block_number: BlockNumberFor<T>) {

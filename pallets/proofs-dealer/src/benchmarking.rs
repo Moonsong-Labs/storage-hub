@@ -26,6 +26,7 @@ use frame_benchmarking::v2::*;
         <T as frame_system::Config>::RuntimeEvent: From<pallet::Event<T>>
 )]
 mod benchmarks {
+    use __private::traits::Hooks;
     use codec::Decode;
     use frame_support::{
         assert_ok,
@@ -35,11 +36,11 @@ mod benchmarks {
             Get,
         },
     };
-    use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
+    use frame_system::{pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, RawOrigin};
     use pallet_storage_providers::types::ProviderIdFor;
     use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
     use sp_runtime::{
-        traits::{Hash, One},
+        traits::{Hash, One, Zero},
         BoundedVec,
     };
     use sp_std::{vec, vec::Vec};
@@ -343,6 +344,54 @@ mod benchmarks {
 
         // Check that chain is considered to be not spammed.
         assert!(ChallengesTickerPaused::<T>::get().is_none());
+
+        Ok(())
+    }
+
+    /// * Case:
+    /// - Current block is greater than `BlockFullnessPeriod`, so the part of this function that removes
+    ///   old blocks from the `NotFullBlocksCount` is executed.
+    #[benchmark]
+    fn on_finalize() -> Result<(), BenchmarkError> {
+        // Set current block to be one block beyond `BlockFullnessPeriod`, so that the removal of old
+        // blocks' weight is executed.
+        let current_block = T::BlockFullnessPeriod::get() + One::one();
+        frame_system::Pallet::<T>::set_block_number(current_block);
+
+        // Set the weight used in block `current_block` - (`BlockFullnessPeriod` + 1).
+        let weights = T::BlockWeights::get();
+        let max_weight_for_class = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let block_to_remove_weight = current_block - T::BlockFullnessPeriod::get() - One::one();
+        PastBlocksWeight::<T>::insert(block_to_remove_weight, max_weight_for_class);
+
+        // Set the current block's weight.
+        let current_block_weight = ConsumedWeight::new(|class: DispatchClass| match class {
+            DispatchClass::Normal => max_weight_for_class,
+            DispatchClass::Operational => Zero::zero(),
+            DispatchClass::Mandatory => Zero::zero(),
+        });
+        BlockWeight::<T>::set(current_block_weight);
+
+        // Check that there is no value in the `PastBlocksWeight` StorageMap for block `current_block`.
+        assert!(PastBlocksWeight::<T>::get(current_block).is_none());
+
+        #[block]
+        {
+            Pallet::<T>::on_finalize(current_block);
+        }
+
+        // Check that the current block's weight is registered in the `PastBlocksWeight` StorageMap.
+        assert!(PastBlocksWeight::<T>::get(current_block).is_some());
+        assert_eq!(
+            PastBlocksWeight::<T>::get(current_block).unwrap(),
+            max_weight_for_class
+        );
+
+        // Check that block `current_block` - (`BlockFullnessPeriod` + 1) is removed from the `PastBlocksWeight` StorageMap.
+        assert!(PastBlocksWeight::<T>::get(block_to_remove_weight).is_none());
 
         Ok(())
     }
