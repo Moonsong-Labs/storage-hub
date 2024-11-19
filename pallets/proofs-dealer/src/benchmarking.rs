@@ -22,6 +22,7 @@ use frame_benchmarking::v2::*;
         T: pallet_storage_providers::Config<MerklePatriciaRoot = <T as frame_system::Config>::Hash>,
         // The Storage Providers `ProviderId` type is the same as `frame_system::Hash`.
         T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
+        // The events from this pallet can be converted into events of the Runtime.
         <T as frame_system::Config>::RuntimeEvent: From<pallet::Event<T>>
 )]
 mod benchmarks {
