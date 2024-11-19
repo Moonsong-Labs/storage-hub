@@ -29,6 +29,7 @@ mod benchmarks {
     use codec::Decode;
     use frame_support::{
         assert_ok,
+        dispatch::DispatchClass,
         traits::{
             fungible::{Mutate, MutateHold},
             Get,
@@ -42,7 +43,7 @@ mod benchmarks {
         BoundedVec,
     };
     use sp_std::{vec, vec::Vec};
-    use sp_weights::WeightMeter;
+    use sp_weights::{Weight, WeightMeter};
 
     use super::*;
     use crate::{
@@ -52,8 +53,9 @@ mod benchmarks {
             ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, KeyFor,
             MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
         },
-        Call, ChallengesQueue, ChallengesTicker, Config, Event, LastCheckpointTick,
-        LastTickProviderSubmittedAProofFor, Pallet, SlashableProviders, TickToChallengesSeed,
+        Call, ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Config, Event,
+        LastCheckpointTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
+        PastBlocksWeight, SlashableProviders, TickToChallengesSeed,
         TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
     };
 
@@ -277,6 +279,70 @@ mod benchmarks {
         // Check that the checkpoint challenge tick was registered.
         let checkpoint_challenge_tick_after = LastCheckpointTick::<T>::get();
         assert_eq!(checkpoint_challenge_tick_after, checkpoint_challenge_tick);
+
+        Ok(())
+    }
+
+    /// * Case:
+    /// - The previous block is considered _not_ full, so it increments the count.
+    /// - We're already past the first {[`T::BlockFullnessPeriod`] + 1} blocks, so that the part of this
+    ///   function that clears old blocks from the `NotFullBlocksCount` is executed.
+    /// - The oldest block to clear was a full block, so it doesn't decrement the count. Although the
+    ///   intuition would be that in the worst case scenario, it should execute the code to decrement, if
+    ///   it did decrement, there would be no chance in the number of blocks considered not full, so...
+    /// - There is a change in the number of blocks considered not full, so there is a write to `NotFullBlocksCount`.
+    /// - It is irrelevant if the chain is considered to be spammed or not, as both executions are of the same
+    ///   complexity in terms of computation and storage read/writes. We're going to consider it going from spammed
+    ///   to not spammed.
+    #[benchmark]
+    fn check_spamming_condition() -> Result<(), BenchmarkError> {
+        // Set the block number to be the first block after going beyond `T::BlockFullnessPeriod` blocks.
+        let block_fullness_period = T::BlockFullnessPeriod::get();
+        frame_system::Pallet::<T>::set_block_number(block_fullness_period + One::one());
+
+        // Set tick number to be the same as the block number.
+        ChallengesTicker::<T>::set(frame_system::Pallet::<T>::block_number());
+
+        // Set the previous block weight to something below the threshold, so that it is considered not full.
+        let weights = T::BlockWeights::get();
+        let max_weight_for_class = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+        let prev_block_weight = max_weight_for_class
+            - T::BlockFullnessHeadroom::get()
+            - Weight::from_parts(One::one(), One::one());
+        let prev_block = frame_system::Pallet::<T>::block_number() - One::one();
+        PastBlocksWeight::<T>::insert(prev_block, prev_block_weight);
+
+        // Set the weight of a block `BlockFullnessPeriod + 1` blocks before, to one such that it is considered full.
+        let old_block =
+            frame_system::Pallet::<T>::block_number() - T::BlockFullnessPeriod::get() - One::one();
+        PastBlocksWeight::<T>::insert(old_block, max_weight_for_class);
+
+        // Setting `NotFullBlocksCount` to be just exactly the minimum, so that with this increment the
+        // chain is considered to be not spammed.
+        let min_not_full_blocks_to_spam = Pallet::<T>::calculate_min_non_full_blocks_to_spam();
+        NotFullBlocksCount::<T>::set(min_not_full_blocks_to_spam);
+
+        // Set the chain to be considered spammed.
+        ChallengesTickerPaused::<T>::set(Some(()));
+
+        let mut meter: WeightMeter = WeightMeter::new();
+        #[block]
+        {
+            Pallet::<T>::do_check_spamming_condition(&mut meter);
+        }
+
+        // Check that blocks considered NOT full is incremented by 1.
+        let not_full_blocks_count = NotFullBlocksCount::<T>::get();
+        assert_eq!(
+            not_full_blocks_count,
+            min_not_full_blocks_to_spam + One::one()
+        );
+
+        // Check that chain is considered to be not spammed.
+        assert!(ChallengesTickerPaused::<T>::get().is_none());
 
         Ok(())
     }

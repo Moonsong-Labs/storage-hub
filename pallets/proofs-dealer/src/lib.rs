@@ -743,8 +743,6 @@ pub mod pallet {
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut sp_weights::WeightMeter) {
-            // TODO: Benchmark computational weight cost of this hook.
-
             // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.
             if ChallengesTickerPaused::<T>::get().is_none() {
                 Self::do_new_challenges_round(weight);
@@ -757,6 +755,16 @@ pub mod pallet {
             // Then if at this block we consider the network to be under spam, we pause the `ChallengesTicker`, which will not
             // be incremented in the next block.
             Self::do_check_spamming_condition(weight);
+        }
+
+        /// This hook is used to trim down the `ValidProofSubmittersLastTicks` StorageMap up to the `TargetTicksOfProofsStorage`.
+        ///
+        /// It runs when the block is being finalized (but before the `on_finalize` hook) and can consume all remaining weight.
+        /// It returns the used weight, so it can be used to calculate the remaining weight for the block for any other
+        /// pallets that have `on_idle` hooks.
+        fn on_idle(n: BlockNumberFor<T>, weight: Weight) -> Weight {
+            // TODO: Benchmark computational and proof size weight cost of this hook.
+            Self::do_trim_valid_proof_submitters_last_ticks(n, weight)
         }
 
         /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
@@ -814,16 +822,6 @@ pub mod pallet {
                 T::BlockFullnessPeriod::get(),
                 T::ChallengeTicksTolerance::get()
             );
-        }
-
-        /// This hook is used to trim down the `ValidProofSubmittersLastTicks` StorageMap up to the `TargetTicksOfProofsStorage`.
-        ///
-        /// It runs when the block is being finalized (but before the `on_finalize` hook) and can consume all remaining weight.
-        /// It returns the used weight, so it can be used to calculate the remaining weight for the block for any other
-        /// pallets that have `on_idle` hooks.
-        fn on_idle(n: BlockNumberFor<T>, weight: Weight) -> Weight {
-            // TODO: Benchmark computational and proof size weight cost of this hook.
-            Self::do_trim_valid_proof_submitters_last_ticks(n, weight)
         }
     }
 }

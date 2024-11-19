@@ -647,9 +647,7 @@ where
         if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get() {
             // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
             // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
-            let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
-            let min_non_full_blocks =
-                min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
+            let min_non_full_blocks = Self::calculate_min_non_full_blocks_to_spam();
 
             // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
             if new_not_full_blocks_count > min_non_full_blocks {
@@ -660,6 +658,9 @@ where
                 ChallengesTickerPaused::<T>::set(Some(()));
             }
         }
+
+        // Consume weight.
+        weight.consume(T::WeightInfo::check_spamming_condition());
     }
 
     /// Generate new checkpoint challenges for a given block.
@@ -766,6 +767,64 @@ where
         ));
     }
 
+    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
+    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
+    ///
+    /// This function is called in the `on_idle` hook, which means it's only called when the block has
+    /// unused weight.
+    ///
+    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
+    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
+    /// has `TargetTicksOfProofsStorage` ticks left.
+    pub fn do_trim_valid_proof_submitters_last_ticks(
+        _n: BlockNumberFor<T>,
+        usable_weight: Weight,
+    ) -> Weight {
+        // Initialize the weight used by this function.
+        let mut used_weight = Weight::zero();
+
+        // Check how many ticks should be removed to keep the storage at the target amount.
+        let mut last_deleted_tick = LastDeletedTick::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let current_tick = ChallengesTicker::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let ticks_to_remove = current_tick
+            .saturating_sub(last_deleted_tick)
+            .saturating_sub(target_ticks_to_keep.into());
+
+        // Check how much ticks can be removed considering weight limitations
+        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
+        let removable_ticks = usable_weight
+            .saturating_sub(used_weight)
+            .checked_div_per_component(&weight_to_remove_tick);
+
+        // If there is enough weight to remove ticks, try to remove as many ticks as possible until the target is reached.
+        if let Some(removable_ticks) = removable_ticks {
+            let removable_ticks =
+                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
+            // Remove all the ticks that we can, until we reach the target amount.
+            for _ in 0..removable_ticks {
+                // Get the next tick to delete.
+                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
+
+                // Remove it from storage
+                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
+
+                // Update the last removed tick
+                LastDeletedTick::<T>::set(next_tick_to_delete);
+                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
+
+                // Increment the used weight.
+                used_weight = used_weight.saturating_add(weight_to_remove_tick);
+            }
+        }
+
+        // Return the weight used by this function.
+        used_weight
+    }
+
     /// Convert stake to challenge period.
     ///
     /// [`StakeToChallengePeriodFor`] is divided by `stake` to get the number of blocks in between challenges
@@ -860,62 +919,14 @@ where
         challenges
     }
 
-    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
-    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
+    /// Calculate the minimum number of blocks that should be not full to consider the network
+    /// to be presumably under spam attack.
     ///
-    /// This function is called in the `on_idle` hook, which means it's only called when the block has
-    /// unused weight.
-    ///
-    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
-    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
-    /// has `TargetTicksOfProofsStorage` ticks left.
-    pub fn do_trim_valid_proof_submitters_last_ticks(
-        _n: BlockNumberFor<T>,
-        usable_weight: Weight,
-    ) -> Weight {
-        // Initialize the weight used by this function.
-        let mut used_weight = Weight::zero();
-
-        // Check how many ticks should be removed to keep the storage at the target amount.
-        let mut last_deleted_tick = LastDeletedTick::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let current_tick = ChallengesTicker::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let ticks_to_remove = current_tick
-            .saturating_sub(last_deleted_tick)
-            .saturating_sub(target_ticks_to_keep.into());
-
-        // Check how much ticks can be removed considering weight limitations
-        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
-        let removable_ticks = usable_weight
-            .saturating_sub(used_weight)
-            .checked_div_per_component(&weight_to_remove_tick);
-
-        // If there is enough weight to remove ticks, try to remove as many ticks as possible until the target is reached.
-        if let Some(removable_ticks) = removable_ticks {
-            let removable_ticks =
-                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
-            // Remove all the ticks that we can, until we reach the target amount.
-            for _ in 0..removable_ticks {
-                // Get the next tick to delete.
-                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
-
-                // Remove it from storage
-                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
-
-                // Update the last removed tick
-                LastDeletedTick::<T>::set(next_tick_to_delete);
-                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
-
-                // Increment the used weight.
-                used_weight = used_weight.saturating_add(weight_to_remove_tick);
-            }
-        }
-
-        // Return the weight used by this function.
-        used_weight
+    /// To be precise, the number of non full blocks should be greater than what this function
+    /// returns.
+    pub(crate) fn calculate_min_non_full_blocks_to_spam() -> BlockNumberFor<T> {
+        let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
+        min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get())
     }
 }
 
