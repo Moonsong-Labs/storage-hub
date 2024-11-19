@@ -1361,6 +1361,7 @@ export default {
       BspSignUpSuccess: {
         who: "AccountId32",
         bspId: "H256",
+        root: "H256",
         multiaddresses: "Vec<Bytes>",
         capacity: "u64"
       },
@@ -1445,6 +1446,7 @@ export default {
         mspId: "Option<H256>",
         bucketId: "H256",
         name: "Bytes",
+        root: "H256",
         collectionId: "Option<u32>",
         private: "bool",
         valuePropId: "Option<H256>"

@@ -607,7 +607,7 @@ where
             fingerprint,
             size,
             msp,
-            user_peer_ids: user_peer_ids.unwrap_or_default(),
+            user_peer_ids: user_peer_ids.clone().unwrap_or_default(),
             bsps_required,
             bsps_confirmed: ReplicationTargetType::<T>::zero(),
             bsps_volunteered: ReplicationTargetType::<T>::zero(),
@@ -642,6 +642,17 @@ where
 
         let expiration_item = ExpirationItem::StorageRequest(file_key);
         Self::enqueue_expiration_item(expiration_item)?;
+
+        // BSPs listen to this event and volunteer to store the file
+        Self::deposit_event(Event::NewStorageRequest {
+            who: sender,
+            file_key,
+            bucket_id,
+            location,
+            fingerprint,
+            size,
+            peer_ids: user_peer_ids.unwrap_or_default(),
+        });
 
         Ok(file_key)
     }

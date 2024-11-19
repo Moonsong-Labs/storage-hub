@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS bsp_file;
+
+DROP TABLE IF EXISTS file;
