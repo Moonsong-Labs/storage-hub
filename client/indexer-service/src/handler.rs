@@ -186,6 +186,7 @@ impl IndexerService {
                 collection_id,
                 private,
                 value_prop_id: _,
+                root,
             } => {
                 let msp = match msp_id {
                     Some(msp_id) => {
@@ -201,6 +202,7 @@ impl IndexerService {
                     name.to_vec(),
                     collection_id.map(|id| id.to_string()),
                     *private,
+                    root.as_ref().to_vec(),
                 )
                 .await?;
             }
@@ -223,17 +225,83 @@ impl IndexerService {
                 )
                 .await?;
             }
-            pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {}
-            pallet_file_system::Event::BspConfirmedStoring { .. } => {}
-            pallet_file_system::Event::NewStorageRequest { .. } => {}
+            pallet_file_system::Event::BspConfirmStoppedStoring {
+                bsp_id,
+                file_key: _,
+                new_root,
+            } => {
+                Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
+                    .await?;
+            }
+            pallet_file_system::Event::BspConfirmedStoring {
+                who: _,
+                bsp_id,
+                confirmed_file_keys,
+                skipped_file_keys: _,
+                new_root,
+            } => {
+                Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
+                    .await?;
+
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
+                for file_key in confirmed_file_keys {
+                    let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                    BspFile::create(conn, bsp.id, file.id).await?;
+                }
+            }
+            pallet_file_system::Event::NewStorageRequest {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+            } => {
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.to_string()).await?;
+
+                let mut sql_peer_ids = Vec::new();
+                for peer_id in peer_ids {
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                }
+
+                File::create(
+                    conn,
+                    who.to_string(),
+                    file_key.as_ref().to_vec(),
+                    bucket.id,
+                    location.to_vec(),
+                    fingerprint.as_ref().to_vec(),
+                    *size as i64,
+                    FileStorageRequestStep::Requested,
+                    sql_peer_ids,
+                )
+                .await?;
+            }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
-            pallet_file_system::Event::StorageRequestFulfilled { .. } => {}
-            pallet_file_system::Event::StorageRequestExpired { .. } => {}
-            pallet_file_system::Event::StorageRequestRejected { .. } => {}
-            pallet_file_system::Event::StorageRequestRevoked { .. } => {}
+            pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Stored,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestExpired { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Stored,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestRevoked { file_key } => {
+                File::delete(conn, file_key.as_ref().to_vec()).await?;
+            }
             pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
+            pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
@@ -244,7 +312,13 @@ impl IndexerService {
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::MspStoppedStoringBucket { .. } => {}
-            pallet_file_system::Event::BucketDeleted { .. } => {}
+            pallet_file_system::Event::BucketDeleted {
+                who: _,
+                bucket_id,
+                maybe_collection_id: _,
+            } => {
+                Bucket::delete(conn, bucket_id.to_string()).await?;
+            }
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
@@ -357,6 +431,7 @@ impl IndexerService {
             pallet_storage_providers::Event::BspSignUpSuccess {
                 who,
                 bsp_id,
+                root,
                 multiaddresses,
                 capacity,
             } => {
@@ -379,6 +454,7 @@ impl IndexerService {
                     conn,
                     who.to_string(),
                     capacity.into(),
+                    root.as_ref().to_vec(),
                     sql_multiaddresses,
                     bsp_id.to_string(),
                     stake,
@@ -451,7 +527,14 @@ impl IndexerService {
             } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
-            pallet_storage_providers::Event::BucketRootChanged { .. } => {}
+            pallet_storage_providers::Event::BucketRootChanged {
+                bucket_id,
+                old_root: _,
+                new_root,
+            } => {
+                Bucket::update_merkle_root(conn, bucket_id.to_string(), new_root.as_ref().to_vec())
+                    .await?;
+            }
             pallet_storage_providers::Event::Slashed {
                 provider_id,
                 amount_slashed: _amount_slashed,

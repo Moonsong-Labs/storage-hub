@@ -495,6 +495,22 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        // Verify if file not already stored
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+        if fs.read().await.contains_file_key(&event.file_key.into())? {
+            info!(
+                target: LOG_TARGET,
+                "Skipping file key {:?} NewStorageRequest because we are already storing it.",
+                event.file_key
+            );
+            return Ok(());
+        }
+
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
