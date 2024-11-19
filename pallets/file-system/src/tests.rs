@@ -162,6 +162,7 @@ mod create_bucket_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -215,6 +216,7 @@ mod create_bucket_tests {
                         collection_id: None,
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1188,6 +1190,7 @@ mod update_bucket_privacy_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1261,6 +1264,7 @@ mod update_bucket_privacy_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1361,6 +1365,7 @@ mod update_bucket_privacy_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
