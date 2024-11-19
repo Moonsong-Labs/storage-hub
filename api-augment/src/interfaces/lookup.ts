@@ -3590,7 +3590,7 @@ export default {
         userAccounts: "Vec<AccountId32>"
       },
       pay_outstanding_debt: {
-        amountOfStreamsToPay: "u32"
+        providers: "Vec<H256>"
       },
       clear_insolvent_flag: "Null"
     }

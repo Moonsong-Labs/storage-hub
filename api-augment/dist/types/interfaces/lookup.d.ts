@@ -3514,7 +3514,7 @@ declare const _default: {
         userAccounts: string;
       };
       pay_outstanding_debt: {
-        amountOfStreamsToPay: string;
+        providers: string;
       };
       clear_insolvent_flag: string;
     };
