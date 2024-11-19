@@ -1099,9 +1099,9 @@ where
     /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
     /// submit a proof of storage for the neighbouring file keys of the missing challenged file key.
     ///
-    /// The slashing amount is calculated as the product of the [`SlashAmountPerMaxFileSize`](Config::SlashAmountPerMaxFileSize) (an assumption
-    /// that every file is the maximum size allowed by the protocol) and the accrued failed proof submissions multiplied by `2` to
-    /// account for the worst case scenario where the provider would have proved two file keys surrounding the challenged file key.
+    /// The slashing amount is calculated as the product of the [`SlashAmountPerMaxFileSize`](Config::SlashAmountPerMaxFileSize)
+    /// (an assumption that most file sizes fall below this large arbitrary size) and the accrued failed proof submissions multiplied
+    /// by `2` to account for the worst case scenario where the provider would have proved two file keys surrounding the challenged file key.
     pub fn compute_worst_case_scenario_slashable_amount(
         provider_id: &ProviderIdFor<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {

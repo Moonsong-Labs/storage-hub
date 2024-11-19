@@ -544,8 +544,8 @@ pub mod pallet {
             amount: BalanceOf<T>,
         },
 
-        /// Event emitted when a provider has been slashed optionally signaling the end of the grace
-        /// period if an automatic top up could not be performed.
+        /// Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
+        /// signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
         AwaitingTopUp {
             provider_id: ProviderIdFor<T>,
             top_up_metadata: TopUpMetadata,

@@ -1660,8 +1660,8 @@ declare module "@polkadot/api-base/types/events" {
     };
     providers: {
       /**
-       * Event emitted when a provider has been slashed optionally signaling the end of the grace
-       * period if an automatic top up could not be performed.
+       * Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
+       * signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
        **/
       AwaitingTopUp: AugmentedEvent<
         ApiType,
