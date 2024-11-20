@@ -176,7 +176,7 @@ export class BspNetTestApi implements AsyncDisposable {
 
   private enrichApi() {
     const remappedAssertNs = {
-      fetchEventData: Assertions.fetchEventData,
+      fetchEvent: Assertions.fetchEvent,
 
       /**
        * Asserts that a specific event is present in the given events or the latest block.

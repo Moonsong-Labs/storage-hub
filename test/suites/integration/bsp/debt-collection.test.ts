@@ -3,7 +3,7 @@ import { after } from "node:test";
 import {
   bob,
   describeBspNet,
-  fetchEventData,
+  fetchEvent,
   ShConsts,
   sleep,
   type EnrichedBspApi
@@ -336,7 +336,9 @@ describeBspNet(
         updateDynamicRatePaymentStreamResult.events
       );
       // Get the on-chain payment stream information
-      const [userAccount, providerId, newAmountProvided] = fetchEventData(
+      const {
+        data: { userAccount, providerId, newAmountProvided }
+      } = fetchEvent(
         userApi.events.paymentStreams.DynamicRatePaymentStreamUpdated,
         await userApi.query.system.events()
       );
