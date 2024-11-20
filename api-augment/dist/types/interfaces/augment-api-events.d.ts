@@ -30,6 +30,7 @@ import type {
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -2064,14 +2065,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [
-          provider: H256,
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
-          newRoot: H256
-        ],
+        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
         {
           provider: H256;
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
           newRoot: H256;
         }
       >;
@@ -2320,6 +2317,19 @@ declare module "@polkadot/api-base/types/events" {
         {
           providerId: H256;
           removedMultiaddress: Bytes;
+        }
+      >;
+      /**
+       * Event emitted when a provider has been marked as insolvent.
+       *
+       * This happens when the provider hasn't topped up their deposit within the grace period after being slashed
+       * and they have a capacity deficit (i.e. their capacity is below their used capacity).
+       **/
+      ProviderInsolvent: AugmentedEvent<
+        ApiType,
+        [providerId: H256],
+        {
+          providerId: H256;
         }
       >;
       /**

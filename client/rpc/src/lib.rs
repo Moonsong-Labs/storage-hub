@@ -24,6 +24,12 @@ use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, S
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointChallenge {
+    pub file_key: H256,
+    pub should_remove_file: bool,
+}
+
 pub struct StorageHubClientRpcConfig<FL, FSH> {
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage_handler: FSH,
@@ -142,7 +148,7 @@ pub trait StorageHubClientApi {
         &self,
         provider_id: H256,
         seed: H256,
-        challenged_file_keys: Vec<H256>,
+        checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>>;
 
     #[method(name = "insertBcsvKeys")]
@@ -448,10 +454,33 @@ where
         &self,
         provider_id: H256,
         seed: H256,
-        challenged_file_keys: Vec<H256>,
+        checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>> {
         // TODO: Get provider ID itself.
-        // TODO: Generate challenges from seed.
+        debug!(target: LOG_TARGET, "Checkpoint challenges: {:?}", checkpoint_challenges);
+
+        // Getting Runtime APIs
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        // Generate challenges from seed.
+        let random_challenges = api
+            .get_forest_challenges_from_seed(at_hash, &seed, &provider_id)
+            .unwrap();
+
+        // Merge custom challenges with random challenges.
+        let challenges = if let Some(custom_challenges) = checkpoint_challenges.as_ref() {
+            let mut challenged_keys = custom_challenges
+                .iter()
+                .map(|custom_challenge| custom_challenge.file_key)
+                .collect::<Vec<_>>();
+
+            challenged_keys.extend(random_challenges.into_iter());
+
+            challenged_keys
+        } else {
+            random_challenges
+        };
 
         // Generate the Forest proof in a closure to drop the read lock on the Forest Storage.
         let proven_file_keys = {
@@ -462,15 +491,16 @@ where
                 .get(&Vec::new().into())
                 .await
                 .ok_or_else(|| {
-                    into_rpc_error(format!(
+                    into_rpc_error(
                         "Forest storage not found for empty key. Make sure you're running a BSP."
-                    ))
+                            .to_string(),
+                    )
                 })?;
 
             let p = fs
                 .read()
                 .await
-                .generate_proof(challenged_file_keys.clone())
+                .generate_proof(challenges)
                 .map_err(into_rpc_error)?;
 
             p
@@ -501,18 +531,39 @@ where
         // Construct key challenges and generate key proofs for them.
         let mut key_proofs = KeyProofs::new();
         for file_key in &proven_keys {
-            // Generate the key proof for each file key.
-            let key_proof = generate_key_proof(
-                self.client.clone(),
-                self.file_storage.clone(),
-                *file_key,
-                seed,
-                provider_id,
-                None,
-            )
-            .await?;
+            // If the file key is a checkpoint challenge for a file deletion, we should NOT generate a key proof for it.
+            let should_generate_key_proof = if let Some(checkpoint_challenges) =
+                checkpoint_challenges.as_ref()
+            {
+                if checkpoint_challenges.contains(&CheckpointChallenge {
+                    file_key: *file_key,
+                    should_remove_file: true,
+                }) {
+                    debug!(target: LOG_TARGET, "File key {} is a checkpoint challenge for a file deletion", file_key);
+                    false
+                } else {
+                    debug!(target: LOG_TARGET, "File key {} is not a checkpoint challenge for a file deletion", file_key);
+                    true
+                }
+            } else {
+                debug!(target: LOG_TARGET, "No checkpoint challenges provided");
+                false
+            };
 
-            key_proofs.insert(*file_key, key_proof);
+            if should_generate_key_proof {
+                // Generate the key proof for each file key.
+                let key_proof = generate_key_proof(
+                    self.client.clone(),
+                    self.file_storage.clone(),
+                    *file_key,
+                    seed,
+                    provider_id,
+                    None,
+                )
+                .await?;
+
+                key_proofs.insert(*file_key, key_proof);
+            };
         }
 
         // Construct full proof.

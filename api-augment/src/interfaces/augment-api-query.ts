@@ -1643,6 +1643,39 @@ declare module "@polkadot/api-base/types/storage" {
       mspCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * A pointer to the earliest available block to insert a new storage request expiration.
+       *
+       * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+       **/
+      nextAvailableProviderTopUpExpirationBlock: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the starting block to clean up expired storage requests.
+       *
+       * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
+       * attempt to accelerate this block pointer as close to or up to the current block number. This
+       * will execute provided that there is enough remaining weight to do so.
+       **/
+      nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A map of relay chain block numbers to expired provider top up period.
+       *
+       * Provider top up expiration items are ignored and cleared if the provider is not found in the `AwaitingTopUpFromProviders` storage.
+       * Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
+       * If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+       **/
+      providerTopUpExpirations: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
+      /**
        * The mapping from an AccountId that requested to sign up to a tuple of the metadata with type of the request, and the block
        * number when the request was made.
        *

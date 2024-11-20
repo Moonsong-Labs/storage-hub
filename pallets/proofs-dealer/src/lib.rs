@@ -30,11 +30,12 @@ pub mod pallet {
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
-        ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
+        ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+        TrieRemoveMutation,
     };
     use sp_runtime::{
-        traits::{CheckedSub, Convert, Saturating},
-        Perbill,
+        traits::{CheckedSub, Convert, Saturating, Zero},
+        Perbill, SaturatedConversion,
     };
     use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
@@ -398,6 +399,32 @@ pub mod pallet {
     pub type TickToCheckForSlashableProviders<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        /// The checkpoint challenges that will be registered for the first checkpoint challenge (i.e. tick 0).
+        pub initial_checkpoint_challenges:
+            BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            // Start with an empty vector of checkpoint challenges.
+            Self {
+                initial_checkpoint_challenges: Default::default(),
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            TickToCheckpointChallenges::<T>::insert(
+                &BlockNumberFor::<T>::zero(),
+                &self.initial_checkpoint_challenges,
+            );
+        }
+    }
+
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
     #[pallet::event]
@@ -451,7 +478,7 @@ pub mod pallet {
         /// A set of mutations has been applied to the Forest.
         MutationsApplied {
             provider: ProviderIdFor<T>,
-            mutations: Vec<(KeyFor<T>, TrieRemoveMutation)>,
+            mutations: Vec<(KeyFor<T>, TrieMutation)>,
             new_root: KeyFor<T>,
         },
 
@@ -536,6 +563,9 @@ pub mod pallet {
         /// not sufficient for the challenges made.
         ForestProofVerificationFailed,
 
+        /// The number of key proofs submitted does not match the number of keys proven in the forest proof.
+        IncorrectNumberOfKeyProofs,
+
         /// There is at least one key proven in the forest proof, that does not have a corresponding
         /// key proof.
         KeyProofNotFound,
@@ -547,6 +577,10 @@ pub mod pallet {
 
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
+
+        /// After successfully applying delta for a set of mutations, the number of mutated keys is
+        /// not the same as the number of mutations expected to have been applied.
+        UnexpectedNumberOfRemoveMutations,
 
         /// Failed to update the provider after a key removal mutation.
         FailedToUpdateProviderAfterKeyRemoval,
@@ -603,7 +637,26 @@ pub mod pallet {
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+            let max_random_key_proofs = T::RandomChallengesPerBlock::get().saturating_mul(2u32.into());
+            let max_custom_key_proofs = T::MaxCustomChallengesPerBlock::get().saturating_mul(2u32.into());
+
+            let max_key_proofs = max_random_key_proofs.saturating_add(max_custom_key_proofs);
+
+            let key_proofs_len = SaturatedConversion::saturated_into::<u32>(
+                proof.key_proofs.len()
+            );
+            match key_proofs_len {
+                n if n <= max_random_key_proofs => {
+                    T::WeightInfo::submit_proof_no_checkpoint_challenges_key_proofs(n)
+                }
+                n if n <= max_key_proofs => {
+                    T::WeightInfo::submit_proof_with_checkpoint_challenges_key_proofs(n)
+                }
+                // More key proofs than `max_key_proofs` would inevitably fail the transaction.
+                n => T::WeightInfo::submit_proof_with_checkpoint_challenges_key_proofs(n),
+            }
+        })]
         pub fn submit_proof(
             origin: OriginFor<T>,
             proof: Proof<T>,

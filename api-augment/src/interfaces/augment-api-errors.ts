@@ -947,6 +947,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ForestProofVerificationFailed: AugmentedError<ApiType>;
       /**
+       * The number of key proofs submitted does not match the number of keys proven in the forest proof.
+       **/
+      IncorrectNumberOfKeyProofs: AugmentedError<ApiType>;
+      /**
        * There is at least one key proven in the forest proof, that does not have a corresponding
        * key proof.
        **/
@@ -999,6 +1003,11 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       TooManyValidProofSubmitters: AugmentedError<ApiType>;
       /**
+       * After successfully applying delta for a set of mutations, the number of mutated keys is
+       * not the same as the number of mutations expected to have been applied.
+       **/
+      UnexpectedNumberOfRemoveMutations: AugmentedError<ApiType>;
+      /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be
        * submitting proofs.
@@ -1022,6 +1031,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
        **/
       AppendBucketToMspFailed: AugmentedError<ApiType>;
+      /**
+       * Failed thrown when trying to convert a type to a block number.
+       **/
+      BlockNumberConversionFailed: AugmentedError<ApiType>;
       /**
        * Error thrown when a bucket ID already exists in storage.
        **/
@@ -1074,6 +1087,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a Provider tries to remove the last MultiAddress from its account.
        **/
       LastMultiAddressCantBeRemoved: AugmentedError<ApiType>;
+      /**
+       * Congratulations, you either lived long enough or were born late enough to see this error.
+       **/
+      MaxBlockNumberReached: AugmentedError<ApiType>;
       /**
        * Error thrown when changing the MSP of a bucket to the same assigned MSP.
        **/
