@@ -2183,20 +2183,20 @@ mod hooks {
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
-            let current_data_price_per_unit =
-                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::get_price_per_unit_per_tick();
+            let current_data_price_per_giga_unit =
+                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
             weight.consume(T::DbWeight::get().reads(1));
 
-            let new_data_price_per_unit =
+            let new_data_price_per_giga_unit =
                 <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
-                    current_data_price_per_unit,
+                    current_data_price_per_giga_unit,
                     <T::Providers as shp_traits::SystemMetricsInterface>::get_total_used_capacity(),
                     <T::Providers as shp_traits::SystemMetricsInterface>::get_total_capacity(),
                 );
 
-            if new_data_price_per_unit != current_data_price_per_unit {
-                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::set_price_per_unit_per_tick(
-                    new_data_price_per_unit,
+            if new_data_price_per_giga_unit != current_data_price_per_giga_unit {
+                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
+                    new_data_price_per_giga_unit,
                 );
                 weight.consume(T::DbWeight::get().writes(1));
             }

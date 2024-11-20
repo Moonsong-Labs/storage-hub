@@ -1,7 +1,7 @@
 use crate::{
     mock::*,
     types::{BalanceOf, ProviderLastChargeableInfo},
-    AccumulatedPriceIndex, CurrentPricePerUnitPerTick, DynamicRatePaymentStreams, Error, Event,
+    AccumulatedPriceIndex, CurrentPricePerGigaUnitPerTick, DynamicRatePaymentStreams, Error, Event,
     LastChargeableInfo, RegisteredUsers, UsersWithoutFunds,
 };
 
@@ -18,6 +18,8 @@ use frame_support::{
 use shp_traits::{PaymentStreamsInterface, ReadProvidersInterface};
 use sp_core::H256;
 use sp_runtime::{bounded_vec, traits::Convert, DispatchError};
+
+const GIGAUNIT: u128 = 1_073_741_824;
 
 // `payment-streams` types:
 type NativeBalance = <Test as crate::Config>::NativeBalance;
@@ -1574,7 +1576,7 @@ mod fixed_rate_streams {
 
                 // Get the current price for dynamic-rate payment streams from the runtime
                 let current_storage_price: BalanceOf<Test> =
-                    PaymentStreams::get_current_price_per_unit_per_tick();
+                    PaymentStreams::get_current_price_per_giga_unit_per_tick();
 
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
@@ -2111,7 +2113,7 @@ mod fixed_rate_streams {
 
                 // Get the current price for dynamic-rate payment streams from the runtime
                 let current_storage_price: BalanceOf<Test> =
-                    PaymentStreams::get_current_price_per_unit_per_tick();
+                    PaymentStreams::get_current_price_per_giga_unit_per_tick();
 
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
@@ -2322,8 +2324,8 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2331,7 +2333,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
@@ -2403,8 +2405,8 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2412,7 +2414,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
@@ -2441,11 +2443,11 @@ mod dynamic_rate_streams {
             ExtBuilder::build().execute_with(|| {
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Try to create a payment stream from Bob to a random not registered BSP of 100 units provided
@@ -2468,8 +2470,8 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2482,7 +2484,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units per block
@@ -2560,8 +2562,8 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2569,7 +2571,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Transfer almost all of Bob's balance to Alice (Bob keeps `deposit_amount - 1` balance)
@@ -2604,12 +2606,12 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let charlie: AccountId = 2;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2698,11 +2700,11 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided: u64 = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2768,11 +2770,11 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2808,11 +2810,11 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2891,11 +2893,11 @@ mod dynamic_rate_streams {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2985,11 +2987,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3092,11 +3094,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3198,11 +3200,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3294,11 +3296,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3380,11 +3382,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3469,11 +3471,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3581,11 +3583,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3741,11 +3743,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 100;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3803,11 +3805,11 @@ mod dynamic_rate_streams {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3912,11 +3914,11 @@ mod dynamic_rate_streams {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -4062,11 +4064,11 @@ mod dynamic_rate_streams {
                 let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let initial_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let initial_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(initial_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -4118,11 +4120,11 @@ mod user_without_funds {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4309,11 +4311,11 @@ mod user_without_funds {
                 let david: AccountId = 3;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4533,11 +4535,11 @@ mod user_without_funds {
                 let david: AccountId = 3;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4787,12 +4789,12 @@ mod user_without_funds {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
                 let amount_provided = 100;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -4830,11 +4832,11 @@ mod user_without_funds {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -5033,11 +5035,11 @@ mod user_without_funds {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -5202,11 +5204,11 @@ mod user_without_funds {
                 let bob: AccountId = 1;
                 let charlie: AccountId = 2;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT;
+                let current_price_index = 10000 * GIGAUNIT;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -5306,12 +5308,12 @@ mod users_with_debt_over_threshold {
             let dave: AccountId = 3;
             let amount_provided_bob = 100;
             let amount_provided_charlie = 1;
-            let current_price = 10;
-            let current_price_index = 10000;
+            let current_price = 10 * GIGAUNIT;
+            let current_price_index = 10000 * GIGAUNIT;
             let empty_account_id_vector: Vec<AccountId> = Vec::new();
 
             // Update the current price and current price index
-            CurrentPricePerUnitPerTick::<Test>::put(current_price);
+            CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
             AccumulatedPriceIndex::<Test>::put(current_price_index);
 
             // Register Alice as a BSP with 100 units of data and get her BSP ID

@@ -301,7 +301,8 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Get the current price of storage from the runtime, the new stream deposit and the ED
-      const currentPriceOfStorage = await userApi.query.paymentStreams.currentPricePerUnitPerTick();
+      const currentPriceOfStorage =
+        await userApi.query.paymentStreams.currentPricePerGigaUnitPerTick();
       const newStreamDeposit = userApi.consts.paymentStreams.newStreamDeposit;
       const existentialDeposit = userApi.consts.balances.existentialDeposit;
 

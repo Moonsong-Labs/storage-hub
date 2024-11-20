@@ -1,5 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+//! This crate holds the logic for updating the price index of storage based on the system utilisation.
+//! It provides two structs that implement the `UpdateStoragePrice` trait:
+//! - `NoUpdatePriceIndexUpdater`: A struct that does not update the price index.
+//! - `MostlyStablePriceIndexUpdater`: A struct that updates the price index based on the system utilisation,
+//! but keeps a mostly stable price.
+
 use core::{
     cmp::{max, min},
     marker::PhantomData,

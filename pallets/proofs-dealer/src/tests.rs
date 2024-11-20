@@ -1395,7 +1395,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 user_deposit: 10
                     * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get(
                     ) as u128
-                    * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+                    * pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<Test>::get(),
                 out_of_funds_tick: None,
             },
         );
@@ -1569,7 +1569,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
                 user_deposit: 10
                     * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get(
                     ) as u128
-                    * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+                    * pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<Test>::get(),
                 out_of_funds_tick: None,
             },
         );

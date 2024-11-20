@@ -12,16 +12,18 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_traits::{
-    MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    MutatePricePerGigaUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
     TreasuryCutCalculator,
 };
 use sp_runtime::{
-    traits::{Convert, One},
+    traits::{CheckedDiv, Convert, One},
     Saturating,
 };
 
 use crate::{weights::WeightInfo, *};
+
+const GIGAUNIT: u32 = 1_073_741_824;
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -315,21 +317,24 @@ where
         );
 
         // Check that the user has enough balance to pay the deposit
-        // Deposit is: `amount_provided * current_price * NewStreamDeposit` where:
+        // Deposit is: `(amount_provided * current_price_per_giga_unit_per_tick * NewStreamDeposit) / giga_units ` where:
         // - `amount_provided` is the amount of units of something (for example, storage) that are provided by the Provider to the User
-        // - `current_price` is the current price of the units of something (per unit per tick)
+        // - `current_price_per_giga_unit_per_tick` is the current price of a giga-unit of something (per tick)
         // - `NewStreamDeposit` is a runtime constant that represents the number of ticks that the deposit should cover
+        // - `GIGAUNIT` is the number of units in a giga-unit (1024 * 1024 * 1024 = 1_073_741_824)
         let user_balance = T::NativeBalance::reducible_balance(
             &user_account,
             Preservation::Preserve,
             Fortitude::Polite,
         );
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
-        let deposit = current_price
+        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
+        let deposit = current_price_per_giga_unit_per_tick
             .checked_mul(&amount_provided.into())
             .ok_or(ArithmeticError::Overflow)?
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-            .ok_or(ArithmeticError::Overflow)?;
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_div(&GIGAUNIT.into())
+            .ok_or(ArithmeticError::Underflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
         // Check if we can hold the deposit from the User
@@ -441,13 +446,15 @@ where
         }
 
         // Update the user's deposit based on the new amount provided
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
+        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
         let new_deposit = new_amount_provided
             .into()
-            .checked_mul(&current_price)
+            .checked_mul(&current_price_per_giga_unit_per_tick)
             .ok_or(ArithmeticError::Overflow)?
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-            .ok_or(ArithmeticError::Overflow)?;
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_div(&GIGAUNIT.into())
+            .ok_or(ArithmeticError::Underflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
         // Update the payment stream in the DynamicRatePaymentStreams mapping
@@ -1224,7 +1231,7 @@ where
 
     pub fn do_update_price_index(meter: &mut sp_weights::WeightMeter) {
         // Get the current price
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
+        let current_price = CurrentPricePerGigaUnitPerTick::<T>::get();
 
         // Add it to the accumulated price index
         AccumulatedPriceIndex::<T>::mutate(|price_index| {
@@ -1628,15 +1635,15 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> MutatePricePerUnitPerTickInterface for pallet::Pallet<T> {
-    type PricePerUnitPerTick = BalanceOf<T>;
+impl<T: pallet::Config> MutatePricePerGigaUnitPerTickInterface for pallet::Pallet<T> {
+    type PricePerGigaUnitPerTick = BalanceOf<T>;
 
-    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick {
-        CurrentPricePerUnitPerTick::<T>::get()
+    fn get_price_per_giga_unit_per_tick() -> Self::PricePerGigaUnitPerTick {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
-    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick) {
-        CurrentPricePerUnitPerTick::<T>::put(price_index);
+    fn set_price_per_giga_unit_per_tick(price_index: Self::PricePerGigaUnitPerTick) {
+        CurrentPricePerGigaUnitPerTick::<T>::put(price_index);
     }
 }
 

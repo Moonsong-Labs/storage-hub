@@ -215,14 +215,13 @@ pub mod pallet {
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
 
-    /// The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+    /// The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
-    /// This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+    /// This can be updated each tick by the system manager.
     ///
-    /// This storage is updated in:
-    /// - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+    /// It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
     #[pallet::storage]
-    pub type CurrentPricePerUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+    pub type CurrentPricePerGigaUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
     /// The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
@@ -253,7 +252,7 @@ pub mod pallet {
         fn default() -> Self {
             let current_price = One::one();
 
-            CurrentPricePerUnitPerTick::<T>::put(current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(current_price);
 
             Self { current_price }
         }
@@ -262,7 +261,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            CurrentPricePerUnitPerTick::<T>::put(self.current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(self.current_price);
         }
     }
 
@@ -971,8 +970,8 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function to get the current price per unit per tick of the system
-    pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
-        CurrentPricePerUnitPerTick::<T>::get()
+    pub fn get_current_price_per_giga_unit_per_tick() -> BalanceOf<T> {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
     /// A helper function to get the accumulated price index of the system
