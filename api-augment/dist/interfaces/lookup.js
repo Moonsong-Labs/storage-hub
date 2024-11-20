@@ -4369,6 +4369,15 @@ export default {
     confirmed: "bool"
   },
   /**
+   * Lookup451: pallet_file_system::types::PendingFileDeletionRequest<T>
+   **/
+  PalletFileSystemPendingFileDeletionRequest: {
+    user: "AccountId32",
+    fileKey: "H256",
+    bucketId: "H256",
+    fileSize: "u64"
+  },
+  /**
    * Lookup457: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {

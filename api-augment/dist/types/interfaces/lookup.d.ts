@@ -4158,6 +4158,15 @@ declare const _default: {
     confirmed: string;
   };
   /**
+   * Lookup451: pallet_file_system::types::PendingFileDeletionRequest<T>
+   **/
+  PalletFileSystemPendingFileDeletionRequest: {
+    user: string;
+    fileKey: string;
+    bucketId: string;
+    fileSize: string;
+  };
+  /**
    * Lookup457: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
