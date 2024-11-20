@@ -6849,17 +6849,7 @@ mod delete_file_and_pending_deletions_tests {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let (msp_id, _) = add_msp_to_provider_storage(&msp);
-
-				// Create a new value proposition with a high price per gigabyte per tick so deleting the 4 byte file will
-				// actually make a difference in the rate of the fixed-rate payment stream between the user and the MSP.
-				let value_prop = ValueProposition::<Test>::new(1024 * 1024 * 1024, bounded_vec![], 10000);
-    			let value_prop_id = value_prop.derive_id();
-    			pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
-        			msp_id,
-        			value_prop_id,
-        			value_prop,
-    			);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -7000,6 +6990,8 @@ mod delete_file_and_pending_deletions_tests {
                 let size = 4;
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -7015,16 +7007,40 @@ mod delete_file_and_pending_deletions_tests {
                     fingerprint,
                 );
 
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
-
-                // Since we have to delete a file, we need to simulate that it's stored in the corresponding bucket.
-                pallet_storage_providers::Buckets::<Test>::mutate(bucket_id, |bucket| {
-                    if let Some(bucket) = bucket.as_mut() {
-                        bucket.size += size;
-                    }
-                });
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -8906,7 +8922,7 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        capacity: 1024 * 1024 * 1024,
+        capacity: 100,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),

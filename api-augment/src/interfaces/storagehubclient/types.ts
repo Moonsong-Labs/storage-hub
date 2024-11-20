@@ -101,12 +101,14 @@ export interface GetUsersWithDebtOverThresholdError extends Enum {
   readonly isProviderNotRegistered: boolean;
   readonly isProviderWithoutPaymentStreams: boolean;
   readonly isAmountToChargeOverflow: boolean;
+  readonly isAmountToChargeUnderflow: boolean;
   readonly isDebtOverflow: boolean;
   readonly isInternalApiError: boolean;
   readonly type:
     | "ProviderNotRegistered"
     | "ProviderWithoutPaymentStreams"
     | "AmountToChargeOverflow"
+    | "AmountToChargeUnderflow"
     | "DebtOverflow"
     | "InternalApiError";
 }
@@ -243,7 +245,7 @@ export interface ValuePropId extends H256 {}
 
 /** @name ValueProposition */
 export interface ValueProposition extends Struct {
-  readonly price_per_unit_of_data_per_block: u64;
+  readonly price_per_giga_unit_of_data_per_block: u64;
   readonly bucket_data_limit: StorageDataUnit;
 }
 

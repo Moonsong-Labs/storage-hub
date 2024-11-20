@@ -24,6 +24,7 @@ pub enum GetUsersWithDebtOverThresholdError {
     ProviderNotRegistered,
     ProviderWithoutPaymentStreams,
     AmountToChargeOverflow,
+    AmountToChargeUnderflow,
     DebtOverflow,
     InternalApiError,
 }

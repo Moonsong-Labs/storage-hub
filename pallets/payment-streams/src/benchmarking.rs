@@ -43,7 +43,7 @@ mod benchmarks {
         <T as frame_system::Config>::AccountId,
     >>::Balance;
 
-    const GIGABYTE: u32 = 1024 * 1024 * 1024; // Amount of bytes in a gigabyte
+    const GIGAUNIT: u32 = 1_073_741_824; // Amount of bytes in a gigabyte
 
     fn set_user_as_insolvent<T: crate::Config>(user: <T as frame_system::Config>::AccountId) {
         UsersWithoutFunds::<T>::insert(user, frame_system::Pallet::<T>::block_number());
@@ -273,7 +273,7 @@ mod benchmarks {
         // Verify that the charge event was emitted.
         let amount_charged: BalanceOf<T> = initial_rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
-                / GIGABYTE.into());
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
@@ -495,7 +495,7 @@ mod benchmarks {
         // Verify that the charge event was emitted.
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (initial_amount_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
-                / GIGABYTE.into());
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
@@ -589,7 +589,7 @@ mod benchmarks {
         // Verify that the charge event was emitted.
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
-                / GIGABYTE.into());
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
@@ -678,7 +678,7 @@ mod benchmarks {
         // Verify that the charge event was emitted.
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
-                / GIGABYTE.into());
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
@@ -766,7 +766,7 @@ mod benchmarks {
         // Verify that the charge event was emitted for each user
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
-                / GIGABYTE.into());
+                / GIGAUNIT.into());
         for user_account in user_accounts.iter() {
             let charge_event =
                 <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {

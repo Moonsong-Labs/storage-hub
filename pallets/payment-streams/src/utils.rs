@@ -322,6 +322,8 @@ where
         // - `current_price_per_giga_unit_per_tick` is the current price of a giga-unit of something (per tick)
         // - `NewStreamDeposit` is a runtime constant that represents the number of ticks that the deposit should cover
         // - `GIGAUNIT` is the number of units in a giga-unit (1024 * 1024 * 1024 = 1_073_741_824)
+        // As an example, if the `current_price_per_giga_unit_per_tick` is 10000 and the `NewStreamDeposit` is 100 ticks,
+        // the minimum amount provided would be 1074 units and the deposit would increase by 1 every 1074 units.
         let user_balance = T::NativeBalance::reducible_balance(
             &user_account,
             Preservation::Preserve,
@@ -755,7 +757,9 @@ where
                         // Calculate the amount to charge
                         let amount_to_charge = price_index_difference
                             .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                            .ok_or(Error::<T>::ChargeOverflow)?;
+                            .ok_or(Error::<T>::ChargeOverflow)?
+                            .checked_div(&GIGAUNIT.into())
+                            .ok_or(ArithmeticError::Underflow)?;
 
                         // Check the free balance of the user
                         let user_balance = T::NativeBalance::reducible_balance(
@@ -1049,7 +1053,9 @@ where
             let amount_to_charge = price_index_at_last_chargeable_tick
                 .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                 .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                .ok_or(ArithmeticError::Overflow)?;
+                .ok_or(ArithmeticError::Overflow)?
+                .checked_div(&GIGAUNIT.into())
+                .ok_or(ArithmeticError::Underflow)?;
 
             // If the amount to charge is greater than the deposit, just charge the deposit
             let amount_to_charge = amount_to_charge.min(dynamic_rate_payment_stream.user_deposit);
@@ -1354,7 +1360,9 @@ where
                 let amount_to_charge = price_index_at_last_chargeable_tick
                     .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                     .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                    .ok_or(ArithmeticError::Overflow)?;
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_div(&GIGAUNIT.into())
+                    .ok_or(ArithmeticError::Underflow)?;
 
                 // If the amount to charge is greater than the deposit, just charge the deposit
                 let amount_to_charge =
@@ -1694,7 +1702,9 @@ where
                         .saturating_sub(dynamic_stream.price_index_when_last_charged);
                     let amount_to_charge = price_index_difference
                         .checked_mul(&dynamic_stream.amount_provided.into())
-                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?;
+                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?
+                        .checked_div(&GIGAUNIT.into())
+                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeUnderflow)?;
                     debt = debt
                         .checked_add(&amount_to_charge)
                         .ok_or(GetUsersWithDebtOverThresholdError::DebtOverflow)?;

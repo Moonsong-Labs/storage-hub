@@ -995,14 +995,13 @@ declare module "@polkadot/api-base/types/storage" {
       accumulatedPriceIndex: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+       * The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+       * This can be updated each tick by the system manager.
        *
-       * This storage is updated in:
-       * - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+       * It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
        **/
-      currentPricePerUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
+      currentPricePerGigaUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The double mapping from a Provider, to its provided Users, to their dynamic-rate payment streams.

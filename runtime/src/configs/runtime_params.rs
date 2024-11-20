@@ -57,7 +57,7 @@ pub mod dynamic_params {
         ///
         /// With 6 seconds per tick, this means that over a month, the price of 1 GB is:
         /// 50e-9 [`UNIT`]s * 10 ticks/min * 60 min/h * 24 h/day * 30 days/month = 21.6e-3 [`UNIT`]s
-        pub static MostlyStablePrice: Balance = 49 * NANOUNIT;
+        pub static MostlyStablePrice: Balance = 50 * NANOUNIT;
 
         #[codec(index = 7)]
         #[allow(non_upper_case_globals)]

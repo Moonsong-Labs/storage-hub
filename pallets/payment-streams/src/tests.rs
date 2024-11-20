@@ -1589,7 +1589,8 @@ mod fixed_rate_streams {
                 let charlie_new_balance: BalanceOf<Test> = charlie_initial_balance
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * charlie_amount_provided as u128;
+                        * charlie_amount_provided as u128
+                        / GIGAUNIT;
                 assert_eq!(NativeBalance::free_balance(&charlie), charlie_new_balance);
 
                 // Check the new free balance of Dave (after both new stream deposits)
@@ -1597,7 +1598,8 @@ mod fixed_rate_streams {
                     - dave_rate * new_stream_deposit_blocks_balance_typed
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * dave_amount_provided as u128;
+                        * dave_amount_provided as u128
+                        / GIGAUNIT;
                 assert_eq!(NativeBalance::free_balance(&dave), dave_new_balance);
 
                 // Set the last valid proof of the payment streams from Bob to Alice, from Charlie to Alice and from Dave to Alice to 10 blocks ahead
@@ -2126,7 +2128,8 @@ mod fixed_rate_streams {
                 let charlie_new_balance: BalanceOf<Test> = charlie_initial_balance
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * charlie_amount_provided as u128;
+                        * charlie_amount_provided as u128
+                        / GIGAUNIT;
                 assert_eq!(NativeBalance::free_balance(&charlie), charlie_new_balance);
 
                 // Check the new free balance of Dave (after both new stream deposits)
@@ -2134,7 +2137,8 @@ mod fixed_rate_streams {
                     - dave_rate * new_stream_deposit_blocks_balance_typed
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * dave_amount_provided as u128;
+                        * dave_amount_provided as u128
+                        / GIGAUNIT;
                 assert_eq!(NativeBalance::free_balance(&dave), dave_new_balance);
 
                 // Set the last valid proof of the payment streams from Bob to Alice, from Charlie to Alice and from Dave to Alice to 20 blocks ahead
@@ -2350,7 +2354,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_initial_balance - deposit_amount
@@ -2511,7 +2516,8 @@ mod dynamic_rate_streams {
                 let deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -2579,7 +2585,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 assert_ok!(Balances::transfer(
                     &bob,
                     &alice,
@@ -2641,7 +2648,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_free_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
 
@@ -2715,7 +2723,8 @@ mod dynamic_rate_streams {
                 // Create a payment stream from Bob to Alice of 100 units provided
                 let deposit = current_price
                     * amount_provided as u128
-                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get())
+                    / GIGAUNIT;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
@@ -2734,7 +2743,8 @@ mod dynamic_rate_streams {
                 let new_amount_provided: u64 = 200;
                 let new_deposit = current_price
                     * new_amount_provided as u128
-                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get())
+                    / GIGAUNIT;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
                         &alice_bsp_id,
@@ -2934,7 +2944,8 @@ mod dynamic_rate_streams {
                 let deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3013,7 +3024,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3043,7 +3055,8 @@ mod dynamic_rate_streams {
                 let bob_balance_updated_deposit = bob_new_balance
                     - current_price
                         * u128::from(new_amount_provided - amount_provided)
-                        * new_stream_deposit_blocks_balance_typed;
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT;
                 let paid_for_storage = 10 * current_price * u128::from(amount_provided);
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
@@ -3120,7 +3133,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3226,7 +3240,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3322,7 +3337,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3408,7 +3424,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3497,7 +3514,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3514,7 +3532,8 @@ mod dynamic_rate_streams {
                 // Check that Bob's deposit has also been updated
                 let new_deposit_amount = current_price
                     * (new_amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_new_balance - (new_deposit_amount - deposit_amount);
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3609,7 +3628,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3769,7 +3789,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_balance_after_deposit = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_balance_after_deposit);
 
@@ -3846,7 +3867,8 @@ mod dynamic_rate_streams {
                 let deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3955,7 +3977,8 @@ mod dynamic_rate_streams {
                 let deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4030,7 +4053,7 @@ mod dynamic_rate_streams {
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_new_balance + charlie_stream_deposit
-                        - current_price * amount_provided as u128
+                        - current_price * amount_provided as u128 / GIGAUNIT
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
@@ -4163,7 +4186,8 @@ mod user_without_funds {
                 let total_deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4271,7 +4295,8 @@ mod user_without_funds {
                 ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying Charlie
-                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    current_price * (amount_provided as u128) / GIGAUNIT;
                 let bob_new_balance =
                     bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -4369,7 +4394,8 @@ mod user_without_funds {
                 let total_deposit_amount = 3
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4490,7 +4516,8 @@ mod user_without_funds {
                 ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying charlie and david
-                let amount_to_pay_for_storage = 3 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    3 * current_price * (amount_provided as u128) / GIGAUNIT;
                 let bob_new_balance = bob_new_balance - amount_to_pay_for_storage
                     + charlie_deposit_amount
                     + david_deposit_amount;
@@ -4593,7 +4620,8 @@ mod user_without_funds {
                 let total_deposit_amount = 3
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4717,7 +4745,7 @@ mod user_without_funds {
                 if DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_none() {
                     // Check that Bob's balance has been updated with the correct amount after paying Charlie (but not David)
                     let amount_to_pay_for_storage_charlie =
-                        1 * current_price * (amount_provided as u128);
+                        1 * current_price * (amount_provided as u128) / GIGAUNIT;
                     let bob_new_balance = bob_new_balance - amount_to_pay_for_storage_charlie
                         + charlie_deposit_amount;
                     assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -4875,7 +4903,8 @@ mod user_without_funds {
                 let total_deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4983,7 +5012,8 @@ mod user_without_funds {
                 ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying Charlie
-                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    current_price * (amount_provided as u128) / GIGAUNIT;
                 let bob_new_balance =
                     bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -5077,7 +5107,8 @@ mod user_without_funds {
                 let total_deposit_amount = 2
                     * current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT;
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 

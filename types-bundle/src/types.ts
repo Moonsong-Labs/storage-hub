@@ -143,6 +143,7 @@ export const ALL_TYPES: RegistryTypes = {
       ProviderNotRegistered: null,
       ProviderWithoutPaymentStreams: null,
       AmountToChargeOverflow: null,
+      AmountToChargeUnderflow: null,
       DebtOverflow: null,
       InternalApiError: null
     }

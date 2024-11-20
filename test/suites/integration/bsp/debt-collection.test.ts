@@ -9,6 +9,7 @@ import {
   type EnrichedBspApi
 } from "../../../util";
 import invariant from "tiny-invariant";
+import { BN } from "@polkadot/util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -45,7 +46,7 @@ describeBspNet(
           userApi.tx.paymentStreams.createDynamicRatePaymentStream(
             ShConsts.DUMMY_BSP_ID,
             bob.address,
-            10
+            1024 * 1024 // 1 MB
           )
         )
       );
@@ -226,6 +227,16 @@ describeBspNet(
     });
 
     it("Correctly updates payment stream on-chain to make user insolvent", async () => {
+      // Reduce the free balance of the user to make it insolvent
+      const initialFreeBalance = (await userApi.query.system.account(userAddress)).data.free;
+      const reduceFreeBalanceResult = await userApi.sealBlock(
+        userApi.tx.sudo.sudo(
+          userApi.tx.balances.forceSetBalance(userAddress, initialFreeBalance.divn(10))
+        )
+      );
+      const changeBalanceSuccess = reduceFreeBalanceResult.extSuccess;
+      strictEqual(changeBalanceSuccess, true, "Extrinsic should be successful");
+
       // Make sure the payment streams between the users and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
@@ -310,12 +321,15 @@ describeBspNet(
       const freeBalance = (await userApi.query.system.account(userAddress)).data.free;
 
       // To make the user insolvent, we need to update the payment stream with a very high amount
-      // and advance new stream deposit blocks
-      // To do this, the new amount provided should be equal to the free balance of the user divided by
-      // the current price of storage multiplied by the new stream deposit
+      // of amount provided so when the BSP tries to charge it the user cannot pay its debt.
+      // We set the new provided amount to be as much as possible considering the deposit
+      // that the user is going to have to pay. We leave 10 * ED in the account to allow
+      // the user to pay its other debts.
+      const gigaUnit = new BN("1073741824", 10);
       const newAmountProvidedForInsolvency = freeBalance
-        .div(currentPriceOfStorage.mul(newStreamDeposit))
-        .sub(existentialDeposit);
+        .sub(existentialDeposit.muln(10))
+        .mul(gigaUnit)
+        .div(currentPriceOfStorage.mul(newStreamDeposit));
 
       // Make the user insolvent by updating the payment stream with a very high amount
       const updateDynamicRatePaymentStreamResult = await userApi.sealBlock(
@@ -344,7 +358,7 @@ describeBspNet(
       // Assert that the information on-chain is correct
       strictEqual(userAccount.toString(), userAddress);
       strictEqual(providerId.toString(), ShConsts.DUMMY_BSP_ID.toString());
-      strictEqual(newAmountProvided.toNumber(), newAmountProvidedForInsolvency.toNumber());
+      strictEqual(newAmountProvided.toString(), newAmountProvidedForInsolvency.toString());
     });
 
     it("Correctly flags update payment stream as without funds after charging", async () => {

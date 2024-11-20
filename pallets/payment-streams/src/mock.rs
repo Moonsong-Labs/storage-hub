@@ -35,7 +35,7 @@ const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
 // We manage the price per gigabyte so we have to divide the price by the number of bytes in a gigabyte
-const GIGABYTE: u128 = 1_073_741_824;
+const GIGAUNIT: u128 = 1_073_741_824;
 
 // Configure a mock runtime to test the pallet.
 #[frame_support::runtime]
@@ -465,7 +465,7 @@ impl ExtBuilder {
         .unwrap();
 
         crate::GenesisConfig::<Test> {
-            current_price: GIGABYTE,
+            current_price: GIGAUNIT,
         }
         .assimilate_storage(&mut t)
         .unwrap();
