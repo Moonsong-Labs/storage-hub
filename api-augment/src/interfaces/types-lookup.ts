@@ -5512,6 +5512,14 @@ declare module "@polkadot/types/lookup" {
     readonly confirmed: bool;
   }
 
+  /** @name PalletFileSystemPendingFileDeletionRequest (451) */
+  interface PalletFileSystemPendingFileDeletionRequest extends Struct {
+    readonly user: AccountId32;
+    readonly fileKey: H256;
+    readonly bucketId: H256;
+    readonly fileSize: u64;
+  }
+
   /** @name PalletFileSystemMoveBucketRequestMetadata (457) */
   interface PalletFileSystemMoveBucketRequestMetadata extends Struct {
     readonly requester: AccountId32;
