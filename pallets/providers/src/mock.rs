@@ -322,6 +322,8 @@ impl crate::Config for Test {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
     type TopUpGracePeriod = ConstU32<5>;
+    type ProviderTopUpTtl = ConstU32<5>;
+    type MaxExpiredItemsInBlock = ConstU32<10>;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

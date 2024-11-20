@@ -4,7 +4,7 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     sp_runtime::{
-        traits::{BlockNumberProvider, CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
+        traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
         ArithmeticError, BoundedVec, DispatchError,
     },
     traits::{
@@ -28,10 +28,10 @@ use shp_traits::{
 use sp_runtime::traits::{Convert, ConvertBack};
 use sp_std::vec::Vec;
 use types::{
-    Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderIdFor, RateDeltaParam, RelayBlockGetter, SignUpRequestSpParams,
-    StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropIdFor,
-    ValueProposition, ValuePropositionWithId,
+    Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
+    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, RelayBlockNumber,
+    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
+    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -874,16 +874,9 @@ where
             // Increase capacity up to the used capacity
             capacity = used_capacity;
 
-            let top_up_metadata = expect_or_err!(
-                AwaitingTopUpFromProviders::<T>::take(provider_id),
-                "Top up metadata should exist when there is a capacity deficit",
-                Error::<T>::TopUpNotRequired
-            );
-
-            GracePeriodToSlashedProviders::<T>::remove(
-                top_up_metadata.end_block_grace_period,
-                provider_id,
-            );
+            // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
+            // they will not be slashed
+            AwaitingTopUpFromProviders::<T>::remove(provider_id);
 
             Self::deposit_event(Event::<T>::TopUpFulfilled {
                 provider_id: *provider_id,
@@ -891,13 +884,15 @@ where
             });
         } else {
             // Cannot hold enough balance, start tracking grace period and awaited top up
-            let end_block_grace_period = RelayBlockGetter::<T>::current_block_number()
-                .saturating_add(T::TopUpGracePeriod::get());
 
-            GracePeriodToSlashedProviders::<T>::insert(end_block_grace_period, provider_id, ());
+            // Queue provider top up expiration
+            let block_number_expiry =
+                Self::enqueue_expiration_item(ExpirationItem::ProviderTopUp(*provider_id))?;
 
             let top_up_metadata = TopUpMetadata {
-                end_block_grace_period,
+                end_block_grace_period: Self::convert_block_number_to_relay_block_number(
+                    block_number_expiry,
+                )?,
             };
 
             AwaitingTopUpFromProviders::<T>::insert(provider_id, top_up_metadata.clone());
@@ -969,17 +964,8 @@ where
             BackupStorageProviders::<T>::mutate(provider_id, |p| *p = Some(provider));
         }
 
-        let top_up_metadata = expect_or_err!(
-            AwaitingTopUpFromProviders::<T>::get(provider_id),
-            "Top up metadata should exist when there is a capacity deficit",
-            Error::<T>::TopUpNotRequired
-        );
-
-        // Clear provider tracked storage
-        GracePeriodToSlashedProviders::<T>::remove(
-            top_up_metadata.end_block_grace_period,
-            provider_id,
-        );
+        // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
+        // they will not be slashed
         AwaitingTopUpFromProviders::<T>::remove(provider_id);
 
         // Signal that the slashed amount has been topped up
@@ -1286,6 +1272,15 @@ where
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
+    }
+
+    /// Convert `BlockNumberFor` to `RelayBlockNumber`.
+    pub(crate) fn convert_block_number_to_relay_block_number(
+        block_number: BlockNumberFor<T>,
+    ) -> Result<RelayBlockNumber<T>, DispatchError> {
+        let block_number = block_number.into();
+        RelayBlockNumber::<T>::try_from(block_number)
+            .map_err(|_| Error::<T>::BlockNumberConversionFailed.into())
     }
 }
 
@@ -2162,5 +2157,116 @@ where
             &bsp.owner_account,
         );
         Ok(stake)
+    }
+
+    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
+    ///
+    /// This function attempts to insert a the expiration item at the next available block starting from
+    /// the current next available block.
+    pub(crate) fn enqueue_expiration_item(
+        expiration_item: ExpirationItem<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let expiration_block = expiration_item.get_next_expiration_block()?;
+        let new_expiration_block = expiration_item.try_append(expiration_block)?;
+        expiration_item.set_next_expiration_block(new_expiration_block)?;
+
+        Ok(new_expiration_block)
+    }
+}
+
+mod hooks {
+    use crate::{
+        pallet,
+        utils::{BlockNumberFor, ProviderIdFor},
+        Event, NextStartingBlockToCleanUp, Pallet,
+    };
+
+    use frame_support::{pallet_prelude::Weight, traits::Get};
+    use sp_runtime::{
+        traits::{BlockNumberProvider, One, Zero},
+        Saturating,
+    };
+
+    use super::{types::RelayBlockGetter, AwaitingTopUpFromProviders, ProviderTopUpExpirations};
+
+    impl<T: pallet::Config> Pallet<T> {
+        pub(crate) fn do_on_idle(
+            current_block: BlockNumberFor<T>,
+            mut remaining_weight: &mut Weight,
+        ) -> &mut Weight {
+            let db_weight = T::DbWeight::get();
+            let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
+
+            while block_to_clean <= current_block && !remaining_weight.is_zero() {
+                Self::process_block_expired_items(&mut remaining_weight);
+
+                if remaining_weight.is_zero() {
+                    break;
+                }
+
+                block_to_clean.saturating_accrue(BlockNumberFor::<T>::one());
+            }
+
+            // Update the next starting block for cleanup
+            if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
+                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
+                remaining_weight.saturating_reduce(db_weight.writes(1));
+            }
+
+            remaining_weight
+        }
+
+        fn process_block_expired_items(remaining_weight: &mut Weight) {
+            let db_weight = T::DbWeight::get();
+            let minimum_required_weight_processing_expired_items = db_weight.reads_writes(2, 1);
+
+            // Check if there is enough remaining weight to process expired move bucket requests
+            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+                return;
+            }
+
+            // Provider top up expirations expire based on the relay chain block number, not the local block number.
+            let relay_chain_block_number = RelayBlockGetter::<T>::current_block_number();
+
+            // Remove expired move bucket requests if any existed and process them.
+            let mut expired_move_bucket_requests =
+                ProviderTopUpExpirations::<T>::take(&relay_chain_block_number);
+            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
+
+            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
+            // TODO: process all the expired move bucket requests. If not, we should return early.
+            while let Some(provider_id) = expired_move_bucket_requests.pop() {
+                Self::process_expired_provider_top_up_period(provider_id, remaining_weight);
+            }
+
+            // If there are remaining items which were not processed, put them back in storage
+            if !expired_move_bucket_requests.is_empty() {
+                ProviderTopUpExpirations::<T>::insert(
+                    &relay_chain_block_number,
+                    expired_move_bucket_requests,
+                );
+                remaining_weight.saturating_reduce(db_weight.writes(1));
+            }
+        }
+
+        fn process_expired_provider_top_up_period(
+            provider_id: ProviderIdFor<T>,
+            remaining_weight: &mut Weight,
+        ) {
+            let db_weight = T::DbWeight::get();
+            let potential_weight = db_weight.reads_writes(0, 2);
+
+            if !remaining_weight.all_gte(potential_weight) {
+                return;
+            }
+
+            AwaitingTopUpFromProviders::<T>::remove(&provider_id);
+
+            // TODO: mark provider as insolvent
+
+            remaining_weight.saturating_reduce(potential_weight);
+
+            Self::deposit_event(Event::ProviderInsolvent { provider_id });
+        }
     }
 }

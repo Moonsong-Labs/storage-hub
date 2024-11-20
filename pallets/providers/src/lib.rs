@@ -283,6 +283,14 @@ pub mod pallet {
         /// If the provider does not top up their deposit within this period, they will be marked as insolvent.
         #[pallet::constant]
         type TopUpGracePeriod: Get<u32>;
+
+        /// Time-to-live for a provider to top up their deposit to cover a capacity deficit.
+        #[pallet::constant]
+        type ProviderTopUpTtl: Get<RelayBlockNumber<Self>>;
+
+        /// Maximum number of expired items (per type) to clean up in a single block.
+        #[pallet::constant]
+        type MaxExpiredItemsInBlock: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -455,7 +463,7 @@ pub mod pallet {
     pub type GracePeriodToSlashedProviders<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        RelayChainBlockNumber,
+        RelayBlockNumber<T>,
         Blake2_128Concat,
         ProviderIdFor<T>,
         (),
@@ -467,7 +475,36 @@ pub mod pallet {
     /// This is primarily used to lookup providers, restrict certain operations while they are in this state.
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata>;
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata<T>>;
+
+    /// A map of relay chain block numbers to expired provider top up period.
+    ///
+    /// Provider top up expiration items are ignored and cleared if the provider is not found in the `AwaitingTopUpFromProviders` storage.
+    /// Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
+    /// If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+    #[pallet::storage]
+    pub type ProviderTopUpExpirations<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        RelayBlockNumber<T>,
+        BoundedVec<ProviderIdFor<T>, T::MaxExpiredItemsInBlock>,
+        ValueQuery,
+    >;
+
+    /// A pointer to the earliest available block to insert a new storage request expiration.
+    ///
+    /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+    #[pallet::storage]
+    pub type NextAvailableProviderTopUpExpirationBlock<T: Config> =
+        StorageValue<_, RelayBlockNumber<T>, ValueQuery>;
+
+    /// A pointer to the starting block to clean up expired storage requests.
+    ///
+    /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
+    /// attempt to accelerate this block pointer as close to or up to the current block number. This
+    /// will execute provided that there is enough remaining weight to do so.
+    #[pallet::storage]
+    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -550,7 +587,7 @@ pub mod pallet {
         /// signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
         AwaitingTopUp {
             provider_id: ProviderIdFor<T>,
-            top_up_metadata: TopUpMetadata,
+            top_up_metadata: TopUpMetadata<T>,
         },
 
         /// Event emitted when an SP has topped up its deposit based on slash amount.
@@ -559,6 +596,12 @@ pub mod pallet {
             /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
             amount: BalanceOf<T>,
         },
+
+        /// Event emitted when a provider has been marked as insolvent.
+        ///
+        /// This happens when the provider hasn't topped up their deposit within the grace period after being slashed
+        /// and they have a capacity deficit (i.e. their capacity is below their used capacity).
+        ProviderInsolvent { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when a bucket's root has been changed.
         BucketRootChanged {
@@ -687,6 +730,10 @@ pub mod pallet {
         BucketSizeExceedsLimit,
         /// Error thrown when a bucket has no value proposition.
         BucketHasNoValueProposition,
+        /// Congratulations, you either lived long enough or were born late enough to see this error.
+        MaxBlockNumberReached,
+        /// Failed thrown when trying to convert a type to a block number.
+        BlockNumberConversionFailed,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -1346,6 +1393,20 @@ pub mod pallet {
             Self::do_top_up_deposit(&who)?;
 
             Ok(Pays::No.into())
+        }
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+    where
+        u32: TryFrom<BlockNumberFor<T>>,
+    {
+        fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+            let mut remaining_weight = remaining_weight;
+
+            Self::do_on_idle(current_block, &mut remaining_weight);
+
+            remaining_weight
         }
     }
 }

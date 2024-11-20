@@ -517,6 +517,8 @@ impl pallet_storage_providers::Config for Runtime {
     type ZeroSizeBucketFixedRate =
         runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
     type TopUpGracePeriod = ConstU32<600>; // 1 hour with 6 second timeslots.
+    type ProviderTopUpTtl = ConstU32<600>; // 1 hour with 6 second timeslots.
+    type MaxExpiredItemsInBlock = ConstU32<100>;
 }
 
 parameter_types! {

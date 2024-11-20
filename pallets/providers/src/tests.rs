@@ -4871,7 +4871,7 @@ mod slash_and_top_up {
 
         use sp_runtime::traits::ConvertBack;
 
-        use crate::{AwaitingTopUpFromProviders, GracePeriodToSlashedProviders};
+        use crate::{AwaitingTopUpFromProviders, ProviderTopUpExpirations};
 
         use super::*;
 
@@ -5031,12 +5031,14 @@ mod slash_and_top_up {
                         .into()
                     );
 
+                    // Check that the provider top up expiration still exists
+                    // This item will automatically be cleared once it is processed in the `on_idle` execution
+                    assert!(
+                        ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                            .iter()
+                            .any(|provider_id| *provider_id == self.provider_id)
+                    );
                     // Check that the storage has been cleared
-                    assert!(GracePeriodToSlashedProviders::<Test>::get(
-                        end_block_grace_period,
-                        self.provider_id
-                    )
-                    .is_none());
                     assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
 
                     // Check that the provider's capacity is equal to used capacity
@@ -5073,6 +5075,13 @@ mod slash_and_top_up {
                     assert_eq!(
                         top_up_metadata.end_block_grace_period,
                         end_block_grace_period
+                    );
+
+                    // Check that we have queued the provider top up expiration item
+                    assert!(
+                        ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                            .iter()
+                            .any(|provider_id| *provider_id == self.provider_id)
                     );
 
                     // Check that the provider's capacity was reduced by the converted slash amount (storage data units)
@@ -5142,12 +5151,13 @@ mod slash_and_top_up {
                     pre_state_held_amount + expected_delta_hold_amount
                 );
 
+                // Check that the provider top up expiration still exists
+                assert!(
+                    ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                        .iter()
+                        .any(|provider_id| *provider_id == self.provider_id)
+                );
                 // Check that the storage has been cleared
-                assert!(GracePeriodToSlashedProviders::<Test>::get(
-                    end_block_grace_period,
-                    self.provider_id
-                )
-                .is_none());
                 assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
             }
         }
