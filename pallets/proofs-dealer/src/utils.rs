@@ -182,8 +182,9 @@ where
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Check that the challenges tick is lower than the current tick.
+        let current_tick = ChallengesTicker::<T>::get();
         ensure!(
-            challenges_tick < ChallengesTicker::<T>::get(),
+            challenges_tick < current_tick,
             Error::<T>::ChallengesTickNotReached
         );
 
@@ -191,14 +192,14 @@ where
         // i.e. that the challenges tick is within the ticks this pallet keeps track of.
         expect_or_err!(
             challenges_tick
-                > ChallengesTicker::<T>::get()
+                > current_tick
                     .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
             "Challenges tick is too old, beyond the history this pallet keeps track of. This should not be possible.",
             Error::<T>::ChallengesTickTooOld,
             bool
         );
 
-        // Check that the submitter is not submitting the proof to late, i.e. that the challenges tick
+        // Check that the submitter is not submitting the proof too late, i.e. that the challenges tick
         // is not greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
         // This should never happen, as the `TickToProvidersDeadlines` StorageMap is
         // cleaned up every block. Therefore, if a Provider reached this deadline, it should have been
@@ -207,7 +208,7 @@ where
             .checked_add(&T::ChallengeTicksTolerance::get())
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         expect_or_err!(
-            challenges_tick_deadline > frame_system::Pallet::<T>::block_number(),
+            challenges_tick_deadline > current_tick,
             "Challenges tick is too late, the proof should be submitted at most `T::ChallengeTicksTolerance::get()` ticks after the challenges tick.",
             Error::<T>::ChallengesTickTooLate,
             bool
@@ -254,66 +255,49 @@ where
         // Apply the delta to the Forest root for all mutations that are in checkpoint challenges.
         if let Some(challenges) = checkpoint_challenges {
             // Aggregate all mutations to apply to the Forest root.
-            let mutations: Vec<_> = challenges
+            let mutations = challenges
                 .iter()
                 .filter_map(|(key, mutation)| match mutation {
-                    Some(mutation) if forest_keys_proven.contains(key) => Some((*key, mutation)),
+                    Some(mutation) if forest_keys_proven.contains(key) => {
+                        Some((*key, Into::<TrieMutation>::into(mutation.clone())))
+                    }
                     Some(_) | None => None,
                 })
-                .collect();
+                .collect::<Vec<_>>();
 
             if !mutations.is_empty() {
-                let mut mutations_applied = Vec::new();
-                let new_root = mutations.iter().try_fold(root, |acc_root, mutation| {
-                    // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
-                    forest_keys_proven.remove(&mutation.0);
+                // Apply the mutations to the Forest.
+                let (_, new_root, mutated_keys_and_values) = <T::ForestVerifier as TrieProofDeltaApplier<
+                    T::MerkleTrieHashing,
+                >>::apply_delta(
+                    &root, mutations.as_slice(), forest_proof
+                )
+                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 
-                    // Add mutation to list of mutations applied.
-                    mutations_applied.push((mutation.0, mutation.1.clone()));
+                // Check that the number of mutated keys is the same as the mutations expected.
+                ensure!(
+                    mutated_keys_and_values.len() == mutations.len(),
+                    Error::<T>::UnexpectedNumberOfRemoveMutations
+                );
 
-                    // Apply the mutation to the Forest.
-                    let apply_delta_result = <T::ForestVerifier as TrieProofDeltaApplier<
-                        T::MerkleTrieHashing,
-                    >>::apply_delta(
-                        &acc_root,
-                        &[(mutation.0, mutation.1.clone().into())],
-                        forest_proof,
-                    )
-                    .map_err(|_| Error::<T>::FailedToApplyDelta);
+                for (key, maybe_value) in mutated_keys_and_values.iter() {
+                    // Remove the mutated key from the list of `forest_keys_proven` to avoid having to verify the key proof.
+                    forest_keys_proven.remove(key);
 
-                    // If the mutation was correctly applied, update the Provider's info and return the new root.
-                    match apply_delta_result {
-                        Ok((_, new_root, mutated_keys_and_values)) => {
-                            // Check that the mutated key is the same as the mutation (and is the only one).
-                            ensure!(
-                                mutated_keys_and_values.len() == 1,
-                                Error::<T>::FailedToApplyDelta
-                            );
-                            ensure!(
-                                mutated_keys_and_values[0].0 == mutation.0,
-                                Error::<T>::FailedToApplyDelta
-                            );
-
-                            // Use the interface exposed by the Providers pallet to update the submitting Provider
-                            // after the key removal if the key had a value.
-                            let removed_trie_value = &mutated_keys_and_values[0].1;
-                            if let Some(trie_value) = removed_trie_value {
-                                ProvidersPalletFor::<T>::update_provider_after_key_removal(
-                                    submitter, trie_value,
-                                )
-                                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
-                            }
-
-                            Ok(new_root)
-                        }
-                        Err(err) => Err(err),
+                    // Use the interface exposed by the Providers pallet to update the submitting Provider
+                    // after the key removal if the key had a value.
+                    if let Some(trie_value) = maybe_value {
+                        ProvidersPalletFor::<T>::update_provider_after_key_removal(
+                            submitter, trie_value,
+                        )
+                        .map_err(|_| Error::<T>::FailedToApplyDelta)?;
                     }
-                })?;
+                }
 
                 // Emit event of mutation applied.
                 Self::deposit_event(Event::<T>::MutationsApplied {
                     provider: *submitter,
-                    mutations: mutations_applied,
+                    mutations,
                     new_root,
                 });
 
@@ -323,6 +307,12 @@ where
                 )?;
             }
         };
+
+        // Check that the correct number of key proofs were submitted.
+        ensure!(
+            key_proofs.len() == forest_keys_proven.len(),
+            Error::<T>::IncorrectNumberOfKeyProofs
+        );
 
         // Verify each key proof.
         for key_proven in forest_keys_proven {
@@ -362,18 +352,14 @@ where
         TickToProvidersDeadlines::<T>::set(next_challenges_tick_deadline, submitter, Some(()));
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
-        let current_tick_valid_submitters =
-            ValidProofSubmittersLastTicks::<T>::get(ChallengesTicker::<T>::get());
+        let current_tick_valid_submitters = ValidProofSubmittersLastTicks::<T>::get(current_tick);
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
                 let did_not_already_exist = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
                 // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
                 if did_not_already_exist {
-                    ValidProofSubmittersLastTicks::<T>::insert(
-                        ChallengesTicker::<T>::get(),
-                        valid_submitters,
-                    );
+                    ValidProofSubmittersLastTicks::<T>::insert(current_tick, valid_submitters);
                 }
             }
             // If the set doesn't exist, we create it and insert the submitter.
@@ -386,10 +372,7 @@ where
                     Error::<T>::TooManyValidProofSubmitters,
                     result
                 );
-                ValidProofSubmittersLastTicks::<T>::insert(
-                    ChallengesTicker::<T>::get(),
-                    new_valid_submitters,
-                );
+                ValidProofSubmittersLastTicks::<T>::insert(current_tick, new_valid_submitters);
             }
         }
 

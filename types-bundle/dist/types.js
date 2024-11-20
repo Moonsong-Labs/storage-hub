@@ -29,7 +29,12 @@ export const ALL_TYPES = {
   ProviderId: "H256",
   Key: "H256",
   RandomnessOutput: "H256",
-  TrieRemoveMutation: {},
+  TrieRemoveMutation: "Null",
+  CheckpointChallenge: {
+    file_key: "H256",
+    should_remove_file: "bool"
+  },
+  ShouldRemoveFile: "bool",
   BackupStorageProviderId: "H256",
   MainStorageProviderId: "H256",
   StorageData: "u32",

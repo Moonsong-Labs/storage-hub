@@ -947,6 +947,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ForestProofVerificationFailed: AugmentedError<ApiType>;
       /**
+       * The number of key proofs submitted does not match the number of keys proven in the forest proof.
+       **/
+      IncorrectNumberOfKeyProofs: AugmentedError<ApiType>;
+      /**
        * There is at least one key proven in the forest proof, that does not have a corresponding
        * key proof.
        **/
@@ -998,6 +1002,11 @@ declare module "@polkadot/api-base/types/errors" {
        * The limit of Providers that can submit a proof in a single tick has been reached.
        **/
       TooManyValidProofSubmitters: AugmentedError<ApiType>;
+      /**
+       * After successfully applying delta for a set of mutations, the number of mutated keys is
+       * not the same as the number of mutations expected to have been applied.
+       **/
+      UnexpectedNumberOfRemoveMutations: AugmentedError<ApiType>;
       /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be

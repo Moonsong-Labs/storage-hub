@@ -35,6 +35,7 @@ import type {
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -1595,16 +1596,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [
-          provider: H256,
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
-          newRoot: H256
-        ],
-        {
-          provider: H256;
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
-          newRoot: H256;
-        }
+        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
+        { provider: H256; mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; newRoot: H256 }
       >;
       /**
        * A manual challenge was submitted.

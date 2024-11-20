@@ -879,6 +879,11 @@ where
                 result
             );
 
+            // Notify that the storage request has been accepted by an MSP.
+            Self::deposit_event(Event::MspAcceptedStorageRequest {
+                file_key: file_key_with_proof.file_key,
+            });
+
             // Check if all BSPs have confirmed storing the file.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
                 // Remove storage request metadata.
@@ -921,11 +926,6 @@ where
                     &file_key_with_proof.file_key,
                     Some(storage_request_metadata.clone()),
                 );
-
-                // Notify that the storage request has been accepted by an MSP.
-                Self::deposit_event(Event::MspAcceptedStorageRequest {
-                    file_key: file_key_with_proof.file_key,
-                });
             }
         }
 

@@ -13,4 +13,7 @@ pub const FILE_CHUNK_SIZE: u64 = 2u64.pow(10);
 
 /// The number of challenges for a file, depending on the size of the file.
 /// For every 512 kB, there is a challenge.
-pub const FILE_SIZE_TO_CHALLENGES: u64 = 2u64.pow(25);
+#[cfg(feature = "runtime-benchmarks")]
+pub const FILE_SIZE_TO_CHALLENGES: u64 = 2u64.pow(10);
+#[cfg(not(feature = "runtime-benchmarks"))]
+pub const FILE_SIZE_TO_CHALLENGES: u64 = 2u64.pow(19);
