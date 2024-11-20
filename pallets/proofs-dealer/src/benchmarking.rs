@@ -26,14 +26,13 @@ use frame_benchmarking::v2::*;
         <T as frame_system::Config>::RuntimeEvent: From<pallet::Event<T>>
 )]
 mod benchmarks {
-    use __private::traits::Hooks;
     use codec::Decode;
     use frame_support::{
         assert_ok,
         dispatch::DispatchClass,
         traits::{
             fungible::{Mutate, MutateHold},
-            Get,
+            Get, Hooks,
         },
     };
     use frame_system::{pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, RawOrigin};

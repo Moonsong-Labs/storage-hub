@@ -1998,6 +1998,14 @@ declare module "@polkadot/types/lookup" {
       readonly owner: AccountId32;
       readonly bucketId: H256;
     } & Struct;
+    readonly isFailedToDecreaseBucketSize: boolean;
+    readonly asFailedToDecreaseBucketSize: {
+      readonly user: AccountId32;
+      readonly bucketId: H256;
+      readonly fileKey: H256;
+      readonly fileSize: u64;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2023,7 +2031,8 @@ declare module "@polkadot/types/lookup" {
       | "MoveBucketRequestExpired"
       | "MoveBucketAccepted"
       | "MoveBucketRejected"
-      | "MspStoppedStoringBucket";
+      | "MspStoppedStoringBucket"
+      | "FailedToDecreaseBucketSize";
   }
   /** @name PalletFileSystemRejectedStorageRequestReason (138) */
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
