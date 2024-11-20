@@ -1641,13 +1641,14 @@ mod fixed_rate_streams {
                 assert_eq!(
                     NativeBalance::free_balance(&charlie),
                     charlie_new_balance
-                        - 10 * current_storage_price * charlie_amount_provided as u128
+                        - 10 * current_storage_price * charlie_amount_provided as u128 / GIGAUNIT
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: charlie,
                         provider_id: alice_msp_id,
-                        amount: 10 * current_storage_price * charlie_amount_provided as u128,
+                        amount: 10 * current_storage_price * charlie_amount_provided as u128
+                            / GIGAUNIT,
                         last_tick_charged: last_chargeable_tick,
                         charged_at_tick: System::block_number(),
                     }
@@ -1660,14 +1661,14 @@ mod fixed_rate_streams {
                     NativeBalance::free_balance(&dave),
                     dave_new_balance
                         - 10 * dave_rate
-                        - 10 * current_storage_price * dave_amount_provided as u128
+                        - 10 * current_storage_price * dave_amount_provided as u128 / GIGAUNIT
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: dave,
                         provider_id: alice_msp_id,
                         amount: 10 * dave_rate
-                            + 10 * current_storage_price * dave_amount_provided as u128,
+                            + 10 * current_storage_price * dave_amount_provided as u128 / GIGAUNIT,
                         last_tick_charged: last_chargeable_tick,
                         charged_at_tick: System::block_number(),
                     }
@@ -2522,8 +2523,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index to something that will make Bob run out of funds
-                let current_price_index =
-                    current_price_index + bob_new_balance / (amount_provided as u128) + 1;
+                let current_price_index = current_price_index
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -2951,7 +2953,7 @@ mod dynamic_rate_streams {
 
                 // Set the last chargeable price index to something that will make Bob run out of funds
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
@@ -3057,7 +3059,7 @@ mod dynamic_rate_streams {
                         * u128::from(new_amount_provided - amount_provided)
                         * new_stream_deposit_blocks_balance_typed
                         / GIGAUNIT;
-                let paid_for_storage = 10 * current_price * u128::from(amount_provided);
+                let paid_for_storage = 10 * current_price * u128::from(amount_provided) / GIGAUNIT;
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_balance_updated_deposit - paid_for_storage
@@ -3248,7 +3250,8 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3345,7 +3348,8 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3432,7 +3436,8 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3540,7 +3545,8 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (new_amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (new_amount_provided as u128) / GIGAUNIT;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3636,7 +3642,8 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3680,7 +3687,8 @@ mod dynamic_rate_streams {
                 // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
                 run_to_block(System::block_number() + 20);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 20 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    20 * current_price * (amount_provided as u128) / GIGAUNIT;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3874,7 +3882,7 @@ mod dynamic_rate_streams {
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to something that will make Bob run out of funds
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
                 let last_chargeable_tick = System::block_number();
@@ -3984,7 +3992,7 @@ mod dynamic_rate_streams {
 
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
                 let last_chargeable_tick = System::block_number();
@@ -4220,7 +4228,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
@@ -4447,7 +4455,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -4673,7 +4681,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -4937,7 +4945,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
@@ -5141,7 +5149,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
@@ -5276,7 +5284,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT / (amount_provided as u128)
                     + 1;
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -5448,7 +5456,7 @@ mod users_with_debt_over_threshold {
             run_to_block(System::block_number() + 10);
             let bob_new_balance = NativeBalance::free_balance(&bob);
             let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                + bob_new_balance / (amount_provided_bob as u128)
+                + bob_new_balance * GIGAUNIT / (amount_provided_bob as u128)
                 + 1;
             LastChargeableInfo::<Test>::insert(
                 &alice_bsp_id,
