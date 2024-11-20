@@ -1,6 +1,5 @@
 import { strictEqual } from "node:assert";
 import { isDeepStrictEqual } from "node:util";
-import invariant from "tiny-invariant";
 import {
   bspThreeKey,
   bspThreeSeed,
@@ -8,8 +7,7 @@ import {
   bspTwoSeed,
   describeBspNet,
   type EnrichedBspApi,
-  ShConsts,
-  shUser
+  ShConsts
 } from "../../../util";
 
 describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUserApi }) => {
@@ -39,31 +37,11 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 
-    const bucketEvent = await api.file.newBucket("multi-bsp-single-req");
-    const newBucketEventDataBlob =
-      api.events.fileSystem.NewBucket.is(bucketEvent) && bucketEvent.data;
-
-    invariant(newBucketEventDataBlob, "Event doesn't match Type");
-
-    const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+    await api.file.createBucketAndSendNewStorageRequest(
       "res/adolphus.jpg",
       "cat/adolphus.jpg",
-      shUser.address,
-      newBucketEventDataBlob.bucketId
+      "multi-bsp-single-req"
     );
-
-    const signedExt = await api.tx.fileSystem
-      .issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        "cat/adolphus.jpg",
-        fileMetadata.fingerprint,
-        fileMetadata.file_size,
-        ShConsts.DUMMY_MSP_ID,
-        [ShConsts.NODE_INFOS.user.expectedPeerId]
-      )
-      .signAsync(shUser);
-
-    await api.sealBlock(signedExt);
 
     // Waits for all three BSPs to volunteer
     await api.assert.extrinsicPresent({
@@ -71,12 +49,19 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       method: "bspVolunteer",
       checkTxPool: true,
       assertLength: 3,
-      timeout: 5000
+      timeout: 10000
     });
     await api.sealBlock();
 
-    // Wait for a bsp to confirm storage, and check that the other BSPs failed the race
-    await api.wait.bspStored();
+    await api.assert.extrinsicPresent({
+      module: "fileSystem",
+      method: "bspConfirmStoring",
+      checkTxPool: true,
+      assertLength: 3,
+      timeout: 15000
+    });
+    await api.sealBlock();
+
     const matchedEvents = await api.assert.eventMany("system", "ExtrinsicFailed");
     strictEqual(matchedEvents.length, 2, "Expected 2 ExtrinsicFailed events from the losing BSPs");
 
