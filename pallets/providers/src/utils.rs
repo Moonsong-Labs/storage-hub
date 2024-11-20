@@ -315,7 +315,7 @@ where
             who: who.clone(),
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
-            capacity: sign_up_request.msp_info.capacity.clone(),
+            capacity: sign_up_request.msp_info.capacity,
             value_prop: ValuePropositionWithId {
                 id: value_prop_id,
                 value_prop: value_prop.clone(),
@@ -1820,7 +1820,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
-            let msp_id = bucket.msp_id.map(|msp_id| msp_id)?;
+            let msp_id = bucket.msp_id?;
 
             if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
                 Some(msp.owner_account)
