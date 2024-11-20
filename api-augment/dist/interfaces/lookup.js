@@ -1577,6 +1577,13 @@ export default {
         mspId: "H256",
         owner: "AccountId32",
         bucketId: "H256"
+      },
+      FailedToDecreaseBucketSize: {
+        user: "AccountId32",
+        bucketId: "H256",
+        fileKey: "H256",
+        fileSize: "u64",
+        error: "SpRuntimeDispatchError"
       }
     }
   },

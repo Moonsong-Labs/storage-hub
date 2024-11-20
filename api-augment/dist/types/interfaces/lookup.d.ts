@@ -1564,6 +1564,13 @@ declare const _default: {
         owner: string;
         bucketId: string;
       };
+      FailedToDecreaseBucketSize: {
+        user: string;
+        bucketId: string;
+        fileKey: string;
+        fileSize: string;
+        error: string;
+      };
     };
   };
   /**
