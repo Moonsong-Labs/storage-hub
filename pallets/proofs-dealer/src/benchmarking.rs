@@ -40,7 +40,7 @@ mod benchmarks {
     use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
     use sp_runtime::{
         traits::{Hash, One, Zero},
-        BoundedVec,
+        BoundedBTreeSet, BoundedVec,
     };
     use sp_std::{vec, vec::Vec};
     use sp_weights::{Weight, WeightMeter};
@@ -54,9 +54,10 @@ mod benchmarks {
             MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Config, Event,
-        LastCheckpointTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
-        PastBlocksWeight, SlashableProviders, TickToChallengesSeed,
+        LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor,
+        NotFullBlocksCount, Pallet, PastBlocksWeight, SlashableProviders, TickToChallengesSeed,
         TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
+        ValidProofSubmittersLastTicks,
     };
 
     #[benchmark]
@@ -343,6 +344,84 @@ mod benchmarks {
 
         // Check that chain is considered to be not spammed.
         assert!(ChallengesTickerPaused::<T>::get().is_none());
+
+        Ok(())
+    }
+
+    /// * Case:
+    /// - The number of ticks to remove is 0. This means that the loop never executes, but that loop execution
+    ///   is benchmarked in the `trim_valid_proof_submitters_last_ticks_loop` benchmark.
+    #[benchmark]
+    fn trim_valid_proof_submitters_last_ticks_constant_execution() -> Result<(), BenchmarkError> {
+        // Set the current tick to be `TargetTicksStorageOfSubmitters`.
+        // `LastDeletedTick` would be 0 by default, so this way, when `target_ticks_storage_of_submitters`
+        // subtracts from `current_tick`, it will be 0, and the loop will never execute.
+        let target_ticks_storage_of_submitters: u32 = T::TargetTicksStorageOfSubmitters::get();
+        frame_system::Pallet::<T>::set_block_number(target_ticks_storage_of_submitters.into());
+
+        // Pass the whole available weight for the Normal dispatch class.
+        let weights = T::BlockWeights::get();
+        let max_weight_for_class = weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(weights.max_block);
+
+        #[block]
+        {
+            Pallet::<T>::do_trim_valid_proof_submitters_last_ticks(
+                frame_system::Pallet::<T>::block_number(),
+                max_weight_for_class,
+            );
+        }
+
+        // Check that `LastDeletedTick` is still 0.
+        assert_eq!(
+            LastDeletedTick::<T>::get(),
+            0u32.into(),
+            "LastDeletedTick should still be 0."
+        );
+
+        Ok(())
+    }
+
+    /// * Case:
+    /// - The tick to remove has a maximum size [`BoundedBTreeSet`], where the maximum size is
+    ///   [`T::MaxSubmittersPerTick`].
+    #[benchmark]
+    fn trim_valid_proof_submitters_last_ticks_loop() -> Result<(), BenchmarkError> {
+        // Generate a vector of proof submitters of max size.
+        let mut proof_submitters =
+            BoundedBTreeSet::<ProviderIdFor<T>, T::MaxSubmittersPerTick>::new();
+        let max_submitters_per_tick: u32 = T::MaxSubmittersPerTick::get();
+        for i in 0..max_submitters_per_tick {
+            let provider_id = <T as frame_system::Config>::Hashing::hash(
+                sp_runtime::format!("provider_id_{:?}", i).as_bytes(),
+            );
+            proof_submitters.try_insert(provider_id).expect("Failed to insert provider ID. This shouldn't happen because we're iterating until the maximum size.");
+        }
+
+        // Add the vector of proof submitters to the `ValidProofSubmittersLastTicks` storage element.
+        let tick: BlockNumberFor<T> = 181222u32.into();
+        ValidProofSubmittersLastTicks::<T>::insert(tick, proof_submitters);
+
+        #[block]
+        {
+            Pallet::<T>::remove_proof_submitters_for_tick(tick);
+        }
+
+        // Check that the `ValidProofSubmittersLastTicks` storage element has been updated.
+        assert_eq!(
+            ValidProofSubmittersLastTicks::<T>::get(tick),
+            None,
+            "The `ValidProofSubmittersLastTicks` storage element should have been removed."
+        );
+
+        // Check that the `LastDeletedTick` storage element has been updated.
+        assert_eq!(
+            LastDeletedTick::<T>::get(),
+            tick,
+            "The `LastDeletedTick` storage element should have been updated."
+        );
 
         Ok(())
     }

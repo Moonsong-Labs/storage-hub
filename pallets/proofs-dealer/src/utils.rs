@@ -780,49 +780,42 @@ where
         _n: BlockNumberFor<T>,
         usable_weight: Weight,
     ) -> Weight {
-        // Initialize the weight used by this function.
-        let mut used_weight = Weight::zero();
-
         // Check how many ticks should be removed to keep the storage at the target amount.
-        let mut last_deleted_tick = LastDeletedTick::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let last_deleted_tick = LastDeletedTick::<T>::get();
         let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
         let current_tick = ChallengesTicker::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let ticks_to_remove = current_tick
+        let ticks_to_remove: BlockNumberFor<T> = current_tick
             .saturating_sub(last_deleted_tick)
             .saturating_sub(target_ticks_to_keep.into());
 
         // Check how much ticks can be removed considering weight limitations
-        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
-        let removable_ticks = usable_weight
-            .saturating_sub(used_weight)
-            .checked_div_per_component(&weight_to_remove_tick);
+        let weight_for_one_iteration = T::WeightInfo::trim_valid_proof_submitters_last_ticks_loop();
+        let removable_ticks = usable_weight.checked_div_per_component(&weight_for_one_iteration);
 
         // If there is enough weight to remove ticks, try to remove as many ticks as possible until the target is reached.
-        if let Some(removable_ticks) = removable_ticks {
-            let removable_ticks =
-                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
+        let ticks_removed: u64 = if let Some(removable_ticks) = removable_ticks {
+            // Take the minimum between all the ticks that we want to remove, and the ones we can.
+            let removable_ticks: BlockNumberFor<T> = removable_ticks.saturated_into();
+            let removable_ticks = removable_ticks.min(ticks_to_remove);
+
             // Remove all the ticks that we can, until we reach the target amount.
-            for _ in 0..removable_ticks {
-                // Get the next tick to delete.
-                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
-
-                // Remove it from storage
-                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
-
-                // Update the last removed tick
-                LastDeletedTick::<T>::set(next_tick_to_delete);
-                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
-
-                // Increment the used weight.
-                used_weight = used_weight.saturating_add(weight_to_remove_tick);
+            let start_tick = last_deleted_tick.saturating_add(One::one());
+            let end_tick = last_deleted_tick.saturating_add(removable_ticks);
+            let mut tick_to_remove = start_tick;
+            while tick_to_remove <= end_tick {
+                tick_to_remove = Self::remove_proof_submitters_for_tick(tick_to_remove);
             }
-        }
+
+            // Return the number of ticks removed.
+            removable_ticks.saturated_into()
+        } else {
+            // No ticks can be removed.
+            Zero::zero()
+        };
 
         // Return the weight used by this function.
-        used_weight
+        T::WeightInfo::trim_valid_proof_submitters_last_ticks_constant_execution()
+            .saturating_add(weight_for_one_iteration.saturating_mul(ticks_removed))
     }
 
     /// Convert stake to challenge period.
@@ -927,6 +920,21 @@ where
     pub(crate) fn calculate_min_non_full_blocks_to_spam() -> BlockNumberFor<T> {
         let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
         min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get())
+    }
+
+    /// Remove all the proof submitters for a given tick and update the `LastDeletedTick` storage element
+    /// to the given tick.
+    ///
+    /// Returns the next tick to delete.
+    pub(crate) fn remove_proof_submitters_for_tick(tick: BlockNumberFor<T>) -> BlockNumberFor<T> {
+        // Remove it from storage
+        ValidProofSubmittersLastTicks::<T>::remove(tick);
+
+        // Update the last removed tick
+        LastDeletedTick::<T>::set(tick);
+
+        // Return the next tick to delete
+        tick.saturating_add(One::one())
     }
 }
 
