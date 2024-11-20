@@ -37,7 +37,9 @@ mod benchmarks {
     };
     use frame_system::{pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, RawOrigin};
     use pallet_storage_providers::types::ProviderIdFor;
-    use shp_traits::{ReadChallengeableProvidersInterface, TrieRemoveMutation};
+    use shp_traits::{
+        ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation,
+    };
     use sp_runtime::{
         traits::{Hash, One, Zero},
         BoundedBTreeSet, BoundedVec,
@@ -470,6 +472,59 @@ mod benchmarks {
 
         // Check that block `current_block` - (`BlockFullnessPeriod` + 1) is removed from the `PastBlocksWeight` StorageMap.
         assert!(PastBlocksWeight::<T>::get(block_to_remove_weight).is_none());
+
+        Ok(())
+    }
+
+    /// * Case:
+    /// - Provider is already initialised, so its current deadline has to be removed first.
+    #[benchmark]
+    fn force_initialise_challenge_cycle() -> Result<(), BenchmarkError> {
+        // Setup initial conditions.
+        let provider_id = <T as frame_system::Config>::Hashing::hash(
+            sp_runtime::format!("provider_id_{:?}", 0u32).as_bytes(),
+        );
+        register_providers::<T>(1u32)?;
+
+        // Force initialise challenge cycle once, so that it is already initialised.
+        <Pallet<T> as ProofsDealerInterface>::initialise_challenge_cycle(&provider_id)?;
+
+        // Check that the last tick the Provider submitted a proof for so far is the current block.
+        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+            .expect("Provider should have a last tick it submitted a proof for.");
+        assert_eq!(last_tick_proven, frame_system::Pallet::<T>::block_number());
+
+        // Advance a block so that we initialise it in a different block.
+        let current_block = frame_system::Pallet::<T>::block_number();
+        frame_system::Pallet::<T>::set_block_number(current_block + One::one());
+
+        #[extrinsic_call]
+        Pallet::<T>::force_initialise_challenge_cycle(RawOrigin::Root, provider_id);
+
+        // Check that the last tick the Provider submitted a proof for, is the new current block.
+        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+            .expect("Provider should have a last tick it submitted a proof for.");
+        assert_eq!(last_tick_proven, current_block);
+
+        Ok(())
+    }
+
+    /// * Case:
+    /// - Any case has the same complexity, so we'll just go from unpaused to paused.
+    #[benchmark]
+    fn set_paused() -> Result<(), BenchmarkError> {
+        // Setup initial conditions.
+        let is_ticker_paused = ChallengesTickerPaused::<T>::get();
+
+        // Ticker should be unpaused.
+        assert!(is_ticker_paused.is_none());
+
+        #[extrinsic_call]
+        Pallet::<T>::set_paused(RawOrigin::Root, true);
+
+        // Ticker should be paused.
+        let is_ticker_paused = ChallengesTickerPaused::<T>::get();
+        assert!(is_ticker_paused.is_some());
 
         Ok(())
     }

@@ -696,7 +696,7 @@ pub mod pallet {
         /// Sets the last tick the Provider submitted a proof for to the current tick, and sets the
         /// deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::force_initialise_challenge_cycle())]
         pub fn force_initialise_challenge_cycle(
             origin: OriginFor<T>,
             provider: ProviderIdFor<T>,
@@ -715,7 +715,8 @@ pub mod pallet {
         ///
         /// Only callable by sudo.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        // TODO: USE BENCHMARK
+        #[pallet::weight(T::WeightInfo::set_paused())]
         pub fn set_paused(origin: OriginFor<T>, paused: bool) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin.
             ensure_root(origin)?;
