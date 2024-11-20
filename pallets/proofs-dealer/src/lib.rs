@@ -715,7 +715,6 @@ pub mod pallet {
         ///
         /// Only callable by sudo.
         #[pallet::call_index(3)]
-        // TODO: USE BENCHMARK
         #[pallet::weight(T::WeightInfo::set_paused())]
         pub fn set_paused(origin: OriginFor<T>, paused: bool) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin.
