@@ -17,6 +17,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 [dependencies]
 codec = { workspace = true }
 scale-info = { workspace = true }
+serde = { workspace = true }
 
 # Frame
 frame-support = { workspace = true }
@@ -28,8 +29,6 @@ sp-std = { workspace = true }
 sp-trie = { workspace = true }
 
 [dev-dependencies]
-serde = { workspace = true }
-
 # Substrate
 sp-io = { workspace = true }
 

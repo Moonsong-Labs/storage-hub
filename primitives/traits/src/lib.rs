@@ -9,6 +9,7 @@ use frame_support::{
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
+use serde::{Deserialize, Serialize};
 use sp_core::Get;
 use sp_runtime::{
     traits::{
@@ -837,7 +838,18 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    PartialEq,
+    Debug,
+    Default,
+    Serialize,
+    Deserialize,
+)]
 pub struct TrieRemoveMutation;
 
 impl Into<TrieMutation> for TrieRemoveMutation {

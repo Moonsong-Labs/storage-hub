@@ -137,7 +137,10 @@ where
         {
             Ok(proven) => {
                 if proven.len() != 1 {
-                    Err(anyhow::anyhow!("Expected exactly one proven chunk."))
+                    Err(anyhow::anyhow!(
+                        "Expected exactly one proven chunk but got {}.",
+                        proven.len()
+                    ))
                 } else {
                     Ok(proven[0].clone())
                 }
@@ -377,7 +380,7 @@ where
 /// Handles the `ProcessMspRespondStoringRequest` event.
 ///
 /// Triggered when there are new storage request(s) to respond to. Normally, storage requests are
-/// immidiately rejected if the MSP cannot store the file (e.g. not enough capacity). However, this event
+/// immediately rejected if the MSP cannot store the file (e.g. not enough capacity). However, this event
 /// is able to respond to storage requests that are either being accepted or rejected either way.
 ///
 /// The MSP will call the `msp_respond_storage_requests_multiple_buckets` extrinsic on the FileSystem pallet to respond to the
