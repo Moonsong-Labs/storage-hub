@@ -41,6 +41,18 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 
+    await api.docker.waitForLog({
+      containerName: "sh-bsp-two",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
+
+    await api.docker.waitForLog({
+      containerName: "sh-bsp-three",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
+
     const signers = [alice, bob, charlie];
     const signedExts: SubmittableExtrinsic<"promise", ISubmittableResult>[] = [];
 
