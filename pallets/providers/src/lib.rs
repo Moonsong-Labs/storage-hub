@@ -447,9 +447,9 @@ pub mod pallet {
     /// The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
     /// marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
     /// `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
-    /// buckets to another MSP or delete their buckets.
+    /// buckets to another MSP or delete their buckets (as they normally can).
     ///
-    /// The relay chain block is used to ensure we have a predictive way to determine how much time we allocate to the provider to
+    /// The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
     /// top up their deposit.
     #[pallet::storage]
     pub type GracePeriodToSlashedProviders<T: Config> = StorageDoubleMap<

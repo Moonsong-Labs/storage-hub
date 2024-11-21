@@ -516,7 +516,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate =
         runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
-    type TopUpGracePeriod = ConstU32<600>; // 1 hour with 6 second timeslots.
+    type TopUpGracePeriod = ConstU32<{ 24 * 60 * 60 / 6 }>; // 1 day with 6 second timeslots.
 }
 
 parameter_types! {
