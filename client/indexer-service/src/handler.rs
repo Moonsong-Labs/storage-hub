@@ -319,6 +319,7 @@ impl IndexerService {
             } => {
                 Bucket::delete(conn, bucket_id.to_string()).await?;
             }
+            pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

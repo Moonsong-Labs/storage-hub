@@ -29,6 +29,7 @@ import type {
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -576,6 +577,26 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256;
           collectionId: Option<u32>;
           private: bool;
+        }
+      >;
+      /**
+       * Failed to decrease bucket size for expired file deletion request
+       **/
+      FailedToDecreaseBucketSize: AugmentedEvent<
+        ApiType,
+        [
+          user: AccountId32,
+          bucketId: H256,
+          fileKey: H256,
+          fileSize: u64,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          user: AccountId32;
+          bucketId: H256;
+          fileKey: H256;
+          fileSize: u64;
+          error: SpRuntimeDispatchError;
         }
       >;
       /**
@@ -2043,14 +2064,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [
-          provider: H256,
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
-          newRoot: H256
-        ],
+        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
         {
           provider: H256;
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
           newRoot: H256;
         }
       >;

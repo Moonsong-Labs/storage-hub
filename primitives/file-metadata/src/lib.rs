@@ -14,7 +14,9 @@ use sp_std::vec::Vec;
 ///
 /// It also provides utility functions like calculating the number of chunks in a file,
 /// the last chunk ID, and generating a file key for a given file metadata.
-#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Default, PartialEq, Eq, TypeInfo, Encode, Decode, Serialize, Deserialize,
+)]
 pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub owner: Vec<u8>,
