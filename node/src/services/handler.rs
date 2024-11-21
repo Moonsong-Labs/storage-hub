@@ -2,10 +2,19 @@ use std::sync::Arc;
 use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
+use crate::tasks::{
+    bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
+    bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
+    msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
+    msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
+    user_sends_file::UserSendsFileTask, BspForestStorageHandlerT, FileStorageT,
+    MspForestStorageHandlerT,
+};
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
+use shc_blockchain_service::events::NotifyPeriod;
 use shc_blockchain_service::{
     events::{
         AcceptedBspVolunteer, FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated,
@@ -20,14 +29,6 @@ use shc_file_transfer_service::{
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-
-use crate::tasks::{
-    bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
-    bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-    msp_delete_bucket::MspStoppedStoringTask, msp_upload_file::MspUploadFileTask,
-    sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
-    BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
-};
 
 /// Configuration paramaters for Storage Providers.
 #[derive(Clone)]
@@ -168,6 +169,14 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         finalised_msp_stopped_storing_bucket_event_bus_listener.start();
+
+        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
+        // Subscribing to NewStorageRequest event from the BlockchainService.
+        let notify_period_event_bus_listener: EventBusListener<NotifyPeriod, _> =
+            msp_charge_fees_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        notify_period_event_bus_listener.start();
     }
 }
 

@@ -100,11 +100,7 @@ describeBspNet(
       let currentBlock = await userApi.rpc.chain.getBlock();
       let currentBlockNumber = currentBlock.block.header.number.toNumber();
       const blocksToAdvance = nextChallengeTick - currentBlockNumber;
-
-      // Advance blocksToAdvance blocks.
-      for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
-      }
+      await userApi.advanceToBlock(blocksToAdvance);
 
       await userApi.assert.extrinsicPresent({
         method: "submitProof",
@@ -417,7 +413,7 @@ describeBspNet(
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
-          lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
+        lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
       );
 
       // Seal one more block to update the last chargeable info of the Provider
@@ -573,7 +569,7 @@ describeBspNet(
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
-          lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
+        lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
       );
 
       // Seal one more block to update the last chargeable info of the Provider
