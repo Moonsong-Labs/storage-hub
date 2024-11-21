@@ -14,6 +14,7 @@ import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
 import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
+import { assertDockerLog } from "../asserts.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -171,6 +172,7 @@ export const addBsp = async (
     maxStorageCapacity?: number;
     extrinsicRetryTimeout?: number;
     additionalArgs?: string[];
+    waitForIdle?: boolean;
   }
 ) => {
   // Launch a BSP node.
@@ -190,6 +192,10 @@ export const addBsp = async (
     ...options,
     additionalArgs
   });
+
+  if (options?.waitForIdle) {
+    await assertDockerLog(containerName, "💤 Idle", 15000);
+  }
 
   //Give it some balance.
   const amount = 10000n * 10n ** 12n;

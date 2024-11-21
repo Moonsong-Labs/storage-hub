@@ -11,12 +11,8 @@ import {
   DevTestContext
 } from "../../../util";
 
-// TODO: Figure out why only isn't working here
 describe("Balances Pallet: Reaping", async () => {
-  const context = new DevTestContext({
-    // printLogs: true,
-    // keepOpen: true,
-  });
+  const context = new DevTestContext({});
   let api: ExtendedApiPromise;
 
   before(async () => {
