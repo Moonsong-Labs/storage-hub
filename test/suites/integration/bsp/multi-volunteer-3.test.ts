@@ -1,6 +1,5 @@
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
-import { strictEqual } from "node:assert";
 import invariant from "tiny-invariant";
 import {
   alice,
@@ -12,8 +11,7 @@ import {
   charlie,
   describeBspNet,
   type EnrichedBspApi,
-  ShConsts,
-  sleep
+  ShConsts
 } from "../../../util";
 
 describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUserApi }) => {
@@ -76,14 +74,12 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
 
     await api.sealBlock(signedExts);
 
-    // Allow time for BSP to react
-    await sleep(5000);
-    const matchedExts = await api.assert.extrinsicPresent({
+    await api.assert.extrinsicPresent({
       module: "fileSystem",
       method: "bspVolunteer",
-      checkTxPool: true
+      checkTxPool: true,
+      assertLength: 9,
+      timeout: 10000
     });
-
-    strictEqual(matchedExts.length, 9, "Expected 9 bspVolunteer extrinsics from three BSPs");
   });
 });
