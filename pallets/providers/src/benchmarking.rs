@@ -83,10 +83,16 @@ mod benchmarks {
                 .ok()
                 .unwrap(),
         );
-        let value_prop_price_per_unit_of_data_per_block = 1u32;
-        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> =
-            vec![1, 2, 3].try_into().unwrap();
-        let value_prop_max_data_limit = 100u32;
+        let value_prop_price_per_unit_of_data_per_block = BalanceOf::<T>::max_value();
+        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> = vec![
+                1;
+                <T as crate::Config>::MaxCommitmentSize::get()
+                    .try_into()
+                    .unwrap()
+            ]
+        .try_into()
+        .unwrap();
+        let value_prop_max_data_limit = StorageDataUnit::<T>::max_value();
         let payment_account = user_account.clone();
 
         /*********** Call the extrinsic to benchmark: ***********/
@@ -1654,10 +1660,16 @@ mod benchmarks {
                 .ok()
                 .unwrap(),
         );
-        let value_prop_price_per_unit_of_data_per_block = 1u32;
-        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> =
-            vec![1, 2, 3].try_into().unwrap();
-        let value_prop_max_data_limit = 100u32;
+        let value_prop_price_per_unit_of_data_per_block = BalanceOf::<T>::max_value();
+        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> = vec![
+                1;
+                <T as crate::Config>::MaxCommitmentSize::get()
+                    .try_into()
+                    .unwrap()
+            ]
+        .try_into()
+        .unwrap();
+        let value_prop_max_data_limit = StorageDataUnit::<T>::max_value();
         let payment_account = user_account.clone();
 
         /*********** Call the extrinsic to benchmark: ***********/
