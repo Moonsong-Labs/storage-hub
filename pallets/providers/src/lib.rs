@@ -13,7 +13,7 @@ mod utils;
 pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+pub mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -275,6 +275,10 @@ pub mod pallet {
         /// fee for a bucket that doesn't have any files yet)
         #[pallet::constant]
         type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
+
+        /// Trait that has benchmark helpers
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelpers: crate::benchmarking::BenchmarkHelpers<Self>;
     }
 
     #[pallet::pallet]

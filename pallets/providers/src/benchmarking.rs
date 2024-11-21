@@ -5,9 +5,22 @@
 use super::*;
 use frame_benchmarking::v2::*;
 
+pub trait BenchmarkHelpers<T: crate::Config> {
+    type ProviderId: From<<T as crate::Config>::ProviderId>;
+    fn set_accrued_failed_proofs(provider_id: Self::ProviderId, value: u32);
+    fn get_accrued_failed_proofs(provider_id: Self::ProviderId) -> u32;
+}
+
+impl<T: crate::Config> BenchmarkHelpers<T> for () {
+    type ProviderId = <T as crate::Config>::ProviderId;
+    fn set_accrued_failed_proofs(_provider_id: Self::ProviderId, _value: u32) {}
+    fn get_accrued_failed_proofs(_provider_id: Self::ProviderId) -> u32 {
+        0
+    }
+}
+
 #[benchmarks(where
-	T: crate::Config + pallet_randomness::Config + pallet_proofs_dealer::Config,
-	<<T as pallet_proofs_dealer::Config>::ProvidersPallet as shp_traits::ReadChallengeableProvidersInterface>::ProviderId: From<<T as crate::Config>::ProviderId>
+	T: crate::Config + pallet_randomness::Config
 )]
 mod benchmarks {
     use frame_support::{
@@ -1772,7 +1785,6 @@ mod benchmarks {
     fn slash() -> Result<(), BenchmarkError> {
         // TODO: once provider sign off is implemented for providers that run out of stake,
         // add a benchmark to check which is the worst case scenario for this extrinsic
-        use pallet_proofs_dealer::types::ProviderIdFor as ProofsDealerProviderIdFor;
         /***********  Setup initial conditions: ***********/
         // Make sure the block number is not 0 so events can be deposited.
         if frame_system::Pallet::<T>::block_number() == Zero::zero() {
@@ -1842,14 +1854,16 @@ mod benchmarks {
         assert!(bsp.is_some());
 
         // Accrue failed proof submissions for this provider
-        let bsp_id_as_pd: ProofsDealerProviderIdFor<T> = bsp_id.into();
-        pallet_proofs_dealer::SlashableProviders::<T>::insert(bsp_id_as_pd, 3);
+        <T as crate::Config>::BenchmarkHelpers::set_accrued_failed_proofs(bsp_id.clone().into(), 3);
 
         // Get the amount to be slashed
         let amount_to_slash = Pallet::<T>::compute_worst_case_scenario_slashable_amount(&bsp_id)
             .map_err(|_| {
                 BenchmarkError::Stop("Failed to compute worst case scenario slashable amount.")
             })?;
+
+        // The amount to be slashed should be greater than 0
+        assert!(amount_to_slash > Zero::zero());
 
         // The amount slashed will be the minimum between the amount to slash and the available
         // funds to slash of the provider
@@ -1881,8 +1895,8 @@ mod benchmarks {
 
         // Verify that the accrued failed proof submissions have been cleared
         let accrued_failed_proofs =
-            pallet_proofs_dealer::SlashableProviders::<T>::get(bsp_id_as_pd);
-        assert!(accrued_failed_proofs.is_none());
+            <T as crate::Config>::BenchmarkHelpers::get_accrued_failed_proofs(bsp_id.into());
+        assert!(accrued_failed_proofs == 0);
 
         Ok(())
     }
