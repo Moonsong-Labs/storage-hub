@@ -242,9 +242,9 @@ describeBspNet(
       // TODO: Check that BSP-Three no longer has a challenge deadline.
     });
 
-    it(
-      "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
-      { skip: "Not implemented yet." },
+
+    // After a re-org the BSP may need to submit any proofs prior to responding to the challenge as the seed has changed§
+    it.only( "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
       async () => {
         const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
           userApi.shConsts.DUMMY_BSP_ID
