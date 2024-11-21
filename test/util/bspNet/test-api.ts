@@ -460,6 +460,7 @@ export class BspNetTestApi implements AsyncDisposable {
         bspStartingWeight?: bigint;
         maxStorageCapacity?: number;
         additionalArgs?: string[];
+        waitForIdle?: boolean;
       }) => addBsp(this._api, options.bspSigner, options)
     };
 

@@ -30,7 +30,8 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
       name: "sh-bsp-two",
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
-      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
+      additionalArgs: ["--keystore-path=/keystore/bsp-two"],
+      waitForIdle: true
     });
 
     await api.docker.onboardBsp({
@@ -38,19 +39,8 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
       name: "sh-bsp-three",
       bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
-      additionalArgs: ["--keystore-path=/keystore/bsp-three"]
-    });
-
-    await api.docker.waitForLog({
-      containerName: "sh-bsp-two",
-      searchString: "💤 Idle",
-      timeout: 15000
-    });
-
-    await api.docker.waitForLog({
-      containerName: "sh-bsp-three",
-      searchString: "💤 Idle",
-      timeout: 15000
+      additionalArgs: ["--keystore-path=/keystore/bsp-three"],
+      waitForIdle: true
     });
 
     const signers = [alice, bob, charlie];
