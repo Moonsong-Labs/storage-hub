@@ -413,7 +413,7 @@ describeBspNet(
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
-        lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
+          lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
       );
 
       // Seal one more block to update the last chargeable info of the Provider
@@ -569,7 +569,7 @@ describeBspNet(
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
-        lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
+          lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
       );
 
       // Seal one more block to update the last chargeable info of the Provider
