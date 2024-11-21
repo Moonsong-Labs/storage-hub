@@ -57,7 +57,7 @@ where
     FL: FileStorageT,
     FSH: MspForestStorageHandlerT,
 {
-    async fn handle_event(&mut self, event: NotifyPeriod) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Charging users",
