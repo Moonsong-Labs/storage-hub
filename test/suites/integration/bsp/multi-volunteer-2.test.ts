@@ -49,7 +49,6 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       timeout: 15000
     });
 
-
     await api.file.createBucketAndSendNewStorageRequest(
       "res/adolphus.jpg",
       "cat/adolphus.jpg",
