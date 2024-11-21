@@ -818,7 +818,7 @@ pub mod pallet {
         #[pallet::call_index(2)]
         #[pallet::weight({
 			T::WeightInfo::confirm_sign_up_bsp()
-				//.max(T::WeightInfo::confirm_sign_up_msp())
+				.max(T::WeightInfo::confirm_sign_up_msp())
 		})]
         pub fn confirm_sign_up(
             origin: OriginFor<T>,
