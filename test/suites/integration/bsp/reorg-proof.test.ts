@@ -3,12 +3,34 @@ import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
-  { initialised: true, networkConfig: "standard", keepAlive: false },
+  { initialised: true, networkConfig: "standard", keepAlive: true },
   ({ before, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
+    });
+
+    // This is skipped because it currently fails with timeout for ext inclusion
+    it("resubmits a dropped proof Ext", async () => {
+      await userApi.block.seal(); // To make sure we have a finalized head
+      const nextChallengeTick = await getNextChallengeHeight(userApi);
+      await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true });
+
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+
+      await userApi.node.dropTxn({ module: "proofsDealer", method: "submitProof" });
+
+      await userApi.block.seal();
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
     });
 
     // This is skipped because: 1) the underlying functionality is not yet implemented
