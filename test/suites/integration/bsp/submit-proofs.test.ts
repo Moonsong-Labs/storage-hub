@@ -189,7 +189,7 @@ describeBspNet(
         bspThreeKey
       );
 
-      userApi.assert.fetchEventData(
+      userApi.assert.fetchEvent(
         userApi.events.fileSystem.BspRequestedToStopStoring,
         await userApi.query.system.events()
       );
