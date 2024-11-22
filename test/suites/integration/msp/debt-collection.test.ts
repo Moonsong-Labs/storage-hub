@@ -2,18 +2,15 @@ import { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 import invariant from "tiny-invariant";
 
-describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
+describeMspNet("Single MSP collecting debt", { only: true }, ({ before, createMspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let mspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();
     const maybeMspApi = await createMspApi();
-    if (maybeMspApi) {
-      mspApi = maybeMspApi;
-    } else {
-      throw new Error("MSP API not available");
-    }
+    invariant(maybeMspApi, "MSP API not available")
+    mspApi = maybeMspApi;
   });
 
   it("Network launches and can be queried", async () => {
@@ -39,9 +36,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("NewBucket event data does not match expected type");
-    }
+    invariant(newBucketEventDataBlob, "NewBucket event data does not match expected type");
 
     const txs = [];
     for (let i = 0; i < source.length; i++) {
@@ -75,29 +70,20 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     const matchedEvents = events.filter((e) =>
       userApi.events.fileSystem.NewStorageRequest.is(e.event)
     );
-
-    if (matchedEvents.length !== source.length) {
-      throw new Error(`Expected ${source.length} NewStorageRequest events`);
-    }
+    invariant(matchedEvents.length === source.length, `Expected ${source.length} NewStorageRequest events`);
 
     const issuedFileKeys = [];
     for (const e of matchedEvents) {
       const newStorageRequestDataBlob =
         userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
 
-      if (!newStorageRequestDataBlob) {
-        throw new Error("Event doesn't match NewStorageRequest type");
-      }
+      invariant(newStorageRequestDataBlob, "Event doesn't match NewStorageRequest type");
 
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(
         newStorageRequestDataBlob.fileKey
       );
 
-      if (!result.isFileFound) {
-        throw new Error(
-          `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-        );
-      }
+      invariant(result.isFileFound, `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`);
 
       issuedFileKeys.push(newStorageRequestDataBlob.fileKey);
     }
@@ -133,7 +119,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       // Event not found, continue
     }
 
-    let acceptedFileKey: string | null = null;
+    let acceptedFileKey: string | undefined = undefined;
     // We expect either the MSP accepted the storage request or the storage request was fulfilled
     if (mspAcceptedStorageRequestDataBlob) {
       acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
@@ -141,11 +127,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
     }
 
-    if (!acceptedFileKey) {
-      throw new Error(
-        "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
-      );
-    }
+    invariant(acceptedFileKey, "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found");
 
     // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
     strictEqual(
@@ -169,9 +151,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
       bucketRootChangedEvent.data;
 
-    if (!bucketRootChangedDataBlob) {
-      throw new Error("Expected BucketRootChanged event but received event of different type");
-    }
+    invariant(bucketRootChangedDataBlob, "Expected BucketRootChanged event but received event of different type");
 
     strictEqual(bucketRootChangedDataBlob.newRoot.toString(), local_bucket_root.toString());
 
@@ -219,9 +199,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
       bucketRootChangedEvent2.data;
 
-    if (!bucketRootChangedDataBlob2) {
-      throw new Error("Expected BucketRootChanged event but received event of different type");
-    }
+    invariant(bucketRootChangedDataBlob2, "Expected BucketRootChanged event but received event of different type");
 
     strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), local_bucket_root2.toString());
 
