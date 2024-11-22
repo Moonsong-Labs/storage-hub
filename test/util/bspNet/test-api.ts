@@ -1,10 +1,10 @@
-import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
+import "@storagehub/api-augment";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
@@ -13,10 +13,10 @@ import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
+import { addBsp } from "./helpers";
 import * as NodeBspNet from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
-import { addBsp } from "./helpers";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -166,12 +166,7 @@ export class BspNetTestApi implements AsyncDisposable {
       waitForBspProofs?: string[];
     }
   ) {
-    return BspNetBlock.advanceToBlock(
-      this._api,
-      blockNumber,
-      options?.waitBetweenBlocks,
-      options?.waitForBspProofs
-    );
+    return BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber });
   }
 
   private enrichApi() {
@@ -376,6 +371,11 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for manipulating and interacting with blocks in the BSP network.
      */
     const remappedBlockNs = {
+      extendFork: (options: {
+        parentBlockHash: string;
+        amountToExtend: number;
+        verbose?: boolean;
+      }) => BspNetBlock.extendFork(this._api, { ...options, verbose: options.verbose ?? false }),
       /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.
@@ -410,18 +410,11 @@ export class BspNetTestApi implements AsyncDisposable {
         options?: {
           waitBetweenBlocks?: number | boolean;
           waitForBspProofs?: string[];
+          finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;
         }
-      ) =>
-        BspNetBlock.advanceToBlock(
-          this._api,
-          blockNumber,
-          options?.waitBetweenBlocks,
-          options?.waitForBspProofs,
-          options?.spam,
-          options?.verbose
-        ),
+      ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.

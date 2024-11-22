@@ -1,15 +1,15 @@
 import assert, { strictEqual } from "node:assert";
+import invariant from "tiny-invariant";
 import {
+  ShConsts,
+  bspThreeKey,
   describeBspNet,
   shUser,
   sleep,
   type EnrichedBspApi,
-  type FileMetadata,
-  ShConsts,
-  bspThreeKey
+  type FileMetadata
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
-import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
@@ -222,7 +222,7 @@ describeBspNet(
         /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
         fileMetadata.fileKey,
         inclusionForestProof,
-      )); 
+      ));
       // Check for the confirm stopped storing event.
           let confirmStopStoringEvent = bspThreeApi.assert.eventPresent(
             "fileSystem",
@@ -240,74 +240,6 @@ describeBspNet(
 
     it("BSP is not challenged any more", { skip: "Not implemented yet." }, async () => {
       // TODO: Check that BSP-Three no longer has a challenge deadline.
-    });
-
-
-    // After a re-org the BSP may need to submit any proofs prior to responding to the challenge as the seed has changed§
-    it.only( "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
-      async () => {
-        const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
-          userApi.shConsts.DUMMY_BSP_ID
-        );
-        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-        const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
-          userApi.shConsts.DUMMY_BSP_ID
-        );
-        const challengePeriod = challengePeriodResult.asOk.toNumber();
-        const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-        await userApi.advanceToBlock(nextChallengeTick);
-        await userApi.block.seal({ finaliseBlock: false });
-
-        await userApi.assert.extrinsicPresent({
-          module: "proofsDealer",
-          method: "submitProof"
-        });
-        await userApi.block.reOrg();
-
-        await assert.rejects(
-          async () => {
-            await userApi.assert.extrinsicPresent({
-              module: "proofsDealer",
-              method: "submitProof",
-              timeout: 1000
-            });
-          },
-          /No matching extrinsic found for proofsDealer\.submitProof/,
-          "No submit proof extrinsics after re-org"
-        );
-
-        await userApi.block.seal();
-        await userApi.assert.extrinsicPresent({
-          module: "proofsDealer",
-          method: "submitProof"
-        });
-      }
-    );
-
-    it("Proofs not submitted in unfinalised block", { skip: "Not implemented yet." }, async () => {
-      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
-        userApi.shConsts.DUMMY_BSP_ID
-      );
-      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
-        userApi.shConsts.DUMMY_BSP_ID
-      );
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-      await userApi.advanceToBlock(nextChallengeTick - 1);
-      await userApi.block.seal({ finaliseBlock: false });
-
-      await assert.rejects(
-        async () =>
-          await userApi.assert.extrinsicPresent({
-            module: "proofsDealer",
-            method: "submitProof",
-            checkTxPool: true,
-            timeout: 5000
-          }),
-        /No matching extrinsic found for proofsDealer\.submitProof/,
-        "Proof extrinsics should not be present within unfinalised block"
-      );
     });
 
     it("New storage request sent by user, to only one BSP", async () => {

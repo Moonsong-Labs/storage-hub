@@ -25,6 +25,39 @@ export interface SealedBlock {
   extSuccess?: boolean;
 }
 
+export const extendFork = async (
+  api: ApiPromise,
+  options: { parentBlockHash: string; amountToExtend: number; verbose: boolean }
+) => {
+  let parentBlockHash: string = options.parentBlockHash;
+  let parentHeight = (await api.rpc.chain.getHeader(parentBlockHash)).number.toNumber();
+  assert(options.amountToExtend > 0, "extendFork: amountToExtend must be greater than 0!");
+
+  for (let i = 0; i < options.amountToExtend; i++) {
+    if (options.verbose) {
+      console.log(`Extending fork by 1 block. Current height: ${parentHeight}`);
+      console.log(`Parent block hash: ${parentBlockHash}`);
+    }
+    const { blockHash } = await api.rpc.engine.createBlock(true, false, parentBlockHash);
+    if (options.verbose) {
+      console.log(`New block hash: ${blockHash.toHex()}`);
+    }
+    parentBlockHash = blockHash.toHex();
+    const newBlockNumber = (await api.rpc.chain.getHeader(blockHash)).number.toNumber();
+    if (options.verbose) {
+      console.log(`New block number: ${newBlockNumber}`);
+    }
+    assert(
+      newBlockNumber > parentHeight,
+      "Fork is not extended! this is a bug in logic, please raise"
+    );
+    parentHeight = newBlockNumber;
+
+    // TODO replace with something smarter eventually
+    await sleep(3000);
+  }
+};
+
 /**
  * Seals a block with optional extrinsics and finalizes it.
  *
@@ -161,7 +194,11 @@ export const skipBlocksToMinChangeTime: (
       console.log(
         `\tSkipping to block #${blockToAdvanceTo} to go beyond MinBlocksBetweenCapacityChanges`
       );
-    await advanceToBlock(api, blockToAdvanceTo, false, [bspId.toString()]);
+    await advanceToBlock(api, {
+      blockNumber: blockToAdvanceTo,
+      verbose: false,
+      watchForBspProofs: [bspId.toString()]
+    });
   } else {
     verbose &&
       console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
@@ -242,21 +279,24 @@ export async function runToNextChallengePeriodBlock(
  */
 export const advanceToBlock = async (
   api: ApiPromise,
-  blockNumber: number,
-  waitBetweenBlocks?: number | boolean,
-  watchForBspProofs?: string[],
-  spam?: number | boolean,
-  verbose?: boolean
+  options: {
+    blockNumber: number;
+    waitBetweenBlocks?: number | boolean;
+    watchForBspProofs?: string[];
+    finalised?: boolean;
+    spam?: number | boolean;
+    verbose?: boolean;
+  }
 ): Promise<SealedBlock> => {
   // If watching for BSP proofs, we need to know the blocks at which they are challenged.
   const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
-  if (watchForBspProofs) {
-    for (const bspId of watchForBspProofs) {
+  if (options.watchForBspProofs) {
+    for (const bspId of options.watchForBspProofs) {
       // First we get the last tick for which the BSP submitted a proof.
       const lastTickResult =
         await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
       if (lastTickResult.isErr) {
-        verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
+        options.verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
         continue;
       }
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
@@ -280,15 +320,15 @@ export const advanceToBlock = async (
   let blockResult = null;
 
   invariant(
-    blockNumber > currentBlockNumber,
-    `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
+    options.blockNumber > currentBlockNumber,
+    `Block number ${options.blockNumber} is lower than current block number ${currentBlockNumber}`
   );
-  const blocksToAdvance = blockNumber - currentBlockNumber;
+  const blocksToAdvance = options.blockNumber - currentBlockNumber;
 
   let blocksToSpam = 0;
-  if (spam) {
-    if (typeof spam === "number") {
-      blocksToSpam = spam;
+  if (options.spam) {
+    if (typeof options.spam === "number") {
+      blocksToSpam = options.spam;
     } else {
       blocksToSpam = blocksToAdvance;
     }
@@ -299,8 +339,8 @@ export const advanceToBlock = async (
   const maxNormalBlockWeight = api.consts.system.blockWeights.perClass.normal.maxTotal.unwrap();
 
   for (let i = 0; i < blocksToAdvance; i++) {
-    if (spam && i < blocksToSpam) {
-      if (verbose) {
+    if (options.spam && i < blocksToSpam) {
+      if (options.verbose) {
         console.log(`Spamming block ${i + 1} of ${blocksToSpam}`);
       }
       // The nonce of the spamming transactions should be incremented by 1 for each transaction.
@@ -322,13 +362,13 @@ export const advanceToBlock = async (
       }
     }
 
-    blockResult = await sealBlock(api);
+    blockResult = await sealBlock(api, [], undefined, options.finalised);
     currentBlockNumber += 1;
 
     const blockWeight = await api.query.system.blockWeight();
     const blockWeightNormal = blockWeight.normal;
 
-    if (spam && i < blocksToSpam && verbose) {
+    if (options.spam && i < blocksToSpam && options.verbose) {
       console.log(`Normal block weight for block ${i + 1}: ${blockWeightNormal}`);
 
       const currentTick = (await api.call.proofsDealerApi.getCurrentTick()).toNumber();
@@ -336,7 +376,7 @@ export const advanceToBlock = async (
     }
 
     // Check if we need to wait for BSP proofs.
-    if (watchForBspProofs) {
+    if (options.watchForBspProofs) {
       for (const challengeBlockNumber of challengeBlockNumbers) {
         if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
           // Wait for the BSP to process the proof.
@@ -349,9 +389,9 @@ export const advanceToBlock = async (
       }
     }
 
-    if (waitBetweenBlocks) {
-      if (typeof waitBetweenBlocks === "number") {
-        await sleep(waitBetweenBlocks);
+    if (options.waitBetweenBlocks) {
+      if (typeof options.waitBetweenBlocks === "number") {
+        await sleep(options.waitBetweenBlocks);
       } else {
         await sleep(500);
       }
