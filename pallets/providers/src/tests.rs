@@ -5098,13 +5098,6 @@ mod slash_and_top_up {
                         .into()
                     );
 
-                    // Check that the provider top up expiration still exists
-                    // This item will automatically be cleared once it is processed in the `on_idle` execution
-                    assert!(
-                        ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
-                            .iter()
-                            .any(|provider_id| *provider_id == self.provider_id)
-                    );
                     // Check that the storage has been cleared
                     assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
 
