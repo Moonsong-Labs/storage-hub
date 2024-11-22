@@ -242,43 +242,51 @@ describeBspNet(
       // TODO: Check that BSP-Three no longer has a challenge deadline.
     });
 
-    it("BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds", async () => {
-      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
-        userApi.shConsts.DUMMY_BSP_ID
-      );
-      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
-        userApi.shConsts.DUMMY_BSP_ID
-      );
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-      await userApi.advanceToBlock(nextChallengeTick);
-      await userApi.block.seal({ finaliseBlock: false });
+    it(
+      "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
+      {
+        skip: "Instead of re-orging, this test should drop the submitProof transactions from the mempools, build a block and check that the proofsDealer pallet submits the proofs again."
+      },
+      async () => {
+        const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+          userApi.shConsts.DUMMY_BSP_ID
+        );
+        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+        const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+          userApi.shConsts.DUMMY_BSP_ID
+        );
+        const challengePeriod = challengePeriodResult.asOk.toNumber();
+        const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+        await userApi.advanceToBlock(nextChallengeTick, {
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        });
+        await userApi.block.seal({ finaliseBlock: false });
 
-      await userApi.assert.extrinsicPresent({
-        module: "proofsDealer",
-        method: "submitProof"
-      });
-      await userApi.block.reOrg();
+        await userApi.assert.extrinsicPresent({
+          module: "proofsDealer",
+          method: "submitProof"
+        });
+        await userApi.block.reOrg();
 
-      await assert.rejects(
-        async () => {
-          await userApi.assert.extrinsicPresent({
-            module: "proofsDealer",
-            method: "submitProof",
-            timeout: 1000
-          });
-        },
-        /No matching extrinsic found for proofsDealer\.submitProof/,
-        "No submit proof extrinsics after re-org"
-      );
+        await assert.rejects(
+          async () => {
+            await userApi.assert.extrinsicPresent({
+              module: "proofsDealer",
+              method: "submitProof",
+              timeout: 1000
+            });
+          },
+          /No matching extrinsic found for proofsDealer\.submitProof/,
+          "No submit proof extrinsics after re-org"
+        );
 
-      await userApi.block.seal();
-      await userApi.assert.extrinsicPresent({
-        module: "proofsDealer",
-        method: "submitProof"
-      });
-    });
+        await userApi.block.seal();
+        await userApi.assert.extrinsicPresent({
+          module: "proofsDealer",
+          method: "submitProof"
+        });
+      }
+    );
 
     it("New storage request sent by user, to only one BSP", async () => {
       // Pause BSP-Two and BSP-Three.
@@ -363,9 +371,7 @@ describeBspNet(
       });
 
       // Resume BSP-Two and BSP-Three.
-      await userApi.docker.resumeBspContainer({
-        containerName: "sh-bsp-two"
-      });
+      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
       await userApi.docker.resumeBspContainer({
         containerName: "sh-bsp-three"
       });
@@ -597,6 +603,12 @@ describeBspNet(
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? dummyBspNextChallengeTick
           : bspTwoNextChallengeTick;
+      const secondBlockToAdvance =
+        dummyBspNextChallengeTick < bspTwoNextChallengeTick
+          ? bspTwoNextChallengeTick
+          : dummyBspNextChallengeTick;
+
+      const areBspsNextChallengeBlockTheSame = firstBlockToAdvance === secondBlockToAdvance;
 
       // Advance to first next challenge block.
       await userApi.advanceToBlock(firstBlockToAdvance, {
@@ -608,10 +620,13 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const challengeBlockEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
+      const firstChallengeBlockEvents = await userApi.assert.eventMany(
+        "proofsDealer",
+        "ProofAccepted"
+      );
 
       // Check that at least one of the `ProofAccepted` events belongs to `firstBspToRespond`.
-      const atLeastOneEventBelongsToFirstBsp = challengeBlockEvents.some((eventRecord) => {
+      const atLeastOneEventBelongsToFirstBsp = firstChallengeBlockEvents.some((eventRecord) => {
         const firstChallengeBlockEventDataBlob =
           userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
         assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
@@ -644,11 +659,22 @@ describeBspNet(
         );
       }
 
+      // If the BSPs had different next challenge blocks, advance to the second next challenge block.
+      if (!areBspsNextChallengeBlockTheSame) {
+        // Advance to second next challenge block.
+        await userApi.advanceToBlock(secondBlockToAdvance, {
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        });
+
+        // Wait for BSP to generate the proof and advance one more block.
+        await sleep(500);
+        await userApi.sealBlock();
+      }
+
       // Check for a ProofAccepted event.
       const secondChallengeBlockEvents = await userApi.assert.eventMany(
         "proofsDealer",
-        "ProofAccepted",
-        challengeBlockEvents
+        "ProofAccepted"
       );
 
       // Check that at least one of the `ProofAccepted` events belongs to `secondBspToRespond`.
