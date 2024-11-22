@@ -363,9 +363,7 @@ describeBspNet(
       });
 
       // Resume BSP-Two and BSP-Three.
-      await userApi.docker.resumeBspContainer({
-        containerName: "sh-bsp-two"
-      });
+      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
       await userApi.docker.resumeBspContainer({
         containerName: "sh-bsp-three"
       });
@@ -597,6 +595,10 @@ describeBspNet(
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? dummyBspNextChallengeTick
           : bspTwoNextChallengeTick;
+      const secondBlockToAdvance =
+        dummyBspNextChallengeTick < bspTwoNextChallengeTick
+          ? bspTwoNextChallengeTick
+          : dummyBspNextChallengeTick;
 
       // Advance to first next challenge block.
       await userApi.advanceToBlock(firstBlockToAdvance, {
@@ -608,10 +610,13 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const challengeBlockEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
+      const firstChallengeBlockEvents = await userApi.assert.eventMany(
+        "proofsDealer",
+        "ProofAccepted"
+      );
 
       // Check that at least one of the `ProofAccepted` events belongs to `firstBspToRespond`.
-      const atLeastOneEventBelongsToFirstBsp = challengeBlockEvents.some((eventRecord) => {
+      const atLeastOneEventBelongsToFirstBsp = firstChallengeBlockEvents.some((eventRecord) => {
         const firstChallengeBlockEventDataBlob =
           userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
         assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
@@ -644,11 +649,20 @@ describeBspNet(
         );
       }
 
+      // Advance to second next challenge block.
+      await userApi.advanceToBlock(secondBlockToAdvance, {
+        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+      });
+
+      // Wait for BSP to generate the proof and advance one more block.
+      await sleep(500);
+      const secondChallengeBlockResult = await userApi.sealBlock();
+
       // Check for a ProofAccepted event.
       const secondChallengeBlockEvents = await userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
-        challengeBlockEvents
+        secondChallengeBlockResult.events
       );
 
       // Check that at least one of the `ProofAccepted` events belongs to `secondBspToRespond`.
