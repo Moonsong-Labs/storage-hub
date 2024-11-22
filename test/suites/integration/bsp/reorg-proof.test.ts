@@ -1,4 +1,4 @@
-import { notStrictEqual, strictEqual } from "assert";
+import { notStrictEqual, strictEqual } from "node:assert";
 import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
@@ -52,9 +52,8 @@ describeBspNet(
       console.dir(fork1.toHuman());
 
       // TODO: Do this better using BTreeMap methods
-      const challengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)[
-        "challengeCount"
-      ];
+      const challengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)
+        .challengeCount;
 
       await userApi.block.reOrg();
       await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true });
@@ -69,9 +68,8 @@ describeBspNet(
         nextChallengeTick,
         "Submitted proof should be for relevant next challenge tick"
       );
-      const newChallengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)[
-        "challengeCount"
-      ];
+      const newChallengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)
+        .challengeCount;
       strictEqual(challengeCount, newChallengeCount, "Challenge count should be the same");
       notStrictEqual(
         fork1.proof.forestProof,
@@ -110,9 +108,8 @@ describeBspNet(
       // console.dir(fork1.toHuman(), {depth: null});
 
       // TODO: Do this better using BTreeMap methods
-      const challengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)[
-        "challengeCount"
-      ];
+      const challengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)
+        .challengeCount;
 
       strictEqual(
         fork1.lastTickProven.toNumber(),
@@ -141,9 +138,8 @@ describeBspNet(
         nextChallengeTick,
         "Submitted proof should be for relevant next challenge tick"
       );
-      const newChallengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)[
-        "challengeCount"
-      ];
+      const newChallengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)
+        .challengeCount;
       strictEqual(challengeCount, newChallengeCount, "Challenge count should be the same");
       notStrictEqual(
         fork1.proof.forestProof,
