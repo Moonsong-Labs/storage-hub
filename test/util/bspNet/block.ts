@@ -189,10 +189,9 @@ export async function runToNextChallengePeriodBlock(
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await sealBlock(api);
 
-  const [_provider, nextChallengeDeadline] = Assertions.fetchEventData(
-    api.events.proofsDealer.SlashableProvider,
-    blockResult.events
-  );
+  const {
+    data: { nextChallengeDeadline }
+  } = Assertions.fetchEvent(api.events.proofsDealer.SlashableProvider, blockResult.events);
 
   // Check provider is slashable for 1 additional failed submission.
   const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);

@@ -333,7 +333,7 @@ where
             who: who.clone(),
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
-            capacity: sign_up_request.msp_info.capacity.clone(),
+            capacity: sign_up_request.msp_info.capacity,
             value_prop: ValuePropositionWithId {
                 id: value_prop_id,
                 value_prop: value_prop.clone(),
@@ -395,6 +395,7 @@ where
         Self::deposit_event(Event::<T>::BspSignUpSuccess {
             who: who.clone(),
             bsp_id,
+            root: bsp_info.root,
             multiaddresses: bsp_info.multiaddresses.clone(),
             capacity: bsp_info.capacity,
         });
@@ -1489,27 +1490,22 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
             bucket.size = bucket.size.saturating_sub(delta);
 
-            Ok::<_, DispatchError>((
-                bucket
-                    .msp_id
-                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
-                bucket.user_id.clone(),
-            ))
-        })?;
+            if let Some(msp_id) = bucket.msp_id {
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::Decrease(delta),
+                )?;
+            }
 
-        Self::apply_delta_fixed_rate_payment_stream(
-            &msp_id,
-            bucket_id,
-            &user_id,
-            RateDeltaParam::Decrease(delta),
-        )?;
-
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -1672,7 +1668,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
-            let msp_id = bucket.msp_id.map(|msp_id| msp_id)?;
+            let msp_id = bucket.msp_id?;
 
             if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
                 Some(msp.owner_account)

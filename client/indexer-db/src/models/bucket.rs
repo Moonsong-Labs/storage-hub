@@ -20,6 +20,7 @@ pub struct Bucket {
     pub private: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub merkle_root: Vec<u8>,
 }
 
 impl Bucket {
@@ -31,6 +32,7 @@ impl Bucket {
         name: Vec<u8>,
         collection_id: Option<String>,
         private: bool,
+        merkle_root: Vec<u8>,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = diesel::insert_into(bucket::table)
             .values((
@@ -40,6 +42,7 @@ impl Bucket {
                 bucket::name.eq(name),
                 bucket::collection_id.eq(collection_id),
                 bucket::private.eq(private),
+                bucket::merkle_root.eq(merkle_root),
             ))
             .returning(Bucket::as_select())
             .get_result(conn)
@@ -79,6 +82,30 @@ impl Bucket {
             .get_result(conn)
             .await?;
         Ok(bucket)
+    }
+
+    pub async fn update_merkle_root<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+        merkle_root: Vec<u8>,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(bucket::table)
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .set(bucket::merkle_root.eq(merkle_root))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::delete(bucket::table)
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .execute(conn)
+            .await?;
+        Ok(())
     }
 
     pub async fn get_by_onchain_bucket_id<'a>(

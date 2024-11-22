@@ -569,9 +569,14 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
     }
 }
 
+const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
+const MAX_CUSTOM_CHALLENGES_PER_BLOCK: u32 = 10;
+const TOTAL_MAX_CHALLENGES_PER_BLOCK: u32 =
+    RANDOM_CHALLENGES_PER_BLOCK + MAX_CUSTOM_CHALLENGES_PER_BLOCK;
 parameter_types! {
-    pub const RandomChallengesPerBlock: u32 = 10;
-    pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const RandomChallengesPerBlock: u32 = RANDOM_CHALLENGES_PER_BLOCK;
+    pub const MaxCustomChallengesPerBlock: u32 = MAX_CUSTOM_CHALLENGES_PER_BLOCK;
+    pub const TotalMaxChallengesPerBlock: u32 = TOTAL_MAX_CHALLENGES_PER_BLOCK;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
     pub const ChallengeHistoryLength: BlockNumber = 100;
@@ -596,7 +601,13 @@ impl pallet_proofs_dealer::Config for Runtime {
         { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    #[cfg(feature = "runtime-benchmarks")]
+    type RandomChallengesPerBlock = ConstU32<0>;
+    #[cfg(not(feature = "runtime-benchmarks"))]
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
+    #[cfg(feature = "runtime-benchmarks")]
+    type MaxCustomChallengesPerBlock = TotalMaxChallengesPerBlock;
+    #[cfg(not(feature = "runtime-benchmarks"))]
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
     type MaxSubmittersPerTick = MaxSubmittersPerTick;
     type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;

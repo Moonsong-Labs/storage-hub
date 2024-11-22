@@ -478,6 +478,7 @@ pub mod pallet {
             msp_id: Option<ProviderIdFor<T>>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
+            root: MerkleHash<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
             value_prop_id: Option<ValuePropId<T>>,
@@ -638,6 +639,14 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
+        },
+        /// Failed to decrease bucket size for expired file deletion request
+        FailedToDecreaseBucketSize {
+            user: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
+            error: DispatchError,
         },
     }
 
@@ -819,6 +828,7 @@ pub mod pallet {
                 msp_id,
                 bucket_id,
                 name,
+                root: <T::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                 collection_id: maybe_collection_id,
                 private,
                 value_prop_id,

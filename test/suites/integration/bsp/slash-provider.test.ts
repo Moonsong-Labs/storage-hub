@@ -27,17 +27,18 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
     );
 
     // Assert that event for challenge cycle initialisation is emitted.
-    userApi.assertEvent(
+    await userApi.assert.eventPresent(
       "proofsDealer",
       "NewChallengeCycleInitialised",
       initialiseChallengeCycleResult.events
     );
 
-    const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] =
-      userApi.assert.fetchEventData(
-        userApi.events.proofsDealer.NewChallengeCycleInitialised,
-        await userApi.query.system.events()
-      );
+    const {
+      data: { nextChallengeDeadline: nextChallengeDeadline1 }
+    } = userApi.assert.fetchEvent(
+      userApi.events.proofsDealer.NewChallengeCycleInitialised,
+      initialiseChallengeCycleResult.events
+    );
 
     const nextChallengeDeadline2 = await userApi.block.skipToChallengePeriod(
       nextChallengeDeadline1.toNumber(),
