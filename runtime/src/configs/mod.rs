@@ -460,6 +460,18 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
@@ -472,6 +484,7 @@ impl pallet_storage_providers::Config for Runtime {
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type MerkleTrieHashing = Hashing;
@@ -482,6 +495,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;
@@ -502,6 +516,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate =
         runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
+    type TopUpGracePeriod = ConstU32<{ 24 * 60 * 60 / 6 }>; // 1 day with 6 second timeslots.
 }
 
 parameter_types! {

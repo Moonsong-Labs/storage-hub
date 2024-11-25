@@ -43,9 +43,10 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
+    use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
-    use sp_runtime::traits::{Bounded, CheckedDiv, Hash};
+    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv, ConvertBack, Hash};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -98,6 +99,8 @@ pub mod pallet {
             + HasCompact
             + Into<BalanceOf<Self>>
             + Into<u64>;
+
+        type StorageDataUnitAndBalanceConvert: ConvertBack<Self::StorageDataUnit, BalanceOf<Self>>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -191,6 +194,9 @@ pub mod pallet {
             + Ord
             + Bounded;
 
+        /// Interface to get the relay chain block number which was used as an anchor for the last block in the parachain.
+        type RelayBlockGetter: BlockNumberProvider<BlockNumber = RelayChainBlockNumber>;
+
         /// The Treasury AccountId.
         /// The account to which:
         /// - The fees for submitting a challenge are transferred.
@@ -271,6 +277,12 @@ pub mod pallet {
         /// fee for a bucket that doesn't have any files yet)
         #[pallet::constant]
         type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
+
+        /// Period of time for a provider to top up their deposit after being slashed.
+        ///
+        /// If the provider does not top up their deposit within this period, they will be marked as insolvent.
+        #[pallet::constant]
+        type TopUpGracePeriod: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -427,6 +439,36 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    /// Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+    ///
+    /// Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+    /// As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+    ///
+    /// The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
+    /// marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
+    /// `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
+    /// buckets to another MSP or delete their buckets (as they normally can).
+    ///
+    /// The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
+    /// top up their deposit.
+    #[pallet::storage]
+    pub type GracePeriodToSlashedProviders<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        RelayChainBlockNumber,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        (),
+    >;
+
+    /// Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
+    /// slashed for.
+    ///
+    /// This is primarily used to lookup providers, restrict certain operations while they are in this state.
+    #[pallet::storage]
+    pub type AwaitingTopUpFromProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata>;
+
     // Events & Errors:
 
     /// The events that can be emitted by this pallet
@@ -498,10 +540,24 @@ pub mod pallet {
             next_block_when_change_allowed: BlockNumberFor<T>,
         },
 
-        /// Event emitted when an SP has been slashed.
+        /// Event emitted when a SP has been slashed.
         Slashed {
             provider_id: ProviderIdFor<T>,
-            amount_slashed: BalanceOf<T>,
+            amount: BalanceOf<T>,
+        },
+
+        /// Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
+        /// signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+        AwaitingTopUp {
+            provider_id: ProviderIdFor<T>,
+            top_up_metadata: TopUpMetadata,
+        },
+
+        /// Event emitted when an SP has topped up its deposit based on slash amount.
+        TopUpFulfilled {
+            provider_id: ProviderIdFor<T>,
+            /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
+            amount: BalanceOf<T>,
         },
 
         /// Event emitted when a bucket's root has been changed.
@@ -583,6 +639,8 @@ pub mod pallet {
         NotEnoughTimePassed,
         /// Error thrown when a SP tries to change its capacity but the new capacity is not enough to store the used storage.
         NewUsedCapacityExceedsStorageCapacity,
+        /// Deposit too low to determine capacity.
+        DepositTooLow,
 
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
@@ -603,6 +661,8 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when a provider attempts to top up their deposit when not required.
+        TopUpNotRequired,
         /// Error thrown when an operation requires an MSP to be storing the bucket.
         BucketMustHaveMspForOperation,
         /// Error thrown when a Provider tries to add a new MultiAddress to its account but it already has the maximum amount of multiaddresses.
@@ -1256,6 +1316,8 @@ pub mod pallet {
         ///
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
+        ///
+        /// This is a free operation.
         #[pallet::call_index(13)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn slash(
@@ -1265,7 +1327,25 @@ pub mod pallet {
             // Check that the extrinsic was sent with root origin.
             ensure_signed(origin)?;
 
-            Self::do_slash(&provider_id)
+            Self::do_slash(&provider_id)?;
+
+            Ok(Pays::No.into())
+        }
+
+        /// Dispatchable extrinsic to top-up the deposit of a Storage Provider.
+        ///
+        /// The dispatch origin for this call must be signed.
+        ///
+        /// This is a free transaction if the user successfully tops up their deposit.
+        #[pallet::call_index(14)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            Self::do_top_up_deposit(&who)?;
+
+            Ok(Pays::No.into())
         }
     }
 }
