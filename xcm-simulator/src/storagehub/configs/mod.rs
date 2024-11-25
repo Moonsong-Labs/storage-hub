@@ -474,6 +474,19 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
         sp_trie::empty_trie_root::<T>()
     }
 }
+
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 // Benchmark helpers for the Providers pallet
 #[cfg(feature = "runtime-benchmarks")]
 pub struct ProvidersBenchmarkHelpers;
@@ -503,7 +516,7 @@ impl pallet_storage_providers::Config for Runtime {
     >;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type MerkleTrieHashing = Hashing;
@@ -514,6 +527,8 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = SpMinCapacity;
@@ -533,6 +548,7 @@ impl pallet_storage_providers::Config for Runtime {
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
+    type TopUpGracePeriod = ConstU32<5>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ProvidersBenchmarkHelpers;
 }

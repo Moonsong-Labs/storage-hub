@@ -236,6 +236,8 @@ export const assertDockerLog = async (
       timeout
     });
   } catch {
-    throw `No matches for ${searchString} in container ${containerName} after ${timeout / 1000} seconds.`;
+    throw `No matches for ${searchString} in container ${containerName} after ${
+      timeout / 1000
+    } seconds.`;
   }
 };

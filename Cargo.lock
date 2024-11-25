@@ -8353,6 +8353,7 @@ dependencies = [
  "pallet-randomness",
  "pallet-storage-providers-runtime-api",
  "parity-scale-codec",
+ "polkadot-parachain-primitives 14.0.0",
  "scale-info",
  "serde",
  "shp-constants",

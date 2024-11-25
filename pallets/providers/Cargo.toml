@@ -29,6 +29,7 @@ shp-traits = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+polkadot-parachain-primitives = { workspace = true }
 
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
