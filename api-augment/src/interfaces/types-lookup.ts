@@ -4539,7 +4539,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isPayOutstandingDebt: boolean;
     readonly asPayOutstandingDebt: {
-      readonly amountOfStreamsToPay: u32;
+      readonly providers: Vec<H256>;
     } & Struct;
     readonly isClearInsolventFlag: boolean;
     readonly type:
