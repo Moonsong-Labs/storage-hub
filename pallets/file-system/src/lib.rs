@@ -792,6 +792,8 @@ pub mod pallet {
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
         RootNotUpdated,
+        /// Privacy update results in no change
+        NoPrivacyChange,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

@@ -289,3 +289,6 @@ pub type RelayBlockNumber<T> =
 /// Type alias for the `StorageDataUnitAndBalanceConvert` type used in the Storage Providers pallet.
 pub type StorageDataUnitAndBalanceConverter<T> =
     <T as crate::Config>::StorageDataUnitAndBalanceConvert;
+
+/// Type alias for the `ProviderTopUpTtl` type used in the Storage Providers pallet.
+pub type ProviderTopUpTtl<T> = <T as crate::Config>::ProviderTopUpTtl;

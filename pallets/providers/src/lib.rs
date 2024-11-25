@@ -273,7 +273,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCommitmentSize: Get<u32>;
 
-        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base  
+        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base
         /// fee for a bucket that doesn't have any files yet)
         #[pallet::constant]
         type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
@@ -447,39 +447,27 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+    /// Storage providers currently awaited for to top up their deposit (providers whom have been slashed and as
+    /// a result have a capacity deficit, i.e. their capacity is below their used capacity).
+    ///
+    /// This is primarily used to lookup providers and restrict certain operations while they are in this state.
     ///
     /// Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
-    /// As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+    /// As a result, their provider account would be cleared from this storage.
     ///
-    /// The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
-    /// marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
-    /// `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
-    /// buckets to another MSP or delete their buckets (as they normally can).
-    ///
-    /// The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
-    /// top up their deposit.
-    #[pallet::storage]
-    pub type GracePeriodToSlashedProviders<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        RelayBlockNumber<T>,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        (),
-    >;
-
-    /// Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
-    /// slashed for.
-    ///
-    /// This is primarily used to lookup providers, restrict certain operations while they are in this state.
+    /// The `on_idle` hook will process every provider in this storage and mark them as insolvent.
+    /// If a provider is marked as insolvent, the network (e.g users, other providers) can issue `add_redundancy`
+    /// requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their buckets
+    /// to another MSP or delete their buckets (as they normally can).
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata<T>>;
 
     /// A map of relay chain block numbers to expired provider top up period.
     ///
-    /// Provider top up expiration items are ignored and cleared if the provider is not found in the `AwaitingTopUpFromProviders` storage.
+    /// Processed in the `on_idle` hook.
+    ///
+    /// Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
     /// Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
     /// If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
     #[pallet::storage]
@@ -505,6 +493,12 @@ pub mod pallet {
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    /// A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
+    ///
+    /// Providers are marked insolvent by the `on_idle` hook.
+    #[pallet::storage]
+    pub type InsolventProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
 
     // Events & Errors:
 

@@ -2218,16 +2218,26 @@ mod hooks {
     use crate::{
         pallet,
         utils::{BlockNumberFor, ProviderIdFor},
-        Event, NextStartingBlockToCleanUp, Pallet,
+        Event, HoldReason, InsolventProviders, NextStartingBlockToCleanUp, Pallet,
     };
 
-    use frame_support::{pallet_prelude::Weight, traits::Get};
+    use frame_support::{
+        pallet_prelude::Weight,
+        traits::Get,
+        traits::{
+            fungible::{InspectHold, MutateHold},
+            tokens::{Fortitude, Precision, Restriction},
+        },
+    };
     use sp_runtime::{
         traits::{BlockNumberProvider, One, Zero},
         Saturating,
     };
 
-    use super::{types::RelayBlockGetter, AwaitingTopUpFromProviders, ProviderTopUpExpirations};
+    use super::{
+        types::RelayBlockGetter, AwaitingTopUpFromProviders, BackupStorageProviders,
+        MainStorageProviders, ProviderTopUpExpirations,
+    };
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_idle(
@@ -2269,21 +2279,21 @@ mod hooks {
             let relay_chain_block_number = RelayBlockGetter::<T>::current_block_number();
 
             // Remove expired move bucket requests if any existed and process them.
-            let mut expired_move_bucket_requests =
+            let mut provider_top_up_expirations =
                 ProviderTopUpExpirations::<T>::take(&relay_chain_block_number);
             remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
             // TODO: process all the expired move bucket requests. If not, we should return early.
-            while let Some(provider_id) = expired_move_bucket_requests.pop() {
+            while let Some(provider_id) = provider_top_up_expirations.pop() {
                 Self::process_expired_provider_top_up_period(provider_id, remaining_weight);
             }
 
             // If there are remaining items which were not processed, put them back in storage
-            if !expired_move_bucket_requests.is_empty() {
+            if !provider_top_up_expirations.is_empty() {
                 ProviderTopUpExpirations::<T>::insert(
                     &relay_chain_block_number,
-                    expired_move_bucket_requests,
+                    provider_top_up_expirations,
                 );
                 remaining_weight.saturating_reduce(db_weight.writes(1));
             }
@@ -2300,13 +2310,57 @@ mod hooks {
                 return;
             }
 
-            AwaitingTopUpFromProviders::<T>::remove(&provider_id);
+            // Clear awaiting top up storage
+            let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&provider_id);
 
-            // TODO: mark provider as insolvent
+            // Mark the provider as insolvent if it was awaiting a top up
+            // If the provider was not awaiting a top up, it means they already topped up either via an
+            // automatic top up or a manual top up.
+            if maybe_awaiting_top_up.is_some() {
+                InsolventProviders::<T>::insert(provider_id, ());
+
+                Self::deposit_event(Event::ProviderInsolvent { provider_id });
+
+                let account_id = if let Some(bsp) = BackupStorageProviders::<T>::get(&provider_id) {
+                    bsp.owner_account
+                } else if let Some(msp) = MainStorageProviders::<T>::get(&provider_id) {
+                    msp.owner_account
+                } else {
+                    log::warn!(
+                        target: "runtime::providers",
+                        "Could not slash any potentially remaining deposit for provider {:?} as it does not exist.",
+                        provider_id
+                    );
+                    return;
+                };
+
+                let held_deposit = T::NativeBalance::balance_on_hold(
+                    &HoldReason::StorageProviderDeposit.into(),
+                    &account_id,
+                );
+
+                if !held_deposit.is_zero() {
+                    // Transfer all held deposit to treasury
+                    if let Err(e) = T::NativeBalance::transfer_on_hold(
+                        &HoldReason::StorageProviderDeposit.into(),
+                        &account_id,
+                        &T::Treasury::get(),
+                        held_deposit,
+                        Precision::BestEffort,
+                        Restriction::Free,
+                        Fortitude::Force,
+                    ) {
+                        log::warn!(
+                            target: "runtime::providers",
+                            "Could not slash remaining deposit for provider {:?} due to error: {:?}",
+                            provider_id,
+                            e
+                        );
+                    }
+                }
+            }
 
             remaining_weight.saturating_reduce(potential_weight);
-
-            Self::deposit_event(Event::ProviderInsolvent { provider_id });
         }
     }
 }

@@ -2,9 +2,9 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
-        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, RelayBlockGetter,
-        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata, ValueProposition,
-        ValuePropositionWithId,
+        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, ProviderTopUpTtl,
+        RelayBlockGetter, SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata,
+        ValueProposition, ValuePropositionWithId,
     },
     Error, Event, MainStorageProviders,
 };
@@ -4911,7 +4911,10 @@ mod slash_and_top_up {
         use frame_support::traits::fungible::Inspect;
         use sp_runtime::traits::ConvertBack;
 
-        use crate::{AwaitingTopUpFromProviders, ProviderTopUpExpirations};
+        use crate::{
+            types::RelayBlockNumber, AwaitingTopUpFromProviders, InsolventProviders,
+            ProviderTopUpExpirations,
+        };
 
         use super::*;
 
@@ -5229,6 +5232,7 @@ mod slash_and_top_up {
                 );
 
                 // Check that the provider top up expiration still exists
+                // This is cleared in the `on_idle` hook
                 assert!(
                     ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
                         .iter()
@@ -5236,6 +5240,64 @@ mod slash_and_top_up {
                 );
                 // Check that the storage has been cleared
                 assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+            }
+
+            fn wait_for_top_up_expiration(&self) {
+                let pre_state_held_deposit = NativeBalance::balance_on_hold(
+                    &StorageProvidersHoldReason::get(),
+                    &self.account,
+                );
+
+                let pre_state_treasury_balance =
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+
+                let grace_period: RelayBlockNumber<Test> = ProviderTopUpTtl::<Test>::get();
+                let end_block_grace_period =
+                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+
+                // Wait for the grace period to expire
+                run_to_block((end_block_grace_period + 1).into());
+
+                // Check that the provider top up expiration no longer exists
+                assert!(
+                    ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                        .iter()
+                        .all(|provider_id| *provider_id != self.provider_id)
+                );
+                // Storage should be cleared
+                assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+
+                // Held deposit was slashed
+                if InsolventProviders::<Test>::get(&self.provider_id).is_some() {
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(
+                            &StorageProvidersHoldReason::get(),
+                            &self.account
+                        ),
+                        0
+                    );
+
+                    // Check treasury was increased by remaining held deposit
+                    assert_eq!(
+                        NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
+                        pre_state_treasury_balance + pre_state_held_deposit
+                    );
+                } else {
+                    // Check that the held deposit was not slashed
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(
+                            &StorageProvidersHoldReason::get(),
+                            &self.account
+                        ),
+                        pre_state_held_deposit
+                    );
+
+                    // Check that the treasury balance has not changed
+                    assert_eq!(
+                        NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
+                        pre_state_treasury_balance
+                    );
+                }
             }
         }
 
@@ -5301,6 +5363,42 @@ mod slash_and_top_up {
                 alice_test_setup.slash_and_verify();
 
                 alice_test_setup.manual_top_up();
+            });
+        }
+
+        #[test]
+        fn top_up_expired_provider_marked_as_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.induce_capacity_deficit = true;
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.wait_for_top_up_expiration();
+
+                // Check that the provider is marked as insolvent
+                assert!(InsolventProviders::<Test>::get(alice_test_setup.provider_id).is_some());
+            });
+        }
+
+        #[test]
+        fn top_up_expired_provider_manual_top_up_not_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.induce_capacity_deficit = true;
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.manual_top_up();
+
+                alice_test_setup.wait_for_top_up_expiration();
+
+                // Check that the provider was not marked as insolvent
+                assert!(InsolventProviders::<Test>::get(alice_test_setup.provider_id).is_none());
             });
         }
     }
