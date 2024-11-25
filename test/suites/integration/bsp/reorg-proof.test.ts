@@ -3,7 +3,7 @@ import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
-  { initialised: true, networkConfig: "standard", keepAlive: true },
+  { initialised: true, networkConfig: "standard" },
   ({ before, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
 
