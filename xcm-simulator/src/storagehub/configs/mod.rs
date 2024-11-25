@@ -39,6 +39,7 @@ use shp_treasury_funding::{
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
+use sp_runtime::traits::Zero;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
@@ -672,9 +673,14 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
     }
 }
 
+const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
+const MAX_CUSTOM_CHALLENGES_PER_BLOCK: u32 = 10;
+const TOTAL_MAX_CHALLENGES_PER_BLOCK: u32 =
+    RANDOM_CHALLENGES_PER_BLOCK + MAX_CUSTOM_CHALLENGES_PER_BLOCK;
 parameter_types! {
-    pub const RandomChallengesPerBlock: u32 = 10;
-    pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const RandomChallengesPerBlock: u32 = RANDOM_CHALLENGES_PER_BLOCK;
+    pub const MaxCustomChallengesPerBlock: u32 = MAX_CUSTOM_CHALLENGES_PER_BLOCK;
+    pub const TotalMaxChallengesPerBlock: u32 = TOTAL_MAX_CHALLENGES_PER_BLOCK;
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
