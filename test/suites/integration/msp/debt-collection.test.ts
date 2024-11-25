@@ -104,28 +104,21 @@ describeMspNet(
       let mspAcceptedStorageRequestDataBlob: any = undefined;
       let storageRequestFulfilledDataBlob: any = undefined;
 
-      try {
-        const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(
-          "fileSystem",
-          "MspAcceptedStorageRequest"
-        );
+      const eventsRecorded = await userApi.query.system.events();
+      const mspAcceptedStorageRequestEvent = eventsRecorded.find((e) => e.event.section === "fileSystem" && e.event.method === "MspAcceptedStorageRequest");
+
+      if (mspAcceptedStorageRequestEvent) {
         mspAcceptedStorageRequestDataBlob =
-          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedStorageRequestEvent) &&
-          mspAcceptedStorageRequestEvent.data;
-      } catch {
-        // Event not found, continue
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedStorageRequestEvent.event) &&
+          mspAcceptedStorageRequestEvent.event.data;
       }
 
-      try {
-        const { event: storageRequestFulfilledEvent } = await userApi.assert.eventPresent(
-          "fileSystem",
-          "StorageRequestFulfilled"
-        );
+      const storageRequestFulfilledEvent = eventsRecorded.find((e) => e.event.section === "fileSystem" && e.event.method === "StorageRequestFulfilled");
+
+      if (storageRequestFulfilledEvent) {
         storageRequestFulfilledDataBlob =
-          userApi.events.fileSystem.StorageRequestFulfilled.is(storageRequestFulfilledEvent) &&
-          storageRequestFulfilledEvent.data;
-      } catch {
-        // Event not found, continue
+          userApi.events.fileSystem.StorageRequestFulfilled.is(storageRequestFulfilledEvent.event) &&
+          storageRequestFulfilledEvent.event.data;
       }
 
       let acceptedFileKey: string | undefined = undefined;
@@ -150,7 +143,7 @@ describeMspNet(
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
 
-      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
+      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
         newBucketEventDataBlob.bucketId.toString()
       );
 
@@ -168,7 +161,7 @@ describeMspNet(
         "Expected BucketRootChanged event but received event of different type"
       );
 
-      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), local_bucket_root.toString());
+      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
 
       const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
         newBucketEventDataBlob.bucketId.toString(),
@@ -201,7 +194,7 @@ describeMspNet(
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
 
-      const local_bucket_root2 = await mspApi.rpc.storagehubclient.getForestRoot(
+      const localBucketRoot2 = await mspApi.rpc.storagehubclient.getForestRoot(
         newBucketEventDataBlob.bucketId.toString()
       );
 
@@ -219,7 +212,7 @@ describeMspNet(
         "Expected BucketRootChanged event but received event of different type"
       );
 
-      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), local_bucket_root2.toString());
+      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
 
       for (const fileKey of fileKeys2) {
         const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
