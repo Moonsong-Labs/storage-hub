@@ -9,17 +9,24 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-codec = { workspace = true }
-frame-support = { workspace = true }
-frame-system = { workspace = true }
 log = { workspace = true }
 scale-info = { workspace = true, features = ["derive"] }
 serde = { workspace = true, optional = true }
-shp-session-keys = { workspace = true }
+
+# Substrate
+frame-benchmarking = { workspace = true, optional = true }
+codec = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
 sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+
+# Local
+shp-session-keys = { workspace = true }
+
+# Polkadot
 polkadot-parachain-primitives = { workspace = true }
 
 [dev-dependencies]
@@ -39,5 +46,11 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 ]
-runtime-benchmarks = ["shp-session-keys/runtime-benchmarks"]
+runtime-benchmarks = [
+	"shp-session-keys/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+]
 try-runtime = ["frame-support/try-runtime"]

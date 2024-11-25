@@ -267,6 +267,16 @@ const PAYMENT_STREAMS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Vec<AccountId>"
+  },
+  get_providers_with_payment_streams_with_user: {
+    description: "Get the Providers that have at least one payment stream with a specific user.",
+    params: [
+      {
+        name: "userAccount",
+        type: "AccountId"
+      }
+    ],
+    type: "Vec<ProviderId>"
   }
 };
 

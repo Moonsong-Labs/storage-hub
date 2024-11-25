@@ -4265,7 +4265,7 @@ mod user_without_funds {
                 // Pay the outstanding debt of Bob
                 assert_ok!(PaymentStreams::pay_outstanding_debt(
                     RuntimeOrigin::signed(bob),
-                    1
+                    vec![charlie_bsp_id]
                 ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying Charlie
@@ -4484,7 +4484,7 @@ mod user_without_funds {
                 // Pay the outstanding debt of Bob
                 assert_ok!(PaymentStreams::pay_outstanding_debt(
                     RuntimeOrigin::signed(bob),
-                    2
+                    vec![charlie_bsp_id, david_bsp_id]
                 ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying charlie and david
@@ -4705,71 +4705,36 @@ mod user_without_funds {
                     charlie_deposit_amount + david_deposit_amount
                 );
 
-                // Pay the outstanding debt of Bob, but only to Charlie or David (we don't know which one will be paid)
+                // Pay the outstanding debt of Bob, but only to Charlie
                 assert_ok!(PaymentStreams::pay_outstanding_debt(
                     RuntimeOrigin::signed(bob),
-                    1
+                    vec![charlie_bsp_id]
                 ));
 
-                // Check if the one paid was Charlie or David
-                if DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_none() {
-                    // Check that Bob's balance has been updated with the correct amount after paying Charlie (but not David)
-                    let amount_to_pay_for_storage_charlie =
-                        1 * current_price * (amount_provided as u128);
-                    let bob_new_balance = bob_new_balance - amount_to_pay_for_storage_charlie
-                        + charlie_deposit_amount;
-                    assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                // Check that Bob's balance has been updated with the correct amount after paying Charlie (but not David)
+                let amount_to_pay_for_storage_charlie =
+                    1 * current_price * (amount_provided as u128);
+                let bob_new_balance =
+                    bob_new_balance - amount_to_pay_for_storage_charlie + charlie_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
-                    // Check that Charlie has been paid
-                    assert_eq!(
-                        NativeBalance::free_balance(&charlie),
-                        charlie_initial_balance + amount_to_pay_for_storage_charlie
-                    );
+                // Check that Charlie has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_initial_balance + amount_to_pay_for_storage_charlie
+                );
 
-                    // Check that David has NOT been paid
-                    assert_eq!(NativeBalance::free_balance(&david), david_initial_balance);
+                // Check that David has NOT been paid
+                assert_eq!(NativeBalance::free_balance(&david), david_initial_balance);
 
-                    // Check that Bob still has the deposit with David
-                    assert_eq!(
-                        NativeBalance::balance_on_hold(
-                            &RuntimeHoldReason::PaymentStreams(
-                                crate::HoldReason::PaymentStreamDeposit
-                            ),
-                            &bob
-                        ),
-                        david_deposit_amount
-                    );
-                } else {
-                    // Check that Bob's balance has been updated with the correct amount after paying David (but not Charlie)
-                    let amount_to_pay_for_storage_david =
-                        2 * current_price * (amount_provided as u128);
-                    let bob_new_balance =
-                        bob_new_balance - amount_to_pay_for_storage_david + david_deposit_amount;
-                    assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
-
-                    // Check that David has been paid
-                    assert_eq!(
-                        NativeBalance::free_balance(&david),
-                        david_initial_balance + amount_to_pay_for_storage_david
-                    );
-
-                    // Check that Charlie has NOT been paid
-                    assert_eq!(
-                        NativeBalance::free_balance(&charlie),
-                        charlie_initial_balance
-                    );
-
-                    // Check that Bob still has the deposit with Charlie
-                    assert_eq!(
-                        NativeBalance::balance_on_hold(
-                            &RuntimeHoldReason::PaymentStreams(
-                                crate::HoldReason::PaymentStreamDeposit
-                            ),
-                            &bob
-                        ),
-                        charlie_deposit_amount
-                    );
-                }
+                // Check that Bob still has the deposit with David
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    david_deposit_amount
+                );
 
                 // Check that Bob still has a payment stream
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 1);
@@ -4811,7 +4776,10 @@ mod user_without_funds {
 
                 // Try to pay the outstanding debt of Bob without him being flagged as a user without funds
                 assert_noop!(
-                    PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(bob), 1),
+                    PaymentStreams::pay_outstanding_debt(
+                        RuntimeOrigin::signed(bob),
+                        vec![alice_bsp_id]
+                    ),
                     Error::<Test>::UserNotFlaggedAsWithoutFunds
                 );
             });
@@ -4977,7 +4945,7 @@ mod user_without_funds {
                 // Pay the outstanding debt of Bob
                 assert_ok!(PaymentStreams::pay_outstanding_debt(
                     RuntimeOrigin::signed(bob),
-                    1
+                    vec![charlie_bsp_id]
                 ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying Charlie
