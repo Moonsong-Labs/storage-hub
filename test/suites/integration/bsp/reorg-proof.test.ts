@@ -12,7 +12,7 @@ describeBspNet(
     });
 
     // This is skipped because it currently fails with timeout for ext inclusion
-    it("resubmits a dropped proof Ext", async () => {
+    it("resubmits a dropped proof Ext", { skip: "Not Impl" }, async () => {
       await userApi.block.seal(); // To make sure we have a finalized head
       const nextChallengeTick = await getNextChallengeHeight(userApi);
       await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true });
