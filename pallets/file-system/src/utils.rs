@@ -430,8 +430,8 @@ where
             (true, None) => {
                 Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
             }
-            // Handle case where the bucket has an existing collection.
-            (_, Some(current_collection_id))
+            // Handle case where the bucket has an existing collection, but the collection is not in stroage.
+            (true, Some(current_collection_id))
             if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
                 {
                     Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
@@ -450,7 +450,7 @@ where
 
     /// Create and associate collection with a bucket.
     ///
-    /// *Callable only by the owner of the bucket. The bucket must be private.*
+    /// *Callable only by the owner of the bucket.*
     ///
     /// It is possible to have a bucket that is private but does not have a collection associated with it. This can happen if
     /// a user destroys the collection associated with the bucket by calling the NFTs pallet directly.
