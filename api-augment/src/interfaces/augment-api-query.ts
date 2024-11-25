@@ -63,6 +63,7 @@ import type {
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
   PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
@@ -1490,6 +1491,20 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
+       * Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
+       * slashed for.
+       *
+       * This is primarily used to lookup providers, restrict certain operations while they are in this state.
+       **/
+      awaitingTopUpFromProviders: AugmentedQuery<
+        ApiType,
+        (
+          arg: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersTopUpMetadata>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * The mapping from a BackupStorageProviderId to a BackupStorageProvider.
        *
        * This is used to get a Backup Storage Provider's metadata.
@@ -1541,6 +1556,29 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+       *
+       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+       * As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+       *
+       * The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
+       * marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
+       * `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
+       * buckets to another MSP or delete their buckets (as they normally can).
+       *
+       * The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
+       * top up their deposit.
+       **/
+      gracePeriodToSlashedProviders: AugmentedQuery<
+        ApiType,
+        (
+          arg1: u32 | AnyNumber | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [u32, H256]
+      > &
+        QueryableStorageEntry<ApiType, [u32, H256]>;
       /**
        * The double mapping from a MainStorageProviderId to a BucketIds.
        *
