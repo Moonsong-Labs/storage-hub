@@ -309,6 +309,7 @@ mod benches {
         [pallet_parameters, Parameters]
         [pallet_payment_streams, PaymentStreams]
         [pallet_proofs_dealer, ProofsDealer]
+        [pallet_randomness, Randomness]
     );
 }
 

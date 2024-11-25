@@ -8077,6 +8077,7 @@ dependencies = [
 name = "pallet-randomness"
 version = "0.1.0"
 dependencies = [
+ "frame-benchmarking 38.0.0",
  "frame-support 38.0.0",
  "frame-system 38.0.0",
  "log",
