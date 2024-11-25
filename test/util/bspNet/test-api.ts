@@ -1,10 +1,11 @@
+import "@storagehub/api-augment"; // must be first import
+
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
-import "@storagehub/api-augment";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
