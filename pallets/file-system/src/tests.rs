@@ -147,9 +147,10 @@ mod create_bucket_tests {
                 );
 
                 let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+				let base_deposit: u128 = <Test as pallet_payment_streams::Config>::BaseDeposit::get();
                 assert_eq!(
                     <Test as Config>::Currency::free_balance(&owner),
-                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128 - base_deposit
                 );
 
                 // Assert that the correct event was deposited
@@ -1670,11 +1671,14 @@ mod request_storage {
                 // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
                 let new_stream_deposit: u64 =
                     <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+                let base_stream_deposit: u128 =
+                    <Test as pallet_payment_streams::Config>::BaseDeposit::get();
                 let balance_to_mint: crate::types::BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
                         crate::types::BalanceOf<Test>,
                     >>::get()
                     .saturating_add(new_stream_deposit as u128)
+                    .saturating_add(base_stream_deposit)
                     .saturating_add(<Test as pallet_balances::Config>::ExistentialDeposit::get());
                 <Test as file_system::Config>::Currency::mint_into(
                     &owner_without_funds,
@@ -3554,7 +3558,7 @@ mod msp_respond_storage_request {
                 let msp = Keyring::Charlie.to_account_id();
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 200;
+                let size = 2 * 1024 * 1024 * 1024;
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -6849,7 +6853,17 @@ mod delete_file_and_pending_deletions_tests {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+				let (msp_id, _) = add_msp_to_provider_storage(&msp);
+
+				// Create a new value proposition with a high price per gigabyte per tick so deleting the 4 byte file will
+				// actually make a difference in the rate of the fixed-rate payment stream between the user and the MSP.
+				let value_prop = ValueProposition::<Test>::new(1024 * 1024 * 1024, bounded_vec![], 10000);
+    			let value_prop_id = value_prop.derive_id();
+    			pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
+        			msp_id,
+        			value_prop_id,
+        			value_prop,
+    			);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -8922,7 +8936,7 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        capacity: 100,
+        capacity: 1024 * 1024 * 1024,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),

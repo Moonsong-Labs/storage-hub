@@ -28,6 +28,7 @@ frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+sp-arithmetic = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sp-trie = { workspace = true }
@@ -71,6 +72,7 @@ std = [
 	"shp-constants/std",
 	"shp-traits/std",
 	"shp-treasury-funding/std",
+	"sp-arithmetic/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",

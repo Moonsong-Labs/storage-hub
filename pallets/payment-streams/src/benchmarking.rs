@@ -30,6 +30,7 @@ mod benchmarks {
         types::{MaxMultiAddressAmount, MultiAddress},
         TotalBspsCapacity, UsedBspsCapacity,
     };
+    use shp_constants::GIGAUNIT;
     use sp_runtime::{
         format,
         traits::{Hash, One},
@@ -42,8 +43,6 @@ mod benchmarks {
     type BalanceOf<T> = <<T as crate::Config>::NativeBalance as Inspect<
         <T as frame_system::Config>::AccountId,
     >>::Balance;
-
-    const GIGAUNIT: u32 = 1_073_741_824; // Amount of bytes in a gigabyte
 
     fn set_user_as_insolvent<T: crate::Config>(user: <T as frame_system::Config>::AccountId) {
         UsersWithoutFunds::<T>::insert(user, frame_system::Pallet::<T>::block_number());

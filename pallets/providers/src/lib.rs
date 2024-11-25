@@ -687,7 +687,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            value_prop_price_per_giga_unit_of_data_per_block: BalanceOf<T>,
             commitment: Commitment<T>,
             value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
@@ -710,7 +710,7 @@ pub mod pallet {
             Self::do_request_msp_sign_up(MainStorageProviderSignUpRequest {
                 msp_info,
                 value_prop: ValueProposition::<T>::new(
-                    value_prop_price_per_unit_of_data_per_block,
+                    value_prop_price_per_giga_unit_of_data_per_block,
                     commitment,
                     value_prop_max_data_limit,
                 ),
@@ -979,7 +979,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
             origin: OriginFor<T>,
-            price_per_unit_of_data_per_block: BalanceOf<T>,
+            price_per_giga_unit_of_data_per_block: BalanceOf<T>,
             commitment: Commitment<T>,
             bucket_data_limit: StorageDataUnit<T>,
         ) -> DispatchResultWithPostInfo {
@@ -989,7 +989,7 @@ pub mod pallet {
             // Execute checks and logic, update storage
             let (msp_id, value_prop) = Self::do_add_value_prop(
                 &who,
-                price_per_unit_of_data_per_block,
+                price_per_giga_unit_of_data_per_block,
                 commitment,
                 bucket_data_limit,
             )?;
@@ -1134,7 +1134,7 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            value_prop_price_per_giga_unit_of_data_per_block: BalanceOf<T>,
             commitment: Commitment<T>,
             value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
@@ -1156,7 +1156,7 @@ pub mod pallet {
             let sign_up_request = MainStorageProviderSignUpRequest {
                 msp_info,
                 value_prop: ValueProposition::<T>::new(
-                    value_prop_price_per_unit_of_data_per_block,
+                    value_prop_price_per_giga_unit_of_data_per_block,
                     commitment,
                     value_prop_max_data_limit,
                 ),

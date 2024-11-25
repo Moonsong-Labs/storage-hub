@@ -250,6 +250,10 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
+       * The base deposit for a new payment stream. The actual deposit will be this constant + the deposit calculated using the `NewStreamDeposit` constant.
+       **/
+      baseDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * The maximum amount of Users that a Provider can charge in a single extrinsic execution.
        * This is used to prevent a Provider from charging too many Users in a single block, which could lead to a DoS attack.
        **/
@@ -257,9 +261,9 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
-       * `NewStreamDeposit * rate` will be held as a deposit.
-       * In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
-       * to be provided by the pallet using the `PaymentStreamsInterface` interface.
+       * `NewStreamDeposit * rate + BaseDeposit` will be held as a deposit.
+       * In the case of dynamic-rate payment streams, `rate` will be `amount_provided_in_giga_units * price_per_giga_unit_per_tick`, where `price_per_giga_unit_per_tick` is
+       * obtained from the `CurrentPricePerGigaUnitPerTick` storage.
        **/
       newStreamDeposit: u32 & AugmentedConst<ApiType>;
       /**

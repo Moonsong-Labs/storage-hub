@@ -20,12 +20,14 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
+use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
@@ -308,7 +310,9 @@ where
 
         let (_, value_prop) = Self::do_add_value_prop(
             who,
-            sign_up_request.value_prop.price_per_unit_of_data_per_block,
+            sign_up_request
+                .value_prop
+                .price_per_giga_unit_of_data_per_block,
             sign_up_request.value_prop.commitment,
             sign_up_request.value_prop.bucket_data_limit,
         )?;
@@ -881,7 +885,7 @@ where
 
     pub(crate) fn do_add_value_prop(
         who: &T::AccountId,
-        price_per_unit_of_data_per_block: BalanceOf<T>,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
         commitment: Commitment<T>,
         bucket_data_limit: StorageDataUnit<T>,
     ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
@@ -889,7 +893,7 @@ where
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
         let value_prop = ValueProposition::<T>::new(
-            price_per_unit_of_data_per_block,
+            price_per_giga_unit_of_data_per_block,
             commitment,
             bucket_data_limit,
         );
@@ -1033,19 +1037,27 @@ where
         )
         .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
+        let zero_sized_bucket_rate = T::ZeroSizeBucketFixedRate::get();
+
         match delta {
             RateDeltaParam::NewBucket => {
-                // Get the rate over that of a zero sized bucket of the bucket to add.
-                // If its size is less than the minimum for which rate starts to increase (which depends on the value proposition),
-                // then the rate over the zero size bucket is 0.
-                let bucket_rate = value_prop
-                    .price_per_unit_of_data_per_block
-                    .checked_mul(&bucket.size.into())
-                    .ok_or(ArithmeticError::Overflow)?;
+                // Get the rate of the new bucket to add.
+                // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
+                // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
+                // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
+                // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
+                let bucket_rate = if bucket.size.is_zero() {
+                    zero_sized_bucket_rate
+                } else {
+                    value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?
+                };
 
                 let new_rate = current_rate
-                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
-                    .ok_or(ArithmeticError::Overflow)?
                     .checked_add(&bucket_rate)
                     .ok_or(ArithmeticError::Overflow)?;
 
@@ -1066,17 +1078,23 @@ where
                 }
             }
             RateDeltaParam::RemoveBucket => {
-                // Get the current bucket rate over the fixed rate of a zero sized bucket.
-                // If it's size is less than the minimum for which rate starts to increase (which depends on the value proposition),
-                // then the rate over the zero size bucket is 0.
-                let bucket_rate = value_prop
-                    .price_per_unit_of_data_per_block
-                    .checked_mul(&bucket.size.into())
-                    .ok_or(ArithmeticError::Overflow)?;
+                // Get the current rate of the bucket to remove.
+                // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
+                // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
+                // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
+                // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
+                let bucket_rate = if bucket.size.is_zero() {
+                    zero_sized_bucket_rate
+                } else {
+                    value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?
+                };
 
-                let new_rate = current_rate
-                    .saturating_sub(T::ZeroSizeBucketFixedRate::get())
-                    .saturating_sub(bucket_rate);
+                let new_rate = current_rate.saturating_sub(bucket_rate);
 
                 if new_rate.is_zero() {
                     <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
@@ -1094,10 +1112,10 @@ where
             RateDeltaParam::Increase(delta) => {
                 // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
                 let bucket_rate = value_prop
-                    .price_per_unit_of_data_per_block
-                    .checked_mul(&bucket.size.into())
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
                     .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .checked_add(&zero_sized_bucket_rate)
                     .ok_or(ArithmeticError::Overflow)?;
 
                 // Calculate the new bucket's size.
@@ -1114,10 +1132,10 @@ where
 
                 // Calculate what would be the new bucket rate with the new size.
                 let new_bucket_rate = value_prop
-                    .price_per_unit_of_data_per_block
-                    .checked_mul(&new_bucket_size.into())
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
                     .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .checked_add(&zero_sized_bucket_rate)
                     .ok_or(ArithmeticError::Overflow)?;
 
                 // Get the delta rate, which is the difference between the old and new rates for this bucket.
@@ -1140,10 +1158,10 @@ where
             RateDeltaParam::Decrease(delta) => {
                 // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
                 let bucket_rate = value_prop
-                    .price_per_unit_of_data_per_block
-                    .checked_mul(&bucket.size.into())
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
                     .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .checked_add(&zero_sized_bucket_rate)
                     .ok_or(ArithmeticError::Overflow)?;
 
                 // Calculate the new bucket's size.
@@ -1154,10 +1172,10 @@ where
 
                 // Calculate what would be the new bucket rate with the new size.
                 let new_bucket_rate = value_prop
-                    .price_per_unit_of_data_per_block
-                    .checked_mul(&new_bucket_size.into())
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
                     .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&T::ZeroSizeBucketFixedRate::get())
+                    .checked_add(&zero_sized_bucket_rate)
                     .ok_or(ArithmeticError::Overflow)?;
 
                 // Get the delta rate, which is the difference between the old and new rates for this bucket.

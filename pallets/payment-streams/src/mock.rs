@@ -10,6 +10,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadProvidersInterface, TrieMutation,
     TrieProofDeltaApplier,
@@ -34,8 +35,6 @@ type AccountId = u64;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
-// We manage the price per gigabyte so we have to divide the price by the number of bytes in a gigabyte
-const GIGAUNIT: u128 = 1_073_741_824;
 
 // Configure a mock runtime to test the pallet.
 #[frame_support::runtime]
@@ -431,6 +430,7 @@ impl crate::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -465,7 +465,7 @@ impl ExtBuilder {
         .unwrap();
 
         crate::GenesisConfig::<Test> {
-            current_price: GIGAUNIT,
+            current_price: GIGAUNIT.into(),
         }
         .assimilate_storage(&mut t)
         .unwrap();

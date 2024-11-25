@@ -1910,7 +1910,7 @@ declare module "@polkadot/types/lookup" {
 
   /** @name PalletStorageProvidersValueProposition (129) */
   interface PalletStorageProvidersValueProposition extends Struct {
-    readonly pricePerUnitOfDataPerBlock: u128;
+    readonly pricePerGigaUnitOfDataPerBlock: u128;
     readonly commitment: Bytes;
     readonly bucketDataLimit: u64;
     readonly available: bool;
@@ -4203,7 +4203,7 @@ declare module "@polkadot/types/lookup" {
     readonly asRequestMspSignUp: {
       readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
-      readonly valuePropPricePerUnitOfDataPerBlock: u128;
+      readonly valuePropPricePerGigaUnitOfDataPerBlock: u128;
       readonly commitment: Bytes;
       readonly valuePropMaxDataLimit: u64;
       readonly paymentAccount: AccountId32;
@@ -4227,7 +4227,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isAddValueProp: boolean;
     readonly asAddValueProp: {
-      readonly pricePerUnitOfDataPerBlock: u128;
+      readonly pricePerGigaUnitOfDataPerBlock: u128;
       readonly commitment: Bytes;
       readonly bucketDataLimit: u64;
     } & Struct;
@@ -4249,7 +4249,7 @@ declare module "@polkadot/types/lookup" {
       readonly mspId: H256;
       readonly capacity: u64;
       readonly multiaddresses: Vec<Bytes>;
-      readonly valuePropPricePerUnitOfDataPerBlock: u128;
+      readonly valuePropPricePerGigaUnitOfDataPerBlock: u128;
       readonly commitment: Bytes;
       readonly valuePropMaxDataLimit: u64;
       readonly paymentAccount: AccountId32;

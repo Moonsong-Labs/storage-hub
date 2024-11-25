@@ -11,6 +11,7 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     MutatePricePerGigaUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
@@ -22,8 +23,6 @@ use sp_runtime::{
 };
 
 use crate::{weights::WeightInfo, *};
-
-const GIGAUNIT: u32 = 1_073_741_824;
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -95,6 +94,8 @@ where
         );
         let deposit = rate
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
@@ -205,6 +206,8 @@ where
         // Update the user's deposit based on the new rate
         let new_deposit = new_rate
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
@@ -336,7 +339,9 @@ where
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
             .ok_or(ArithmeticError::Overflow)?
             .checked_div(&GIGAUNIT.into())
-            .ok_or(ArithmeticError::Underflow)?;
+            .unwrap_or_default()
+            .checked_add(&T::BaseDeposit::get())
+            .ok_or(ArithmeticError::Overflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
         // Check if we can hold the deposit from the User
@@ -456,7 +461,9 @@ where
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
             .ok_or(ArithmeticError::Overflow)?
             .checked_div(&GIGAUNIT.into())
-            .ok_or(ArithmeticError::Underflow)?;
+            .unwrap_or_default()
+            .checked_add(&T::BaseDeposit::get())
+            .ok_or(ArithmeticError::Overflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
         // Update the payment stream in the DynamicRatePaymentStreams mapping

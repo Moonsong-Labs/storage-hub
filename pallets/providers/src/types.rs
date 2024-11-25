@@ -20,7 +20,7 @@ pub struct ValuePropositionWithId<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
-    pub price_per_unit_of_data_per_block: BalanceOf<T>,
+    pub price_per_giga_unit_of_data_per_block: BalanceOf<T>,
     pub commitment: Commitment<T>,
     /// Maximum [`StorageDataUnit`]s that can be stored in a bucket.
     pub bucket_data_limit: StorageDataUnit<T>,
@@ -31,12 +31,12 @@ pub struct ValueProposition<T: Config> {
 
 impl<T: Config> ValueProposition<T> {
     pub fn new(
-        price_per_unit_of_data_per_block: BalanceOf<T>,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
         commitment: Commitment<T>,
         bucket_data_limit: StorageDataUnit<T>,
     ) -> Self {
         Self {
-            price_per_unit_of_data_per_block,
+            price_per_giga_unit_of_data_per_block,
             commitment,
             bucket_data_limit,
             available: true,
@@ -45,7 +45,7 @@ impl<T: Config> ValueProposition<T> {
 
     /// Produce the ID of the ValueProposition not including the `available` field.
     pub fn derive_id(&self) -> ValuePropIdFor<T> {
-        let mut concat = self.price_per_unit_of_data_per_block.encode();
+        let mut concat = self.price_per_giga_unit_of_data_per_block.encode();
         concat.extend_from_slice(&self.commitment.encode());
         concat.extend_from_slice(&self.bucket_data_limit.encode());
         <<T as crate::Config>::ValuePropIdHashing as sp_runtime::traits::Hash>::hash(&concat)
