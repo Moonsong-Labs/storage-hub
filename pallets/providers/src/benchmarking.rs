@@ -1249,7 +1249,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropAdded {
                 msp_id,
-                value_prop_id: value_prop_id.clone(),
+                value_prop_id,
                 value_prop: value_prop.clone(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -1363,24 +1363,21 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropAdded {
                 msp_id,
-                value_prop_id: value_prop_id.clone(),
-                value_prop: value_prop.clone(),
+                value_prop_id,
+                value_prop,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(
-            RawOrigin::Signed(user_account.clone()),
-            value_prop_id.clone(),
-        );
+        _(RawOrigin::Signed(user_account.clone()), value_prop_id);
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the value proposition being made unavailable was emitted
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropUnavailable {
                 msp_id,
-                value_prop_id: value_prop_id.clone(),
+                value_prop_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -1866,7 +1863,7 @@ mod benchmarks {
         assert!(bsp.is_some());
 
         // Accrue failed proof submissions for this provider
-        <T as crate::Config>::BenchmarkHelpers::set_accrued_failed_proofs(bsp_id.clone().into(), 3);
+        <T as crate::Config>::BenchmarkHelpers::set_accrued_failed_proofs(bsp_id.into(), 3);
 
         // Get the amount to be slashed
         let amount_to_slash = Pallet::<T>::compute_worst_case_scenario_slashable_amount(&bsp_id)
@@ -1901,7 +1898,7 @@ mod benchmarks {
         // Verify that the event of the provider being slashed was emitted
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::<T>::Slashed {
             provider_id: bsp_id,
-            amount_slashed: amount_to_slash,
+            amount: amount_to_slash,
         });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
