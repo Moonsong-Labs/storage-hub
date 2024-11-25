@@ -33,8 +33,10 @@ import type {
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -452,6 +454,26 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [who: AccountId32, bucketId: H256, collectionId: Option<u32>, private: bool],
         { who: AccountId32; bucketId: H256; collectionId: Option<u32>; private: bool }
+      >;
+      /**
+       * Failed to decrease bucket size for expired file deletion request
+       **/
+      FailedToDecreaseBucketSize: AugmentedEvent<
+        ApiType,
+        [
+          user: AccountId32,
+          bucketId: H256,
+          fileKey: H256,
+          fileSize: u64,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          user: AccountId32;
+          bucketId: H256;
+          fileKey: H256;
+          fileSize: u64;
+          error: SpRuntimeDispatchError;
+        }
       >;
       /**
        * Notifies that a priority challenge failed to be queued for pending file deletion.
@@ -1575,16 +1597,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [
-          provider: H256,
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
-          newRoot: H256
-        ],
-        {
-          provider: H256;
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
-          newRoot: H256;
-        }
+        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
+        { provider: H256; mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; newRoot: H256 }
       >;
       /**
        * A manual challenge was submitted.
@@ -1660,6 +1674,15 @@ declare module "@polkadot/api-base/types/events" {
       [key: string]: AugmentedEvent<ApiType>;
     };
     providers: {
+      /**
+       * Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
+       * signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+       **/
+      AwaitingTopUp: AugmentedEvent<
+        ApiType,
+        [providerId: H256, topUpMetadata: PalletStorageProvidersTopUpMetadata],
+        { providerId: H256; topUpMetadata: PalletStorageProvidersTopUpMetadata }
+      >;
       /**
        * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
        * that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
@@ -1778,12 +1801,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SignUpRequestCanceled: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
-       * Event emitted when an SP has been slashed.
+       * Event emitted when a SP has been slashed.
        **/
       Slashed: AugmentedEvent<
         ApiType,
-        [providerId: H256, amountSlashed: u128],
-        { providerId: H256; amountSlashed: u128 }
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
+      >;
+      /**
+       * Event emitted when an SP has topped up its deposit based on slash amount.
+       **/
+      TopUpFulfilled: AugmentedEvent<
+        ApiType,
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
       >;
       /**
        * Event emitted when an MSP adds a new value proposition.

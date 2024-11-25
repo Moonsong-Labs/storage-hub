@@ -1257,6 +1257,7 @@ import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
 import type {
   BackupStorageProvider,
   BackupStorageProviderId,
+  CheckpointChallenge,
   ChunkId,
   FileMetadata,
   GetBspInfoError,
@@ -1283,6 +1284,7 @@ import type {
   QueryStorageProviderCapacityError,
   RandomnessOutput,
   SaveFileToDisk,
+  ShouldRemoveFile,
   StorageDataUnit,
   StorageProviderId,
   TrieRemoveMutation,
@@ -1446,6 +1448,7 @@ declare module "@polkadot/types/types/registry" {
     ChangesTrieConfiguration: ChangesTrieConfiguration;
     ChangesTrieSignal: ChangesTrieSignal;
     CheckInherentsResult: CheckInherentsResult;
+    CheckpointChallenge: CheckpointChallenge;
     ChunkId: ChunkId;
     ClassDetails: ClassDetails;
     ClassId: ClassId;
@@ -2223,6 +2226,7 @@ declare module "@polkadot/types/types/registry" {
     SessionStatus: SessionStatus;
     SetId: SetId;
     SetIndex: SetIndex;
+    ShouldRemoveFile: ShouldRemoveFile;
     Si0Field: Si0Field;
     Si0LookupTypeId: Si0LookupTypeId;
     Si0Path: Si0Path;

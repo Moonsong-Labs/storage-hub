@@ -207,9 +207,18 @@ pub enum BucketPrivacy {
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
+pub struct PendingFileDeletionRequest<T: Config> {
+    pub user: T::AccountId,
+    pub file_key: MerkleHash<T>,
+    pub bucket_id: BucketIdFor<T>,
+    pub file_size: StorageData<T>,
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
 pub enum ExpirationItem<T: Config> {
     StorageRequest(MerkleHash<T>),
-    PendingFileDeletionRequests((T::AccountId, MerkleHash<T>)),
+    PendingFileDeletionRequests(PendingFileDeletionRequest<T>),
     MoveBucketRequest((ProviderIdFor<T>, BucketIdFor<T>)),
 }
 
@@ -421,8 +430,7 @@ pub type BucketNameFor<T> = BoundedVec<u8, BucketNameLimitFor<T>>;
 pub type StorageRequestExpirationItem<T> = MerkleHash<T>;
 
 /// Alias for the type of the file deletion request expiration item.
-pub type FileDeletionRequestExpirationItem<T> =
-    (<T as frame_system::Config>::AccountId, MerkleHash<T>);
+pub type FileDeletionRequestExpirationItem<T> = PendingFileDeletionRequest<T>;
 
 /// Alias for the `ThresholdType` used in the FileSystem pallet.
 pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;

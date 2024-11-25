@@ -1,4 +1,4 @@
-import type { Bytes, Enum, Struct, U8aFixed, u32, u64 } from "@polkadot/types-codec";
+import type { Bytes, Enum, Null, Struct, U8aFixed, bool, u32, u64 } from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
@@ -12,6 +12,11 @@ export interface BackupStorageProvider extends Struct {
 }
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
+/** @name CheckpointChallenge */
+export interface CheckpointChallenge extends Struct {
+  readonly file_key: H256;
+  readonly should_remove_file: bool;
+}
 /** @name ChunkId */
 export interface ChunkId extends u64 {}
 /** @name FileMetadata */
@@ -187,6 +192,8 @@ export interface SaveFileToDisk extends Enum {
   readonly asIncompleteFile: IncompleteFileStatus;
   readonly type: "FileNotFound" | "Success" | "IncompleteFile";
 }
+/** @name ShouldRemoveFile */
+export interface ShouldRemoveFile extends bool {}
 /** @name StorageData */
 export interface StorageData extends u32 {}
 /** @name StorageDataUnit */
@@ -200,7 +207,7 @@ export interface StorageProviderId extends Enum {
   readonly type: "BackupStorageProvider" | "MainStorageProvider";
 }
 /** @name TrieRemoveMutation */
-export interface TrieRemoveMutation extends Struct {}
+export interface TrieRemoveMutation extends Null {}
 /** @name ValuePropId */
 export interface ValuePropId extends H256 {}
 /** @name ValueProposition */
