@@ -24,10 +24,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.strictEqual(extSuccess, false);
 
     await userApi.block.skip(20);
-    const [eventInfo, _eventError] = userApi.assert.fetchEventData(
-      userApi.events.system.ExtrinsicFailed,
-      events
-    );
+    const {
+      data: { dispatchError: eventInfo }
+    } = userApi.assert.fetchEvent(userApi.events.system.ExtrinsicFailed, events);
 
     const providersPallet = userApi.runtimeMetadata.asLatest.pallets.find(
       (pallet) => pallet.name.toString() === "Providers"
@@ -141,10 +140,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       bspKey
     );
     assert.strictEqual(extSuccess, false);
-    const [eventInfo, _eventError] = userApi.assert.fetchEventData(
-      userApi.events.system.ExtrinsicFailed,
-      events
-    );
+    const {
+      data: { dispatchError: eventInfo }
+    } = userApi.assert.fetchEvent(userApi.events.system.ExtrinsicFailed, events);
 
     const providersPallet = userApi.runtimeMetadata.asLatest.pallets.find(
       (pallet) => pallet.name.toString() === "Providers"
