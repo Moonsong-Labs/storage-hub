@@ -562,6 +562,8 @@ describeBspNet(
           ? bspTwoNextChallengeTick
           : dummyBspNextChallengeTick;
 
+      const areBspsNextChallengeBlockTheSame = firstBlockToAdvance === secondBlockToAdvance;
+
       // Advance to first next challenge block.
       await userApi.advanceToBlock(firstBlockToAdvance, {
         waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
@@ -611,20 +613,22 @@ describeBspNet(
         );
       }
 
-      // Advance to second next challenge block.
-      await userApi.advanceToBlock(secondBlockToAdvance, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-      });
+      // If the BSPs had different next challenge blocks, advance to the second next challenge block.
+      if (!areBspsNextChallengeBlockTheSame) {
+        // Advance to second next challenge block.
+        await userApi.advanceToBlock(secondBlockToAdvance, {
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        });
 
-      // Wait for BSP to generate the proof and advance one more block.
-      await sleep(500);
-      const secondChallengeBlockResult = await userApi.sealBlock();
+        // Wait for BSP to generate the proof and advance one more block.
+        await sleep(500);
+        await userApi.sealBlock();
+      }
 
       // Check for a ProofAccepted event.
       const secondChallengeBlockEvents = await userApi.assert.eventMany(
         "proofsDealer",
-        "ProofAccepted",
-        secondChallengeBlockResult.events
+        "ProofAccepted"
       );
 
       // Check that at least one of the `ProofAccepted` events belongs to `secondBspToRespond`.

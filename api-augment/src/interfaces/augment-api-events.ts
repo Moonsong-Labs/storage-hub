@@ -33,6 +33,7 @@ import type {
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieMutation,
@@ -1674,6 +1675,15 @@ declare module "@polkadot/api-base/types/events" {
     };
     providers: {
       /**
+       * Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
+       * signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+       **/
+      AwaitingTopUp: AugmentedEvent<
+        ApiType,
+        [providerId: H256, topUpMetadata: PalletStorageProvidersTopUpMetadata],
+        { providerId: H256; topUpMetadata: PalletStorageProvidersTopUpMetadata }
+      >;
+      /**
        * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
        * that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
        **/
@@ -1791,12 +1801,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SignUpRequestCanceled: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
-       * Event emitted when an SP has been slashed.
+       * Event emitted when a SP has been slashed.
        **/
       Slashed: AugmentedEvent<
         ApiType,
-        [providerId: H256, amountSlashed: u128],
-        { providerId: H256; amountSlashed: u128 }
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
+      >;
+      /**
+       * Event emitted when an SP has topped up its deposit based on slash amount.
+       **/
+      TopUpFulfilled: AugmentedEvent<
+        ApiType,
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
       >;
       /**
        * Event emitted when an MSP adds a new value proposition.
