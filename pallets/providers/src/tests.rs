@@ -4697,7 +4697,6 @@ mod decrease_bucket_size {
                     let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
                     let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
                     let expected_rate = current_rate + delta_rate;
-					
                     let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
                         &msp_id,
                         &bucket_owner
@@ -4729,7 +4728,6 @@ mod decrease_bucket_size {
                     let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
                     let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
                     let expected_rate = current_rate - delta_rate;
-					
                     let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
                         &msp_id,
                         &bucket_owner
