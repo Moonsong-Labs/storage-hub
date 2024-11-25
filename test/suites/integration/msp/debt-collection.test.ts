@@ -105,20 +105,26 @@ describeMspNet(
       let storageRequestFulfilledDataBlob: any = undefined;
 
       const eventsRecorded = await userApi.query.system.events();
-      const mspAcceptedStorageRequestEvent = eventsRecorded.find((e) => e.event.section === "fileSystem" && e.event.method === "MspAcceptedStorageRequest");
+      const mspAcceptedStorageRequestEvent = eventsRecorded.find(
+        (e) => e.event.section === "fileSystem" && e.event.method === "MspAcceptedStorageRequest"
+      );
 
       if (mspAcceptedStorageRequestEvent) {
         mspAcceptedStorageRequestDataBlob =
-          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedStorageRequestEvent.event) &&
-          mspAcceptedStorageRequestEvent.event.data;
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(
+            mspAcceptedStorageRequestEvent.event
+          ) && mspAcceptedStorageRequestEvent.event.data;
       }
 
-      const storageRequestFulfilledEvent = eventsRecorded.find((e) => e.event.section === "fileSystem" && e.event.method === "StorageRequestFulfilled");
+      const storageRequestFulfilledEvent = eventsRecorded.find(
+        (e) => e.event.section === "fileSystem" && e.event.method === "StorageRequestFulfilled"
+      );
 
       if (storageRequestFulfilledEvent) {
         storageRequestFulfilledDataBlob =
-          userApi.events.fileSystem.StorageRequestFulfilled.is(storageRequestFulfilledEvent.event) &&
-          storageRequestFulfilledEvent.event.data;
+          userApi.events.fileSystem.StorageRequestFulfilled.is(
+            storageRequestFulfilledEvent.event
+          ) && storageRequestFulfilledEvent.event.data;
       }
 
       let acceptedFileKey: string | undefined = undefined;
