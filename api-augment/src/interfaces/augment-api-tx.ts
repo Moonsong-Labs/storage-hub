@@ -2835,7 +2835,7 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       addValueProp: AugmentedSubmittable<
         (
-          pricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          pricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
           commitment: Bytes | string | Uint8Array,
           bucketDataLimit: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
@@ -2997,7 +2997,7 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
           commitment: Bytes | string | Uint8Array,
           valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
@@ -3117,7 +3117,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
           commitment: Bytes | string | Uint8Array,
           valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array

@@ -10,6 +10,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadProvidersInterface, TrieMutation,
     TrieProofDeltaApplier,
@@ -460,6 +461,7 @@ impl crate::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -493,9 +495,11 @@ impl ExtBuilder {
         .assimilate_storage(&mut t)
         .unwrap();
 
-        crate::GenesisConfig::<Test> { current_price: 1 }
-            .assimilate_storage(&mut t)
-            .unwrap();
+        crate::GenesisConfig::<Test> {
+            current_price: GIGAUNIT.into(),
+        }
+        .assimilate_storage(&mut t)
+        .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| {

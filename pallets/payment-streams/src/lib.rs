@@ -89,11 +89,15 @@ pub mod pallet {
             + HasCompact
             + Into<BalanceOf<Self>>;
 
+        /// The base deposit for a new payment stream. The actual deposit will be this constant + the deposit calculated using the `NewStreamDeposit` constant.
+        #[pallet::constant]
+        type BaseDeposit: Get<BalanceOf<Self>>;
+
         /// The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
         /// This means that, from the balance of the User for which the payment stream is being created, the amount
-        /// `NewStreamDeposit * rate` will be held as a deposit.
-        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
-        /// to be provided by the pallet using the `PaymentStreamsInterface` interface.
+        /// `NewStreamDeposit * rate + BaseDeposit` will be held as a deposit.
+        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided_in_giga_units * price_per_giga_unit_per_tick`, where `price_per_giga_unit_per_tick` is
+        /// obtained from the `CurrentPricePerGigaUnitPerTick` storage.
         #[pallet::constant]
         type NewStreamDeposit: Get<BlockNumberFor<Self>>;
 
@@ -215,14 +219,13 @@ pub mod pallet {
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
 
-    /// The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+    /// The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
-    /// This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+    /// This can be updated each tick by the system manager.
     ///
-    /// This storage is updated in:
-    /// - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+    /// It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
     #[pallet::storage]
-    pub type CurrentPricePerUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+    pub type CurrentPricePerGigaUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
     /// The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
@@ -253,7 +256,7 @@ pub mod pallet {
         fn default() -> Self {
             let current_price = One::one();
 
-            CurrentPricePerUnitPerTick::<T>::put(current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(current_price);
 
             Self { current_price }
         }
@@ -262,7 +265,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            CurrentPricePerUnitPerTick::<T>::put(self.current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(self.current_price);
         }
     }
 
@@ -973,8 +976,8 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function to get the current price per unit per tick of the system
-    pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
-        CurrentPricePerUnitPerTick::<T>::get()
+    pub fn get_current_price_per_giga_unit_per_tick() -> BalanceOf<T> {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
     /// A helper function to get the accumulated price index of the system

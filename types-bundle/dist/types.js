@@ -44,7 +44,7 @@ export const ALL_TYPES = {
   Multiaddresses: "BoundedVec<u8, 5>",
   ValuePropId: "H256",
   ValueProposition: {
-    price_per_unit_of_data_per_block: "u64",
+    price_per_giga_unit_of_data_per_block: "u64",
     bucket_data_limit: "StorageDataUnit"
   },
   ValuePropositionWithId: {
@@ -146,6 +146,7 @@ export const ALL_TYPES = {
       ProviderNotRegistered: null,
       ProviderWithoutPaymentStreams: null,
       AmountToChargeOverflow: null,
+      AmountToChargeUnderflow: null,
       DebtOverflow: null,
       InternalApiError: null
     }
