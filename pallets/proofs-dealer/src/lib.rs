@@ -763,7 +763,6 @@ pub mod pallet {
         /// It returns the used weight, so it can be used to calculate the remaining weight for the block for any other
         /// pallets that have `on_idle` hooks.
         fn on_idle(n: BlockNumberFor<T>, weight: Weight) -> Weight {
-            // TODO: Benchmark computational and proof size weight cost of this hook.
             Self::do_trim_valid_proof_submitters_last_ticks(n, weight)
         }
 

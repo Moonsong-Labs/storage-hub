@@ -39,7 +39,7 @@ use shp_treasury_funding::{
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, ConvertBack, Verify},
+    traits::{BlakeTwo256, Convert, ConvertBack, Verify, Zero},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
@@ -213,7 +213,7 @@ impl parachain_info::Config for Runtime {}
 
 parameter_types! {
     pub MessageQueueServiceWeight: Weight = Perbill::from_percent(35) * RuntimeBlockWeights::get().max_block;
-    // TODO: Set appropiate weight limit
+    // TODO: Set appropriate weight limit
     // The maximum weight to be used from remaining weight for processing enqueued messages on idle
     // pub const IdleMaxServiceWeight: Weight = Some(Weight);
 }
@@ -591,9 +591,10 @@ impl Get<AccountId32> for TreasuryAccount {
 pub struct BlockFullnessHeadroom;
 impl Get<Weight> for BlockFullnessHeadroom {
     fn get() -> Weight {
-        // TODO: Change this to the benchmarked weight of a `submit_proof` extrinsic or more.
-        // TODO: Right now, it is set to the weight of a `transfer_keep_alive` extrinsic.
-        Weight::from_parts(297_297_000, 308)
+        // The block headroom is set to be the maximum benchmarked weight that a `submit_proof` extrinsic can have.
+        // That is, when the proof includes two file key proofs for every single random challenge, and for the maximum
+        // number of checkpoint challenges as well.
+        <pallet_proofs_dealer::weights::SubstrateWeight<Runtime> as pallet_proofs_dealer::weights::WeightInfo>::submit_proof_with_checkpoint_challenges_key_proofs(TOTAL_MAX_CHALLENGES_PER_BLOCK * 2)
     }
 }
 
@@ -605,6 +606,95 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
     }
 }
 
+pub struct MaxSubmittersPerTick;
+impl Get<u32> for MaxSubmittersPerTick {
+    fn get() -> u32 {
+        let block_weights = <Runtime as frame_system::Config>::BlockWeights::get();
+
+        // Not being able to get the `max_total` weight for the Normal dispatch class is considered
+        // a critical bug. So we set it to be zero, essentially allowing zero submitters per tick.
+        // This value can be read from the constants of a node, but with the current configuration, this is:
+        //
+        // max_total: {
+        //   ref_time: 1,500,000,000,000
+        //   proof_size: 3,932,160
+        // }
+        let max_weight_for_class = block_weights
+            .get(DispatchClass::Normal)
+            .max_total
+            .unwrap_or(Zero::zero());
+
+        // Get the minimum weight a `submit_proof` extrinsic can have.
+        // This would be the case where the proof is just made up of a single file key proof, that is a
+        // response to all the random challenges. And there are no checkpoint challenges.
+        // With the current benchmarking, this is:
+        //
+        // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
+        // min_weight_for_submit_proof: {
+        //   ref_time: 1,132,469,305
+        //   proof_size: 35,487
+        // }
+        let min_weight_for_submit_proof =
+            <pallet_proofs_dealer::weights::SubstrateWeight<Runtime> as pallet_proofs_dealer::weights::WeightInfo>::submit_proof_no_checkpoint_challenges_key_proofs(1);
+
+        // Calculate the maximum number of submit proofs that is possible to have in a block/tick.
+        // With the current values, this would be:
+        //
+        // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
+        // 110 proof submissions per block (limited by `proof_size`)
+        let max_proof_submissions_per_tick = max_weight_for_class
+            .checked_div_per_component(&min_weight_for_submit_proof)
+            .unwrap_or(0);
+
+        // Saturating u64 to u32 should be enough.
+        max_proof_submissions_per_tick.saturated_into()
+    }
+}
+
+pub struct MaxSlashableProvidersPerTick;
+impl Get<u32> for MaxSlashableProvidersPerTick {
+    fn get() -> u32 {
+        // With the maximum number of slashable providers per tick being `N`, the absolute maximum
+        // weight that the `on_poll` hook can have, with the current benchmarking, is:
+        //
+        // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
+        // new_challenge_round_weight: {
+        //   ref_time: 577,000,000 + N * 553,024,845
+        //   proof_size: 8,523 + N * 3,158
+        // }
+        // new_checkpoint_challenge_round_max_weight: {
+        //   ref_time: 587,562,874 + ChallengesQueueLength * 255,790 = 613,141,874
+        //   proof_size: 4,787
+        // }
+        // check_spamming_condition_weight: {
+        //   ref_time: 313,000,000
+        //   proof_size: 6,016
+        // }
+        //
+        // For `N` = 1000, this would be:
+        // max_on_poll_weight: {
+        //   ref_time: 313,000,000 + 613,141,874 + 577,000,000 + N * 553,024,845 ≈ 554,527,987,000
+        //   proof_size: 6,016 + 4,787 + 8,523 + N * 3,158 ≈ 3,177,326
+        // }
+        //
+        // Consider that the maximum block weight is:
+        // maxBlock: {
+        //   ref_time: 2,000,000,000,000
+        //   proof_size: 5,242,880
+        // }
+        //
+        // This `on_poll` hook would consume roughly 1/4 of the block `ref_time` and 3/5 of the block `proof_size`.
+        // This is naturally a lot. But it would be a very unlikely scenario.
+        //
+        // This would be the case where all `N` Providers have synchronised their challenge periods
+        // and have the same deadline, plus, all of them missed their proof submissions.
+        // The normal scenario would be that NONE (or just a small number) of the Providers have
+        // missed their proof submissions.
+        let max_slashable_providers_per_tick = 1000;
+        max_slashable_providers_per_tick
+    }
+}
+
 const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
 const MAX_CUSTOM_CHALLENGES_PER_BLOCK: u32 = 10;
 const TOTAL_MAX_CHALLENGES_PER_BLOCK: u32 =
@@ -613,13 +703,11 @@ parameter_types! {
     pub const RandomChallengesPerBlock: u32 = RANDOM_CHALLENGES_PER_BLOCK;
     pub const MaxCustomChallengesPerBlock: u32 = MAX_CUSTOM_CHALLENGES_PER_BLOCK;
     pub const TotalMaxChallengesPerBlock: u32 = TOTAL_MAX_CHALLENGES_PER_BLOCK;
-    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const ChallengeTicksTolerance: u32 = 50;
-    pub const MaxSlashableProvidersPerTick: u32 = 1000; // TODO: Change this value after benchmarking the `on_poll` hook for the Proofs Dealer pallet
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
