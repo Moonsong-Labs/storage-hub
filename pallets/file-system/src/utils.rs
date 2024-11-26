@@ -430,7 +430,7 @@ where
             (true, None) => {
                 Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
             }
-            // Handle case where the bucket has an existing collection, but the collection is not in stroage.
+            // Handle case where the bucket has an existing collection, but the collection is not in storage.
             (true, Some(current_collection_id))
             if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
                 {
