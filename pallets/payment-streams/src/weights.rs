@@ -150,9 +150,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `PaymentStreams::CurrentPricePerUnitPerTick` (r:1 w:0)
-	/// Proof: `PaymentStreams::CurrentPricePerUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
-	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:0)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -165,7 +165,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Minimum execution time: 54_000_000 picoseconds.
 		Weight::from_parts(66_000_000, 4148)
 			.saturating_add(T::DbWeight::get().reads(8_u64))
-			.saturating_add(T::DbWeight::get().writes(4_u64))
+			.saturating_add(T::DbWeight::get().writes(3_u64))
 	}
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
@@ -189,13 +189,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::OnPollTicker` (r:1 w:0)
 	/// Proof: `PaymentStreams::OnPollTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	/// Storage: `PaymentStreams::CurrentPricePerUnitPerTick` (r:1 w:0)
-	/// Proof: `PaymentStreams::CurrentPricePerUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
-	/// Storage: `Balances::Holds` (r:1 w:1)
-	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	fn update_dynamic_rate_payment_stream() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `1389`
+		//  Measured:  `1334`
 		//  Estimated: `11034`
 		// Minimum execution time: 231_000_000 picoseconds.
 		Weight::from_parts(262_000_000, 11034)
@@ -313,7 +311,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:1001 w:1001)
+	/// Storage: `System::Account` (r:1001 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
 	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
@@ -363,8 +361,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(3_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
-	/// Storage: `PaymentStreams::CurrentPricePerUnitPerTick` (r:1 w:0)
-	/// Proof: `PaymentStreams::CurrentPricePerUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::AccumulatedPriceIndex` (r:1 w:1)
 	/// Proof: `PaymentStreams::AccumulatedPriceIndex` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	fn price_index_update() -> Weight {
@@ -515,9 +513,9 @@ impl WeightInfo for () {
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `PaymentStreams::CurrentPricePerUnitPerTick` (r:1 w:0)
-	/// Proof: `PaymentStreams::CurrentPricePerUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
-	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:0)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -530,7 +528,7 @@ impl WeightInfo for () {
 		// Minimum execution time: 54_000_000 picoseconds.
 		Weight::from_parts(66_000_000, 4148)
 			.saturating_add(RocksDbWeight::get().reads(8_u64))
-			.saturating_add(RocksDbWeight::get().writes(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
@@ -554,13 +552,11 @@ impl WeightInfo for () {
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::OnPollTicker` (r:1 w:0)
 	/// Proof: `PaymentStreams::OnPollTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	/// Storage: `PaymentStreams::CurrentPricePerUnitPerTick` (r:1 w:0)
-	/// Proof: `PaymentStreams::CurrentPricePerUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
-	/// Storage: `Balances::Holds` (r:1 w:1)
-	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	fn update_dynamic_rate_payment_stream() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `1389`
+		//  Measured:  `1334`
 		//  Estimated: `11034`
 		// Minimum execution time: 231_000_000 picoseconds.
 		Weight::from_parts(262_000_000, 11034)
@@ -678,7 +674,7 @@ impl WeightInfo for () {
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:1001 w:1001)
+	/// Storage: `System::Account` (r:1001 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
 	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
@@ -728,8 +724,8 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(3_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
-	/// Storage: `PaymentStreams::CurrentPricePerUnitPerTick` (r:1 w:0)
-	/// Proof: `PaymentStreams::CurrentPricePerUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::AccumulatedPriceIndex` (r:1 w:1)
 	/// Proof: `PaymentStreams::AccumulatedPriceIndex` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	fn price_index_update() -> Weight {

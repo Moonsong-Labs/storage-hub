@@ -19,10 +19,12 @@ use frame_support::{
     },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ReadBucketsInterface, ReadProvidersInterface,
 };
+use sp_arithmetic::{MultiplyRational, Rounding};
 use sp_runtime::bounded_vec;
 use sp_runtime::traits::BlockNumberProvider;
 
@@ -103,7 +105,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -203,7 +205,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -300,7 +302,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -416,7 +418,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -427,7 +429,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         bob
@@ -504,7 +506,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1118,7 +1120,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1217,7 +1219,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1310,7 +1312,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1422,7 +1424,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1512,7 +1514,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1613,7 +1615,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1751,7 +1753,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1809,7 +1811,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1866,7 +1868,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1878,7 +1880,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
@@ -2072,7 +2074,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -2215,7 +2217,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -2246,7 +2248,7 @@ mod sign_up {
                             RuntimeOrigin::signed(bob),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             bob
@@ -2283,7 +2285,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
@@ -2331,7 +2333,7 @@ mod sign_up {
                             RuntimeOrigin::signed(helen),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             helen
@@ -2372,7 +2374,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
@@ -3865,9 +3867,10 @@ mod add_bucket {
                 );
 
                 let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+				let base_deposit: u128 = <Test as pallet_payment_streams::Config>::BaseDeposit::get();
                 assert_eq!(
                     NativeBalance::free_balance(&bucket_owner),
-                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get() - new_stream_deposit as u128
+                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get() - new_stream_deposit as u128 - base_deposit
                 );
 
                 let new_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
@@ -4513,9 +4516,9 @@ mod increase_bucket_size {
                 let storage_amount: StorageDataUnit<Test> = 100;
 
                 let num_buckets = 10;
-                let delta_increase = 100;
+                let delta_increase = 100 * 1024 * 1024;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount, Some(10), Some(num_buckets * delta_increase));
+                    register_account_as_msp(alice, storage_amount, Some(100), Some(num_buckets * delta_increase));
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
@@ -4552,7 +4555,7 @@ mod increase_bucket_size {
 
                 assert_eq!(buckets.len(), num_buckets as usize);
 
-                // Remove all the buckets
+                // Increment the size of all buckets
                 for i in 0..num_buckets {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
@@ -4573,9 +4576,9 @@ mod increase_bucket_size {
 
                     // Check that the fixed rate payment stream matches the expected rate
                     let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
-                    let delta_rate = value_prop.price_per_unit_of_data_per_block * delta_increase as u128;
-
+                    let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
                     let expected_rate = current_rate + delta_rate;
+
                     let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
                         &msp_id,
                         &bucket_owner
@@ -4690,10 +4693,9 @@ mod decrease_bucket_size {
                         delta_increase
                     ));
 
-                    // Check that the fixed rate payment stream matches the expected rate
+					// Check that the fixed rate payment stream matches the expected rate
                     let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
-                    let delta_rate = value_prop.price_per_unit_of_data_per_block * delta_increase as u128;
-
+                    let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
                     let expected_rate = current_rate + delta_rate;
                     let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
                         &msp_id,
@@ -4722,10 +4724,9 @@ mod decrease_bucket_size {
                         delta_increase
                     ));
 
-                    // Check that the fixed rate payment stream matches the expected rate
+					// Check that the fixed rate payment stream matches the expected rate
                     let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
-                    let delta_rate = value_prop.price_per_unit_of_data_per_block * delta_increase as u128;
-
+                    let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
                     let expected_rate = current_rate - delta_rate;
                     let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
                         &msp_id,
@@ -5613,7 +5614,7 @@ mod add_value_prop {
                 assert_noop!(
                     StorageProviders::add_value_prop(
                         RuntimeOrigin::signed(alice),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit
                     ),
@@ -5634,7 +5635,7 @@ mod add_value_prop {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -5642,7 +5643,7 @@ mod add_value_prop {
                 assert_noop!(
                     StorageProviders::add_value_prop(
                         RuntimeOrigin::signed(alice),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit
                     ),
@@ -5668,7 +5669,7 @@ mod add_value_prop {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -5756,7 +5757,7 @@ mod make_value_prop_unavailable {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -5784,7 +5785,7 @@ mod make_value_prop_unavailable {
                     )
                     .unwrap(),
                     ValueProposition::<Test> {
-                        price_per_unit_of_data_per_block: 999,
+                        price_per_giga_unit_of_data_per_block: 999,
                         commitment: bounded_vec![],
                         bucket_data_limit: 999,
                         available: false
@@ -5807,7 +5808,7 @@ mod make_value_prop_unavailable {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -5851,7 +5852,7 @@ mod make_value_prop_unavailable {
 fn register_account_as_msp(
     account: AccountId,
     storage_amount: StorageDataUnit<Test>,
-    value_prop_price_per_unit_of_data_per_block: Option<BalanceOf<Test>>,
+    value_prop_price_per_giga_unit_of_data_per_block: Option<BalanceOf<Test>>,
     value_prop_bucket_size_limit: Option<StorageDataUnit<Test>>,
 ) -> (BalanceOf<Test>, MainStorageProvider<Test>, HashId<Test>) {
     // Initialize variables:
@@ -5877,7 +5878,7 @@ fn register_account_as_msp(
     assert!(NativeBalance::free_balance(&account) >= deposit_for_storage_amount);
 
     let value_prop = ValueProposition::<Test>::new(
-        value_prop_price_per_unit_of_data_per_block.unwrap_or(1),
+        value_prop_price_per_giga_unit_of_data_per_block.unwrap_or(1),
         bounded_vec![],
         value_prop_bucket_size_limit.unwrap_or(100),
     );
@@ -5887,7 +5888,7 @@ fn register_account_as_msp(
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        value_prop.price_per_unit_of_data_per_block,
+        value_prop.price_per_giga_unit_of_data_per_block,
         bounded_vec![],
         value_prop.bucket_data_limit,
         account

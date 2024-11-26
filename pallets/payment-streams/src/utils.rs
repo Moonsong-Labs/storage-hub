@@ -11,13 +11,14 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
-    MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    MutatePricePerGigaUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
     TreasuryCutCalculator,
 };
 use sp_runtime::{
-    traits::{Convert, One},
+    traits::{CheckedDiv, Convert, One},
     Saturating,
 };
 
@@ -93,6 +94,8 @@ where
         );
         let deposit = rate
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
@@ -202,6 +205,8 @@ where
         // Update the user's deposit based on the new rate
         let new_deposit = new_rate
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
@@ -314,20 +319,27 @@ where
         );
 
         // Check that the user has enough balance to pay the deposit
-        // Deposit is: `amount_provided * current_price * NewStreamDeposit` where:
+        // Deposit is: `(amount_provided * current_price_per_giga_unit_per_tick * NewStreamDeposit) / giga_units ` where:
         // - `amount_provided` is the amount of units of something (for example, storage) that are provided by the Provider to the User
-        // - `current_price` is the current price of the units of something (per unit per tick)
+        // - `current_price_per_giga_unit_per_tick` is the current price of a giga-unit of something (per tick)
         // - `NewStreamDeposit` is a runtime constant that represents the number of ticks that the deposit should cover
+        // - `GIGAUNIT` is the number of units in a giga-unit (1024 * 1024 * 1024 = 1_073_741_824)
+        // As an example, if the `current_price_per_giga_unit_per_tick` is 10000 and the `NewStreamDeposit` is 100 ticks,
+        // the minimum amount provided would be 1074 units and the deposit would increase by 1 every 1074 units.
         let user_balance = T::NativeBalance::reducible_balance(
             &user_account,
             Preservation::Preserve,
             Fortitude::Polite,
         );
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
-        let deposit = current_price
+        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
+        let deposit = current_price_per_giga_unit_per_tick
             .checked_mul(&amount_provided.into())
             .ok_or(ArithmeticError::Overflow)?
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_div(&GIGAUNIT.into())
+            .unwrap_or_default()
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
@@ -440,12 +452,16 @@ where
         }
 
         // Update the user's deposit based on the new amount provided
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
+        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
         let new_deposit = new_amount_provided
             .into()
-            .checked_mul(&current_price)
+            .checked_mul(&current_price_per_giga_unit_per_tick)
             .ok_or(ArithmeticError::Overflow)?
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_div(&GIGAUNIT.into())
+            .unwrap_or_default()
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
@@ -747,7 +763,9 @@ where
                         // Calculate the amount to charge
                         let amount_to_charge = price_index_difference
                             .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                            .ok_or(Error::<T>::ChargeOverflow)?;
+                            .ok_or(Error::<T>::ChargeOverflow)?
+                            .checked_div(&GIGAUNIT.into())
+                            .ok_or(ArithmeticError::Underflow)?;
 
                         // Check the free balance of the user
                         let user_balance = T::NativeBalance::reducible_balance(
@@ -1027,7 +1045,9 @@ where
                 let amount_to_charge = price_index_at_last_chargeable_tick
                     .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                     .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                    .ok_or(ArithmeticError::Overflow)?;
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_div(&GIGAUNIT.into())
+                    .ok_or(ArithmeticError::Underflow)?;
 
                 // If the amount to charge is greater than the deposit, just charge the deposit
                 let amount_to_charge =
@@ -1213,7 +1233,7 @@ where
 
     pub fn do_update_price_index(meter: &mut sp_weights::WeightMeter) {
         // Get the current price
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
+        let current_price = CurrentPricePerGigaUnitPerTick::<T>::get();
 
         // Add it to the accumulated price index
         AccumulatedPriceIndex::<T>::mutate(|price_index| {
@@ -1336,7 +1356,9 @@ where
                 let amount_to_charge = price_index_at_last_chargeable_tick
                     .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                     .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                    .ok_or(ArithmeticError::Overflow)?;
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_div(&GIGAUNIT.into())
+                    .ok_or(ArithmeticError::Underflow)?;
 
                 // If the amount to charge is greater than the deposit, just charge the deposit
                 let amount_to_charge =
@@ -1617,15 +1639,15 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> MutatePricePerUnitPerTickInterface for pallet::Pallet<T> {
-    type PricePerUnitPerTick = BalanceOf<T>;
+impl<T: pallet::Config> MutatePricePerGigaUnitPerTickInterface for pallet::Pallet<T> {
+    type PricePerGigaUnitPerTick = BalanceOf<T>;
 
-    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick {
-        CurrentPricePerUnitPerTick::<T>::get()
+    fn get_price_per_giga_unit_per_tick() -> Self::PricePerGigaUnitPerTick {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
-    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick) {
-        CurrentPricePerUnitPerTick::<T>::put(price_index);
+    fn set_price_per_giga_unit_per_tick(price_index: Self::PricePerGigaUnitPerTick) {
+        CurrentPricePerGigaUnitPerTick::<T>::put(price_index);
     }
 }
 
@@ -1676,7 +1698,9 @@ where
                         .saturating_sub(dynamic_stream.price_index_when_last_charged);
                     let amount_to_charge = price_index_difference
                         .checked_mul(&dynamic_stream.amount_provided.into())
-                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?;
+                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?
+                        .checked_div(&GIGAUNIT.into())
+                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeUnderflow)?;
                     debt = debt
                         .checked_add(&amount_to_charge)
                         .ok_or(GetUsersWithDebtOverThresholdError::DebtOverflow)?;
