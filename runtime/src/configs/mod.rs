@@ -460,8 +460,38 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
+// Benchmark helpers for the Providers pallet
+#[cfg(feature = "runtime-benchmarks")]
+pub struct ProvidersBenchmarkHelpers;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_storage_providers::benchmarking::BenchmarkHelpers<Runtime>
+    for ProvidersBenchmarkHelpers
+{
+    type ProviderId = <Runtime as pallet_storage_providers::Config>::ProviderId;
+    fn set_accrued_failed_proofs(provider_id: Self::ProviderId, value: u32) {
+        pallet_proofs_dealer::SlashableProviders::<Runtime>::insert(provider_id, value);
+    }
+
+    fn get_accrued_failed_proofs(provider_id: Self::ProviderId) -> u32 {
+        pallet_proofs_dealer::SlashableProviders::<Runtime>::get(provider_id).unwrap_or(0)
+    }
+}
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_storage_providers::weights::SubstrateWeight<Runtime>;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
     type FileMetadataManager = FileMetadata<
@@ -472,6 +502,7 @@ impl pallet_storage_providers::Config for Runtime {
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type MerkleTrieHashing = Hashing;
@@ -482,6 +513,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;
@@ -502,6 +534,9 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate =
         runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
+    type TopUpGracePeriod = ConstU32<{ 24 * 60 * 60 / 6 }>; // 1 day with 6 second timeslots.
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ProvidersBenchmarkHelpers;
 }
 
 parameter_types! {

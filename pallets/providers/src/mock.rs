@@ -9,6 +9,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::SlashableProviders;
+use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
     CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
@@ -17,7 +18,7 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, IdentityLookup},
+    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -59,6 +60,8 @@ mod test_runtime {
     pub type ProofsDealer = pallet_proofs_dealer;
     #[runtime::pallet_index(4)]
     pub type PaymentStreams = pallet_payment_streams;
+    #[runtime::pallet_index(5)]
+    pub type RandomnessPallet = pallet_randomness;
 }
 
 parameter_types! {
@@ -117,6 +120,41 @@ impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
         1000
     }
+}
+// Randomness pallet:
+/// Mock implementation of the relay chain data provider, which should return the relay chain block
+/// that the previous parachain block was anchored to.
+pub struct MockRelaychainDataProvider;
+impl BlockNumberProvider for MockRelaychainDataProvider {
+    type BlockNumber = u32;
+    fn current_block_number() -> Self::BlockNumber {
+        frame_system::Pallet::<Test>::block_number()
+            .saturating_sub(1)
+            .try_into()
+            .unwrap()
+    }
+}
+
+pub struct BabeDataGetter;
+impl GetBabeData<u64, H256> for BabeDataGetter {
+    fn get_epoch_index() -> u64 {
+        frame_system::Pallet::<Test>::block_number()
+    }
+    fn get_epoch_randomness() -> H256 {
+        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
+    }
+    fn get_parent_randomness() -> H256 {
+        H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
+        ))
+    }
+}
+
+impl pallet_randomness::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = MockRelaychainDataProvider;
+    type WeightInfo = ();
 }
 
 // Proofs dealer pallet:
@@ -255,14 +293,30 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
     }
 }
 
+type StorageDataUnit = u64;
+
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type FileMetadataManager = MockFileMetadataManager;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
@@ -274,6 +328,7 @@ impl crate::Config for Test {
     type PaymentStreams = PaymentStreams;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = MockRelaychainDataProvider;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
@@ -292,6 +347,9 @@ impl crate::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
+    type TopUpGracePeriod = ConstU32<5>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

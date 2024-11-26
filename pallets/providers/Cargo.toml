@@ -19,6 +19,8 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 
 # Local
+# pallet-proofs-dealer = { workspace = true, optional = true }
+pallet-randomness = { workspace = true, optional = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 shp-constants = { workspace = true }
 shp-traits = { workspace = true, default-features = false }
@@ -27,6 +29,7 @@ shp-traits = { workspace = true, default-features = false }
 frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+polkadot-parachain-primitives = { workspace = true }
 
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
@@ -38,6 +41,7 @@ serde = { workspace = true }
 #Local
 pallet-proofs-dealer = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-randomness = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-treasury-funding = { workspace = true }
 
@@ -54,6 +58,8 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-randomness/runtime-benchmarks",
+	"pallet-proofs-dealer/runtime-benchmarks",
 	"shp-traits/runtime-benchmarks",
 	"shp-treasury-funding/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
@@ -67,6 +73,7 @@ std = [
 	"pallet-storage-providers-runtime-api/std",
 	"pallet-proofs-dealer/std",
 	"pallet-payment-streams/std",
+	"pallet-randomness/std",
 	"scale-info/std",
 	"shp-constants/std",
 	"shp-traits/std",

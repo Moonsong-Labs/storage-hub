@@ -1,4 +1,5 @@
-import "@storagehub/api-augment";
+import "@storagehub/api-augment"; // must be first import
+
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
@@ -13,10 +14,10 @@ import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
+import { addBsp } from "./helpers";
 import * as NodeBspNet from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
-import { addBsp } from "./helpers";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -166,17 +167,12 @@ export class BspNetTestApi implements AsyncDisposable {
       waitForBspProofs?: string[];
     }
   ) {
-    return BspNetBlock.advanceToBlock(
-      this._api,
-      blockNumber,
-      options?.waitBetweenBlocks,
-      options?.waitForBspProofs
-    );
+    return BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber });
   }
 
   private enrichApi() {
     const remappedAssertNs = {
-      fetchEventData: Assertions.fetchEventData,
+      fetchEvent: Assertions.fetchEvent,
 
       /**
        * Asserts that a specific event is present in the given events or the latest block.
@@ -377,6 +373,37 @@ export class BspNetTestApi implements AsyncDisposable {
      */
     const remappedBlockNs = {
       /**
+       * Extends a fork in the blockchain by creating new blocks on top of a specified parent block.
+       *
+       * This function is used for testing chain fork scenarios. It creates a specified number
+       * of new blocks, each building on top of the previous one, starting from a given parent
+       * block hash.
+       *
+       * @param options - Configuration options for extending the fork:
+       *   @param options.parentBlockHash - The hash of the parent block to build upon.
+       *   @param options.amountToExtend - The number of blocks to add to the fork.
+       *   @param options.verbose - If true, logs detailed information about the fork extension process.
+       *
+       * @returns A Promise that resolves when all blocks have been created.
+       */
+      extendFork: (options: {
+        /**
+         * The hash of the parent block to build upon.
+         *  e.g. "0x827392aa...."
+         */
+        parentBlockHash: string;
+        /**
+         * The number of blocks to add to the fork.
+         *  e.g. 5
+         */
+        amountToExtend: number;
+        /**
+         * If true, logs detailed information about the fork extension process.
+         *  e.g. true
+         */
+        verbose?: boolean;
+      }) => BspNetBlock.extendFork(this._api, { ...options, verbose: options.verbose ?? false }),
+      /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.
        * @returns A promise that resolves to a SealedBlock object.
@@ -410,18 +437,11 @@ export class BspNetTestApi implements AsyncDisposable {
         options?: {
           waitBetweenBlocks?: number | boolean;
           waitForBspProofs?: string[];
+          finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;
         }
-      ) =>
-        BspNetBlock.advanceToBlock(
-          this._api,
-          blockNumber,
-          options?.waitBetweenBlocks,
-          options?.waitForBspProofs,
-          options?.spam,
-          options?.verbose
-        ),
+      ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.
@@ -460,6 +480,7 @@ export class BspNetTestApi implements AsyncDisposable {
         bspStartingWeight?: bigint;
         maxStorageCapacity?: number;
         additionalArgs?: string[];
+        waitForIdle?: boolean;
       }) => addBsp(this._api, options.bspSigner, options)
     };
 
