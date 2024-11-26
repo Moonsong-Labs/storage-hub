@@ -13,7 +13,7 @@ import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard", only: true },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -197,44 +197,36 @@ describeBspNet(
 
     it(
       "BSP can correctly delete a file from its forest and runtime correctly updates its root",
-      { skip: "Not implemented yet. Needs RPC method to build proofs." },
       async () => {
         // TODO: Setup a BSP that has two files which lie under the same NibbledBranch in the forest.
-        // TODO: Generate the proof to delete one of the files.
-        /* let inclusionForestProof = bspThreeApi.rpc.storagehubclient.buildForestRoot(fileMetadata.fileKey); */
-        // TODO: Request the deletion of the file:
-        /* const fileDeletionRequestResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-            fileMetadata.fileKey,
-            fileMetadata.bucketId,
-            fileMetadata.location,
-            fileMetadata.owner,
-            fileMetadata.fingerprint,
-            fileMetadata.fileSize,
-            false,
-            inclusion_forest_proof: ForestProof<T>,
-        ); */
+        const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
+          null,
+          [fileMetadata.fileKey]
+        );
         // Wait enough blocks for the deletion to be allowed.
-        /* const currentBlock = await bspThreeApi.rpc.chain.getBlock();
-    const currentBlockNumber = currentBlock.block.header.number.toNumber();
-    const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
-    await bspThreeApi.advanceToBlock(cooldown); */
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+        await userApi.advanceToBlock(cooldown);
         // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-        /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-        fileMetadata.fileKey,
-        inclusionForestProof,
-      )); 
-      // Check for the confirm stopped storing event.
-          let confirmStopStoringEvent = bspThreeApi.assert.eventPresent(
-            "fileSystem",
-              "BspConfirmStoppedStoring",
-            fileDeletionConfirmResult.events
-          );
-      // Make sure the new root was updated correctly.
-      bspThreeApi.rpc.storagehubclient.deleteFile(fileMetadata.fileKey); // Not sure if this is the correct way to do it.
-      const newRoot = bspThreeApi.rpc.storagehubclient.getForestRoot();
-      const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
-      assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
-    */
+        await userApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
+          fileMetadata.fileKey,
+          inclusionForestProof.toString(),
+        ), bspThreeKey
+        );
+        // Check for the confirm stopped storing event.
+        const confirmStopStoringEvent = await userApi.assert.eventPresent(
+          "fileSystem",
+          "BspConfirmStoppedStoring",
+        );
+        // Make sure the new root was updated correctly.
+        // userApi.rpc.fileSystem.deleteFile(fileMetadata.fileKey); // Not sure if this is the correct way to do it.
+        const newRoot = await bspThreeApi.rpc.storagehubclient.getForestRoot(null);
+        const newRootInRuntime = userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event) && confirmStopStoringEvent.event.data;
+
+        console.log(newRootInRuntime.newRoot.toString());
+        console.log(newRoot.toString());
+        assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
       }
     );
 

@@ -8,7 +8,6 @@ import {
   sleep,
   type EnrichedBspApi
 } from "../../../util";
-import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -22,7 +21,7 @@ describeBspNet(
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      invariant(
+      assert(
         launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
         "BSPNet failed to initialise with required ports"
       );
@@ -419,7 +418,7 @@ describeBspNet(
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
-          lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
+        lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
       );
 
       // Seal one more block to update the last chargeable info of the Provider
@@ -575,7 +574,7 @@ describeBspNet(
         await userApi.query.paymentStreams.lastChargeableInfo(ShConsts.DUMMY_BSP_ID);
       assert(
         lastChargeableInfo.priceIndex.toNumber() ===
-          lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
+        lastChargeableInfoAfterProofSubmission.priceIndex.toNumber()
       );
 
       // Seal one more block to update the last chargeable info of the Provider
