@@ -16,6 +16,7 @@ import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
 import * as Assertions from "../asserts";
 import invariant from "tiny-invariant";
+import { waitForLog } from "./docker";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -25,9 +26,25 @@ export interface SealedBlock {
   extSuccess?: boolean;
 }
 
+/**
+ * Extends a fork in the blockchain by creating new blocks on top of a specified parent block.
+ *
+ * This function is used for testing chain fork scenarios. It creates
+ * a specified number of new blocks, each building on top of the previous one, starting
+ * from a given parent block hash.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param options - Configuration options for extending the fork:
+ *   @param options.parentBlockHash - The hash of the parent block to build upon.
+ *   @param options.amountToExtend - The number of blocks to add to the fork.
+ *   @param options.verbose - (optional) If true, logs detailed information about the fork extension process.
+ *
+ * @throws Will throw an assertion error if amountToExtend is not greater than 0.
+ * @returns A Promise that resolves when all blocks have been created.
+ */
 export const extendFork = async (
   api: ApiPromise,
-  options: { parentBlockHash: string; amountToExtend: number; verbose: boolean }
+  options: { parentBlockHash: string; amountToExtend: number; verbose?: boolean }
 ) => {
   let parentBlockHash: string = options.parentBlockHash;
   let parentHeight = (await api.rpc.chain.getHeader(parentBlockHash)).number.toNumber();
@@ -54,7 +71,11 @@ export const extendFork = async (
     parentHeight = newBlockNumber;
 
     // TODO replace with something smarter eventually
-    await sleep(3000);
+    await waitForLog({
+      containerName: "docker-sh-user-1", // we can only produce blocks via the user node for now
+      searchString: "💤 Idle",
+      timeout: 5000
+    });
   }
 };
 

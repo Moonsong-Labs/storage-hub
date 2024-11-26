@@ -372,9 +372,35 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for manipulating and interacting with blocks in the BSP network.
      */
     const remappedBlockNs = {
+      /**
+       * Extends a fork in the blockchain by creating new blocks on top of a specified parent block.
+       *
+       * This function is used for testing chain fork scenarios. It creates a specified number
+       * of new blocks, each building on top of the previous one, starting from a given parent
+       * block hash.
+       *
+       * @param options - Configuration options for extending the fork:
+       *   @param options.parentBlockHash - The hash of the parent block to build upon.
+       *   @param options.amountToExtend - The number of blocks to add to the fork.
+       *   @param options.verbose - If true, logs detailed information about the fork extension process.
+       *
+       * @returns A Promise that resolves when all blocks have been created.
+       */
       extendFork: (options: {
+        /**
+         * The hash of the parent block to build upon.
+         *  e.g. "0x827392aa...."
+         */
         parentBlockHash: string;
+        /**
+         * The number of blocks to add to the fork.
+         *  e.g. 5
+         */
         amountToExtend: number;
+        /**
+         * If true, logs detailed information about the fork extension process.
+         *  e.g. true
+         */
         verbose?: boolean;
       }) => BspNetBlock.extendFork(this._api, { ...options, verbose: options.verbose ?? false }),
       /**
