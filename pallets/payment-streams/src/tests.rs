@@ -366,6 +366,8 @@ mod fixed_rate_streams {
     /// This module holds the tests for updating a payment stream (right now, only the rate can be updated)
     mod update_stream {
 
+        use crate::FixedRatePaymentStreams;
+
         use super::*;
 
         #[test]
@@ -539,7 +541,7 @@ mod fixed_rate_streams {
         }
 
         #[test]
-        fn update_payment_stream_fails_if_user_is_flagged_as_without_funds() {
+        fn update_payment_stream_deletes_payment_stream_if_user_is_flagged_as_without_funds() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -604,14 +606,16 @@ mod fixed_rate_streams {
 
                 // Try to update the rate of the payment stream from Bob to Charlie to 20 units per block
                 let new_rate: BalanceOf<Test> = 20;
-                assert_noop!(
+                assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
                         &charlie_msp_id,
                         &bob,
                         new_rate
-                    ),
-                    Error::<Test>::UserWithoutFunds
+                    )
                 );
+
+                // Check that the payment stream from Bob to Charlie was deleted
+                assert!(FixedRatePaymentStreams::<Test>::get(&charlie_msp_id, &bob).is_none());
             });
         }
 
@@ -2953,7 +2957,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn update_payment_stream_fails_if_user_is_flagged_as_without_funds() {
+        fn update_payment_stream_deletes_payment_stream_if_user_is_flagged_as_without_funds() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -3039,14 +3043,16 @@ mod dynamic_rate_streams {
 
                 // Try to update the amount provided of the payment stream from Bob to Charlie to 200 units
                 let new_amount_provided = 200;
-                assert_noop!(
+                assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
                         &charlie_bsp_id,
                         &bob,
                         &new_amount_provided,
-                    ),
-                    Error::<Test>::UserWithoutFunds
+                    )
                 );
+
+                // Check that the payment stream from Bob to Charlie was deleted
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_none());
             });
         }
 

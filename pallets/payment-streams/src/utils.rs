@@ -180,12 +180,6 @@ where
             Error::<T>::UpdateRateToSameRate
         );
 
-        // Check that the user is not flagged as without funds
-        ensure!(
-            !UsersWithoutFunds::<T>::contains_key(user_account),
-            Error::<T>::UserWithoutFunds
-        );
-
         // Charge the payment stream with the old rate before updating it to prevent abuse
         let (amount_charged, last_tick_charged) =
             Self::do_charge_payment_streams(&provider_id, user_account)?;
@@ -202,25 +196,29 @@ where
             });
         }
 
-        // Update the user's deposit based on the new rate
-        let new_deposit = new_rate
-            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-            .ok_or(ArithmeticError::Overflow)?
-            .checked_add(&T::BaseDeposit::get())
-            .ok_or(ArithmeticError::Overflow)?;
-        Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
+        // The payment stream could have been deleted when charged if the user was out of funds.
+        // If that didn't happen, we update it with the new rate here.
+        if FixedRatePaymentStreams::<T>::get(provider_id, user_account).is_some() {
+            // Update the user's deposit based on the new rate
+            let new_deposit = new_rate
+                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+                .ok_or(ArithmeticError::Overflow)?
+                .checked_add(&T::BaseDeposit::get())
+                .ok_or(ArithmeticError::Overflow)?;
+            Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
-        // Update the payment stream in the FixedRatePaymentStreams mapping
-        FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
-            let payment_stream = expect_or_err!(
-                payment_stream,
-                "Payment stream should exist if it was found before.",
-                Error::<T>::PaymentStreamNotFound
-            );
-            payment_stream.rate = new_rate;
-            payment_stream.user_deposit = new_deposit;
-            Ok::<(), DispatchError>(())
-        })?;
+            // Update the payment stream in the FixedRatePaymentStreams mapping
+            FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
+                let payment_stream = expect_or_err!(
+                    payment_stream,
+                    "Payment stream should exist if it was found before.",
+                    Error::<T>::PaymentStreamNotFound
+                );
+                payment_stream.rate = new_rate;
+                payment_stream.user_deposit = new_deposit;
+                Ok::<(), DispatchError>(())
+            })?;
+        }
 
         Ok(())
     }
@@ -429,12 +427,6 @@ where
             Error::<T>::UpdateAmountToSameAmount
         );
 
-        // Check that the user is not flagged as without funds
-        ensure!(
-            !UsersWithoutFunds::<T>::contains_key(user_account),
-            Error::<T>::UserWithoutFunds
-        );
-
         // Charge the payment stream with the old amount before updating it to prevent abuse
         let (amount_charged, last_tick_charged) =
             Self::do_charge_payment_streams(&provider_id, user_account)?;
@@ -451,31 +443,35 @@ where
             });
         }
 
-        // Update the user's deposit based on the new amount provided
-        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
-        let new_deposit = new_amount_provided
-            .into()
-            .checked_mul(&current_price_per_giga_unit_per_tick)
-            .ok_or(ArithmeticError::Overflow)?
-            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-            .ok_or(ArithmeticError::Overflow)?
-            .checked_div(&GIGAUNIT.into())
-            .unwrap_or_default()
-            .checked_add(&T::BaseDeposit::get())
-            .ok_or(ArithmeticError::Overflow)?;
-        Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
+        // The payment stream could have been deleted when charged if the user was out of funds.
+        // If that didn't happen, we update it with the new amount provided here.
+        if DynamicRatePaymentStreams::<T>::get(provider_id, user_account).is_some() {
+            // Update the user's deposit based on the new amount provided
+            let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
+            let new_deposit = new_amount_provided
+                .into()
+                .checked_mul(&current_price_per_giga_unit_per_tick)
+                .ok_or(ArithmeticError::Overflow)?
+                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+                .ok_or(ArithmeticError::Overflow)?
+                .checked_div(&GIGAUNIT.into())
+                .unwrap_or_default()
+                .checked_add(&T::BaseDeposit::get())
+                .ok_or(ArithmeticError::Overflow)?;
+            Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
-        // Update the payment stream in the DynamicRatePaymentStreams mapping
-        DynamicRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
-            let payment_stream = expect_or_err!(
-                payment_stream,
-                "Payment stream should exist if it was found before.",
-                Error::<T>::PaymentStreamNotFound
-            );
-            payment_stream.amount_provided = new_amount_provided;
-            payment_stream.user_deposit = new_deposit;
-            Ok::<(), DispatchError>(())
-        })?;
+            // Update the payment stream in the DynamicRatePaymentStreams mapping
+            DynamicRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
+                let payment_stream = expect_or_err!(
+                    payment_stream,
+                    "Payment stream should exist if it was found before.",
+                    Error::<T>::PaymentStreamNotFound
+                );
+                payment_stream.amount_provided = new_amount_provided;
+                payment_stream.user_deposit = new_deposit;
+                Ok::<(), DispatchError>(())
+            })?;
+        }
 
         Ok(())
     }
