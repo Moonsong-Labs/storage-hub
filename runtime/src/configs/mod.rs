@@ -472,8 +472,26 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
     }
 }
 
+// Benchmark helpers for the Providers pallet
+#[cfg(feature = "runtime-benchmarks")]
+pub struct ProvidersBenchmarkHelpers;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_storage_providers::benchmarking::BenchmarkHelpers<Runtime>
+    for ProvidersBenchmarkHelpers
+{
+    type ProviderId = <Runtime as pallet_storage_providers::Config>::ProviderId;
+    fn set_accrued_failed_proofs(provider_id: Self::ProviderId, value: u32) {
+        pallet_proofs_dealer::SlashableProviders::<Runtime>::insert(provider_id, value);
+    }
+
+    fn get_accrued_failed_proofs(provider_id: Self::ProviderId) -> u32 {
+        pallet_proofs_dealer::SlashableProviders::<Runtime>::get(provider_id).unwrap_or(0)
+    }
+}
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_storage_providers::weights::SubstrateWeight<Runtime>;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
     type FileMetadataManager = FileMetadata<
@@ -517,6 +535,8 @@ impl pallet_storage_providers::Config for Runtime {
     type ZeroSizeBucketFixedRate =
         runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
     type TopUpGracePeriod = ConstU32<{ 24 * 60 * 60 / 6 }>; // 1 day with 6 second timeslots.
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ProvidersBenchmarkHelpers;
 }
 
 parameter_types! {

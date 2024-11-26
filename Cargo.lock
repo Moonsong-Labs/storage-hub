@@ -8351,6 +8351,7 @@ dependencies = [
  "pallet-balances 39.0.0",
  "pallet-payment-streams",
  "pallet-proofs-dealer",
+ "pallet-randomness",
  "pallet-storage-providers-runtime-api",
  "parity-scale-codec",
  "polkadot-parachain-primitives 14.0.0",

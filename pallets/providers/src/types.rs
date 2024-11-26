@@ -30,6 +30,28 @@ pub struct ValuePropositionWithId<T: Config> {
     pub value_prop: ValueProposition<T>,
 }
 
+impl<T: Config> ValuePropositionWithId<T> {
+    pub fn new(id: ValuePropIdFor<T>, value_prop: ValueProposition<T>) -> Self {
+        Self { id, value_prop }
+    }
+
+    pub fn build(
+        price_per_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Self {
+        let value_prop = ValueProposition::<T>::new(
+            price_per_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
+        Self {
+            id: value_prop.derive_id(),
+            value_prop,
+        }
+    }
+}
+
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {

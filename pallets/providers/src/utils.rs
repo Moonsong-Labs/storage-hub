@@ -76,8 +76,6 @@ where
     pub fn do_request_msp_sign_up(
         sign_up_request: MainStorageProviderSignUpRequest<T>,
     ) -> DispatchResult {
-        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
-
         let who = sign_up_request.msp_info.owner_account.clone();
 
         // Check that the user does not have a pending sign up request
@@ -147,8 +145,6 @@ where
     /// This function holds the logic that checks if a user can request to sign up as a Backup Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
     pub fn do_request_bsp_sign_up(bsp_info: &BackupStorageProvider<T>) -> DispatchResult {
-        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
-
         let who = &bsp_info.owner_account;
 
         // Check that the user does not have a pending sign up request
