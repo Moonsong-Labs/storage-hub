@@ -215,12 +215,12 @@ where
             max_storage_capacity,
             jump_capacity,
             extrinsic_retry_timeout,
-            msp_charging_freq,
+            msp_charging_period,
             ..
         }) => {
             info!(
-                "Starting as a Storage Provider. Storage path: {:?}, Max storage capacity: {:?}, Jump capacity: {:?}, MSP charging frequency: {:?}",
-                storage_path, max_storage_capacity, jump_capacity, msp_charging_freq,
+                "Starting as a Storage Provider. Storage path: {:?}, Max storage capacity: {:?}, Jump capacity: {:?}, MSP charging period: {:?}",
+                storage_path, max_storage_capacity, jump_capacity, msp_charging_period,
             );
 
             // Start building the StorageHubHandler, if running as a provider.
@@ -240,12 +240,14 @@ where
                 )
                 .await;
 
+            if let Some(notify_period) = msp_charging_period {
+                storage_hub_builder.with_notify_period(*notify_period);
+            }
             storage_hub_builder.setup(
                 storage_path.clone(),
                 *max_storage_capacity,
                 *jump_capacity,
                 *extrinsic_retry_timeout,
-                *msp_charging_freq,
             );
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);

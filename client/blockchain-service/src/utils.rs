@@ -33,11 +33,11 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use crate::{
     events::{
-        ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
-        ProcessSubmitProofRequestData,
+        ForestWriteLockTaskData, MultipleNewChallengeSeeds, NotifyPeriod,
+        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
+        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::{
@@ -880,6 +880,14 @@ impl BlockchainService {
 
         // Check if the current tick is a tick this provider should submit a proof for.
         Ok(next_challenge_tick)
+    }
+
+    pub(crate) fn check_for_notify(&self, block_number: &BlockNumber) {
+        if let Some(np) = self.notify_period {
+            if block_number % np == 0 {
+                self.emit(NotifyPeriod {});
+            }
+        }
     }
 }
 

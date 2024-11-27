@@ -110,11 +110,12 @@ pub struct ProviderConfigurations {
     #[clap(long, default_value = "60")]
     pub extrinsic_retry_timeout: u64,
 
-    /// MSP charging fees frequency.
+    /// MSP charging fees period (in blocks).
+    /// Setting it to 600 with a block every 6 seconds will charge user every hour.
     #[clap(long, required_if_eq_any([
         ("provider_type", "msp"),
     ]))]
-    pub msp_charging_freq: Option<u32>,
+    pub msp_charging_period: Option<u32>,
 }
 
 impl ProviderConfigurations {
@@ -134,7 +135,7 @@ impl ProviderConfigurations {
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
             extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-            msp_charging_freq: self.msp_charging_freq,
+            msp_charging_period: self.msp_charging_period,
         }
     }
 }

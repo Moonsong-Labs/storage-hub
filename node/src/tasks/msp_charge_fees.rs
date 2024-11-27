@@ -1,11 +1,10 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::commands::BlockchainServiceInterface;
-use shc_blockchain_service::events::NotifyPeriod;
-use shc_blockchain_service::types::Tip;
-use shc_common::types::MaxUsersToCharge;
-use shc_common::types::StorageProviderId;
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface, events::NotifyPeriod, types::Tip,
+};
+use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 use storage_hub_runtime::Balance;
 
@@ -116,7 +115,7 @@ where
 
             match charging_result {
                 Ok(submitted_transaction) => {
-                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                    debug!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);

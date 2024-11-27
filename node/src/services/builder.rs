@@ -168,8 +168,7 @@ where
         self
     }
 
-    // TODO: add a function ´with_notify_period´ to be called in the service.
-    // but check that ´blockchain´ is None (so we don't have called with_blockchain before)
+    // Add an alert notification for every X blocks to the blockchain service. Cannot be added if the service has already been spawn.
     pub fn with_notify_period(&mut self, notify_period: u32) -> &mut Self {
         if self.blockchain.is_some() {
             panic!(
@@ -425,7 +424,6 @@ pub trait RequiredStorageProviderSetup {
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
-        msp_charging_freq: Option<u32>,
     );
 }
 
@@ -440,14 +438,10 @@ where
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
-        msp_charging_freq: Option<u32>,
     ) {
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
-        }
-        if let Some(notify_period) = msp_charging_freq {
-            self.with_notify_period(notify_period.clone());
         }
 
         self.with_max_storage_capacity(max_storage_capacity);
@@ -467,7 +461,6 @@ where
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
-        msp_charging_freq: Option<u32>,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -475,9 +468,6 @@ where
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
-        }
-        if let Some(notify_period) = msp_charging_freq {
-            self.with_notify_period(notify_period.clone());
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
@@ -496,14 +486,10 @@ where
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
-        msp_charging_freq: Option<u32>,
     ) {
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
-        }
-        if let Some(notify_period) = msp_charging_freq {
-            self.with_notify_period(notify_period.clone());
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
@@ -522,7 +508,6 @@ where
         max_storage_capacity: Option<StorageDataUnit>,
         jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
-        msp_charging_freq: Option<u32>,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -530,9 +515,6 @@ where
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
-        }
-        if let Some(notify_period) = msp_charging_freq {
-            self.with_notify_period(notify_period.clone());
         }
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
@@ -551,11 +533,7 @@ where
         _max_storage_capacity: Option<StorageDataUnit>,
         _jump_capacity: Option<StorageDataUnit>,
         extrinsic_retry_timeout: u64,
-        msp_charging_freq: Option<u32>,
     ) {
-        if let Some(notify_period) = msp_charging_freq {
-            self.with_notify_period(notify_period.clone());
-        }
         self.setup_storage_layer(None);
         self.with_retry_timeout(extrinsic_retry_timeout);
     }

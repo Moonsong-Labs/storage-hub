@@ -52,7 +52,7 @@ use crate::{
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
-        NotifyPeriod, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -110,7 +110,7 @@ pub struct BlockchainService {
     /// computing the next challenges tick. This case is handled separately.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
     /// Notify period value to know when to trigger the NotifyPeriod event.
-    notify_period: Option<u32>,
+    pub(crate) notify_period: Option<u32>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -1302,14 +1302,6 @@ impl BlockchainService {
                 // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
                 // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
-            }
-        }
-    }
-
-    fn check_for_notify(&self, block_number: &BlockNumber) {
-        if let Some(np) = self.notify_period {
-            if block_number % np == 0 {
-                self.emit(NotifyPeriod {});
             }
         }
     }
