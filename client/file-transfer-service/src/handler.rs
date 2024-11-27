@@ -23,13 +23,12 @@
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
 };
 
 use codec::{Decode, Encode};
-use futures::prelude::*;
-use futures::stream::select;
+use futures::stream::{self, StreamExt};
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
@@ -39,8 +38,9 @@ use sc_network::{
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{DownloadRequestId, FileKey, FileKeyProof};
+use shc_common::types::{BucketId, DownloadRequestId, FileKey, FileKeyProof};
 use shp_file_metadata::ChunkId;
+use tokio::time::{interval, Duration};
 
 use crate::events::RemoteUploadRequest;
 
@@ -51,6 +51,44 @@ use super::{
 };
 
 const LOG_TARGET: &str = "file-transfer-service";
+
+#[derive(Eq)]
+pub struct BucketIdWithExpiration {
+    bucket_id: BucketId,
+    expiration: chrono::DateTime<chrono::Utc>,
+}
+
+impl BucketIdWithExpiration {
+    pub fn new(bucket_id: BucketId, grace_period_seconds: u64) -> Self {
+        let expiration = chrono::Utc::now()
+            + chrono::Duration::seconds(grace_period_seconds.try_into().unwrap_or(0));
+        Self {
+            bucket_id,
+            expiration,
+        }
+    }
+}
+
+impl PartialEq for BucketIdWithExpiration {
+    fn eq(&self, other: &Self) -> bool {
+        self.expiration.eq(&other.expiration) && self.bucket_id.eq(&other.bucket_id)
+    }
+}
+
+impl PartialOrd for BucketIdWithExpiration {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BucketIdWithExpiration {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Order by expiration first, then by bucket_id
+        self.expiration
+            .cmp(&other.expiration)
+            .then(self.bucket_id.cmp(&other.bucket_id))
+    }
+}
 
 pub struct FileTransferService {
     /// Protocol name used by substrate network for the file transfer service.
@@ -63,6 +101,12 @@ pub struct FileTransferService {
     peer_file_allow_list: HashSet<(PeerId, FileKey)>,
     /// Registry of peers by file key, used for cleanup.
     peers_by_file: HashMap<FileKey, Vec<PeerId>>,
+    /// Registry of (peer, bucket id) pairs for which we accept requests.
+    peer_bucket_allow_list: HashSet<(PeerId, BucketId)>,
+    /// Registry of peers by bucket id, used for cleanup.
+    peers_by_bucket: HashMap<BucketId, Vec<PeerId>>,
+    /// Mapping from bucket id to the grace period time.
+    bucket_allow_list_grace_period_time: BTreeSet<BucketIdWithExpiration>,
     /// The event bus provider for the file transfer service.
     /// Part of the actor framework, allows for emitting events.
     event_bus_provider: FileTransferServiceEventBusProvider,
@@ -87,12 +131,14 @@ impl Actor for FileTransferService {
                     peer_id,
                     file_key,
                     file_key_proof,
+                    bucket_id,
                     callback,
                 } => {
                     let request = schema::v1::provider::request::Request::RemoteUploadDataRequest(
                         schema::v1::provider::RemoteUploadDataRequest {
                             file_key: file_key.encode(),
                             file_key_proof: file_key_proof.encode(),
+                            bucket_id: bucket_id.map(|id| id.encode()),
                         },
                     );
 
@@ -122,12 +168,14 @@ impl Actor for FileTransferService {
                     peer_id,
                     file_key,
                     chunk_id,
+                    bucket_id,
                     callback,
                 } => {
                     let request = schema::v1::provider::request::Request::RemoteDownloadDataRequest(
                         schema::v1::provider::RemoteDownloadDataRequest {
                             file_key: file_key.encode(),
                             file_chunk_id: chunk_id.as_u64(),
+                            bucket_id: bucket_id.map(|id| id.encode()),
                         },
                     );
 
@@ -271,6 +319,52 @@ impl Actor for FileTransferService {
                         ),
                     }
                 }
+                FileTransferServiceCommand::RegisterNewBucketPeer {
+                    peer_id,
+                    bucket_id,
+                    callback,
+                } => {
+                    let result = match self.peer_bucket_allow_list.insert((peer_id, bucket_id)) {
+                        true => Ok(()),
+                        false => Err(RequestError::BucketAlreadyRegisteredForPeer),
+                    };
+
+                    self.peers_by_bucket
+                        .entry(bucket_id)
+                        .or_insert_with(Vec::new)
+                        .push(peer_id);
+
+                    match callback.send(result) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
+                FileTransferServiceCommand::UnregisterBucket {
+                    bucket_id,
+                    grace_period_seconds,
+                    callback,
+                } => {
+                    let result = match grace_period_seconds {
+                        Some(grace_period_seconds) => {
+                            self.bucket_allow_list_grace_period_time.insert(
+                                BucketIdWithExpiration::new(bucket_id, grace_period_seconds),
+                            );
+                            Ok(())
+                        }
+                        None => self.unregister_bucket(bucket_id),
+                    };
+
+                    match callback.send(result) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
             };
         }
     }
@@ -289,6 +383,7 @@ pub struct FileTransferServiceEventLoop {
 enum MergedEventLoopMessage {
     Command(FileTransferServiceCommand),
     Request(IncomingRequest),
+    Tick,
 }
 
 /// Since this actor is a network service, it needs to handle both incoming network events and
@@ -304,12 +399,23 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
     async fn run(mut self) {
         info!(target: LOG_TARGET, "FileTransferService starting up!");
 
-        let mut merged_stream = select(
-            self.receiver.map(MergedEventLoopMessage::Command),
-            self.actor
-                .request_receiver
-                .clone()
-                .map(MergedEventLoopMessage::Request),
+        let ticker = interval(Duration::from_secs(1));
+        let ticker_stream = stream::unfold(ticker, |mut interval| {
+            Box::pin(async move {
+                interval.tick().await;
+                Some((MergedEventLoopMessage::Tick, interval))
+            })
+        });
+
+        let mut merged_stream = stream::select(
+            stream::select(
+                self.receiver.map(MergedEventLoopMessage::Command),
+                self.actor
+                    .request_receiver
+                    .clone()
+                    .map(MergedEventLoopMessage::Request),
+            ),
+            ticker_stream,
         );
 
         loop {
@@ -326,6 +432,10 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
 
                     self.actor
                         .handle_request(peer.into(), payload, pending_response);
+                }
+                Some(MergedEventLoopMessage::Tick) => {
+                    // Handle expired buckets
+                    self.actor.handle_expired_buckets();
                 }
                 None => {
                     warn!(target: LOG_TARGET, "FileTransferService event loop terminated.");
@@ -349,6 +459,9 @@ impl FileTransferService {
             network,
             peer_file_allow_list: HashSet::new(),
             peers_by_file: HashMap::new(),
+            peer_bucket_allow_list: HashSet::new(),
+            peers_by_bucket: HashMap::new(),
+            bucket_allow_list_grace_period_time: BTreeSet::new(),
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
             download_pending_responses: HashMap::new(),
             download_pending_response_nonce: DownloadRequestId::new(0),
@@ -500,6 +613,35 @@ impl FileTransferService {
 
         if pending_response.send(response).is_err() {
             debug!(target: LOG_TARGET, "Failed to send request response back");
+        }
+    }
+
+    fn unregister_bucket(&mut self, bucket_id: BucketId) -> Result<(), RequestError> {
+        let result = match self.peers_by_bucket.get(&bucket_id) {
+            Some(peers) => {
+                for peer_id in peers {
+                    self.peer_bucket_allow_list.remove(&(*peer_id, bucket_id));
+                }
+                Ok(())
+            }
+            None => Err(RequestError::BucketNotRegisteredForPeer),
+        };
+
+        result
+    }
+
+    fn handle_expired_buckets(&mut self) {
+        let now = chrono::Utc::now();
+        while let Some(bucket) = self.bucket_allow_list_grace_period_time.pop_first() {
+            if bucket.expiration < now {
+                let _ = self.unregister_bucket(bucket.bucket_id).map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to unregister expired bucket {:?}: {:?}", bucket.bucket_id, e);
+                });
+            } else {
+                // Re-insert the bucket back into the set since it hasn't expired yet.
+                self.bucket_allow_list_grace_period_time.insert(bucket);
+                break;
+            }
         }
     }
 }

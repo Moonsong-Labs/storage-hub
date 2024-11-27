@@ -2,6 +2,7 @@ use async_channel::Receiver;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
+use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
 use storage_hub_runtime::StorageDataUnit;
@@ -107,6 +108,7 @@ where
     max_storage_capacity: Option<StorageDataUnit>,
     jump_capacity: Option<StorageDataUnit>,
     extrinsic_retry_timeout: u64,
+    indexer_db_pool: Option<DbPool>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -125,6 +127,7 @@ where
             max_storage_capacity: None,
             jump_capacity: None,
             extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
+            indexer_db_pool: None,
         }
     }
 
@@ -185,6 +188,11 @@ where
         .await;
 
         self.blockchain = Some(blockchain_service_handle);
+        self
+    }
+
+    pub fn with_indexer_db_pool(&mut self, indexer_db_pool: DbPool) -> &mut Self {
+        self.indexer_db_pool = Some(indexer_db_pool);
         self
     }
 }
@@ -315,6 +323,7 @@ where
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
+            self.indexer_db_pool.clone(),
         )
     }
 }
@@ -358,6 +367,7 @@ where
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
+            self.indexer_db_pool.clone(),
         )
     }
 }
@@ -399,6 +409,7 @@ where
                 jump_capacity: 0,
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
+            self.indexer_db_pool.clone(),
         )
     }
 }

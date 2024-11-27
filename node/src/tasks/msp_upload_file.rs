@@ -119,7 +119,7 @@ where
     }
 }
 
-/// Handles the `RemoteUploadRequest` event.
+/// Handles the [`RemoteUploadRequest`] event.
 ///
 /// This event is triggered by a user sending a chunk of the file to the MSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
@@ -374,7 +374,7 @@ where
     }
 }
 
-/// Handles the `ProcessMspRespondStoringRequest` event.
+/// Handles the [`ProcessMspRespondStoringRequest`] event.
 ///
 /// Triggered when there are new storage request(s) to respond to. Normally, storage requests are
 /// immidiately rejected if the MSP cannot store the file (e.g. not enough capacity). However, this event

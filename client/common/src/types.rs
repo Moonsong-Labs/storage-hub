@@ -62,6 +62,8 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
+pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
+
 /// Type alias for the events vector.
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events
