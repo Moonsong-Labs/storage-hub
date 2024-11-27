@@ -117,8 +117,8 @@ impl BlockchainService {
         let last_best_block = self.best_block.clone();
         let new_block_info: BestBlockInfo = block_import_notification.into();
 
-        // If the new block is not the new best, this is a block from a non-best fork branch.
-        if block_import_notification.is_new_best {
+        // If the new block is NOT the new best, this is a block from a non-best fork branch.
+        if !block_import_notification.is_new_best {
             trace!(target: LOG_TARGET, "New non-best block imported: {:?}", new_block_info);
             return NewBlockNotificationKind::NewNonBestBlock(new_block_info);
         }
