@@ -3,7 +3,7 @@ import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
-  { initialised: true, networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
 
@@ -13,7 +13,7 @@ describeBspNet(
 
     // This is skipped because it currently fails with timeout for ext inclusion
     it("resubmits a dropped proof Ext", { skip: "Not Impl" }, async () => {
-      await userApi.block.seal(); // To make sure we have a finalized head
+      await userApi.block.seal(); // To make sure we have a finalised head
       const nextChallengeTick = await getNextChallengeHeight(userApi);
       await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true });
 
@@ -35,7 +35,7 @@ describeBspNet(
 
     // This is skipped because: 1) the underlying functionality is not yet implemented
     it("proof re-submitted when new fork has longer chain", { skip: "Not Impl" }, async () => {
-      await userApi.block.seal(); // To make sure we have a finalized head
+      await userApi.block.seal(); // To make sure we have a finalised head
       const nextChallengeTick = await getNextChallengeHeight(userApi);
       await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true, finalised: false });
       const { events } = await userApi.block.seal({ finaliseBlock: false });
@@ -90,7 +90,7 @@ describeBspNet(
     //     5: 0x3f0132 - storage_hub_runtime.wasm!frame_executive::Executive<System,Block,Context,UnsignedValidator,AllPalletsWithSystem,COnRuntimeUpgrade>::finalize_block::h29d519d55162f43f
     //     6: 0x30a417 - storage_hub_runtime.wasm!BlockBuilder_finalize_block
     it("proof re-submitted when new fork has longer chain", { skip: "Not Impl" }, async () => {
-      await userApi.block.seal(); // To make sure we have a finalized head
+      await userApi.block.seal(); // To make sure we have a finalised head
       const nextChallengeTick = await getNextChallengeHeight(userApi);
       const finalisedHead = await userApi.rpc.chain.getFinalizedHead();
       await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true, finalised: false });
@@ -150,20 +150,14 @@ describeBspNet(
   }
 );
 
-async function getNextChallengeHeight(api: EnrichedBspApi): Promise<number> {
-  const lastTickResult = await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(
-    api.shConsts.DUMMY_BSP_ID
-  );
-  const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-  console.log(
-    `The last block that has a proof submitted by the BSP is ${lastTickBspSubmittedProof}`
-  );
-  const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(
-    api.shConsts.DUMMY_BSP_ID
-  );
-  const challengePeriod = challengePeriodResult.asOk.toNumber();
-  console.log(`The challenge period is ${challengePeriod}`);
+async function getNextChallengeHeight(api: EnrichedBspApi, bsp_id?: string): Promise<number> {
+  const bsp_id_to_use = bsp_id ?? api.shConsts.DUMMY_BSP_ID;
 
-  console.log(`therefore we skip to block ${lastTickBspSubmittedProof + challengePeriod}`);
+  const lastTickResult =
+    await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bsp_id_to_use);
+  const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+  const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bsp_id_to_use);
+  const challengePeriod = challengePeriodResult.asOk.toNumber();
+
   return lastTickBspSubmittedProof + challengePeriod;
 }
