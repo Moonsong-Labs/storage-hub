@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use codec::Encode;
 use cumulus_primitives_core::BlockT;
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
@@ -11,7 +11,7 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers::types::StorageProviderId;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{BlockBackend, HeaderBackend};
+use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
@@ -45,7 +45,7 @@ use crate::{
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{Extrinsic, Tip},
+    types::{BestBlockInfo, Extrinsic, NewBlockNotificationKind, Tip},
     BlockchainService,
 };
 
@@ -104,6 +104,45 @@ impl BlockchainService {
 
         for key in keys_to_remove {
             self.wait_for_tick_request_by_number.remove(&key);
+        }
+    }
+
+    pub(crate) fn register_best_block_and_check_reorg<Block>(
+        &mut self,
+        block_import_notification: &BlockImportNotification<Block>,
+    ) -> NewBlockNotificationKind
+    where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        let last_best_block = self.best_block.clone();
+        let new_block_info: BestBlockInfo = block_import_notification.into();
+
+        // If the new block is not the new best, this is a block from a non-best fork branch.
+        if block_import_notification.is_new_best {
+            trace!(target: LOG_TARGET, "New non-best block imported: {:?}", new_block_info);
+            return NewBlockNotificationKind::NewNonBestBlock(new_block_info);
+        }
+
+        // At this point we know that the new block is a new best block.
+        trace!(target: LOG_TARGET, "New best block imported: {:?}", new_block_info);
+        self.best_block = new_block_info;
+
+        // If `tree_route` is `None`, this means that there was NO reorg while importing the block.
+        if block_import_notification.tree_route.is_none() {
+            return NewBlockNotificationKind::NewBestBlock(new_block_info);
+        }
+
+        // At this point we know that the new block is the new best block, and that it also caused a reorg.
+        let tree_route = block_import_notification
+            .tree_route
+            .as_ref()
+            .expect("Tree route should exist, it was just checked to be `Some`; qed")
+            .clone();
+        info!(target: LOG_TARGET, "New best block caused a reorg: {:?}", new_block_info);
+        info!(target: LOG_TARGET, "Tree route: {:?}", tree_route);
+        NewBlockNotificationKind::Reorg {
+            old_best_block: last_best_block,
+            new_best_block: new_block_info,
         }
     }
 
