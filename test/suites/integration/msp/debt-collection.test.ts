@@ -3,7 +3,6 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 
 describeMspNet(
   "Single MSP collecting debt",
-  { only: true },
   ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
