@@ -536,9 +536,10 @@ impl IndexerService {
                 Bucket::update_merkle_root(conn, bucket_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
             }
-            pallet_storage_providers::Event::Slashed {
+            pallet_storage_providers::Event::Slashed { .. } => {}
+            pallet_storage_providers::Event::AwaitingTopUp {
                 provider_id,
-                amount_slashed: _amount_slashed,
+                top_up_metadata: _top_up_metadata,
             } => {
                 let stake = self
                     .client
@@ -550,6 +551,7 @@ impl IndexerService {
 
                 Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
             }
+            pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}

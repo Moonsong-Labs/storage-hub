@@ -20,10 +20,13 @@
 use frame_support::pallet;
 pub use pallet::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 #[cfg(test)]
 mod mock;
 #[cfg(test)]
 mod tests;
+pub mod weights;
 
 /// Read babe randomness info from the relay chain state proof
 pub trait GetBabeData<EpochIndex, Randomness> {
@@ -34,10 +37,9 @@ pub trait GetBabeData<EpochIndex, Randomness> {
 
 #[pallet]
 pub mod pallet {
-    use super::*;
+    use super::{weights::WeightInfo, *};
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use frame_system::WeightInfo;
     use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use shp_session_keys::{InherentError, INHERENT_IDENTIFIER};
     use sp_runtime::traits::{BlockNumberProvider, Saturating};
@@ -58,7 +60,7 @@ pub mod pallet {
         type RelayBlockGetter: BlockNumberProvider<BlockNumber = RelayChainBlockNumber>;
 
         /// Weight info
-        type WeightInfo: WeightInfo;
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::event]
@@ -91,7 +93,7 @@ pub mod pallet {
 
     /// Ensures the mandatory inherent was included in the block
     #[pallet::storage]
-    pub(crate) type InherentIncluded<T: Config> = StorageValue<_, ()>;
+    pub type InherentIncluded<T: Config> = StorageValue<_, ()>;
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -100,7 +102,7 @@ pub mod pallet {
         /// the previous relay chain epoch
         #[pallet::call_index(0)]
         #[pallet::weight((
-			Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1),
+			T::WeightInfo::set_babe_randomness(),
 			DispatchClass::Mandatory
 		))]
         pub fn set_babe_randomness(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -146,7 +148,7 @@ pub mod pallet {
                 Self::deposit_event(Event::NewOneEpochAgoRandomnessAvailable {
                     randomness_seed: epoch_randomness,
                     from_epoch: relay_epoch_index,
-                    valid_until_block: latest_valid_block,
+                    valid_until_block: latest_valid_block_for_randomness,
                 });
             }
 
@@ -197,9 +199,8 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
         /// let block builders know how much weight to reserve for it
-        /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
         fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
-            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1)
+            T::WeightInfo::on_finalize_hook()
         }
         /// This hook checks, on block finalization, that the required inherent was included and clears
         /// storage to make it necessary to include it in future blocks as well

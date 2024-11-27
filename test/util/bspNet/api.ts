@@ -45,7 +45,10 @@ export const createApiObject = async (
         waitForBspProofs?: string[];
       }
     ) =>
-      advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
+      advanceToBlock(baseApi, {
+        ...options,
+        blockNumber
+      }),
 
     sendNewStorageRequest: async (
       source: string,

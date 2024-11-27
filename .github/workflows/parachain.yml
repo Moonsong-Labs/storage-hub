@@ -251,7 +251,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                shard: [1, 2, 3, 4]
+                shard: [1, 2]
         steps:
             - uses: actions/checkout@v4
             - uses: ./.github/workflow-templates/setup-pnpm
@@ -290,7 +290,7 @@ jobs:
                        --test-reporter=spec                 \
                        --test-reporter-destination=stdout   \
                        --test-concurrency=1                 \
-                       --test-shard=${{ matrix.shard }}/4   \
+                       --test-shard=${{ matrix.shard }}/2   \
                        ./suites/solo-node/**/**.test.ts
 
     full_net:
@@ -302,7 +302,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                shard: [1, 2]
+                shard: [1,2,3,4]
         steps:
             - uses: actions/checkout@v4
             - uses: ./.github/workflow-templates/setup-pnpm
@@ -348,7 +348,7 @@ jobs:
                       --test-reporter=spec                 \
                       --test-reporter-destination=stdout   \
                       --test-concurrency=1                 \
-                      --test-shard=${{ matrix.shard }}/2   \
+                      --test-shard=${{ matrix.shard }}/4   \
                       ./suites/integration/msp/**.test.ts
 
             - name: Collect Docker Logs on Failure

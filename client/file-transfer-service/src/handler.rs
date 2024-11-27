@@ -603,6 +603,7 @@ impl FileTransferService {
         &self,
         pending_response: futures::channel::oneshot::Sender<OutgoingResponse>,
     ) {
+        debug!(target: LOG_TARGET, "Bad request received. Lowering reputation.");
         let reputation_changes = vec![ReputationChange::new(-(1 << 12), "bad request")];
 
         let response = OutgoingResponse {

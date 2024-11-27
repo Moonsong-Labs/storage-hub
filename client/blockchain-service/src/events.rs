@@ -3,7 +3,7 @@ use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
     Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
-    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieRemoveMutation,
+    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieMutation, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -200,7 +200,7 @@ impl EventBusMessage for SlashableProvider {}
 #[derive(Debug, Clone)]
 pub struct FinalisedTrieRemoveMutationsApplied {
     pub provider_id: ProviderId,
-    pub mutations: Vec<(ForestRoot, TrieRemoveMutation)>,
+    pub mutations: Vec<(ForestRoot, TrieMutation)>,
     pub new_root: H256,
 }
 

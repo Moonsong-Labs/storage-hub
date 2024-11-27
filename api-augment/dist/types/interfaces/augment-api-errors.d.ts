@@ -939,6 +939,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ForestProofVerificationFailed: AugmentedError<ApiType>;
       /**
+       * The number of key proofs submitted does not match the number of keys proven in the forest proof.
+       **/
+      IncorrectNumberOfKeyProofs: AugmentedError<ApiType>;
+      /**
        * There is at least one key proven in the forest proof, that does not have a corresponding
        * key proof.
        **/
@@ -991,6 +995,11 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       TooManyValidProofSubmitters: AugmentedError<ApiType>;
       /**
+       * After successfully applying delta for a set of mutations, the number of mutated keys is
+       * not the same as the number of mutations expected to have been applied.
+       **/
+      UnexpectedNumberOfRemoveMutations: AugmentedError<ApiType>;
+      /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be
        * submitting proofs.
@@ -1042,6 +1051,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Deposit too low to determine capacity.
+       **/
+      DepositTooLow: AugmentedError<ApiType>;
       /**
        * Error thrown when a fixed payment stream is not found.
        **/
@@ -1158,6 +1171,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
        **/
       StorageTooLow: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a provider attempts to top up their deposit when not required.
+       **/
+      TopUpNotRequired: AugmentedError<ApiType>;
       /**
        * Error thrown when value proposition under a given id already exists.
        **/

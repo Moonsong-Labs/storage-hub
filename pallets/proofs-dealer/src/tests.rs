@@ -1395,7 +1395,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 user_deposit: 10
                     * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get(
                     ) as u128
-                    * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+                    * pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<Test>::get(),
                 out_of_funds_tick: None,
             },
         );
@@ -1453,10 +1453,10 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             custom_challenges.clone(),
         );
 
-        // Add custom challenges to the challenges vector.
-        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
-
         // Creating a vec of proofs with some content to pass verification.
+        // We build the proof before adding the custom challenges to the challenges vector
+        // because the custom challenges have a `TrieRemoveMutation`, therefore key proofs
+        // are not required for them.
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
@@ -1469,6 +1469,9 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 },
             );
         }
+
+        // Add custom challenges to the challenges vector.
+        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
 
         // Mock a proof.
         let proof = Proof::<Test> {
@@ -1487,7 +1490,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 provider: provider_id,
                 mutations: custom_challenges
                     .iter()
-                    .map(|(key, mutation)| (*key, mutation.clone().unwrap()))
+                    .map(|(key, mutation)| (*key, mutation.clone().unwrap().into()))
                     .collect(),
                 new_root: challenges.last().unwrap().clone(),
             }
@@ -1569,7 +1572,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
                 user_deposit: 10
                     * <<Test as pallet_payment_streams::Config>::NewStreamDeposit as Get<u64>>::get(
                     ) as u128
-                    * pallet_payment_streams::CurrentPricePerUnitPerTick::<Test>::get(),
+                    * pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<Test>::get(),
                 out_of_funds_tick: None,
             },
         );
@@ -2338,6 +2341,109 @@ fn submit_proof_forest_proof_verification_fail() {
 }
 
 #[test]
+fn submit_proof_number_of_key_proofs_lower_than_keys_verified_in_forest_fail() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Create user and add funds to the account.
+        let user = RuntimeOrigin::signed(1);
+        let user_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            user_balance
+        ));
+
+        // Creating key proof with incorrect number of keys verified (just one instead
+        // of the number of challenges).
+        let mut key_proofs = BTreeMap::new();
+        key_proofs.insert(
+            BlakeTwo256::hash(b"key"),
+            KeyProof::<Test> {
+                proof: CompactProof {
+                    encoded_nodes: vec![],
+                },
+                challenge_count: Default::default(),
+            },
+        );
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
+            },
+        );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Dispatch challenge extrinsic.
+        // The forest proof will pass because it's not empty, so the MockVerifier will accept it,
+        // and it will return the generated challenges as keys proven. The key proofs are an empty
+        // vector, so it will fail saying that there are no key proofs for the keys proven.
+        assert_noop!(
+            ProofsDealer::submit_proof(user, proof, None),
+            crate::Error::<Test>::IncorrectNumberOfKeyProofs
+        );
+    });
+}
+
+#[test]
 fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
@@ -2351,17 +2457,22 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
             user_balance
         ));
 
-        // Creating empty key proof to fail verification.
+        // Creating the correct number of key proofs, but not for the challenged keys,
+        // therefore not for the forest keys that will be verified.
+        let challenges_count = RandomChallengesPerBlockFor::<Test>::get();
         let mut key_proofs = BTreeMap::new();
-        key_proofs.insert(
-            BlakeTwo256::hash(b"key"),
-            KeyProof::<Test> {
-                proof: CompactProof {
-                    encoded_nodes: vec![],
+        for i in 0..challenges_count {
+            let key = format!("key_{}", i);
+            key_proofs.insert(
+                BlakeTwo256::hash(key.as_bytes()),
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![],
+                    },
+                    challenge_count: Default::default(),
                 },
-                challenge_count: Default::default(),
-            },
-        );
+            );
+        }
 
         // Mock a proof.
         let proof = Proof::<Test> {
@@ -2523,11 +2634,24 @@ fn submit_proof_out_checkpoint_challenges_fail() {
             custom_challenges.clone(),
         );
 
-        // Creating a vec of empty key proofs for each challenge, to fail verification.
+        // Creating a vec of empty key proofs for each challenge.
         let mut key_proofs = BTreeMap::new();
         for challenge in challenges {
             key_proofs.insert(
                 challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+        // Adding a key proof for each custom challenge but not for the challenged keys.
+        for i in 0..custom_challenges.len() {
+            let key = format!("key_{}", i);
+            key_proofs.insert(
+                BlakeTwo256::hash(key.as_bytes()),
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],

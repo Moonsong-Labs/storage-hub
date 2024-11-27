@@ -37,6 +37,7 @@ use crate::{
         RandomnessProviderFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
         TreasuryAccountFor,
     },
+    weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
     LastDeletedTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
     PastBlocksWeight, PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed,
@@ -182,8 +183,9 @@ where
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Check that the challenges tick is lower than the current tick.
+        let current_tick = ChallengesTicker::<T>::get();
         ensure!(
-            challenges_tick < ChallengesTicker::<T>::get(),
+            challenges_tick < current_tick,
             Error::<T>::ChallengesTickNotReached
         );
 
@@ -191,14 +193,14 @@ where
         // i.e. that the challenges tick is within the ticks this pallet keeps track of.
         expect_or_err!(
             challenges_tick
-                > ChallengesTicker::<T>::get()
+                > current_tick
                     .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
             "Challenges tick is too old, beyond the history this pallet keeps track of. This should not be possible.",
             Error::<T>::ChallengesTickTooOld,
             bool
         );
 
-        // Check that the submitter is not submitting the proof to late, i.e. that the challenges tick
+        // Check that the submitter is not submitting the proof too late, i.e. that the challenges tick
         // is not greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
         // This should never happen, as the `TickToProvidersDeadlines` StorageMap is
         // cleaned up every block. Therefore, if a Provider reached this deadline, it should have been
@@ -207,7 +209,7 @@ where
             .checked_add(&T::ChallengeTicksTolerance::get())
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         expect_or_err!(
-            challenges_tick_deadline > frame_system::Pallet::<T>::block_number(),
+            challenges_tick_deadline > current_tick,
             "Challenges tick is too late, the proof should be submitted at most `T::ChallengeTicksTolerance::get()` ticks after the challenges tick.",
             Error::<T>::ChallengesTickTooLate,
             bool
@@ -254,66 +256,49 @@ where
         // Apply the delta to the Forest root for all mutations that are in checkpoint challenges.
         if let Some(challenges) = checkpoint_challenges {
             // Aggregate all mutations to apply to the Forest root.
-            let mutations: Vec<_> = challenges
+            let mutations = challenges
                 .iter()
                 .filter_map(|(key, mutation)| match mutation {
-                    Some(mutation) if forest_keys_proven.contains(key) => Some((*key, mutation)),
+                    Some(mutation) if forest_keys_proven.contains(key) => {
+                        Some((*key, Into::<TrieMutation>::into(mutation.clone())))
+                    }
                     Some(_) | None => None,
                 })
-                .collect();
+                .collect::<Vec<_>>();
 
             if !mutations.is_empty() {
-                let mut mutations_applied = Vec::new();
-                let new_root = mutations.iter().try_fold(root, |acc_root, mutation| {
-                    // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
-                    forest_keys_proven.remove(&mutation.0);
+                // Apply the mutations to the Forest.
+                let (_, new_root, mutated_keys_and_values) = <T::ForestVerifier as TrieProofDeltaApplier<
+                    T::MerkleTrieHashing,
+                >>::apply_delta(
+                    &root, mutations.as_slice(), forest_proof
+                )
+                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 
-                    // Add mutation to list of mutations applied.
-                    mutations_applied.push((mutation.0, mutation.1.clone()));
+                // Check that the number of mutated keys is the same as the mutations expected.
+                ensure!(
+                    mutated_keys_and_values.len() == mutations.len(),
+                    Error::<T>::UnexpectedNumberOfRemoveMutations
+                );
 
-                    // Apply the mutation to the Forest.
-                    let apply_delta_result = <T::ForestVerifier as TrieProofDeltaApplier<
-                        T::MerkleTrieHashing,
-                    >>::apply_delta(
-                        &acc_root,
-                        &[(mutation.0, mutation.1.clone().into())],
-                        forest_proof,
-                    )
-                    .map_err(|_| Error::<T>::FailedToApplyDelta);
+                for (key, maybe_value) in mutated_keys_and_values.iter() {
+                    // Remove the mutated key from the list of `forest_keys_proven` to avoid having to verify the key proof.
+                    forest_keys_proven.remove(key);
 
-                    // If the mutation was correctly applied, update the Provider's info and return the new root.
-                    match apply_delta_result {
-                        Ok((_, new_root, mutated_keys_and_values)) => {
-                            // Check that the mutated key is the same as the mutation (and is the only one).
-                            ensure!(
-                                mutated_keys_and_values.len() == 1,
-                                Error::<T>::FailedToApplyDelta
-                            );
-                            ensure!(
-                                mutated_keys_and_values[0].0 == mutation.0,
-                                Error::<T>::FailedToApplyDelta
-                            );
-
-                            // Use the interface exposed by the Providers pallet to update the submitting Provider
-                            // after the key removal if the key had a value.
-                            let removed_trie_value = &mutated_keys_and_values[0].1;
-                            if let Some(trie_value) = removed_trie_value {
-                                ProvidersPalletFor::<T>::update_provider_after_key_removal(
-                                    submitter, trie_value,
-                                )
-                                .map_err(|_| Error::<T>::FailedToApplyDelta)?;
-                            }
-
-                            Ok(new_root)
-                        }
-                        Err(err) => Err(err),
+                    // Use the interface exposed by the Providers pallet to update the submitting Provider
+                    // after the key removal if the key had a value.
+                    if let Some(trie_value) = maybe_value {
+                        ProvidersPalletFor::<T>::update_provider_after_key_removal(
+                            submitter, trie_value,
+                        )
+                        .map_err(|_| Error::<T>::FailedToApplyDelta)?;
                     }
-                })?;
+                }
 
                 // Emit event of mutation applied.
                 Self::deposit_event(Event::<T>::MutationsApplied {
                     provider: *submitter,
-                    mutations: mutations_applied,
+                    mutations,
                     new_root,
                 });
 
@@ -323,6 +308,12 @@ where
                 )?;
             }
         };
+
+        // Check that the correct number of key proofs were submitted.
+        ensure!(
+            key_proofs.len() == forest_keys_proven.len(),
+            Error::<T>::IncorrectNumberOfKeyProofs
+        );
 
         // Verify each key proof.
         for key_proven in forest_keys_proven {
@@ -362,18 +353,14 @@ where
         TickToProvidersDeadlines::<T>::set(next_challenges_tick_deadline, submitter, Some(()));
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
-        let current_tick_valid_submitters =
-            ValidProofSubmittersLastTicks::<T>::get(ChallengesTicker::<T>::get());
+        let current_tick_valid_submitters = ValidProofSubmittersLastTicks::<T>::get(current_tick);
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
                 let did_not_already_exist = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
                 // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
                 if did_not_already_exist {
-                    ValidProofSubmittersLastTicks::<T>::insert(
-                        ChallengesTicker::<T>::get(),
-                        valid_submitters,
-                    );
+                    ValidProofSubmittersLastTicks::<T>::insert(current_tick, valid_submitters);
                 }
             }
             // If the set doesn't exist, we create it and insert the submitter.
@@ -386,24 +373,22 @@ where
                     Error::<T>::TooManyValidProofSubmitters,
                     result
                 );
-                ValidProofSubmittersLastTicks::<T>::insert(
-                    ChallengesTicker::<T>::get(),
-                    new_valid_submitters,
-                );
+                ValidProofSubmittersLastTicks::<T>::insert(current_tick, new_valid_submitters);
             }
         }
 
         Ok(challenges_tick)
     }
 
-    /// Generate a new round of challenges, be it random or checkpoint.
+    /// Generate a new round of challenges, both random and checkpoint if corresponding.
     ///
     /// Random challenges are automatically generated based on some external source of
-    /// randomness, and are added to [`TickToChallengesSeed`], for this tick's number.
+    /// randomness. To be more precise, a random seed is generated and added to
+    /// [`TickToChallengesSeed`], for this tick's number.
     ///
     /// It also takes care of including the challenges from the `ChallengesQueue` and
     /// `PriorityChallengesQueue`. These custom challenges are only included in "checkpoint"
-    /// ticks
+    /// ticks.
     ///
     /// Additionally, it takes care of checking if there are Providers that have
     /// failed to submit a proof, and should have submitted one by this tick. It does so
@@ -574,6 +559,11 @@ where
 
         // Update `TickToCheckedForSlashableProviders` to the value resulting from the last iteration of the loop.
         TickToCheckForSlashableProviders::<T>::set(tick_to_check_for_slashable_providers);
+
+        // Consume weight.
+        weight.consume(T::WeightInfo::new_challenges_round(
+            slashable_providers_count,
+        ));
     }
 
     /// Check if the network is presumably under a spam attack.
@@ -583,7 +573,7 @@ where
     /// The idea is to track blocks that have not been filled to capacity within a
     /// specific period (`BlockFullnessPeriod`) and determine if there is enough "headroom"
     /// (unused block capacity) to consider the network not under spam.
-    pub fn do_check_spamming_condition(_weight: &mut WeightMeter) {
+    pub fn do_check_spamming_condition(weight: &mut WeightMeter) {
         // Get the maximum weight for the dispatch class of `submit_proof` extrinsics.
         let weights = T::BlockWeights::get();
         let max_weight_for_class = weights
@@ -657,9 +647,7 @@ where
         if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get() {
             // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
             // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
-            let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
-            let min_non_full_blocks =
-                min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get());
+            let min_non_full_blocks = Self::calculate_min_non_full_blocks_to_spam();
 
             // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
             if new_not_full_blocks_count > min_non_full_blocks {
@@ -670,6 +658,9 @@ where
                 ChallengesTickerPaused::<T>::set(Some(()));
             }
         }
+
+        // Consume weight.
+        weight.consume(T::WeightInfo::check_spamming_condition());
     }
 
     /// Generate new checkpoint challenges for a given block.
@@ -678,9 +669,9 @@ where
     /// and the `ChallengesQueue` if there is space left.
     ///
     /// Cleans up the `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
-    fn do_new_checkpoint_challenge_round(
+    pub(crate) fn do_new_checkpoint_challenge_round(
         current_tick: BlockNumberFor<T>,
-        _weight: &mut WeightMeter,
+        weight: &mut WeightMeter,
     ) {
         let mut new_checkpoint_challenges: BoundedVec<
             (KeyFor<T>, Option<TrieRemoveMutation>),
@@ -710,6 +701,8 @@ where
         }
 
         // Convert priority_challenges_queue back to a bounded vector.
+        // The conversion shouldn't fail because we now have a vector that has even less elements than the original.
+        // Anyway, in case it fails, we just use the original priority challenges queue.
         let new_priority_challenges_queue: BoundedVec<
             (KeyFor<T>, Option<TrieRemoveMutation>),
             ChallengesQueueLengthFor<T>,
@@ -765,8 +758,64 @@ where
         // Emit new checkpoint challenge event.
         Self::deposit_event(Event::NewCheckpointChallenge {
             challenges_ticker: current_tick,
-            challenges: new_checkpoint_challenges,
+            challenges: new_checkpoint_challenges.clone(),
         });
+
+        // Consume weight.
+        weight.consume(T::WeightInfo::new_checkpoint_challenge_round(
+            new_checkpoint_challenges.len() as u32,
+        ));
+    }
+
+    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
+    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
+    ///
+    /// This function is called in the `on_idle` hook, which means it's only called when the block has
+    /// unused weight.
+    ///
+    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
+    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
+    /// has `TargetTicksOfProofsStorage` ticks left.
+    pub fn do_trim_valid_proof_submitters_last_ticks(
+        _n: BlockNumberFor<T>,
+        usable_weight: Weight,
+    ) -> Weight {
+        // Check how many ticks should be removed to keep the storage at the target amount.
+        let last_deleted_tick = LastDeletedTick::<T>::get();
+        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
+        let current_tick = ChallengesTicker::<T>::get();
+        let ticks_to_remove: BlockNumberFor<T> = current_tick
+            .saturating_sub(last_deleted_tick)
+            .saturating_sub(target_ticks_to_keep.into());
+
+        // Check how much ticks can be removed considering weight limitations
+        let weight_for_one_iteration = T::WeightInfo::trim_valid_proof_submitters_last_ticks_loop();
+        let removable_ticks = usable_weight.checked_div_per_component(&weight_for_one_iteration);
+
+        // If there is enough weight to remove ticks, try to remove as many ticks as possible until the target is reached.
+        let ticks_removed: u64 = if let Some(removable_ticks) = removable_ticks {
+            // Take the minimum between all the ticks that we want to remove, and the ones we can.
+            let removable_ticks: BlockNumberFor<T> = removable_ticks.saturated_into();
+            let removable_ticks = removable_ticks.min(ticks_to_remove);
+
+            // Remove all the ticks that we can, until we reach the target amount.
+            let start_tick = last_deleted_tick.saturating_add(One::one());
+            let end_tick = last_deleted_tick.saturating_add(removable_ticks);
+            let mut tick_to_remove = start_tick;
+            while tick_to_remove <= end_tick {
+                tick_to_remove = Self::remove_proof_submitters_for_tick(tick_to_remove);
+            }
+
+            // Return the number of ticks removed.
+            removable_ticks.saturated_into()
+        } else {
+            // No ticks can be removed.
+            Zero::zero()
+        };
+
+        // Return the weight used by this function.
+        T::WeightInfo::trim_valid_proof_submitters_last_ticks_constant_execution()
+            .saturating_add(weight_for_one_iteration.saturating_mul(ticks_removed))
     }
 
     /// Convert stake to challenge period.
@@ -863,62 +912,29 @@ where
         challenges
     }
 
-    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
-    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
+    /// Calculate the minimum number of blocks that should be not full to consider the network
+    /// to be presumably under spam attack.
     ///
-    /// This function is called in the `on_idle` hook, which means it's only called when the block has
-    /// unused weight.
+    /// To be precise, the number of non full blocks should be greater than what this function
+    /// returns.
+    pub(crate) fn calculate_min_non_full_blocks_to_spam() -> BlockNumberFor<T> {
+        let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
+        min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get())
+    }
+
+    /// Remove all the proof submitters for a given tick and update the `LastDeletedTick` storage element
+    /// to the given tick.
     ///
-    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
-    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
-    /// has `TargetTicksOfProofsStorage` ticks left.
-    pub fn do_trim_valid_proof_submitters_last_ticks(
-        _n: BlockNumberFor<T>,
-        usable_weight: Weight,
-    ) -> Weight {
-        // Initialize the weight used by this function.
-        let mut used_weight = Weight::zero();
+    /// Returns the next tick to delete.
+    pub(crate) fn remove_proof_submitters_for_tick(tick: BlockNumberFor<T>) -> BlockNumberFor<T> {
+        // Remove it from storage
+        ValidProofSubmittersLastTicks::<T>::remove(tick);
 
-        // Check how many ticks should be removed to keep the storage at the target amount.
-        let mut last_deleted_tick = LastDeletedTick::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let current_tick = ChallengesTicker::<T>::get();
-        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
-        let ticks_to_remove = current_tick
-            .saturating_sub(last_deleted_tick)
-            .saturating_sub(target_ticks_to_keep.into());
+        // Update the last removed tick
+        LastDeletedTick::<T>::set(tick);
 
-        // Check how much ticks can be removed considering weight limitations
-        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
-        let removable_ticks = usable_weight
-            .saturating_sub(used_weight)
-            .checked_div_per_component(&weight_to_remove_tick);
-
-        // If there is enough weight to remove ticks, try to remove as many ticks as possible until the target is reached.
-        if let Some(removable_ticks) = removable_ticks {
-            let removable_ticks =
-                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
-            // Remove all the ticks that we can, until we reach the target amount.
-            for _ in 0..removable_ticks {
-                // Get the next tick to delete.
-                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
-
-                // Remove it from storage
-                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
-
-                // Update the last removed tick
-                LastDeletedTick::<T>::set(next_tick_to_delete);
-                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
-
-                // Increment the used weight.
-                used_weight = used_weight.saturating_add(weight_to_remove_tick);
-            }
-        }
-
-        // Return the weight used by this function.
-        used_weight
+        // Return the next tick to delete
+        tick.saturating_add(One::one())
     }
 }
 

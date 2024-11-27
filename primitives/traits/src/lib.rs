@@ -9,6 +9,7 @@ use frame_support::{
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
+use serde::{Deserialize, Serialize};
 use sp_core::Get;
 use sp_runtime::{
     traits::{
@@ -837,7 +838,18 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    PartialEq,
+    Debug,
+    Default,
+    Serialize,
+    Deserialize,
+)]
 pub struct TrieRemoveMutation;
 
 impl Into<TrieMutation> for TrieRemoveMutation {
@@ -1014,19 +1026,22 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
-/// A trait to mutate the price per unit per tick.
+/// A trait to mutate the price per giga-unit per tick.
 ///
-/// This is used by the Payment Streams pallet to expose the function to update the price per unit per tick,
+/// This is used by the Payment Streams pallet to expose the function to update the price per giga-unit per tick,
 /// which governs the amount to charge for dynamic-rate payment streams.
-pub trait MutatePricePerUnitPerTickInterface {
+///
+/// The use of giga-units instead of units is to avoid issues with decimal places, since the Balance type
+/// might not granular enough to represent the price per unit.
+pub trait MutatePricePerGigaUnitPerTickInterface {
     /// The type which represents a price per unit per tick.
-    type PricePerUnitPerTick: NumericalParam;
+    type PricePerGigaUnitPerTick: NumericalParam;
 
     /// Get the price per unit per tick.
-    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick;
+    fn get_price_per_giga_unit_per_tick() -> Self::PricePerGigaUnitPerTick;
 
     /// Update the price per unit per tick..
-    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick);
+    fn set_price_per_giga_unit_per_tick(price_index: Self::PricePerGigaUnitPerTick);
 }
 
 /// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof

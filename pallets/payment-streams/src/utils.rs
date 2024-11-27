@@ -11,13 +11,14 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
-    MutatePricePerUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    MutatePricePerGigaUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
     TreasuryCutCalculator,
 };
 use sp_runtime::{
-    traits::{Convert, One},
+    traits::{CheckedDiv, Convert, One},
     Saturating,
 };
 
@@ -93,6 +94,8 @@ where
         );
         let deposit = rate
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
@@ -107,7 +110,6 @@ where
         );
 
         // Check if adding one to the user's payment streams count would overflow
-        // NOTE: We check this BEFORE holding the deposit, as for some weird reason the `hold` function does NOT revert when the extrinsic fails !?!?
         ensure!(
             RegisteredUsers::<T>::get(user_account)
                 .checked_add(1)
@@ -203,6 +205,8 @@ where
         // Update the user's deposit based on the new rate
         let new_deposit = new_rate
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
@@ -315,20 +319,27 @@ where
         );
 
         // Check that the user has enough balance to pay the deposit
-        // Deposit is: `amount_provided * current_price * NewStreamDeposit` where:
+        // Deposit is: `(amount_provided * current_price_per_giga_unit_per_tick * NewStreamDeposit) / giga_units ` where:
         // - `amount_provided` is the amount of units of something (for example, storage) that are provided by the Provider to the User
-        // - `current_price` is the current price of the units of something (per unit per tick)
+        // - `current_price_per_giga_unit_per_tick` is the current price of a giga-unit of something (per tick)
         // - `NewStreamDeposit` is a runtime constant that represents the number of ticks that the deposit should cover
+        // - `GIGAUNIT` is the number of units in a giga-unit (1024 * 1024 * 1024 = 1_073_741_824)
+        // As an example, if the `current_price_per_giga_unit_per_tick` is 10000 and the `NewStreamDeposit` is 100 ticks,
+        // the minimum amount provided would be 1074 units and the deposit would increase by 1 every 1074 units.
         let user_balance = T::NativeBalance::reducible_balance(
             &user_account,
             Preservation::Preserve,
             Fortitude::Polite,
         );
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
-        let deposit = current_price
+        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
+        let deposit = current_price_per_giga_unit_per_tick
             .checked_mul(&amount_provided.into())
             .ok_or(ArithmeticError::Overflow)?
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_div(&GIGAUNIT.into())
+            .unwrap_or_default()
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
@@ -441,12 +452,16 @@ where
         }
 
         // Update the user's deposit based on the new amount provided
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
+        let current_price_per_giga_unit_per_tick = CurrentPricePerGigaUnitPerTick::<T>::get();
         let new_deposit = new_amount_provided
             .into()
-            .checked_mul(&current_price)
+            .checked_mul(&current_price_per_giga_unit_per_tick)
             .ok_or(ArithmeticError::Overflow)?
             .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_div(&GIGAUNIT.into())
+            .unwrap_or_default()
+            .checked_add(&T::BaseDeposit::get())
             .ok_or(ArithmeticError::Overflow)?;
         Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
@@ -748,7 +763,9 @@ where
                         // Calculate the amount to charge
                         let amount_to_charge = price_index_difference
                             .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                            .ok_or(Error::<T>::ChargeOverflow)?;
+                            .ok_or(Error::<T>::ChargeOverflow)?
+                            .checked_div(&GIGAUNIT.into())
+                            .ok_or(ArithmeticError::Underflow)?;
 
                         // Check the free balance of the user
                         let user_balance = T::NativeBalance::reducible_balance(
@@ -914,14 +931,14 @@ where
 
     /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider
     /// the amount owed, deleting the corresponding payment stream and decreasing the user's payment streams count until all outstanding debt is paid
-    /// or the amount of streams to pay has been reached. It returns true if the user has paid all the outstanding debt, false otherwise.
+    /// or all the Providers in the provided list have been paid. It returns true if the user has paid all the outstanding debt, false otherwise.
     ///
     /// Note: This could be achieved by calling `manage_user_without_funds` for each payment stream, but this function is more efficient as it
     /// avoids repeating the same checks and operations for each payment stream, such as releasing all the deposit of the user at once instead
     /// of doing it for each payment stream.
     pub fn do_pay_outstanding_debt(
         user_account: &T::AccountId,
-        amount_of_streams_to_pay: u32,
+        providers: Vec<ProviderIdFor<T>>,
     ) -> Result<bool, DispatchError> {
         // Check that the user is flagged as without funds
         ensure!(
@@ -942,158 +959,147 @@ where
         let used_provided_amount =
             <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
 
-        // Get all payment streams of the user
-        let fixed_rate_payment_streams = Self::get_fixed_rate_payment_streams_of_user(user_account);
-        let dynamic_rate_payment_streams =
-            Self::get_dynamic_rate_payment_streams_of_user(user_account);
-
-        // Get the amount of streams that the user has still to pay (which should fit in a u32)
-        let total_streams_to_pay: u32 = (fixed_rate_payment_streams.len()
-            + dynamic_rate_payment_streams.len())
-        .try_into()
-        .map_err(|_| ArithmeticError::Overflow)?;
-
         // Keep track of the deposit that corresponds to the payment streams that have been paid
         let mut total_deposit_paid: BalanceOf<T> = Zero::zero();
 
-        // And keep track of the total amount of streams that have been paid
-        let mut total_streams_paid: u32 = 0;
+        // For each Provider in the list, pay the outstanding debt of the user
+        for provider_id in providers {
+            // Get the fixed-rate payment stream of the user with the given Provider
+            let fixed_rate_payment_stream =
+                FixedRatePaymentStreams::<T>::get(provider_id, user_account);
 
-        // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
-        for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
-            // If the amount of streams to pay has been reached, break the loop
-            if total_streams_paid >= amount_of_streams_to_pay {
-                break;
+            // Get the dynamic-rate payment stream of the user with the given Provider
+            let dynamic_rate_payment_stream =
+                DynamicRatePaymentStreams::<T>::get(provider_id, user_account);
+
+            // If the fixed-rate payment stream exists:
+            if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
+                // Get the amount that should be charged for this payment stream
+                let last_chargeable_info =
+                    Self::get_last_chargeable_info_with_privilege(&provider_id);
+                let amount_to_charge = fixed_rate_payment_stream
+                    .rate
+                    .checked_mul(&T::BlockNumberToBalance::convert(
+                        last_chargeable_info
+                            .last_chargeable_tick
+                            .saturating_sub(fixed_rate_payment_stream.last_charged_tick),
+                    ))
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // If the amount to charge is greater than the deposit, just charge the deposit
+                let amount_to_charge = amount_to_charge.min(fixed_rate_payment_stream.user_deposit);
+
+                // Get the cut for the treasury and the cut for the provider
+                let treasury_cut =
+                    <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
+                        total_provided_amount,
+                        used_provided_amount,
+                        amount_to_charge,
+                    );
+                let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
+                // Transfer the provider's cut from the user to the Provider
+                let provider_payment_account = expect_or_err!(
+                    <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                        provider_id
+                    ),
+                    "Provider should exist and have a payment account if its ID exists.",
+                    Error::<T>::ProviderInconsistencyError
+                );
+                T::NativeBalance::transfer(
+                    user_account,
+                    &provider_payment_account,
+                    provider_cut,
+                    Preservation::Preserve,
+                )?;
+
+                // Send the rest of the funds to the treasury
+                T::NativeBalance::transfer(
+                    user_account,
+                    &T::TreasuryAccount::get(),
+                    treasury_cut,
+                    Preservation::Preserve,
+                )?;
+
+                // Update the total deposit paid
+                total_deposit_paid = total_deposit_paid
+                    .checked_add(&fixed_rate_payment_stream.user_deposit)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Remove the payment stream from the FixedRatePaymentStreams mapping
+                FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
+
+                // Decrease the user's payment streams count
+                let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+                user_payment_streams_count = user_payment_streams_count
+                    .checked_sub(1)
+                    .ok_or(ArithmeticError::Underflow)?;
+                RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
             }
 
-            // Get the amount that should be charged for this payment stream
-            let last_chargeable_info = Self::get_last_chargeable_info_with_privilege(&provider_id);
-            let amount_to_charge = fixed_rate_payment_stream
-                .rate
-                .checked_mul(&T::BlockNumberToBalance::convert(
-                    last_chargeable_info
-                        .last_chargeable_tick
-                        .saturating_sub(fixed_rate_payment_stream.last_charged_tick),
-                ))
-                .ok_or(ArithmeticError::Overflow)?;
+            // If the dynamic-rate payment stream exists:
+            if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
+                // Get the amount that should be charged for this payment stream
+                let price_index_at_last_chargeable_tick =
+                    Self::get_last_chargeable_info_with_privilege(&provider_id).price_index;
+                let amount_to_charge = price_index_at_last_chargeable_tick
+                    .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
+                    .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_div(&GIGAUNIT.into())
+                    .ok_or(ArithmeticError::Underflow)?;
 
-            // If the amount to charge is greater than the deposit, just charge the deposit
-            let amount_to_charge = amount_to_charge.min(fixed_rate_payment_stream.user_deposit);
+                // If the amount to charge is greater than the deposit, just charge the deposit
+                let amount_to_charge =
+                    amount_to_charge.min(dynamic_rate_payment_stream.user_deposit);
 
-            // Get the cut for the treasury and the cut for the provider
-            let treasury_cut =
-                <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
-                    total_provided_amount,
-                    used_provided_amount,
-                    amount_to_charge,
+                // Get the cut for the treasury and the cut for the provider
+                let treasury_cut =
+                    <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
+                        total_provided_amount,
+                        used_provided_amount,
+                        amount_to_charge,
+                    );
+                let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+
+                // Transfer the provider's cut from the user to the Provider
+                let provider_payment_account = expect_or_err!(
+                    <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                        provider_id
+                    ),
+                    "Provider should exist and have a payment account if its ID exists.",
+                    Error::<T>::ProviderInconsistencyError
                 );
-            let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
+                T::NativeBalance::transfer(
+                    user_account,
+                    &provider_payment_account,
+                    provider_cut,
+                    Preservation::Preserve,
+                )?;
 
-            // Transfer the provider's cut from the user to the Provider
-            let provider_payment_account = expect_or_err!(
-                <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(provider_id),
-                "Provider should exist and have a payment account if its ID exists.",
-                Error::<T>::ProviderInconsistencyError
-            );
-            T::NativeBalance::transfer(
-                user_account,
-                &provider_payment_account,
-                provider_cut,
-                Preservation::Preserve,
-            )?;
+                // Send the rest of the funds to the treasury
+                T::NativeBalance::transfer(
+                    user_account,
+                    &T::TreasuryAccount::get(),
+                    treasury_cut,
+                    Preservation::Preserve,
+                )?;
 
-            // Send the rest of the funds to the treasury
-            T::NativeBalance::transfer(
-                user_account,
-                &T::TreasuryAccount::get(),
-                treasury_cut,
-                Preservation::Preserve,
-            )?;
+                // Update the total deposit paid
+                total_deposit_paid = total_deposit_paid
+                    .checked_add(&dynamic_rate_payment_stream.user_deposit)
+                    .ok_or(ArithmeticError::Overflow)?;
 
-            // Update the total deposit paid
-            total_deposit_paid = total_deposit_paid
-                .checked_add(&fixed_rate_payment_stream.user_deposit)
-                .ok_or(ArithmeticError::Overflow)?;
+                // Remove the payment stream from the DynamicRatePaymentStreams mapping
+                DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
 
-            // Remove the payment stream from the FixedRatePaymentStreams mapping
-            FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
-
-            // Decrease the user's payment streams count
-            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-            user_payment_streams_count = user_payment_streams_count
-                .checked_sub(1)
-                .ok_or(ArithmeticError::Underflow)?;
-            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
-
-            // Increase the total amount of streams that have been paid
-            total_streams_paid += 1;
-        }
-
-        // Do the same for the dynamic-rate payment streams
-        for (provider_id, dynamic_rate_payment_stream) in dynamic_rate_payment_streams {
-            // If the amount of streams to pay has been reached, break the loop
-            if total_streams_paid >= amount_of_streams_to_pay {
-                break;
+                // Decrease the user's payment streams count
+                let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+                user_payment_streams_count = user_payment_streams_count
+                    .checked_sub(1)
+                    .ok_or(ArithmeticError::Underflow)?;
+                RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
             }
-
-            // Get the amount that should be charged for this payment stream
-            let price_index_at_last_chargeable_tick =
-                Self::get_last_chargeable_info_with_privilege(&provider_id).price_index;
-            let amount_to_charge = price_index_at_last_chargeable_tick
-                .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
-                .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                .ok_or(ArithmeticError::Overflow)?;
-
-            // If the amount to charge is greater than the deposit, just charge the deposit
-            let amount_to_charge = amount_to_charge.min(dynamic_rate_payment_stream.user_deposit);
-
-            // Get the cut for the treasury and the cut for the provider
-            let treasury_cut =
-                <T::TreasuryCutCalculator as TreasuryCutCalculator>::calculate_treasury_cut(
-                    total_provided_amount,
-                    used_provided_amount,
-                    amount_to_charge,
-                );
-            let provider_cut = amount_to_charge.saturating_sub(treasury_cut); // Treasury cut should always be less than the amount to charge, so this will never be 0.
-
-            // Transfer the provider's cut from the user to the Provider
-            let provider_payment_account = expect_or_err!(
-                <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(provider_id),
-                "Provider should exist and have a payment account if its ID exists.",
-                Error::<T>::ProviderInconsistencyError
-            );
-            T::NativeBalance::transfer(
-                user_account,
-                &provider_payment_account,
-                provider_cut,
-                Preservation::Preserve,
-            )?;
-
-            // Send the rest of the funds to the treasury
-            T::NativeBalance::transfer(
-                user_account,
-                &T::TreasuryAccount::get(),
-                treasury_cut,
-                Preservation::Preserve,
-            )?;
-
-            // Update the total deposit paid
-            total_deposit_paid = total_deposit_paid
-                .checked_add(&dynamic_rate_payment_stream.user_deposit)
-                .ok_or(ArithmeticError::Overflow)?;
-
-            // Remove the payment stream from the DynamicRatePaymentStreams mapping
-            DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
-
-            // Decrease the user's payment streams count
-            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-            user_payment_streams_count = user_payment_streams_count
-                .checked_sub(1)
-                .ok_or(ArithmeticError::Underflow)?;
-            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
-
-            // Increase the total amount of streams that have been paid
-            total_streams_paid += 1;
         }
 
         // Hold the difference between the total deposit release and the total deposit used to pay the payment streams
@@ -1106,8 +1112,11 @@ where
             difference,
         )?;
 
-        if total_streams_to_pay <= amount_of_streams_to_pay {
-            // If the user has paid all the outstanding debt, return true
+        // Check if the user has paid all the outstanding debt, which is equivalent to having no remaining payment streams
+        let remaining_payment_streams = RegisteredUsers::<T>::get(user_account);
+
+        // If the user has paid all the outstanding debt, return true
+        if remaining_payment_streams == 0 {
             Ok(true)
         } else {
             // If the user has not paid all the outstanding debt, return false
@@ -1224,7 +1233,7 @@ where
 
     pub fn do_update_price_index(meter: &mut sp_weights::WeightMeter) {
         // Get the current price
-        let current_price = CurrentPricePerUnitPerTick::<T>::get();
+        let current_price = CurrentPricePerGigaUnitPerTick::<T>::get();
 
         // Add it to the accumulated price index
         AccumulatedPriceIndex::<T>::mutate(|price_index| {
@@ -1347,7 +1356,9 @@ where
                 let amount_to_charge = price_index_at_last_chargeable_tick
                     .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
                     .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                    .ok_or(ArithmeticError::Overflow)?;
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_div(&GIGAUNIT.into())
+                    .ok_or(ArithmeticError::Underflow)?;
 
                 // If the amount to charge is greater than the deposit, just charge the deposit
                 let amount_to_charge =
@@ -1628,15 +1639,15 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> MutatePricePerUnitPerTickInterface for pallet::Pallet<T> {
-    type PricePerUnitPerTick = BalanceOf<T>;
+impl<T: pallet::Config> MutatePricePerGigaUnitPerTickInterface for pallet::Pallet<T> {
+    type PricePerGigaUnitPerTick = BalanceOf<T>;
 
-    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick {
-        CurrentPricePerUnitPerTick::<T>::get()
+    fn get_price_per_giga_unit_per_tick() -> Self::PricePerGigaUnitPerTick {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
-    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick) {
-        CurrentPricePerUnitPerTick::<T>::put(price_index);
+    fn set_price_per_giga_unit_per_tick(price_index: Self::PricePerGigaUnitPerTick) {
+        CurrentPricePerGigaUnitPerTick::<T>::put(price_index);
     }
 }
 
@@ -1687,7 +1698,9 @@ where
                         .saturating_sub(dynamic_stream.price_index_when_last_charged);
                     let amount_to_charge = price_index_difference
                         .checked_mul(&dynamic_stream.amount_provided.into())
-                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?;
+                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?
+                        .checked_div(&GIGAUNIT.into())
+                        .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeUnderflow)?;
                     debt = debt
                         .checked_add(&amount_to_charge)
                         .ok_or(GetUsersWithDebtOverThresholdError::DebtOverflow)?;
@@ -1738,6 +1751,36 @@ where
         }
 
         payment_streams
+    }
+
+    /// This function is called by the runtime API that allows anyone to get the list of Providers that have a
+    /// at least one payment stream with a user.
+    /// It returns a vector of Provider IDs, without duplicates.
+    pub fn get_providers_with_payment_streams_with_user(
+        user_account: &T::AccountId,
+    ) -> Vec<ProviderIdFor<T>> {
+        let mut providers = Vec::new();
+
+        // Get all the payment streams of the user
+        let fixed_rate_payment_streams = Self::get_fixed_rate_payment_streams_of_user(user_account);
+        let dynamic_rate_payment_streams =
+            Self::get_dynamic_rate_payment_streams_of_user(user_account);
+
+        // Get the Providers of the fixed-rate payment streams
+        for (provider_id, _) in fixed_rate_payment_streams {
+            if !providers.contains(&provider_id) {
+                providers.push(provider_id);
+            }
+        }
+
+        // Get the Providers of the dynamic-rate payment streams
+        for (provider_id, _) in dynamic_rate_payment_streams {
+            if !providers.contains(&provider_id) {
+                providers.push(provider_id);
+            }
+        }
+
+        providers
     }
 
     pub fn get_last_chargeable_info_with_privilege(

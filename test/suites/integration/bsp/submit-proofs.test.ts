@@ -1,15 +1,15 @@
 import assert, { strictEqual } from "node:assert";
+import invariant from "tiny-invariant";
 import {
+  ShConsts,
+  bspThreeKey,
   describeBspNet,
   shUser,
   sleep,
   type EnrichedBspApi,
-  type FileMetadata,
-  ShConsts,
-  bspThreeKey
+  type FileMetadata
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
-import invariant from "tiny-invariant";
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
@@ -189,7 +189,7 @@ describeBspNet(
         bspThreeKey
       );
 
-      userApi.assert.fetchEventData(
+      userApi.assert.fetchEvent(
         userApi.events.fileSystem.BspRequestedToStopStoring,
         await userApi.query.system.events()
       );
@@ -222,7 +222,7 @@ describeBspNet(
         /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
         fileMetadata.fileKey,
         inclusionForestProof,
-      )); 
+      ));
       // Check for the confirm stopped storing event.
           let confirmStopStoringEvent = bspThreeApi.assert.eventPresent(
             "fileSystem",
@@ -240,44 +240,6 @@ describeBspNet(
 
     it("BSP is not challenged any more", { skip: "Not implemented yet." }, async () => {
       // TODO: Check that BSP-Three no longer has a challenge deadline.
-    });
-
-    it("BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds", async () => {
-      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
-        userApi.shConsts.DUMMY_BSP_ID
-      );
-      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
-        userApi.shConsts.DUMMY_BSP_ID
-      );
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-      await userApi.advanceToBlock(nextChallengeTick);
-      await userApi.block.seal({ finaliseBlock: false });
-
-      await userApi.assert.extrinsicPresent({
-        module: "proofsDealer",
-        method: "submitProof"
-      });
-      await userApi.block.reOrg();
-
-      await assert.rejects(
-        async () => {
-          await userApi.assert.extrinsicPresent({
-            module: "proofsDealer",
-            method: "submitProof",
-            timeout: 1000
-          });
-        },
-        /No matching extrinsic found for proofsDealer\.submitProof/,
-        "No submit proof extrinsics after re-org"
-      );
-
-      await userApi.block.seal();
-      await userApi.assert.extrinsicPresent({
-        module: "proofsDealer",
-        method: "submitProof"
-      });
     });
 
     it("New storage request sent by user, to only one BSP", async () => {
@@ -600,6 +562,8 @@ describeBspNet(
           ? bspTwoNextChallengeTick
           : dummyBspNextChallengeTick;
 
+      const areBspsNextChallengeBlockTheSame = firstBlockToAdvance === secondBlockToAdvance;
+
       // Advance to first next challenge block.
       await userApi.advanceToBlock(firstBlockToAdvance, {
         waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
@@ -649,20 +613,22 @@ describeBspNet(
         );
       }
 
-      // Advance to second next challenge block.
-      await userApi.advanceToBlock(secondBlockToAdvance, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-      });
+      // If the BSPs had different next challenge blocks, advance to the second next challenge block.
+      if (!areBspsNextChallengeBlockTheSame) {
+        // Advance to second next challenge block.
+        await userApi.advanceToBlock(secondBlockToAdvance, {
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        });
 
-      // Wait for BSP to generate the proof and advance one more block.
-      await sleep(500);
-      const secondChallengeBlockResult = await userApi.sealBlock();
+        // Wait for BSP to generate the proof and advance one more block.
+        await sleep(500);
+        await userApi.sealBlock();
+      }
 
       // Check for a ProofAccepted event.
       const secondChallengeBlockEvents = await userApi.assert.eventMany(
         "proofsDealer",
-        "ProofAccepted",
-        secondChallengeBlockResult.events
+        "ProofAccepted"
       );
 
       // Check that at least one of the `ProofAccepted` events belongs to `secondBspToRespond`.

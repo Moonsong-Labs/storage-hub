@@ -5,10 +5,23 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
+use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 use scale_info::TypeInfo;
 use sp_runtime::BoundedVec;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
+
+pub type ValuePropId<T> = HashId<T>;
+
+/// Top up metadata for a provider tracked in storage.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+pub struct TopUpMetadata {
+    /// The last block at which the provider will either forcibly top up their deposit or be marked as
+    /// insolvent.
+    ///
+    /// This is the relay chain block number which the parachain is anchored to.
+    pub end_block_grace_period: RelayChainBlockNumber,
+}
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
@@ -17,10 +30,32 @@ pub struct ValuePropositionWithId<T: Config> {
     pub value_prop: ValueProposition<T>,
 }
 
+impl<T: Config> ValuePropositionWithId<T> {
+    pub fn new(id: ValuePropIdFor<T>, value_prop: ValueProposition<T>) -> Self {
+        Self { id, value_prop }
+    }
+
+    pub fn build(
+        price_per_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Self {
+        let value_prop = ValueProposition::<T>::new(
+            price_per_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
+        Self {
+            id: value_prop.derive_id(),
+            value_prop,
+        }
+    }
+}
+
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
-    pub price_per_unit_of_data_per_block: BalanceOf<T>,
+    pub price_per_giga_unit_of_data_per_block: BalanceOf<T>,
     pub commitment: Commitment<T>,
     /// Maximum [`StorageDataUnit`]s that can be stored in a bucket.
     pub bucket_data_limit: StorageDataUnit<T>,
@@ -31,12 +66,12 @@ pub struct ValueProposition<T: Config> {
 
 impl<T: Config> ValueProposition<T> {
     pub fn new(
-        price_per_unit_of_data_per_block: BalanceOf<T>,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
         commitment: Commitment<T>,
         bucket_data_limit: StorageDataUnit<T>,
     ) -> Self {
         Self {
-            price_per_unit_of_data_per_block,
+            price_per_giga_unit_of_data_per_block,
             commitment,
             bucket_data_limit,
             available: true,
@@ -45,7 +80,7 @@ impl<T: Config> ValueProposition<T> {
 
     /// Produce the ID of the ValueProposition not including the `available` field.
     pub fn derive_id(&self) -> ValuePropIdFor<T> {
-        let mut concat = self.price_per_unit_of_data_per_block.encode();
+        let mut concat = self.price_per_giga_unit_of_data_per_block.encode();
         concat.extend_from_slice(&self.commitment.encode());
         concat.extend_from_slice(&self.bucket_data_limit.encode());
         <<T as crate::Config>::ValuePropIdHashing as sp_runtime::traits::Hash>::hash(&concat)
@@ -191,3 +226,10 @@ pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;
 
 /// Type alias for the `StartingReputationWeight` type used in the Storage Providers pallet.
 pub type StartingReputationWeight<T> = <T as crate::Config>::StartingReputationWeight;
+
+/// Type alias for the `RelayBlockGetter` type used in the Storage Providers pallet.
+pub type RelayBlockGetter<T> = <T as crate::Config>::RelayBlockGetter;
+
+/// Type alias for the `StorageDataUnitAndBalanceConvert` type used in the Storage Providers pallet.
+pub type StorageDataUnitAndBalanceConverter<T> =
+    <T as crate::Config>::StorageDataUnitAndBalanceConvert;

@@ -142,7 +142,10 @@ where
         {
             Ok(proven) => {
                 if proven.len() != 1 {
-                    Err(anyhow::anyhow!("Expected exactly one proven chunk."))
+                    Err(anyhow::anyhow!(
+                        "Expected exactly one proven chunk but got {}.",
+                        proven.len()
+                    ))
                 } else {
                     Ok(proven[0].clone())
                 }
@@ -463,11 +466,7 @@ where
         // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
         if !file_metadatas.is_empty() {
             fs.write().await.insert_files_metadata(
-                file_metadatas
-                    .into_iter()
-                    .map(|(_, metadata)| metadata)
-                    .collect::<Vec<_>>()
-                    .as_slice(),
+                file_metadatas.into_values().collect::<Vec<_>>().as_slice(),
             )?;
 
             if fs.read().await.root() != new_root {

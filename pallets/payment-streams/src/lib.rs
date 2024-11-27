@@ -29,7 +29,7 @@ use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::{types::*, weights::WeightInfo};
+    use super::{types::*, weights::WeightInfo, Vec};
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::fungible::*,
@@ -89,11 +89,15 @@ pub mod pallet {
             + HasCompact
             + Into<BalanceOf<Self>>;
 
+        /// The base deposit for a new payment stream. The actual deposit will be this constant + the deposit calculated using the `NewStreamDeposit` constant.
+        #[pallet::constant]
+        type BaseDeposit: Get<BalanceOf<Self>>;
+
         /// The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
         /// This means that, from the balance of the User for which the payment stream is being created, the amount
-        /// `NewStreamDeposit * rate` will be held as a deposit.
-        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
-        /// to be provided by the pallet using the `PaymentStreamsInterface` interface.
+        /// `NewStreamDeposit * rate + BaseDeposit` will be held as a deposit.
+        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided_in_giga_units * price_per_giga_unit_per_tick`, where `price_per_giga_unit_per_tick` is
+        /// obtained from the `CurrentPricePerGigaUnitPerTick` storage.
         #[pallet::constant]
         type NewStreamDeposit: Get<BlockNumberFor<Self>>;
 
@@ -215,14 +219,13 @@ pub mod pallet {
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
 
-    /// The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+    /// The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
-    /// This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+    /// This can be updated each tick by the system manager.
     ///
-    /// This storage is updated in:
-    /// - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+    /// It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
     #[pallet::storage]
-    pub type CurrentPricePerUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+    pub type CurrentPricePerGigaUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
     /// The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
@@ -253,7 +256,7 @@ pub mod pallet {
         fn default() -> Self {
             let current_price = One::one();
 
-            CurrentPricePerUnitPerTick::<T>::put(current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(current_price);
 
             Self { current_price }
         }
@@ -262,7 +265,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            CurrentPricePerUnitPerTick::<T>::put(self.current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(self.current_price);
         }
     }
 
@@ -801,8 +804,8 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows a user flagged as without funds to pay up to `amount_of_streams_to_pay`
-        /// remaining payment streams to be able to recover its deposits.
+        /// Dispatchable extrinsic that allows a user flagged as without funds to pay the Providers that still have payment streams
+        /// with it, in order to recover as much of its deposits as possible.
         ///
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the User that has been flagged as without funds.
@@ -810,27 +813,29 @@ pub mod pallet {
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the user has been flagged as without funds.
-        /// 3. Release the user's funds that were held as a deposit for each payment stream.
-        /// 4. Get the payment streams of the user and charge them, paying the Providers for the services.
+        /// 3. Release the user's funds that were held as a deposit for each payment stream to be paid.
+        /// 4. Get the payment streams that the user has with the provided list of Providers, and pay them for the services.
         /// 5. Delete the charged payment streams of the user.
         ///
-        /// Emits a 'UserPaidAllDebts' event when successful.
+        /// Emits a 'UserPaidSomeDebts' event when successful if the user has remaining debts. If the user has successfully paid all its debts,
+        /// it emits a 'UserPaidAllDebts' event.
         ///
-        /// Notes: this extrinsic iterates over payment streams of the user and charges them, so it can be expensive in terms of weight.
-        /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
-        /// finds more convenient to wait for Providers to get its deposits one by one instead.
+        /// Notes: this extrinsic iterates over the provided list of Providers, getting the payment streams they have with the user and charging
+        /// them, so the execution could get expensive. It's recommended to provide a list of Providers that the user actually has payment streams with,
+        /// which can be obtained by calling the `get_providers_with_payment_streams_with_user` runtime API.
+        /// There was an idea to limit the amount of Providers that can be received by this extrinsic using a constant in the configuration of this pallet,
+        /// but the correct benchmarking of this extrinsic should be enough to avoid any potential abuse.
         #[pallet::call_index(8)]
-        #[pallet::weight(T::WeightInfo::pay_outstanding_debt(*amount_of_streams_to_pay))]
+        #[pallet::weight(T::WeightInfo::pay_outstanding_debt(providers.len().try_into().unwrap_or(u32::MAX)))]
         pub fn pay_outstanding_debt(
             origin: OriginFor<T>,
-            amount_of_streams_to_pay: u32,
+            providers: Vec<ProviderIdFor<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
             let user_account = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            let fully_paid =
-                Self::do_pay_outstanding_debt(&user_account, amount_of_streams_to_pay)?;
+            let fully_paid = Self::do_pay_outstanding_debt(&user_account, providers)?;
 
             // Emit the corresponding event
             if fully_paid {
@@ -971,8 +976,8 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function to get the current price per unit per tick of the system
-    pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
-        CurrentPricePerUnitPerTick::<T>::get()
+    pub fn get_current_price_per_giga_unit_per_tick() -> BalanceOf<T> {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
     /// A helper function to get the accumulated price index of the system

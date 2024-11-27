@@ -10,6 +10,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadProvidersInterface, TrieMutation,
     TrieProofDeltaApplier,
@@ -18,7 +19,7 @@ use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
-    traits::{BlakeTwo256, IdentityLookup},
+    traits::{BlakeTwo256, BlockNumberProvider, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
@@ -28,7 +29,7 @@ use std::collections::BTreeSet;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
-type StorageUnit = u64;
+type StorageDataUnit = u64;
 type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
@@ -164,6 +165,31 @@ impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
     }
 }
 
+/// Mock implementation of the relay chain data provider, which should return the relay chain block
+/// that the previous parachain block was anchored to.
+pub struct MockRelaychainDataProvider;
+impl BlockNumberProvider for MockRelaychainDataProvider {
+    type BlockNumber = u32;
+    fn current_block_number() -> Self::BlockNumber {
+        frame_system::Pallet::<Test>::block_number()
+            .saturating_sub(1)
+            .try_into()
+            .unwrap()
+    }
+}
+
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 pub struct MockRandomness;
 impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
     fn random(subject: &[u8]) -> (H256, BlockNumberFor<Test>) {
@@ -188,11 +214,12 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = StorageUnit;
+    type StorageDataUnit = StorageDataUnit;
     type PaymentStreams = PaymentStreams;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
@@ -204,6 +231,8 @@ impl pallet_storage_providers::Config for Test {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
@@ -222,6 +251,9 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
+    type TopUpGracePeriod = ConstU32<5>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 parameter_types! {
@@ -354,7 +386,7 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type MaxSubmittersPerTick = ConstU32<100>;
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
@@ -421,7 +453,7 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type Units = StorageUnit;
+    type Units = StorageDataUnit;
     type NewStreamDeposit = ConstU64<10>;
     type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
@@ -429,6 +461,7 @@ impl crate::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -462,9 +495,11 @@ impl ExtBuilder {
         .assimilate_storage(&mut t)
         .unwrap();
 
-        crate::GenesisConfig::<Test> { current_price: 1 }
-            .assimilate_storage(&mut t)
-            .unwrap();
+        crate::GenesisConfig::<Test> {
+            current_price: GIGAUNIT.into(),
+        }
+        .assimilate_storage(&mut t)
+        .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| {

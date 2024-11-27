@@ -1305,7 +1305,7 @@ impl BlockchainService {
                             if self.provider_ids.contains(&provider) {
                                 self.emit(FinalisedTrieRemoveMutationsApplied {
                                     provider_id: provider,
-                                    mutations: mutations.clone(),
+                                    mutations: mutations.clone().into(),
                                     new_root,
                                 })
                             }
