@@ -13,6 +13,8 @@ use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-move-bucket-task";
 
+const MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS: u64 = 4 * 60 * 60; // 4 hours
+
 /// TODO DOCS
 pub struct BspMoveBucketTask<FL, FSH>
 where
@@ -111,7 +113,10 @@ where
 
         self.storage_hub_handler
             .file_transfer
-            .unregister_bucket(event.bucket_id)
+            .unregister_bucket_with_grace_period(
+                event.bucket_id,
+                MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS,
+            )
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 

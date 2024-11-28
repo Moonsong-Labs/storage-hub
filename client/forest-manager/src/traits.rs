@@ -51,7 +51,16 @@ pub trait ForestStorageHandler {
     /// Get forest storage instance.
     async fn get(&self, key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>>;
     /// Create a new forest storage instance.
-    async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>>;
+    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>>;
     /// Remove forest storage instance.
     async fn remove_forest_storage(&mut self, key: &Self::Key);
+
+    /// Get or create forest storage instance.
+    async fn get_or_create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+        if let Some(forest_storage) = self.get(key).await {
+            forest_storage
+        } else {
+            self.create(key).await
+        }
+    }
 }

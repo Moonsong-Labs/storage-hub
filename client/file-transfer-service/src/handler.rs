@@ -520,13 +520,19 @@ impl FileTransferService {
                         return;
                     }
                 };
-                if self.peer_file_allow_list.contains(&(peer, file_key)) {
+                let bucket_id = match r.bucket_id {
+                    Some(ref bucket_id) => BucketId::decode(&mut bucket_id.as_slice()).ok(),
+                    None => None,
+                };
+
+                if self.is_allowed(peer, file_key, bucket_id) {
                     // Emit the event to the event bus, letting the upper layers know about the
                     // upload request.
                     self.emit(RemoteUploadRequest {
                         peer,
                         file_key,
                         file_key_proof,
+                        bucket_id,
                     });
 
                     let response =
@@ -575,6 +581,23 @@ impl FileTransferService {
                     }
                 };
 
+                let bucket_id = match r.bucket_id {
+                    Some(ref bucket_id) => BucketId::decode(&mut bucket_id.as_slice()).ok(),
+                    None => None,
+                };
+
+                if !self.is_allowed(peer, file_key, bucket_id) {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Received unexpected download request from {} for file key {:?} (bucket {:?})",
+                        peer, file_key, bucket_id
+                    );
+
+                    self.handle_bad_request(pending_response);
+
+                    return;
+                }
+
                 let chunk_id = ChunkId::new(r.file_chunk_id);
                 let request_id = self.download_pending_response_nonce.next();
                 self.download_pending_responses
@@ -584,6 +607,7 @@ impl FileTransferService {
                     file_key,
                     chunk_id,
                     request_id,
+                    bucket_id,
                 });
             }
             None => {
@@ -597,6 +621,18 @@ impl FileTransferService {
                 return;
             }
         };
+    }
+
+    fn is_allowed(&self, peer: PeerId, file_key: FileKey, bucket_id: Option<BucketId>) -> bool {
+        if self.peer_file_allow_list.contains(&(peer, file_key)) {
+            return true;
+        }
+
+        if let Some(bucket_id) = bucket_id {
+            self.peer_bucket_allow_list.contains(&(peer, bucket_id))
+        } else {
+            false
+        }
     }
 
     fn handle_bad_request(

@@ -2,8 +2,12 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
+use sc_network::{Multiaddr, PeerId};
+
+use shc_common::types::{FileMetadata, Fingerprint};
+
 use crate::{
-    models::PeerId,
+    models::MultiAddress,
     schema::{bucket, file, file_peer_id},
     DbConnection,
 };
@@ -19,7 +23,7 @@ pub enum FileStorageRequestStep {
 pub struct File {
     /// The ID of the file as stored in the database. For the runtime id, use `onchain_bsp_id`.
     pub id: i32,
-    pub account: String,
+    pub account: Vec<u8>,
     pub file_key: Vec<u8>,
     pub bucket_id: i32,
     pub location: Vec<u8>,
@@ -35,7 +39,7 @@ pub struct File {
 #[derive(Debug, Queryable, Insertable, Associations)]
 #[diesel(table_name = file_peer_id)]
 #[diesel(belongs_to(File, foreign_key = file_id))]
-#[diesel(belongs_to(PeerId, foreign_key = peer_id))]
+#[diesel(belongs_to(crate::models::PeerId, foreign_key = peer_id))]
 pub struct FilePeerId {
     pub file_id: i32,
     pub peer_id: i32,
@@ -44,14 +48,14 @@ pub struct FilePeerId {
 impl File {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        account: impl Into<String>,
+        account: impl Into<Vec<u8>>,
         file_key: impl Into<Vec<u8>>,
         bucket_id: i32,
         location: impl Into<Vec<u8>>,
         fingerprint: impl Into<Vec<u8>>,
         size: i64,
         step: FileStorageRequestStep,
-        peer_ids: Vec<PeerId>,
+        peer_ids: Vec<crate::models::PeerId>,
     ) -> Result<Self, diesel::result::Error> {
         let file = diesel::insert_into(file::table)
             .values((
@@ -136,7 +140,7 @@ impl File {
 
     pub async fn get_by_onchain_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
     ) -> Result<Vec<Self>, diesel::result::Error> {
         let files = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
@@ -145,5 +149,45 @@ impl File {
             .load(conn)
             .await?;
         Ok(files)
+    }
+
+    pub async fn get_bsp_peer_ids(
+        &self,
+        conn: &mut DbConnection<'_>,
+    ) -> Result<Vec<PeerId>, diesel::result::Error> {
+        use crate::schema::{bsp, bsp_file, bsp_multiaddress, multiaddress};
+
+        let peer_ids: Vec<PeerId> = bsp_file::table
+            .filter(bsp_file::file_id.eq(self.id))
+            .inner_join(bsp::table.on(bsp_file::bsp_id.eq(bsp::id)))
+            .inner_join(bsp_multiaddress::table.on(bsp::id.eq(bsp_multiaddress::bsp_id)))
+            .inner_join(
+                multiaddress::table.on(multiaddress::id.eq(bsp_multiaddress::multiaddress_id)),
+            )
+            .select(multiaddress::all_columns)
+            .distinct()
+            .load::<MultiAddress>(conn)
+            .await?
+            .into_iter()
+            .filter_map(|multiaddress| {
+                Multiaddr::try_from(multiaddress.address)
+                    .ok()
+                    .and_then(|addr| PeerId::try_from_multiaddr(&Multiaddr::from(addr)))
+            })
+            .collect();
+
+        Ok(peer_ids)
+    }
+}
+
+impl File {
+    pub fn to_file_metadata(&self, onchain_bucket_id: Vec<u8>) -> FileMetadata {
+        FileMetadata::new(
+            self.account.clone(),
+            onchain_bucket_id,
+            self.location.clone(),
+            self.size as u64,
+            Fingerprint::from(self.fingerprint.as_slice()),
+        )
     }
 }

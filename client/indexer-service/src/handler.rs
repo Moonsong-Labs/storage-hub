@@ -198,7 +198,7 @@ impl IndexerService {
                     conn,
                     msp.map(|m| m.id),
                     who.to_string(),
-                    bucket_id.to_string(),
+                    bucket_id.as_ref().to_vec(),
                     name.to_vec(),
                     collection_id.map(|id| id.to_string()),
                     *private,
@@ -208,7 +208,7 @@ impl IndexerService {
             }
             pallet_file_system::Event::MoveBucketAccepted { msp_id, bucket_id } => {
                 let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
-                Bucket::update_msp(conn, bucket_id.to_string(), msp.id).await?;
+                Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), msp.id).await?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {
                 who,
@@ -219,7 +219,7 @@ impl IndexerService {
                 Bucket::update_privacy(
                     conn,
                     who.to_string(),
-                    bucket_id.to_string(),
+                    bucket_id.as_ref().to_vec(),
                     collection_id.map(|id| id.to_string()),
                     *private,
                 )
@@ -258,7 +258,8 @@ impl IndexerService {
                 size,
                 peer_ids,
             } => {
-                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.to_string()).await?;
+                let bucket =
+                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
 
                 let mut sql_peer_ids = Vec::new();
                 for peer_id in peer_ids {
@@ -317,7 +318,7 @@ impl IndexerService {
                 bucket_id,
                 maybe_collection_id: _,
             } => {
-                Bucket::delete(conn, bucket_id.to_string()).await?;
+                Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
@@ -533,8 +534,12 @@ impl IndexerService {
                 old_root: _,
                 new_root,
             } => {
-                Bucket::update_merkle_root(conn, bucket_id.to_string(), new_root.as_ref().to_vec())
-                    .await?;
+                Bucket::update_merkle_root(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
             }
             pallet_storage_providers::Event::Slashed { .. } => {}
             pallet_storage_providers::Event::AwaitingTopUp {
