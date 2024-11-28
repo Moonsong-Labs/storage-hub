@@ -970,7 +970,7 @@ impl BlockchainService {
             NewBlockNotificationKind::NewBestBlock(new_best_block_info) => new_best_block_info,
             NewBlockNotificationKind::NewNonBestBlock(_) => return,
             NewBlockNotificationKind::Reorg {
-                old_best_block,
+                old_best_block: _,
                 new_best_block,
             } => {
                 // TODO: Handle catch up of reorgs.
