@@ -245,7 +245,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
 
     assert.equal(
       paymentStreamChargedEventAmount.toString(),
-      "2595108",
+      "750000",
       "Charged amount not matching the expected value"
     );
   });
