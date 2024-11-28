@@ -53,7 +53,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
-        "--msp-charging-freq=12",
+        "--msp-charging-period=12",
       ]
   sh-msp-2:
     image: storage-hub:local
@@ -82,7 +82,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
-        "--msp-charging-freq=12",
+        "--msp-charging-period=12",
       ]
   sh-user:
     image: storage-hub:local
