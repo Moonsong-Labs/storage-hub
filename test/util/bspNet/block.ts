@@ -503,9 +503,10 @@ export async function reOrgWithLongerChain(
     );
   }
 
-  let parentHash = blockHash;
-  for (let i = startingBlockNumber; i < currentBlockNumber + 1; i++) {
-    const createdBlock = await api.rpc.engine.createBlock(true, false, parentHash);
-    parentHash = createdBlock.blockHash;
-  }
+  const parentHash = blockHash;
+  extendFork(api, {
+    parentBlockHash: parentHash.toString(),
+    amountToExtend: currentBlockNumber - startingBlockNumber + 1,
+    verbose: false
+  });
 }
