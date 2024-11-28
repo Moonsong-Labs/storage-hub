@@ -107,6 +107,7 @@ where
                 },
             );
 
+            // TODO: watch for success (we might want to do it for BSP too)
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
