@@ -435,7 +435,7 @@ export const advanceToBlock = async (
  * @throws Will throw an error if the head block is already finalized.
  * @returns A Promise that resolves when the chain reorganization is complete.
  */
-export async function reOrgBlocks(api: ApiPromise): Promise<void> {
+export async function reOrgWithFinality(api: ApiPromise): Promise<void> {
   const currentBlockHeader = await api.rpc.chain.getHeader();
   const finalisedHash = await api.rpc.chain.getFinalizedHead();
 
@@ -447,4 +447,65 @@ export async function reOrgBlocks(api: ApiPromise): Promise<void> {
     throw "Cannot reorg a finalised block";
   }
   await api.rpc.engine.createBlock(true, true, finalisedHash);
+}
+
+/**
+ * Performs a chain reorganization by creating a longer forked chain.
+ * If no parent starting block is provided, the chain will start the fork from the last
+ * finalised block.
+ *
+ * !!! WARNING !!!
+ * The number of blocks this function can create for the alternative fork is limited by the
+ * "unincluded segment capacity" parameter, set in the `ConsensusHook` config type of the
+ * `cumulus-pallet-parachain-system`. If you try to build more blocks than this limit to
+ * achieve the reorg, the node will panic when building the block.
+ *
+ * This function is used to simulate network forks and test the system's ability to handle
+ * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+ * in face of potential consensus issues.
+ *
+ * @param api - The ApiPromise instance.
+ * @param startingBlock - Optional. The hash of the starting block to create the fork from.
+ * @throws Will throw an error if the last finalised block is greater than the starting block
+ *         or if the starting block is the same or higher than the current block.
+ * @returns A Promise that resolves when the chain reorganization is complete.
+ */
+export async function reOrgWithLongerChain(
+  api: ApiPromise,
+  startingBlockHash?: string
+): Promise<void> {
+  const blockHash = startingBlockHash ?? (await api.rpc.chain.getFinalizedHead());
+  const startingBlock = await api.rpc.chain.getHeader(blockHash);
+  const startingBlockNumber = startingBlock.number.toNumber();
+
+  const finalisedHash = await api.rpc.chain.getFinalizedHead();
+  const finalisedBlock = await api.rpc.chain.getHeader(finalisedHash);
+  const finalisedBlockNumber = finalisedBlock.number.toNumber();
+
+  const currentBlock = await api.rpc.chain.getHeader();
+  const currentBlockNumber = currentBlock.number.toNumber();
+
+  if (finalisedBlockNumber > startingBlockNumber) {
+    throw new Error(
+      `Last finalised block #${finalisedBlockNumber} is greater than starting block #${startingBlockNumber}. So a fork cannot start from it.`
+    );
+  }
+
+  if (startingBlockNumber === currentBlockNumber) {
+    throw new Error(
+      `Starting block #${startingBlockNumber} is the same as the current block #${currentBlockNumber}. So a fork cannot start from it.`
+    );
+  }
+
+  if (startingBlockNumber > currentBlockNumber) {
+    throw new Error(
+      `Starting block #${startingBlockNumber} is higher than the current block #${currentBlockNumber}. So a fork cannot start from it.`
+    );
+  }
+
+  let parentHash = blockHash;
+  for (let i = startingBlockNumber; i < currentBlockNumber + 1; i++) {
+    const createdBlock = await api.rpc.engine.createBlock(true, false, parentHash);
+    parentHash = createdBlock.blockHash;
+  }
 }

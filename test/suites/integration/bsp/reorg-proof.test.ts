@@ -1,9 +1,9 @@
 import { notStrictEqual, strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi } from "../../../util";
+import { ShConsts, describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: true, networkConfig: "standard", only: true },
   ({ before, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
 
@@ -34,48 +34,80 @@ describeBspNet(
     });
 
     // This is skipped because: 1) the underlying functionality is not yet implemented
-    it("proof re-submitted when new fork has longer chain", { skip: "Not Impl" }, async () => {
+    it("Proof re-submitted after reorgs with no Forest changes in between", async () => {
       await userApi.block.seal(); // To make sure we have a finalised head
       const nextChallengeTick = await getNextChallengeHeight(userApi);
-      await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true, finalised: false });
-      const { events } = await userApi.block.seal({ finaliseBlock: false });
+      await userApi.block.skipTo(nextChallengeTick, {
+        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID],
+        finalised: true
+      });
+
+      // Get the last tick for which the BSP submitted a proof, before submitting the new proof.
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        ShConsts.DUMMY_BSP_ID
+      );
+      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
 
       await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
-        method: "submitProof"
+        method: "submitProof",
+        checkTxPool: true
       });
 
-      const { data: fork1 } = userApi.assert.fetchEvent(
-        userApi.events.proofsDealer.ProofAccepted,
-        events
-      );
-      console.dir(fork1.toHuman());
+      // The proof is submitted in this block.
+      const { events: eventsFork1 } = await userApi.block.seal({ finaliseBlock: false });
 
-      // TODO: Do this better using BTreeMap methods
-      const challengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)
-        .challengeCount;
+      await userApi.assert.eventPresent("proofsDealer", "ProofAccepted", eventsFork1);
 
-      await userApi.block.reOrg();
-      await userApi.block.skipTo(nextChallengeTick, { waitBetweenBlocks: true });
+      // Reorg away from the last block by creating a longer fork.
+      await userApi.block.reOrgWithLongerChain();
 
-      const { data: fork2 } = userApi.assert.fetchEvent(
-        userApi.events.proofsDealer.ProofAccepted,
-        await userApi.query.system.events()
-      );
-      console.dir(fork2.toHuman(), { depth: null });
+      // Wait for the BSP to catch up to proofs in the new fork.
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+
+      // If queried now, the last tick should be the same as before submitting the last proof.
+      const lastTickResultAfterReorg =
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID);
+      const lastTickBspSubmittedProofAfterReorg = lastTickResultAfterReorg.asOk.toNumber();
       strictEqual(
-        fork2.lastTickProven.toNumber(),
-        nextChallengeTick,
-        "Submitted proof should be for relevant next challenge tick"
+        lastTickBspSubmittedProofAfterReorg,
+        lastTickBspSubmittedProof,
+        "Last tick should be the same as before submitting the last proof"
       );
-      const newChallengeCount: number = (Object.values(fork1.proof.keyProofs.toJSON())[0] as any)
-        .challengeCount;
-      strictEqual(challengeCount, newChallengeCount, "Challenge count should be the same");
-      notStrictEqual(
-        fork1.proof.forestProof,
-        fork2.proof.forestProof,
-        "Forest proof should be different since seeds have changed"
+
+      // The proof is submitted in this block.
+      const { events: eventsFork2 } = await userApi.block.seal({ finaliseBlock: false });
+
+      await userApi.assert.eventPresent("proofsDealer", "ProofAccepted", eventsFork2);
+
+      // Reorg away from the last block by finalising another block from another fork.
+      await userApi.block.reOrgWithFinality();
+
+      // Wait for the BSP to catch up to proofs in the new fork.
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+
+      // If queried now, the last tick should be the same as before submitting the last proof.
+      const lastTickResultAfterFinality =
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID);
+      const lastTickBspSubmittedProofAfterFinality = lastTickResultAfterFinality.asOk.toNumber();
+      strictEqual(
+        lastTickBspSubmittedProofAfterFinality,
+        lastTickBspSubmittedProof,
+        "Last tick should be the same as before submitting the last proof"
       );
+
+      // The proof is submitted in this block.
+      const { events: eventsFork3 } = await userApi.block.seal({ finaliseBlock: false });
+
+      await userApi.assert.eventPresent("proofsDealer", "ProofAccepted", eventsFork3);
     });
 
     // This is skipped because: 1) the underlying functionality is not yet implemented, and 2) our node panics when we try to extend the chain

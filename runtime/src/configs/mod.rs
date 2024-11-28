@@ -213,7 +213,7 @@ impl parachain_info::Config for Runtime {}
 
 parameter_types! {
     pub MessageQueueServiceWeight: Weight = Perbill::from_percent(35) * RuntimeBlockWeights::get().max_block;
-    // TODO: Set appropiate weight limit
+    // TODO: Set appropriate weight limit
     // The maximum weight to be used from remaining weight for processing enqueued messages on idle
     // pub const IdleMaxServiceWeight: Weight = Some(Weight);
 }

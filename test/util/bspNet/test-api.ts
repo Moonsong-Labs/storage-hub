@@ -407,11 +407,18 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
-       * Causes a chain re-org by creating a finalized block on top of the parent block.
-       * Note: This requires the head block to be unfinalized, otherwise it will throw!
+       * Causes a chain re-org by creating a finalised block on top of the last finalised block.
+       * Note: This requires the head block to be unfinalised, otherwise it will throw!
        * @returns A promise that resolves when the chain re-org is complete.
        */
-      reOrg: () => BspNetBlock.reOrgBlocks(this._api)
+      reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
+      /**
+       * Causes a chain re-org by creating a longer forked chain.
+       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * @returns A promise that resolves when the chain re-org is complete.
+       */
+      reOrgWithLongerChain: (startingBlockHash?: string) =>
+        BspNetBlock.reOrgWithLongerChain(this._api, startingBlockHash)
     };
 
     const remappedNodeNs = {
