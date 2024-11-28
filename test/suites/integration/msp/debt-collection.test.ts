@@ -235,6 +235,11 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     }
 
     // Verify that the MSP charged the users after the notified
-    await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
+    const paymentStreamChargedEvent = await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
+    const paymentStreamChargedEventAmount =
+      userApi.events.paymentStreams.PaymentStreamCharged.is(paymentStreamChargedEvent.event) && paymentStreamChargedEvent.event.data.amount;
+
+    assert.equal(paymentStreamChargedEventAmount.toString(), "2595108", "Charged amount not matching the expected value");
+
   });
 });
