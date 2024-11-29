@@ -734,6 +734,8 @@ pub mod pallet {
         MaxBlockNumberReached,
         /// Failed thrown when trying to convert a type to a block number.
         BlockNumberConversionFailed,
+        /// Operation not allowed for insolvent provider
+        OperationNotAllowedForInsolventProvider,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.

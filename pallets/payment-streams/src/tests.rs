@@ -3954,12 +3954,12 @@ mod dynamic_rate_streams {
                     &alice_bsp_id,
                     System::block_number(),
                 );
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 5 blocks ahead
                 run_to_block(System::block_number() + 5);
-                let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage =
-                    10 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE; // TODO: why is this not 5?
+                    5 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -4149,12 +4149,12 @@ mod dynamic_rate_streams {
                     &alice_bsp_id,
                     System::block_number(),
                 );
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 5 blocks ahead
                 run_to_block(System::block_number() + 5);
-                let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 let amount_to_pay_for_storage =
-                    10 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE; // TODO: figure out why this is not 5 instead of 10
+                    5 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -4948,6 +4948,51 @@ mod dynamic_rate_streams {
 
                 // The payment stream should be updated with the correct last chargeable price index
                 assert_eq!(alice_last_chargeable_info.price_index, current_price_index);
+            });
+        }
+
+        #[test]
+        fn update_last_chargeable_price_index_skips_insolvent_providers() {
+            ExtBuilder::build().execute_with(|| {
+                let alice_on_poll: AccountId = 123;
+                let bob: AccountId = 1;
+                let amount_provided = 100;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let initial_price_index = 10000 * GIGAUNIT_BALANCE;
+
+                // Update the current price and current price index
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(initial_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID
+                register_account_as_bsp(alice_on_poll, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
+                        .unwrap();
+
+                // Create a payment stream from Bob to Alice of 100 units per block
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Simulate alice being insolvent
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    alice_bsp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                run_to_block(alice_on_poll);
+
+                // Get Alice's last chargeable info
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
+
+                // The payment stream should not have been updated since the provider is insolvent
+                assert_eq!(alice_last_chargeable_info.price_index, 0);
             });
         }
     }

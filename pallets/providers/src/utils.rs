@@ -517,11 +517,23 @@ where
 
         // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
         let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // Check if provider is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(&msp_id).is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             (
                 StorageProviderId::MainStorageProvider(msp_id),
                 Self::do_change_capacity_msp(who, msp_id, new_capacity)?,
             )
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // Check if provider is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(&bsp_id).is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             (
                 StorageProviderId::BackupStorageProvider(bsp_id),
                 Self::do_change_capacity_bsp(who, bsp_id, new_capacity)?,
@@ -705,6 +717,12 @@ where
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // Check if provider is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(&msp_id).is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             // If the provider is a MSP, add the new multiaddress to the MSP's storage,
             // making sure the multiaddress did not exist previously
             let mut msp =
@@ -719,6 +737,12 @@ where
             MainStorageProviders::<T>::insert(&msp_id, msp);
             msp_id
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // Check if provider is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(&bsp_id).is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             // If the provider is a BSP, add the new multiaddress to the BSP's storage,
             // making sure the multiaddress did not exist previously
             let mut bsp =
@@ -808,6 +832,12 @@ where
     /// - `AwaitingTopUp`: Emitted if there is a capacity deficit (i.e. the provider's capacity is falls below the used capacity) and therefore are required to top up their held deposit.
     /// This can be done manually by executing the `top_up_deposit` extrinsic.
     pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResult {
+        // Check if the provider is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(provider_id).is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
         let (account_id, _capacity, used_capacity) = Self::get_provider_details(*provider_id)?;
 
         // Calculate slashable amount for the current number of accrued failed proof submissions
@@ -928,6 +958,12 @@ where
             .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
             .ok_or(Error::<T>::NotRegistered)?;
 
+        // Check if the provider is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(&provider_id).is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
         let (account_id, _capacity, used_capacity) = Self::get_provider_details(provider_id)?;
 
         // Capacity needed for the provider to remain active
@@ -995,6 +1031,12 @@ where
     ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check if provider is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(&msp_id).is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         let value_prop = ValueProposition::<T>::new(
             price_per_giga_unit_of_data_per_block,
