@@ -195,10 +195,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
       /**
-       * BSPs required for storage request cannot exceed the maximum allowed.
-       **/
-      BspsRequiredExceedsTarget: AugmentedError<ApiType>;
-      /**
        * Action not allowed while the bucket is being moved.
        **/
       BucketIsBeingMoved: AugmentedError<ApiType>;
@@ -336,6 +332,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
       /**
+       * Privacy update results in no change
+       **/
+      NoPrivacyChange: AugmentedError<ApiType>;
+      /**
        * Account is not a BSP.
        **/
       NotABsp: AugmentedError<ApiType>;
@@ -375,6 +375,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Replication target cannot be zero.
        **/
       ReplicationTargetCannotBeZero: AugmentedError<ApiType>;
+      /**
+       * BSPs required for storage request cannot exceed the maximum allowed.
+       **/
+      ReplicationTargetExceedsMaximum: AugmentedError<ApiType>;
       /**
        * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
        **/
@@ -762,6 +766,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when failing to get the payment account of a registered Provider
        **/
       ProviderInconsistencyError: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a charge is attempted when the provider is marked as insolvent
+       **/
+      ProviderInsolvent: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to create a new fixed-rate payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_fixed_rate_payment_stream instead)
        **/

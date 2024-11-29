@@ -1433,7 +1433,7 @@ export default {
    * Lookup129: pallet_storage_providers::types::ValueProposition<T>
    **/
   PalletStorageProvidersValueProposition: {
-    pricePerUnitOfDataPerBlock: "u128",
+    pricePerGigaUnitOfDataPerBlock: "u128",
     commitment: "Bytes",
     bucketDataLimit: "u64",
     available: "bool"
@@ -3364,7 +3364,7 @@ export default {
       request_msp_sign_up: {
         capacity: "u64",
         multiaddresses: "Vec<Bytes>",
-        valuePropPricePerUnitOfDataPerBlock: "u128",
+        valuePropPricePerGigaUnitOfDataPerBlock: "u128",
         commitment: "Bytes",
         valuePropMaxDataLimit: "u64",
         paymentAccount: "AccountId32"
@@ -3384,7 +3384,7 @@ export default {
         newCapacity: "u64"
       },
       add_value_prop: {
-        pricePerUnitOfDataPerBlock: "u128",
+        pricePerGigaUnitOfDataPerBlock: "u128",
         commitment: "Bytes",
         bucketDataLimit: "u64"
       },
@@ -3402,7 +3402,7 @@ export default {
         mspId: "H256",
         capacity: "u64",
         multiaddresses: "Vec<Bytes>",
-        valuePropPricePerUnitOfDataPerBlock: "u128",
+        valuePropPricePerGigaUnitOfDataPerBlock: "u128",
         commitment: "Bytes",
         valuePropMaxDataLimit: "u64",
         paymentAccount: "AccountId32"
@@ -3459,7 +3459,8 @@ export default {
         fingerprint: "H256",
         size_: "u64",
         mspId: "Option<H256>",
-        peerIds: "Vec<Bytes>"
+        peerIds: "Vec<Bytes>",
+        replicationTarget: "Option<u32>"
       },
       revoke_storage_request: {
         fileKey: "H256"
@@ -3630,7 +3631,7 @@ export default {
         userAccounts: "Vec<AccountId32>"
       },
       pay_outstanding_debt: {
-        amountOfStreamsToPay: "u32"
+        providers: "Vec<H256>"
       },
       clear_insolvent_flag: "Null"
     }
@@ -4316,7 +4317,7 @@ export default {
     valuePropId: "Option<H256>"
   },
   /**
-   * Lookup447: pallet_storage_providers::pallet::Error<T>
+   * Lookup446: pallet_storage_providers::pallet::Error<T>
    **/
   PalletStorageProvidersError: {
     _enum: [
@@ -4368,7 +4369,7 @@ export default {
     ]
   },
   /**
-   * Lookup448: pallet_file_system::types::StorageRequestMetadata<T>
+   * Lookup447: pallet_file_system::types::StorageRequestMetadata<T>
    **/
   PalletFileSystemStorageRequestMetadata: {
     _alias: {
@@ -4387,13 +4388,13 @@ export default {
     bspsVolunteered: "u32"
   },
   /**
-   * Lookup451: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   * Lookup450: pallet_file_system::types::StorageRequestBspsMetadata<T>
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: "bool"
   },
   /**
-   * Lookup453: pallet_file_system::types::PendingFileDeletionRequest<T>
+   * Lookup452: pallet_file_system::types::PendingFileDeletionRequest<T>
    **/
   PalletFileSystemPendingFileDeletionRequest: {
     user: "AccountId32",
@@ -4402,13 +4403,13 @@ export default {
     fileSize: "u64"
   },
   /**
-   * Lookup459: pallet_file_system::types::MoveBucketRequestMetadata<T>
+   * Lookup458: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: "AccountId32"
   },
   /**
-   * Lookup460: pallet_file_system::pallet::Error<T>
+   * Lookup459: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: [
@@ -4417,7 +4418,7 @@ export default {
       "StorageRequestNotRevoked",
       "StorageRequestExists",
       "ReplicationTargetCannotBeZero",
-      "BspsRequiredExceedsTarget",
+      "ReplicationTargetExceedsMaximum",
       "NotABsp",
       "NotAMsp",
       "NotASp",
@@ -4480,7 +4481,8 @@ export default {
       "FailedToQueryEarliestFileVolunteerTick",
       "FailedToGetOwnerAccount",
       "NoFileKeysToConfirm",
-      "RootNotUpdated"
+      "RootNotUpdated",
+      "NoPrivacyChange"
     ]
   },
   /**
@@ -4560,7 +4562,8 @@ export default {
       "UserWithoutFunds",
       "UserNotFlaggedAsWithoutFunds",
       "CooldownPeriodNotPassed",
-      "UserHasRemainingDebt"
+      "UserHasRemainingDebt",
+      "ProviderInsolvent"
     ]
   },
   /**

@@ -17,3 +17,6 @@ pub const FILE_CHUNK_SIZE: u64 = 2u64.pow(10);
 pub const FILE_SIZE_TO_CHALLENGES: u64 = 2u64.pow(10);
 #[cfg(not(feature = "runtime-benchmarks"))]
 pub const FILE_SIZE_TO_CHALLENGES: u64 = 2u64.pow(19);
+
+/// The amount of units that fit in a gigaunit.
+pub const GIGAUNIT: u32 = 2u32.pow(30);

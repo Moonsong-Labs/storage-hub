@@ -1417,7 +1417,7 @@ declare const _default: {
    * Lookup129: pallet_storage_providers::types::ValueProposition<T>
    **/
   PalletStorageProvidersValueProposition: {
-    pricePerUnitOfDataPerBlock: string;
+    pricePerGigaUnitOfDataPerBlock: string;
     commitment: string;
     bucketDataLimit: string;
     available: string;
@@ -3288,7 +3288,7 @@ declare const _default: {
       request_msp_sign_up: {
         capacity: string;
         multiaddresses: string;
-        valuePropPricePerUnitOfDataPerBlock: string;
+        valuePropPricePerGigaUnitOfDataPerBlock: string;
         commitment: string;
         valuePropMaxDataLimit: string;
         paymentAccount: string;
@@ -3308,7 +3308,7 @@ declare const _default: {
         newCapacity: string;
       };
       add_value_prop: {
-        pricePerUnitOfDataPerBlock: string;
+        pricePerGigaUnitOfDataPerBlock: string;
         commitment: string;
         bucketDataLimit: string;
       };
@@ -3326,7 +3326,7 @@ declare const _default: {
         mspId: string;
         capacity: string;
         multiaddresses: string;
-        valuePropPricePerUnitOfDataPerBlock: string;
+        valuePropPricePerGigaUnitOfDataPerBlock: string;
         commitment: string;
         valuePropMaxDataLimit: string;
         paymentAccount: string;
@@ -3384,6 +3384,7 @@ declare const _default: {
         size_: string;
         mspId: string;
         peerIds: string;
+        replicationTarget: string;
       };
       revoke_storage_request: {
         fileKey: string;
@@ -3554,7 +3555,7 @@ declare const _default: {
         userAccounts: string;
       };
       pay_outstanding_debt: {
-        amountOfStreamsToPay: string;
+        providers: string;
       };
       clear_insolvent_flag: string;
     };
@@ -4145,13 +4146,13 @@ declare const _default: {
     valuePropId: string;
   };
   /**
-   * Lookup447: pallet_storage_providers::pallet::Error<T>
+   * Lookup446: pallet_storage_providers::pallet::Error<T>
    **/
   PalletStorageProvidersError: {
     _enum: string[];
   };
   /**
-   * Lookup448: pallet_file_system::types::StorageRequestMetadata<T>
+   * Lookup447: pallet_file_system::types::StorageRequestMetadata<T>
    **/
   PalletFileSystemStorageRequestMetadata: {
     _alias: {
@@ -4170,13 +4171,13 @@ declare const _default: {
     bspsVolunteered: string;
   };
   /**
-   * Lookup451: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   * Lookup450: pallet_file_system::types::StorageRequestBspsMetadata<T>
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: string;
   };
   /**
-   * Lookup453: pallet_file_system::types::PendingFileDeletionRequest<T>
+   * Lookup452: pallet_file_system::types::PendingFileDeletionRequest<T>
    **/
   PalletFileSystemPendingFileDeletionRequest: {
     user: string;
@@ -4185,13 +4186,13 @@ declare const _default: {
     fileSize: string;
   };
   /**
-   * Lookup459: pallet_file_system::types::MoveBucketRequestMetadata<T>
+   * Lookup458: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: string;
   };
   /**
-   * Lookup460: pallet_file_system::pallet::Error<T>
+   * Lookup459: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: string[];

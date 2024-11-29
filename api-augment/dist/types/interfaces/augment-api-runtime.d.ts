@@ -379,6 +379,13 @@ declare module "@polkadot/api-base/types/calls" {
     /** 0x1078d7ac24a07b0e/1 */
     paymentStreamsApi: {
       /**
+       * Get the Providers that have at least one payment stream with a specific user.
+       **/
+      getProvidersWithPaymentStreamsWithUser: AugmentedCall<
+        ApiType,
+        (userAccount: AccountId | string | Uint8Array) => Observable<Vec<ProviderId>>
+      >;
+      /**
        * Get the payment streams of a provider.
        **/
       getUsersOfPaymentStreamsOfProvider: AugmentedCall<

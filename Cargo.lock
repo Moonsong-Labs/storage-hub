@@ -8077,6 +8077,7 @@ dependencies = [
 name = "pallet-randomness"
 version = "0.1.0"
 dependencies = [
+ "frame-benchmarking 38.0.0",
  "frame-support 38.0.0",
  "frame-system 38.0.0",
  "log",
@@ -8351,6 +8352,7 @@ dependencies = [
  "pallet-balances 39.0.0",
  "pallet-payment-streams",
  "pallet-proofs-dealer",
+ "pallet-randomness",
  "pallet-storage-providers-runtime-api",
  "parity-scale-codec",
  "polkadot-parachain-primitives 14.0.0",
@@ -8360,6 +8362,7 @@ dependencies = [
  "shp-file-metadata",
  "shp-traits",
  "shp-treasury-funding",
+ "sp-arithmetic 26.0.0",
  "sp-core 34.0.0",
  "sp-io 38.0.0",
  "sp-runtime 39.0.1",

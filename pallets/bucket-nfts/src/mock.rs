@@ -325,6 +325,7 @@ impl pallet_payment_streams::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -375,6 +376,7 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
     type FileMetadataManager = FileMetadata<
@@ -418,6 +420,8 @@ impl pallet_storage_providers::Config for Test {
     type TopUpGracePeriod = ConstU32<5>;
     type ProviderTopUpTtl = ConstU32<10>;
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

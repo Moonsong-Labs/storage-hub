@@ -323,6 +323,13 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * Maximum number of BSPs required to fulfill a storage request.
+       *
+       * This is also used as a default value if the replication target is not specified when creating a storage request.
+       **/
+      maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A map of blocks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
@@ -425,13 +432,6 @@ declare module "@polkadot/api-base/types/storage" {
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
-      /**
-       * Number of BSPs required to fulfill a storage request
-       *
-       * This is also used as a default value if the BSPs required are not specified when creating a storage request.
-       **/
-      replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
@@ -983,14 +983,13 @@ declare module "@polkadot/api-base/types/storage" {
       accumulatedPriceIndex: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+       * The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+       * This can be updated each tick by the system manager.
        *
-       * This storage is updated in:
-       * - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+       * It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
        **/
-      currentPricePerUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
+      currentPricePerGigaUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The double mapping from a Provider, to its provided Users, to their dynamic-rate payment streams.
@@ -1491,10 +1490,18 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
-       * Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
-       * slashed for.
+       * Storage providers currently awaited for to top up their deposit (providers whom have been slashed and as
+       * a result have a capacity deficit, i.e. their capacity is below their used capacity).
        *
-       * This is primarily used to lookup providers, restrict certain operations while they are in this state.
+       * This is primarily used to lookup providers and restrict certain operations while they are in this state.
+       *
+       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+       * As a result, their provider account would be cleared from this storage.
+       *
+       * The `on_idle` hook will process every provider in this storage and mark them as insolvent.
+       * If a provider is marked as insolvent, the network (e.g users, other providers) can issue `add_redundancy`
+       * requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their buckets
+       * to another MSP or delete their buckets (as they normally can).
        **/
       awaitingTopUpFromProviders: AugmentedQuery<
         ApiType,
@@ -1557,28 +1564,18 @@ declare module "@polkadot/api-base/types/storage" {
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+       * A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
        *
-       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
-       * As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+       * Providers are marked insolvent by the `on_idle` hook.
        *
-       * The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
-       * marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
-       * `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
-       * buckets to another MSP or delete their buckets (as they normally can).
-       *
-       * The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
-       * top up their deposit.
+       * This stores the block number at which the provider was marked insolvent.
        **/
-      gracePeriodToSlashedProviders: AugmentedQuery<
+      insolventProviders: AugmentedQuery<
         ApiType,
-        (
-          arg1: u32 | AnyNumber | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<Null>>,
-        [u32, H256]
+        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
+        [H256]
       > &
-        QueryableStorageEntry<ApiType, [u32, H256]>;
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * The double mapping from a MainStorageProviderId to a BucketIds.
        *
@@ -1665,7 +1662,9 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * A map of relay chain block numbers to expired provider top up period.
        *
-       * Provider top up expiration items are ignored and cleared if the provider is not found in the `AwaitingTopUpFromProviders` storage.
+       * Processed in the `on_idle` hook.
+       *
+       * Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
        * Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
        * If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
        **/

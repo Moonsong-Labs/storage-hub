@@ -10,9 +10,10 @@
 
 pub mod types;
 mod utils;
+pub mod weights;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -29,7 +30,7 @@ use types::{
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::types::*;
+    use super::{types::*, weights::WeightInfo};
     use codec::{FullCodec, HasCompact};
     use frame_support::traits::Randomness;
     use frame_support::{
@@ -53,6 +54,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// Type to access randomness to salt AccountIds and get the corresponding ProviderId
         type ProvidersRandomness: Randomness<ProviderIdFor<Self>, BlockNumberFor<Self>>;
@@ -681,7 +685,6 @@ pub mod pallet {
         NewUsedCapacityExceedsStorageCapacity,
         /// Deposit too low to determine capacity.
         DepositTooLow,
-
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
         NotRegistered,
@@ -786,12 +789,12 @@ pub mod pallet {
         ///
         /// Emits `MspRequestSignUpSuccess` event when successful.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::request_msp_sign_up())]
         pub fn request_msp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            value_prop_price_per_giga_unit_of_data_per_block: BalanceOf<T>,
             commitment: Commitment<T>,
             value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
@@ -814,7 +817,7 @@ pub mod pallet {
             Self::do_request_msp_sign_up(MainStorageProviderSignUpRequest {
                 msp_info,
                 value_prop: ValueProposition::<T>::new(
-                    value_prop_price_per_unit_of_data_per_block,
+                    value_prop_price_per_giga_unit_of_data_per_block,
                     commitment,
                     value_prop_max_data_limit,
                 ),
@@ -855,7 +858,7 @@ pub mod pallet {
         ///
         /// Emits `BspRequestSignUpSuccess` event when successful.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::request_bsp_sign_up())]
         pub fn request_bsp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageDataUnit<T>,
@@ -916,7 +919,10 @@ pub mod pallet {
         /// - The deposit that the user has to pay to register as a SP is held when the user requests to register as a SP
         /// - If this extrinsic is successful, it will be free for the caller, to incentive state debloating
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+			T::WeightInfo::confirm_sign_up_bsp()
+				.max(T::WeightInfo::confirm_sign_up_msp())
+		})]
         pub fn confirm_sign_up(
             origin: OriginFor<T>,
             provider_account: Option<T::AccountId>,
@@ -948,7 +954,7 @@ pub mod pallet {
         ///
         /// Emits `SignUpRequestCanceled` event when successful.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::cancel_sign_up())]
         pub fn cancel_sign_up(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -977,7 +983,7 @@ pub mod pallet {
         ///
         /// Emits `MspSignOffSuccess` event when successful.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::msp_sign_off())]
         pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -1008,7 +1014,7 @@ pub mod pallet {
         ///
         /// Emits `BspSignOffSuccess` event when successful.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::bsp_sign_off())]
         pub fn bsp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -1048,7 +1054,16 @@ pub mod pallet {
         ///
         /// Emits `CapacityChanged` event when successful.
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+			let weight_msp_less_deposit = T::WeightInfo::change_capacity_msp_less_deposit();
+			let weight_msp_more_deposit = T::WeightInfo::change_capacity_msp_more_deposit();
+			let weight_bsp_less_deposit = T::WeightInfo::change_capacity_bsp_less_deposit();
+			let weight_bsp_more_deposit = T::WeightInfo::change_capacity_bsp_more_deposit();
+			weight_msp_less_deposit
+				.max(weight_msp_more_deposit)
+				.max(weight_bsp_less_deposit)
+				.max(weight_bsp_more_deposit)
+		})]
         pub fn change_capacity(
             origin: OriginFor<T>,
             new_capacity: StorageDataUnit<T>,
@@ -1080,10 +1095,10 @@ pub mod pallet {
         ///
         /// Emits `ValuePropAdded` event when successful.
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::add_value_prop())]
         pub fn add_value_prop(
             origin: OriginFor<T>,
-            price_per_unit_of_data_per_block: BalanceOf<T>,
+            price_per_giga_unit_of_data_per_block: BalanceOf<T>,
             commitment: Commitment<T>,
             bucket_data_limit: StorageDataUnit<T>,
         ) -> DispatchResultWithPostInfo {
@@ -1093,7 +1108,7 @@ pub mod pallet {
             // Execute checks and logic, update storage
             let (msp_id, value_prop) = Self::do_add_value_prop(
                 &who,
-                price_per_unit_of_data_per_block,
+                price_per_giga_unit_of_data_per_block,
                 commitment,
                 bucket_data_limit,
             )?;
@@ -1113,7 +1128,7 @@ pub mod pallet {
         /// This operation cannot be reversed. You can only add new value propositions.
         /// This will not affect existing buckets which are using this value proposition.
         #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::make_value_prop_unavailable())]
         pub fn make_value_prop_unavailable(
             origin: OriginFor<T>,
             value_prop_id: ValuePropIdFor<T>,
@@ -1150,7 +1165,7 @@ pub mod pallet {
         ///
         /// Emits `MultiAddressAdded` event when successful.
         #[pallet::call_index(9)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::add_multiaddress())]
         pub fn add_multiaddress(
             origin: OriginFor<T>,
             new_multiaddress: MultiAddress<T>,
@@ -1187,7 +1202,7 @@ pub mod pallet {
         ///
         /// Emits `MultiAddressRemoved` event when successful.
         #[pallet::call_index(10)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::remove_multiaddress())]
         pub fn remove_multiaddress(
             origin: OriginFor<T>,
             multiaddress: MultiAddress<T>,
@@ -1231,14 +1246,14 @@ pub mod pallet {
         ///
         /// Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
         #[pallet::call_index(11)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::force_msp_sign_up())]
         pub fn force_msp_sign_up(
             origin: OriginFor<T>,
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
             capacity: StorageDataUnit<T>,
             multiaddresses: Multiaddresses<T>,
-            value_prop_price_per_unit_of_data_per_block: BalanceOf<T>,
+            value_prop_price_per_giga_unit_of_data_per_block: BalanceOf<T>,
             commitment: Commitment<T>,
             value_prop_max_data_limit: StorageDataUnit<T>,
             payment_account: T::AccountId,
@@ -1260,7 +1275,7 @@ pub mod pallet {
             let sign_up_request = MainStorageProviderSignUpRequest {
                 msp_info,
                 value_prop: ValueProposition::<T>::new(
-                    value_prop_price_per_unit_of_data_per_block,
+                    value_prop_price_per_giga_unit_of_data_per_block,
                     commitment,
                     value_prop_max_data_limit,
                 ),
@@ -1308,7 +1323,7 @@ pub mod pallet {
         ///
         /// Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
         #[pallet::call_index(12)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::force_bsp_sign_up())]
         pub fn force_bsp_sign_up(
             origin: OriginFor<T>,
             who: T::AccountId,
@@ -1362,8 +1377,10 @@ pub mod pallet {
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         ///
         /// This is a free operation.
+        ///
+        /// This is a free operation.
         #[pallet::call_index(13)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::slash())]
         pub fn slash(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,

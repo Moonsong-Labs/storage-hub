@@ -10,6 +10,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadProvidersInterface, TrieMutation,
     TrieProofDeltaApplier,
@@ -213,6 +214,7 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
@@ -252,6 +254,8 @@ impl pallet_storage_providers::Config for Test {
     type TopUpGracePeriod = ConstU32<5>;
     type ProviderTopUpTtl = ConstU32<5>;
     type MaxExpiredItemsInBlock = ConstU32<10>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 parameter_types! {
@@ -384,7 +388,7 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type MaxSubmittersPerTick = ConstU32<100>;
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
@@ -459,6 +463,7 @@ impl crate::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -492,9 +497,11 @@ impl ExtBuilder {
         .assimilate_storage(&mut t)
         .unwrap();
 
-        crate::GenesisConfig::<Test> { current_price: 1 }
-            .assimilate_storage(&mut t)
-            .unwrap();
+        crate::GenesisConfig::<Test> {
+            current_price: GIGAUNIT.into(),
+        }
+        .assimilate_storage(&mut t)
+        .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| {
