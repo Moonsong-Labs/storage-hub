@@ -67,7 +67,7 @@ describeBspNet(
       // Then we calculate the next challenge tick.
       const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
       // Finally, advance to the next challenge tick.
-      await userApi.advanceToBlock(nextChallengeTick);
+      await userApi.block.skipTo(nextChallengeTick);
 
       await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
@@ -130,7 +130,7 @@ describeBspNet(
       assert(lastTickResult.isOk);
       const lastTickBspDownSubmittedProof = lastTickResult.asOk.toNumber();
       // Finally, advance to the next challenge tick.
-      await userApi.advanceToBlock(bspDownDeadline);
+      await userApi.block.skipTo(bspDownDeadline);
 
       // Expect to see a `SlashableProvider` event in the last block.
       const slashableProviderEvent = await userApi.assert.eventPresent(
@@ -217,7 +217,7 @@ describeBspNet(
         /* const currentBlock = await bspThreeApi.rpc.chain.getBlock();
     const currentBlockNumber = currentBlock.block.header.number.toNumber();
     const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
-    await bspThreeApi.advanceToBlock(cooldown); */
+    await bspThreeApi.block.skipTo(cooldown); */
         // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
         /*  const fileDeletionConfirmResult = bspThreeApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
         fileMetadata.fileKey,
@@ -290,7 +290,7 @@ describeBspNet(
       // Then we calculate two challenge ticks ahead.
       const nextChallengeTick = lastTickBspSubmittedProof + 2 * challengePeriod;
       // Finally, advance two challenge ticks ahead.
-      await userApi.advanceToBlock(nextChallengeTick);
+      await userApi.block.skipTo(nextChallengeTick);
 
       // Wait for BSP to submit proof.
       await sleep(1000);
@@ -320,7 +320,7 @@ describeBspNet(
       const storageRequestTtl = Number(userApi.consts.fileSystem.storageRequestTtl);
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      await userApi.advanceToBlock(currentBlockNumber + storageRequestTtl, {
+      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, {
         waitForBspProofs: [ShConsts.DUMMY_BSP_ID]
       });
 
@@ -373,7 +373,7 @@ describeBspNet(
 
       if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
-        await userApi.advanceToBlock(nextChallengeTick);
+        await userApi.block.skipTo(nextChallengeTick);
       }
 
       // Wait for tasks to execute and for the BSPs to submit proofs.
@@ -460,7 +460,7 @@ describeBspNet(
       const deletionRequestTtl = Number(userApi.consts.fileSystem.pendingFileDeletionRequestTtl);
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      await userApi.advanceToBlock(currentBlockNumber + deletionRequestTtl, {
+      await userApi.block.skipTo(currentBlockNumber + deletionRequestTtl, {
         waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
@@ -477,7 +477,7 @@ describeBspNet(
         await userApi.call.proofsDealerApi.getLastCheckpointChallengeTick()
       );
       const nextCheckpointChallengeBlock = lastCheckpointChallengeTick + checkpointChallengePeriod;
-      await userApi.advanceToBlock(nextCheckpointChallengeBlock, {
+      await userApi.block.skipTo(nextCheckpointChallengeBlock, {
         waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
@@ -565,7 +565,7 @@ describeBspNet(
       const areBspsNextChallengeBlockTheSame = firstBlockToAdvance === secondBlockToAdvance;
 
       // Advance to first next challenge block.
-      await userApi.advanceToBlock(firstBlockToAdvance, {
+      await userApi.block.skipTo(firstBlockToAdvance, {
         waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
       });
 
@@ -616,7 +616,7 @@ describeBspNet(
       // If the BSPs had different next challenge blocks, advance to the second next challenge block.
       if (!areBspsNextChallengeBlockTheSame) {
         // Advance to second next challenge block.
-        await userApi.advanceToBlock(secondBlockToAdvance, {
+        await userApi.block.skipTo(secondBlockToAdvance, {
           waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
         });
 

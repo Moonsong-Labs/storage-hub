@@ -7,8 +7,9 @@ use std::{
 
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
+use sc_client_api::BlockImportNotification;
 use sp_core::H256;
-use sp_runtime::{AccountId32, DispatchError};
+use sp_runtime::{traits::Header, AccountId32, DispatchError, SaturatedConversion};
 
 use shc_common::types::{
     BlockNumber, ProviderId, RandomnessOutput, RejectedStorageRequestReason, StorageHubEventsVec,
@@ -269,4 +270,53 @@ impl Default for RetryStrategy {
             should_retry: None,
         }
     }
+}
+
+/// Minimum block information needed to register what is the current best block
+/// and detect reorgs.
+#[derive(Debug, Clone, Encode, Decode, Default, Copy)]
+pub struct BestBlockInfo {
+    pub number: BlockNumber,
+    pub hash: H256,
+}
+
+impl<Block> From<&BlockImportNotification<Block>> for BestBlockInfo
+where
+    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+{
+    fn from(notification: &BlockImportNotification<Block>) -> Self {
+        Self {
+            number: (*notification.header.number()).saturated_into(),
+            hash: notification.hash,
+        }
+    }
+}
+
+impl<Block> From<BlockImportNotification<Block>> for BestBlockInfo
+where
+    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+{
+    fn from(notification: BlockImportNotification<Block>) -> Self {
+        Self {
+            number: (*notification.header.number()).saturated_into(),
+            hash: notification.hash,
+        }
+    }
+}
+
+/// When a new block is imported, the block is checked to see if it is one of the members
+/// of this enum.
+pub enum NewBlockNotificationKind {
+    /// The block is a new best block, built on top of the previous best block.
+    NewBestBlock(BestBlockInfo),
+    /// The block belongs to a fork that is not currently the best fork.
+    NewNonBestBlock(BestBlockInfo),
+    /// This fork causes a reorg, i.e. it is the new best block, but the previous best block
+    /// is not the parent of this one.
+    ///
+    /// The old best block (from the now non-best fork) is provided, as well as the new best block.
+    Reorg {
+        old_best_block: BestBlockInfo,
+        new_best_block: BestBlockInfo,
+    },
 }

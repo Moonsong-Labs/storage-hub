@@ -86,7 +86,7 @@ describeBspNet(
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
-      await userApi.advanceToBlock(cooldown);
+      await userApi.block.skipTo(cooldown);
 
       // Confirm stop storing
       await userApi.sealBlock(

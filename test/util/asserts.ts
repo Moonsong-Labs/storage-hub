@@ -23,8 +23,10 @@ export type AssertExtrinsicOptions = {
   ignoreParamCheck?: boolean;
   /** If provided, asserts that the number of extrinsics found matches this value. */
   assertLength?: number;
-  /**If provided, will not throw until this timeout is reached. */
+  /** If provided, will not throw until this timeout is reached. */
   timeout?: number;
+  /** Provide more logs */
+  verbose?: boolean;
 };
 /**
  * Asserts that a specific extrinsic (module.method) is present in a blockchain block or transaction pool.
@@ -76,9 +78,10 @@ export const assertExtrinsicPresent = async (
             const response = await api.rpc.chain.getBlock(blockHash);
 
             if (!options.blockHeight && !options.blockHash) {
-              console.log(
-                `No block height provided, using latest at ${response.block.header.number.toNumber()}`
-              );
+              options.verbose &&
+                console.log(
+                  `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+                );
             }
             return response.block.extrinsics;
           })()
