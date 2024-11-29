@@ -91,6 +91,37 @@ mod create_bucket_tests {
                 );
             });
         }
+
+        #[test]
+        fn create_public_bucket_fails_with_insolvent_provider() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = false;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    msp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_noop!(
+                    FileSystem::create_bucket(
+                        origin,
+                        Some(msp_id),
+                        name.clone(),
+                        private,
+                        Some(value_prop_id)
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
     }
 
     mod success {
@@ -363,6 +394,80 @@ mod delete_bucket_tests {
                 assert_noop!(
                     FileSystem::delete_bucket(origin, bucket_id),
                     Error::<Test>::BucketNotEmpty
+                );
+            });
+        }
+
+        #[test]
+        fn remove_bucket_bucket_provider_insolvent() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let private = false;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
+                    &owner,
+                    name.clone(),
+                );
+
+                // Create a new bucket.
+                assert_ok!(FileSystem::create_bucket(
+                    origin.clone(),
+                    Some(msp_id),
+                    name.clone(),
+                    private,
+                    Some(value_prop_id)
+                ));
+
+                // Dispatch a signed extrinsic of a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    origin.clone(),
+                    bucket_id,
+                    FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
+                    BlakeTwo256::hash(&b"test".to_vec()),
+                    4,
+                    Some(msp_id),
+                    BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
+                    None
+                ));
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    msp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                // Accept the storage request to store the file, so the bucket is not empty.
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        RuntimeOrigin::signed(msp),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key: FileSystem::compute_file_key(
+                                        owner.clone(),
+                                        bucket_id,
+                                        FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
+                                        4,
+                                        BlakeTwo256::hash(&b"test".to_vec())
+                                    ),
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
         }
@@ -891,6 +996,40 @@ mod request_move_bucket {
                         BucketMoveRequestResponse::Accepted
                     ),
                     Error::<Test>::InsufficientAvailableCapacity
+                );
+            });
+        }
+
+        #[test]
+        fn move_bucket_request_fails_with_insolvent_provider() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp_charlie = Keyring::Charlie.to_account_id();
+                let msp_dave = Keyring::Dave.to_account_id();
+
+                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+
+                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+
+                // Check bucket is stored by Charlie
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    msp_dave_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_noop!(
+                    FileSystem::request_move_bucket(origin.clone(), bucket_id, msp_dave_id),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
         }
@@ -1804,6 +1943,52 @@ mod request_storage {
                         Some(MaxReplicationTarget::<Test>::get() + 1)
                     ),
                     Error::<Test>::ReplicationTargetExceedsMaximum
+                );
+            });
+        }
+
+        #[test]
+        fn request_storage_fails_with_insolvent_provider() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    &msp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_noop!(
+                    FileSystem::issue_storage_request(
+                        user.clone(),
+                        bucket_id,
+                        location.clone(),
+                        fingerprint,
+                        size,
+                        Some(msp_id),
+                        peer_ids.clone(),
+                        None
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
         }
@@ -3473,6 +3658,80 @@ mod msp_respond_storage_request {
         }
 
         #[test]
+        fn fails_if_request_with_insolvent_provider() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Insert a storage request that is not expecting a MSP.
+                StorageRequests::<Test>::insert(
+                    file_key,
+                    StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: None,
+                        user_peer_ids: peer_ids.clone(),
+                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 0,
+                        bsps_volunteered: 0,
+                    },
+                );
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    msp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                assert_noop!(
+                    FileSystem::msp_respond_storage_requests_multiple_buckets(
+                        msp_signed.clone(),
+                        bounded_vec![StorageRequestMspBucketResponse {
+                            bucket_id,
+                            accept: Some(StorageRequestMspAcceptedFileKeys {
+                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                    file_key,
+                                    proof: CompactProof {
+                                        encoded_nodes: vec![],
+                                    }
+                                }],
+                                non_inclusion_forest_proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                },
+                            }),
+                            reject: bounded_vec![],
+                        }],
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
+
+        #[test]
         fn fails_if_caller_is_msp_but_not_assigned_one() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
@@ -3965,6 +4224,66 @@ mod bsp_volunteer {
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
                     Error::<Test>::BspAlreadyVolunteered
+                );
+            });
+        }
+
+        #[test]
+        fn volunteer_fails_when_bsp_is_insolvent() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids.clone(),
+                    None
+                ));
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    bsp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                assert_noop!(
+                    FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
         }
@@ -4821,6 +5140,81 @@ mod bsp_confirm {
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_confirm_storing_fails_with_insolvent_provider() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids.clone(),
+                    None
+                ));
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Simulate insolvent provider
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    bsp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                // Dispatch BSP confirm storing.
+                assert_noop!(
+                    FileSystem::bsp_confirm_storing(
+                        bsp_signed.clone(),
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        },
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
         }

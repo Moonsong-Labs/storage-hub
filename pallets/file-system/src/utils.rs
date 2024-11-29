@@ -256,6 +256,12 @@ where
                 <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
                 Error::<T>::NotAMsp
             );
+
+            // Check if provider is insolvent
+            ensure!(
+                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
         }
 
         // Create collection only if bucket is private
@@ -299,6 +305,12 @@ where
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&new_msp_id),
             Error::<T>::NotAMsp
+        );
+
+        // Check if the newly selected MSP is not insolvent
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(new_msp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
         // Check if the bucket is already stored by the new MSP.
@@ -346,6 +358,12 @@ where
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
             .ok_or(Error::<T>::NotAMsp)?;
+
+        // Check if provider is insolvent.
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         // Check if the sender is the MSP.
         ensure!(
@@ -576,6 +594,12 @@ where
                 Error::<T>::NotAMsp
             );
 
+            // Check if the provider is insolvent
+            ensure!(
+                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             // Check that the MSP received is the one storing the bucket.
             ensure!(
                 <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
@@ -775,6 +799,12 @@ where
         bucket_id: BucketIdFor<T>,
         accepted_file_keys: StorageRequestMspAcceptedFileKeys<T>,
     ) -> Result<MerkleHash<T>, DispatchError> {
+        // Check if provider is insolvent.
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
         let file_keys = accepted_file_keys
             .file_keys_and_proofs
             .iter()
@@ -992,6 +1022,12 @@ where
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
+        // Check if provider is insolvent.
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(bsp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
         // Check that the provider is indeed a BSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
@@ -1093,6 +1129,12 @@ where
         let bsp_id =
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
+
+        // Check if provider is insolvent.
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(bsp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         // Check that the provider is indeed a BSP.
         ensure!(

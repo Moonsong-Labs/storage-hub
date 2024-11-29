@@ -795,6 +795,8 @@ pub mod pallet {
         RootNotUpdated,
         /// Privacy update results in no change
         NoPrivacyChange,
+        /// Operations not allowed for insolvent provider
+        OperationNotAllowedForInsolventProvider,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
