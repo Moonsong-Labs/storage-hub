@@ -5356,7 +5356,7 @@ mod bsp_confirm {
                 );
 
 				// Assert that the payment stream between the BSP and the user has been created
-				assert!(<<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&bsp_id, &owner_account_id));
+				assert!(<<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(&bsp_id, &owner_account_id));
             });
         }
 

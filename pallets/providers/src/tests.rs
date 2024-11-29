@@ -6155,6 +6155,101 @@ mod make_value_prop_unavailable {
     }
 }
 
+mod delete_provider {
+    use super::*;
+
+    mod failure {
+
+        use crate::InsolventProviders;
+
+        use super::*;
+
+        #[test]
+        fn deleting_provider_fails_if_not_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                assert_noop!(
+                    StorageProviders::delete_provider(RuntimeOrigin::signed(alice), msp_id),
+                    Error::<Test>::DeleteProviderConditionsNotMet
+                );
+            });
+        }
+
+        #[test]
+        fn deleting_provider_fails_if_payment_stream_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice which creates a payment stream
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                InsolventProviders::<Test>::insert(
+                    msp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                assert_noop!(
+                    StorageProviders::delete_provider(RuntimeOrigin::signed(alice), msp_id),
+                    Error::<Test>::DeleteProviderConditionsNotMet
+                );
+            });
+        }
+    }
+
+    mod success {
+        use crate::InsolventProviders;
+
+        use super::*;
+
+        #[test]
+        fn deleting_provider_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                InsolventProviders::<Test>::insert(
+                    msp_id,
+                    frame_system::Pallet::<Test>::block_number(),
+                );
+
+                assert_ok!(StorageProviders::delete_provider(
+                    RuntimeOrigin::signed(alice),
+                    msp_id
+                ));
+            });
+        }
+    }
+}
+
 // Helper functions for testing:
 
 /// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageDataUnit units

@@ -1018,10 +1018,13 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::Units>;
 
     /// Check if a user has an active payment stream with a provider.
-    fn has_active_payment_stream(
+    fn has_active_payment_stream_with_user(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> bool;
+
+    /// Check if a provider has any active payment streams.
+    fn has_active_payment_streams(provider_id: &Self::ProviderId) -> bool;
 
     /// Add a priviledge provider to the PriviledgerProvider storage.
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;

@@ -1076,6 +1076,82 @@ where
         )
     }
 
+    /// Delete the provider iff they have no payment streams and they are marked as insolvent.
+    ///
+    /// Anyone can call this.
+    pub(crate) fn do_delete_provider(provider_id: &ProviderIdFor<T>) -> Result<(), DispatchError> {
+        ensure!(
+            Self::can_delete_provider(provider_id),
+            Error::<T>::DeleteProviderConditionsNotMet
+        );
+
+        InsolventProviders::<T>::remove(provider_id);
+
+        // Delete provider data
+        if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+            MainStorageProviders::<T>::remove(&provider_id);
+            AccountIdToMainStorageProviderId::<T>::remove(msp.owner_account);
+            MspCount::<T>::mutate(|n| {
+                let new_amount_of_msps = n.checked_sub(&T::SpCount::one());
+                match new_amount_of_msps {
+                    Some(new_amount_of_msps) => {
+                        *n = new_amount_of_msps;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
+            MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
+
+            Self::deposit_event(Event::<T>::MspDeleted {
+                provider_id: *provider_id,
+            });
+        } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
+            BackupStorageProviders::<T>::remove(&provider_id);
+            AccountIdToBackupStorageProviderId::<T>::remove(bsp.owner_account);
+            BspCount::<T>::mutate(|n| {
+                let new_amount_of_bsps = n.checked_sub(&T::SpCount::one());
+                match new_amount_of_bsps {
+                    Some(new_amount_of_bsps) => {
+                        *n = new_amount_of_bsps;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            TotalBspsCapacity::<T>::mutate(|n| {
+                let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
+                match new_total_bsp_capacity {
+                    Some(new_total_bsp_capacity) => {
+                        *n = new_total_bsp_capacity;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            UsedBspsCapacity::<T>::mutate(|n| {
+                let new_used_bsp_capacity = n.checked_sub(&bsp.capacity_used);
+                match new_used_bsp_capacity {
+                    Some(new_used_bsp_capacity) => {
+                        *n = new_used_bsp_capacity;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            GlobalBspsReputationWeight::<T>::mutate(|n| {
+                *n = n.saturating_sub(bsp.reputation_weight);
+            });
+
+            Self::deposit_event(Event::<T>::BspDeleted {
+                provider_id: *provider_id,
+            });
+        }
+
+        Ok(())
+    }
+
     fn hold_balance(
         account_id: &T::AccountId,
         previous_deposit: BalanceOf<T>,
@@ -2307,6 +2383,20 @@ where
             &bsp.owner_account,
         );
         Ok(stake)
+    }
+
+    pub fn can_delete_provider(provider_id: &ProviderIdFor<T>) -> bool {
+        // Provider must be insolvent
+        if !InsolventProviders::<T>::contains_key(provider_id) {
+            return false;
+        }
+
+        // Provider must not have any payment streams
+        if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_streams(provider_id) {
+            return false;
+        }
+
+        true
     }
 
     /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.

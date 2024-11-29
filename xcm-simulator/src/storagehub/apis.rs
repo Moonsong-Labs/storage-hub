@@ -441,5 +441,9 @@ impl_runtime_apis! {
         fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
             Providers::get_bsp_stake(bsp_id)
         }
+
+        fn can_delete_provider(provider_id: &ProviderIdFor<Runtime>) -> bool {
+            Providers::can_delete_provider(provider_id)
+        }
     }
 }

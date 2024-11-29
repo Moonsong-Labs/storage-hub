@@ -635,6 +635,12 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             value_prop_id: ValuePropIdFor<T>,
         },
+
+        /// Event emitted when an MSP has been deleted.
+        MspDeleted { provider_id: ProviderIdFor<T> },
+
+        /// Event emitted when a BSP has been deleted.
+        BspDeleted { provider_id: ProviderIdFor<T> },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -736,6 +742,10 @@ pub mod pallet {
         BlockNumberConversionFailed,
         /// Operation not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
+        /// Failed to delete a provider due to conditions not being met.
+        ///
+        /// Call `can_delete_provider` runtime API to check if the provider can be deleted.
+        DeleteProviderConditionsNotMet,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -1407,6 +1417,32 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             Self::do_top_up_deposit(&who)?;
+
+            Ok(Pays::No.into())
+        }
+
+        /// Delete a provider from the system.
+        ///
+        /// This can only be done if the following conditions are met:
+        /// - The provider is insolvent.
+        /// - The provider has no active payment streams.
+        ///
+        /// This is a free operation and can be called by anyone with a signed transaction.
+        ///
+        /// You can utilize the runtime API `can_delete_provider` to check if a provider can be deleted
+        /// to automate the process.
+        ///
+        /// Emits `MspDeleted` or `BspDeleted` event when successful.
+        #[pallet::call_index(15)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn delete_provider(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed.
+            ensure_signed(origin)?;
+
+            Self::do_delete_provider(&provider_id)?;
 
             Ok(Pays::No.into())
         }

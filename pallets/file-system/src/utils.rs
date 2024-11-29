@@ -1754,7 +1754,7 @@ where
         // without having to pay any penalty.
         ensure!(
             <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner)
-                || !<T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(
+                || !<T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
                     &sp_id, &owner
                 ),
             Error::<T>::UserNotInsolvent

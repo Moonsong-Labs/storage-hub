@@ -557,6 +557,12 @@ impl IndexerService {
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
             pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
+            pallet_storage_providers::Event::MspDeleted { provider_id } => {
+                Msp::delete(conn, provider_id.to_string()).await?;
+            }
+            pallet_storage_providers::Event::BspDeleted { provider_id } => {
+                Bsp::delete(conn, provider_id.to_string()).await?;
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

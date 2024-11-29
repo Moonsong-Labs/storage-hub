@@ -1638,12 +1638,17 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
             .map(|stream| stream.amount_provided)
     }
 
-    fn has_active_payment_stream(
+    fn has_active_payment_stream_with_user(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> bool {
         FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account)
             || DynamicRatePaymentStreams::<T>::contains_key(provider_id, user_account)
+    }
+
+    fn has_active_payment_streams(provider_id: &Self::ProviderId) -> bool {
+        !Self::get_fixed_rate_payment_streams_of_provider(provider_id).is_empty()
+            || !Self::get_dynamic_rate_payment_streams_of_provider(provider_id).is_empty()
     }
 
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
