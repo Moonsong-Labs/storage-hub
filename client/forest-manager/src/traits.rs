@@ -54,4 +54,14 @@ pub trait ForestStorageHandler {
     async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>>;
     /// Remove forest storage instance.
     async fn remove_forest_storage(&mut self, key: &Self::Key);
+    /// Create a copy (snapshot) of the forest storage instance.
+    ///
+    /// Returns `Some` with the copied forest storage instance for `key` if it exists,
+    /// otherwise returns `None`.
+    /// The instance returned is the one corresponding to `key`, not the one corresponding to `key_for_copy`.
+    async fn snapshot(
+        &self,
+        key: &Self::Key,
+        key_for_copy: &Self::Key,
+    ) -> Option<Arc<RwLock<Self::FS>>>;
 }
