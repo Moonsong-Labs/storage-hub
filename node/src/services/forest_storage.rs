@@ -191,13 +191,13 @@ where
             return fs.clone();
         }
 
-        let fs = InMemoryForestStorage::new();
+        let forest_storage = InMemoryForestStorage::new();
 
-        let fs = Arc::new(RwLock::new(fs));
+        let forest_storage = Arc::new(RwLock::new(forest_storage));
 
-        fs_instances.insert(key.clone(), fs.clone());
+        fs_instances.insert(key.clone(), forest_storage.clone());
 
-        fs
+        forest_storage
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
@@ -229,19 +229,28 @@ where
             return fs.clone();
         }
 
-        let fs = RocksDBForestStorage::<
+        let new_db_storage_path = format!(
+            "{}_{:?}",
+            self.storage_path
+                .clone()
+                .expect("Storage path should be set for RocksDB implementation"),
+            key.clone()
+        );
+
+        let underlying_db = RocksDBForestStorage::<
             StorageProofsMerkleTrieLayout,
             kvdb_rocksdb::Database,
-        >::rocksdb_storage(self.storage_path.clone().expect("Storage path should be set for RocksDB implementation"))
+        >::rocksdb_storage(new_db_storage_path)
         .expect("Failed to create RocksDB");
 
-        let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
+        let forest_storage =
+            RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
 
-        let fs = Arc::new(RwLock::new(fs));
+        let forest_storage = Arc::new(RwLock::new(forest_storage));
 
-        fs_instances.insert(key.clone(), fs.clone());
+        fs_instances.insert(key.clone(), forest_storage.clone());
 
-        fs
+        forest_storage
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {

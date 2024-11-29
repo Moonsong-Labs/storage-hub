@@ -129,47 +129,6 @@ export class BspNetTestApi implements AsyncDisposable {
     return Assertions.assertEventPresent(this._api, module, method, events);
   }
 
-  /**
-   * Advances the blockchain to a specified block number.
-   *
-   * This function seals blocks until the specified block number is reached. It can optionally
-   * wait between blocks and watch for BSP proofs.
-   *
-   * @param api - The ApiPromise instance to interact with the blockchain.
-   * @param blockNumber - The target block number to advance to.
-   * @param waitBetweenBlocks - Optional. If specified:
-   *                            - If a number, waits for that many milliseconds between blocks.
-   *                            - If true, waits for 500ms between blocks.
-   *                            - If false or undefined, doesn't wait between blocks.
-   * @param watchForBspProofs - Optional. An array of BSP IDs to watch for proofs.
-   *                            If specified, the function will wait for BSP proofs at appropriate intervals.
-   *
-   * @returns A Promise that resolves to a SealedBlock object representing the last sealed block.
-   *
-   * @throws Will throw an error if the target block number is lower than the current block number.
-   *
-   * @example
-   * // Advance to block 100 with no waiting
-   * const result = await advanceToBlock(api, 100);
-   *
-   * @example
-   * // Advance to block 200, waiting 1000ms between blocks
-   * const result = await advanceToBlock(api, 200, 1000);
-   *
-   * @example
-   * // Advance to block 300, watching for proofs from two BSPs
-   * const result = await advanceToBlock(api, 300, true, ['bsp1', 'bsp2']);
-   */
-  private advanceToBlock(
-    blockNumber: number,
-    options?: {
-      waitBetweenBlocks?: number | boolean;
-      waitForBspProofs?: string[];
-    }
-  ) {
-    return BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber });
-  }
-
   private enrichApi() {
     const remappedAssertNs = {
       fetchEvent: Assertions.fetchEvent,
@@ -448,11 +407,18 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
-       * Causes a chain re-org by creating a finalized block on top of the parent block.
-       * Note: This requires the head block to be unfinalized, otherwise it will throw!
+       * Causes a chain re-org by creating a finalised block on top of the last finalised block.
+       * Note: This requires the head block to be unfinalised, otherwise it will throw!
        * @returns A promise that resolves when the chain re-org is complete.
        */
-      reOrg: () => BspNetBlock.reOrgBlocks(this._api)
+      reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
+      /**
+       * Causes a chain re-org by creating a longer forked chain.
+       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * @returns A promise that resolves when the chain re-org is complete.
+       */
+      reOrgWithLongerChain: (startingBlockHash?: string) =>
+        BspNetBlock.reOrgWithLongerChain(this._api, startingBlockHash)
     };
 
     const remappedNodeNs = {
@@ -505,11 +471,6 @@ export class BspNetTestApi implements AsyncDisposable {
        * @see {@link assertEvent}
        */
       assertEvent: this.assertEvent.bind(this),
-      /**
-       * Soon Deprecated. Use api.assert.eventPresent() instead.
-       * @see {@link advanceToBlock}
-       */
-      advanceToBlock: this.advanceToBlock.bind(this),
       /**
        * Assertions namespace
        * Provides methods for asserting various conditions in the BSP network tests.
