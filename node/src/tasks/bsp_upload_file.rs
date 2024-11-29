@@ -1,4 +1,10 @@
-use std::{cmp::max, ops::Add, str::FromStr, time::Duration};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    ops::Add,
+    str::FromStr,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -136,7 +142,10 @@ where
         {
             Ok(proven) => {
                 if proven.len() != 1 {
-                    Err(anyhow::anyhow!("Expected exactly one proven chunk."))
+                    Err(anyhow::anyhow!(
+                        "Expected exactly one proven chunk but got {}.",
+                        proven.len()
+                    ))
                 } else {
                     Ok(proven[0].clone())
                 }
@@ -319,7 +328,7 @@ where
         // Generate the proof for the files and get metadatas.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut file_keys_and_proofs = Vec::new();
-        let mut file_metadatas = Vec::new();
+        let mut file_metadatas = HashMap::new();
         for (confirm_storing_request, chunks_to_prove) in
             confirm_storing_requests_with_chunks_to_prove.into_iter()
         {
@@ -330,7 +339,7 @@ where
             ) {
                 (Ok(proof), Ok(Some(metadata))) => {
                     file_keys_and_proofs.push((confirm_storing_request.file_key, proof));
-                    file_metadatas.push(metadata);
+                    file_metadatas.insert(confirm_storing_request.file_key, metadata);
                 }
                 _ => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
@@ -386,7 +395,8 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        self.storage_hub_handler
+        let events = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -398,14 +408,73 @@ where
                             .provider_config
                             .extrinsic_retry_timeout,
                     )),
+                true,
             )
             .await?;
 
+        let maybe_new_root: Option<H256> = events.and_then(|events| {
+            events.into_iter().find_map(|event| {
+                if let storage_hub_runtime::RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::BspConfirmedStoring {
+                        bsp_id,
+                        skipped_file_keys,
+                        new_root,
+                        ..
+                    },
+                ) = event.event
+                {
+                    if bsp_id == own_bsp_id {
+                        if !skipped_file_keys.is_empty() {
+                            warn!(
+                            target: LOG_TARGET,
+                            "Skipped confirmations for file keys: {:?}",
+                            skipped_file_keys
+                            );
+                            // Remove skipped confirmations
+                            let skipped_set: HashSet<_> = skipped_file_keys.into_iter().collect();
+                            file_metadatas.retain(|file_key, _| !skipped_set.contains(file_key));
+                        }
+                        Some(new_root)
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Received confirmation for another BSP: {:?}",
+                            bsp_id
+                        );
+                        None
+                    }
+                } else {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Received unexpected event: {:?}",
+                        event.event
+                    );
+                    None
+                }
+            })
+        });
+
+        let new_root = match maybe_new_root {
+            Some(new_root) => new_root,
+            None => {
+                let err_msg = "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. Failed to query BspConfirmedStoring new forest root after confirming storing.";
+                error!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow!(err_msg));
+            }
+        };
+
         // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
-        {
-            fs.write()
-                .await
-                .insert_files_metadata(file_metadatas.as_slice())?;
+        if !file_metadatas.is_empty() {
+            fs.write().await.insert_files_metadata(
+                file_metadatas.into_values().collect::<Vec<_>>().as_slice(),
+            )?;
+
+            if fs.read().await.root() != new_root {
+                let err_msg =
+                    "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. \nError forest root mismatch after confirming storing.";
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow!(err_msg));
+            }
         }
 
         // Release the forest root write "lock" and finish the task.
@@ -425,6 +494,22 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        // Verify if file not already stored
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+        if fs.read().await.contains_file_key(&event.file_key.into())? {
+            info!(
+                target: LOG_TARGET,
+                "Skipping file key {:?} NewStorageRequest because we are already storing it.",
+                event.file_key
+            );
+            return Ok(());
+        }
+
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),

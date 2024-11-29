@@ -42,6 +42,7 @@ import type {
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -62,6 +63,7 @@ import type {
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
   PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
   PalletXcmQueryStatus,
@@ -314,7 +316,9 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       fileDeletionRequestExpirations: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<ITuple<[AccountId32, H256]>>>,
+        (
+          arg: u32 | AnyNumber | Uint8Array
+        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
@@ -979,14 +983,13 @@ declare module "@polkadot/api-base/types/storage" {
       accumulatedPriceIndex: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+       * The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+       * This can be updated each tick by the system manager.
        *
-       * This storage is updated in:
-       * - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+       * It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
        **/
-      currentPricePerUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
+      currentPricePerGigaUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The double mapping from a Provider, to its provided Users, to their dynamic-rate payment streams.
@@ -1045,11 +1048,12 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
-       * The last tick from the Providers Proof Submitters pallet that was registered.
+       * The last tick that was processed by this pallet from the Proof Submitters interface.
        *
-       * This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
-       * registered. For the tick in this storage element, this pallet already knows the Providers that submitted
-       * a valid proof.
+       * This is used to keep track of the last tick processed by this pallet from the pallet that implements the from the ProvidersProofSubmitters interface.
+       * This is done to know the last tick for which this pallet has registered the Providers that submitted a valid proof and updated their last chargeable info.
+       * In the next `on_poll` hook execution, this pallet will update the last chargeable info of the Providers that submitted a valid proof in the tick that
+       * follows the one saved in this storage element.
        **/
       lastSubmittersTickRegistered: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
@@ -1387,6 +1391,20 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * The tick to check and see if Providers failed to submit proofs before their deadline.
+       *
+       * In a normal situation, this should always be equal to [`ChallengesTicker`].
+       * However, in the unlikely scenario where a large number of Providers fail to submit proofs (larger
+       * than [`Config::MaxSlashableProvidersPerTick`]), and all of them had the same deadline, not all of
+       * them will be marked as slashable. Only the first [`Config::MaxSlashableProvidersPerTick`] will be.
+       * In that case, this stored tick will lag behind [`ChallengesTicker`].
+       *
+       * It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
+       * slashable Providers follow.
+       **/
+      tickToCheckForSlashableProviders: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A mapping from challenges tick to a vector of custom challenged keys for that tick.
        *
        * This is used to keep track of the challenges that have been made in the past, specifically
@@ -1472,6 +1490,20 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
+       * Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
+       * slashed for.
+       *
+       * This is primarily used to lookup providers, restrict certain operations while they are in this state.
+       **/
+      awaitingTopUpFromProviders: AugmentedQuery<
+        ApiType,
+        (
+          arg: H256 | string | Uint8Array
+        ) => Observable<Option<PalletStorageProvidersTopUpMetadata>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * The mapping from a BackupStorageProviderId to a BackupStorageProvider.
        *
        * This is used to get a Backup Storage Provider's metadata.
@@ -1523,6 +1555,29 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+       *
+       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+       * As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+       *
+       * The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
+       * marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
+       * `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
+       * buckets to another MSP or delete their buckets (as they normally can).
+       *
+       * The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
+       * top up their deposit.
+       **/
+      gracePeriodToSlashedProviders: AugmentedQuery<
+        ApiType,
+        (
+          arg1: u32 | AnyNumber | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<Null>>,
+        [u32, H256]
+      > &
+        QueryableStorageEntry<ApiType, [u32, H256]>;
       /**
        * The double mapping from a MainStorageProviderId to a BucketIds.
        *

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS file_peer_id;
+DROP TABLE IF EXISTS peer_id;

@@ -2,11 +2,11 @@ use crate::{
     self as file_system,
     mock::*,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof, FileLocation,
-        MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor,
-        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
-        ThresholdType, ValuePropId,
+        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileDeletionRequestExpirationItem,
+        FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds,
+        PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestTtl, ThresholdType, ValuePropId,
     },
     Config, Error, Event, PendingBucketsToMove, PendingMoveBucketRequests,
     PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations, StorageRequests,
@@ -147,9 +147,10 @@ mod create_bucket_tests {
                 );
 
                 let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+				let base_deposit: u128 = <Test as pallet_payment_streams::Config>::BaseDeposit::get();
                 assert_eq!(
                     <Test as Config>::Currency::free_balance(&owner),
-                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128
+                    owner_initial_balance - bucket_creation_deposit - nft_collection_deposit - new_stream_deposit as u128 - base_deposit
                 );
 
                 // Assert that the correct event was deposited
@@ -162,6 +163,7 @@ mod create_bucket_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -215,6 +217,7 @@ mod create_bucket_tests {
                         collection_id: None,
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1188,6 +1191,7 @@ mod update_bucket_privacy_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1261,6 +1265,7 @@ mod update_bucket_privacy_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1361,6 +1366,7 @@ mod update_bucket_privacy_tests {
                         collection_id: Some(0),
                         private,
                         value_prop_id: Some(value_prop_id),
+                        root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
                 );
@@ -1665,11 +1671,14 @@ mod request_storage {
                 // Mint enough funds for the bucket deposit and existential deposit but not enough for the storage request deposit
                 let new_stream_deposit: u64 =
                     <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+                let base_stream_deposit: u128 =
+                    <Test as pallet_payment_streams::Config>::BaseDeposit::get();
                 let balance_to_mint: crate::types::BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
                         crate::types::BalanceOf<Test>,
                     >>::get()
                     .saturating_add(new_stream_deposit as u128)
+                    .saturating_add(base_stream_deposit)
                     .saturating_add(<Test as pallet_balances::Config>::ExistentialDeposit::get());
                 <Test as file_system::Config>::Currency::mint_into(
                     &owner_without_funds,
@@ -3549,7 +3558,7 @@ mod msp_respond_storage_request {
                 let msp = Keyring::Charlie.to_account_id();
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 200;
+                let size = 2 * 1024 * 1024 * 1024;
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -3863,7 +3872,7 @@ mod bsp_volunteer {
                 // Dispatch BSP volunteer.
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
-                    Error::<Test>::AboveThreshold
+                    Error::<Test>::BspNotEligibleToVolunteer
                 );
             });
         }
@@ -3937,7 +3946,7 @@ mod bsp_volunteer {
                 // Dispatch BSP volunteer.
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
-                    Error::<Test>::AboveThreshold
+                    Error::<Test>::BspNotEligibleToVolunteer
                 );
             });
         }
@@ -4271,7 +4280,7 @@ mod bsp_confirm {
                         )])
                         .unwrap(),
                     ),
-                    Error::<Test>::StorageRequestNotFound
+                    Error::<Test>::NoFileKeysToConfirm
                 );
             });
         }
@@ -4464,7 +4473,7 @@ mod bsp_confirm {
                         )])
                         .unwrap(),
                     ),
-                    Error::<Test>::StorageRequestNotFound
+                    Error::<Test>::NoFileKeysToConfirm
                 );
             });
         }
@@ -4567,6 +4576,90 @@ mod bsp_confirm {
                         file_keys_and_proofs,
                     ),
                     Error::<Test>::InsufficientAvailableCapacity
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_confirm_storing_fails_with_no_file_keys_to_confirm() {
+            new_test_ext().execute_with(|| {
+                // Setup accounts
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Setup common test parameters
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_ids =
+                    BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                // Setup MSP and bucket
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+                let bucket_id = create_bucket(
+                    &owner_account_id,
+                    BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
+                    msp_id,
+                    value_prop_id,
+                );
+
+                // Setup BSP
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                // Set global parameters
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(1), Some(1)).unwrap();
+                assert_eq!(ReplicationTarget::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
+
+                // Create file keys with different file locations
+                let location =
+                    FileLocation::<Test>::try_from(format!("test-location").into_bytes()).unwrap();
+
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Pre-confirm one file key to simulate a previous BSP already confirming it
+                file_system::StorageRequests::<Test>::mutate(file_key, |maybe_metadata| {
+                    if let Some(metadata) = maybe_metadata {
+                        metadata.bsps_confirmed = 1;
+                    }
+                });
+
+                assert_noop!(
+                    FileSystem::bsp_confirm_storing(
+                        bsp_signed,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        },
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
+                    ),
+                    Error::<Test>::NoFileKeysToConfirm
                 );
             });
         }
@@ -4685,8 +4778,9 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
-                        new_root,
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
+                        new_root
                     }
                     .into(),
                 );
@@ -4707,6 +4801,134 @@ mod bsp_confirm {
 
 				// Assert that the payment stream between the BSP and the user has been created
 				assert!(<<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&bsp_id, &owner_account_id));
+            });
+        }
+
+        #[test]
+        fn bsp_confirm_storing_with_skipped_file_keys_success() {
+            new_test_ext().execute_with(|| {
+                // Setup accounts
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Setup common test parameters
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_ids =
+                    BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                // Setup MSP and bucket
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+                let bucket_id = create_bucket(
+                    &owner_account_id,
+                    BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
+                    msp_id,
+                    value_prop_id,
+                );
+
+                // Setup BSP
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Set global parameters
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(1), Some(1)).unwrap();
+                assert_eq!(ReplicationTarget::<Test>::get(), 1);
+                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
+
+                // Create file keys with different file locations
+                let locations: Vec<FileLocation<Test>> = (0..3)
+                    .map(|i| {
+                        FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap()
+                    })
+                    .collect();
+
+                // Issue storage requests and volunteer for each
+                let file_keys: Vec<_> = locations
+                    .iter()
+                    .map(|location| {
+                        assert_ok!(FileSystem::issue_storage_request(
+                            owner_signed.clone(),
+                            bucket_id,
+                            location.clone(),
+                            fingerprint,
+                            size,
+                            Some(msp_id),
+                            peer_ids.clone(),
+                        ));
+
+                        let file_key = FileSystem::compute_file_key(
+                            owner_account_id.clone(),
+                            bucket_id,
+                            location.clone(),
+                            size,
+                            fingerprint,
+                        );
+
+                        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                        file_key
+                    })
+                    .collect();
+
+                // Pre-confirm one file key to simulate a previous BSP already confirming it
+                let pre_confirmed_file_key = file_keys[0];
+                file_system::StorageRequests::<Test>::mutate(
+                    pre_confirmed_file_key,
+                    |maybe_metadata| {
+                        if let Some(metadata) = maybe_metadata {
+                            metadata.bsps_confirmed = 1;
+                        }
+                    },
+                );
+
+                // Confirm storing for all files
+                let file_proofs: Vec<_> = file_keys
+                    .iter()
+                    .map(|&file_key| {
+                        (
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        )
+                    })
+                    .collect();
+
+                let old_root = Providers::get_root(bsp_id).unwrap();
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(file_proofs).unwrap(),
+                ));
+
+                let successful_file_keys: Vec<_> = file_keys
+                    .iter()
+                    .filter(|&&file_key| file_key != pre_confirmed_file_key)
+                    .copied()
+                    .collect();
+
+                let new_root = Providers::get_root(bsp_id).unwrap();
+
+                System::assert_last_event(
+                    Event::BspConfirmedStoring {
+                        who: bsp_account_id,
+                        bsp_id,
+                        confirmed_file_keys: BoundedVec::try_from(successful_file_keys).unwrap(),
+                        skipped_file_keys: BoundedVec::try_from(vec![pre_confirmed_file_key])
+                            .unwrap(),
+                        new_root,
+                    }
+                    .into(),
+                );
+
+                // Verify root was updated while there being a skipped file key
+                assert_ne!(old_root, new_root);
             });
         }
 
@@ -4816,8 +5038,9 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
-                        new_root,
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: BoundedVec::default(),
+                        new_root
                     }
                         .into(),
                 );
@@ -4918,8 +5141,9 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
-                        new_root,
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
+                        new_root
                     }
                         .into(),
                 );
@@ -6475,6 +6699,297 @@ mod delete_file_and_pending_deletions_tests {
                 );
             });
         }
+
+        #[test]
+        fn delete_file_expired_pending_file_deletion_request_with_bucket_does_not_exist() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
+                // Delete file
+                assert_ok!(FileSystem::delete_file(
+					owner_signed.clone(),
+					bucket_id,
+					file_key,
+					location,
+					size,
+					fingerprint,
+					None,
+				));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::FileDeletionRequest {
+                        user: owner_account_id.clone(),
+                        file_key,
+                        bucket_id,
+                        msp_id: Some(msp_id),
+                        proof_of_inclusion: false,
+                    }
+                        .into(),
+                );
+
+                // Assert that the pending file deletion request was added to storage
+                assert_eq!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
+                        vec![(file_key, bucket_id)]
+                    )
+                        .unwrap()
+                );
+
+                let pending_file_deletion_request_ttl: u32 =
+                    PendingFileDeletionRequestTtl::<Test>::get();
+                let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                    pending_file_deletion_request_ttl.into();
+                let expiration_block = pending_file_deletion_request_ttl + System::block_number();
+
+                // Assert that the pending file deletion request was added to storage
+                assert_eq!(
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    vec![FileDeletionRequestExpirationItem {
+                        user: owner_account_id.clone(),
+                        file_key,
+                        bucket_id,
+                        file_size: size,
+                    }]
+                );
+
+                // Delete the bucket manually
+                pallet_storage_providers::Buckets::<Test>::remove(bucket_id);
+
+                // Roll past the expiration block
+                roll_to(pending_file_deletion_request_ttl + 1);
+
+                // Item expiration should be removed
+                assert_eq!(
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    vec![]
+                );
+
+                // Asser that the pending file deletion request was removed from storage
+                assert_eq!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
+                );
+
+                // Assert that the bucket size was not decreased because the bucket was not found
+                System::assert_has_event(Event::FailedToDecreaseBucketSize {
+                    user: owner_account_id.clone(),
+                    bucket_id,
+                    file_key,
+                    file_size: size,
+                    error: pallet_storage_providers::Error::<Test>::BucketNotFound.into(),
+                }.into());
+
+                // Assert that there was no queued priority challenge for file key in proofs dealer pallet
+                assert!(!pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+            });
+        }
+
+        #[test]
+        fn delete_file_expired_pending_file_deletion_request_with_insolvent_user() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+				let (msp_id, _) = add_msp_to_provider_storage(&msp);
+
+				// Create a new value proposition with a high price per gigabyte per tick so deleting the 4 byte file will
+				// actually make a difference in the rate of the fixed-rate payment stream between the user and the MSP.
+				let value_prop = ValueProposition::<Test>::new(1024 * 1024 * 1024, bounded_vec![], 10000);
+    			let value_prop_id = value_prop.derive_id();
+    			pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
+        			msp_id,
+        			value_prop_id,
+        			value_prop,
+    			);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
+                // Delete file
+                assert_ok!(FileSystem::delete_file(
+					owner_signed.clone(),
+					bucket_id,
+					file_key,
+					location,
+					size,
+					fingerprint,
+					None,
+				));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::FileDeletionRequest {
+                        user: owner_account_id.clone(),
+                        file_key,
+                        bucket_id,
+                        msp_id: Some(msp_id),
+                        proof_of_inclusion: false,
+                    }
+                        .into(),
+                );
+
+                // Assert that the pending file deletion request was added to storage
+                assert_eq!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
+                        vec![(file_key, bucket_id)]
+                    )
+                        .unwrap()
+                );
+
+                let pending_file_deletion_request_ttl: u32 =
+                    PendingFileDeletionRequestTtl::<Test>::get();
+                let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                    pending_file_deletion_request_ttl.into();
+                let expiration_block = pending_file_deletion_request_ttl + System::block_number();
+
+                // Assert that the pending file deletion request was added to storage
+                assert_eq!(
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    vec![FileDeletionRequestExpirationItem {
+                        user: owner_account_id.clone(),
+                        file_key,
+                        bucket_id,
+                        file_size: size,
+                    }]
+                );
+
+                pallet_payment_streams::UsersWithoutFunds::<Test>::insert(owner_account_id.clone(), System::block_number());
+
+                // Roll past the expiration block
+                roll_to(pending_file_deletion_request_ttl + 1);
+
+                // Item expiration should be removed
+                assert_eq!(
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    vec![]
+                );
+
+                // Assert that the pending file deletion request was removed from storage
+                assert_eq!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
+                );
+
+                // Assert that the bucket size was not decreased because the user was marked without funds
+                System::assert_has_event(Event::FailedToDecreaseBucketSize {
+                    user: owner_account_id.clone(),
+                    bucket_id,
+                    file_key,
+                    file_size: size,
+                    error: pallet_payment_streams::Error::<Test>::UserWithoutFunds.into(),
+                }.into());
+
+                // Assert that there is a queued priority challenge for file key in proofs dealer pallet
+                // Since failing to update the payment stream from decreasing the bucket size is purely an operation between the MSP and the user,
+                // we proceed to delete the files from the BSPs.
+                assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+            });
+        }
     }
 
     mod success {
@@ -6489,6 +7004,8 @@ mod delete_file_and_pending_deletions_tests {
                 let size = 4;
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -6503,6 +7020,37 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     fingerprint,
                 );
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -6551,6 +7099,8 @@ mod delete_file_and_pending_deletions_tests {
                 let size = 4;
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -6564,6 +7114,40 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     fingerprint,
                 );
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
+                // Query providers pallet Buckets storage
+                let bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -6606,10 +7190,12 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
                     file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
-                    vec![(
-                        owner_account_id.clone(),
-                        file_key
-                    )]
+                    vec![FileDeletionRequestExpirationItem {
+                        user: owner_account_id.clone(),
+                        file_key,
+                        bucket_id,
+                        file_size: size,
+                    }]
                 );
 
                 // Roll past the expiration block
@@ -6625,6 +7211,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
+                );
+
+                // Check that the bucket_size was reduced by the file size
+                assert_eq!(
+                    Providers::get_bucket_size(&bucket_id).unwrap(),
+                    bucket_size - size
                 );
 
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
@@ -7380,7 +7972,8 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
                         new_root,
                     }
                     .into(),
@@ -7527,6 +8120,13 @@ mod stop_storing_for_insolvent_user {
                         reject: bounded_vec![],
                     }],
                 ));
+
+                // TODO: Fix the
+                // TODO: Uncommenting this would result in test failing with the error `UserWithoutFunds`
+                // pallet_payment_streams::UsersWithoutFunds::<Test>::insert(
+                //     owner_account_id.clone(),
+                //     System::block_number(),
+                // );
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -7705,7 +8305,8 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
                         new_root,
                     }
                     .into(),
@@ -7931,7 +8532,8 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
                         new_root,
                     }
                     .into(),
@@ -8124,7 +8726,8 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
                         new_root,
                     }
                     .into(),
@@ -8333,7 +8936,7 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        capacity: 100,
+        capacity: 1024 * 1024 * 1024,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),

@@ -250,6 +250,10 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
+       * The base deposit for a new payment stream. The actual deposit will be this constant + the deposit calculated using the `NewStreamDeposit` constant.
+       **/
+      baseDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * The maximum amount of Users that a Provider can charge in a single extrinsic execution.
        * This is used to prevent a Provider from charging too many Users in a single block, which could lead to a DoS attack.
        **/
@@ -257,9 +261,9 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
-       * `NewStreamDeposit * rate` will be held as a deposit.
-       * In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
-       * to be provided by the pallet using the `PaymentStreamsInterface` interface.
+       * `NewStreamDeposit * rate + BaseDeposit` will be held as a deposit.
+       * In the case of dynamic-rate payment streams, `rate` will be `amount_provided_in_giga_units * price_per_giga_unit_per_tick`, where `price_per_giga_unit_per_tick` is
+       * obtained from the `CurrentPricePerGigaUnitPerTick` storage.
        **/
       newStreamDeposit: u32 & AugmentedConst<ApiType>;
       /**
@@ -342,6 +346,17 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
       /**
+       * The maximum number of Providers that can be slashed per tick.
+       *
+       * Providers are marked as slashable if they are found in the [`TickToProvidersDeadlines`] StorageMap
+       * for the current challenges tick. It is expected that most of the times, there will be little to
+       * no Providers in the [`TickToProvidersDeadlines`] StorageMap for the current challenges tick. That
+       * is because Providers are expected to submit proofs in time. However, in the extreme scenario where
+       * a large number of Providers are missing the proof submissions, this configuration is used to keep
+       * the execution of the `on_poll` hook bounded.
+       **/
+      maxSlashableProvidersPerTick: u32 & AugmentedConst<ApiType>;
+      /**
        * The maximum amount of Providers that can submit a proof in a single block.
        * Although this can be seen as an arbitrary limit, if set to the already existing
        * implicit limit that is "how many `submit_proof` extrinsics fit in the weight of
@@ -359,9 +374,9 @@ declare module "@polkadot/api-base/types/consts" {
        * If less than this percentage of blocks are not full, the networks is considered to be presumably
        * under a spam attack.
        * This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
-       * if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+       * if this is set to `Perbill::from_percent(50)`, then if more than half of the last [`Config::BlockFullnessPeriod`]
        * blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
-       * that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+       * that there was at least one truly _not_ full block in the last [`Config::BlockFullnessPeriod`] blocks.
        **/
       minNotFullBlocksRatio: Perbill & AugmentedConst<ApiType>;
       /**
@@ -461,6 +476,12 @@ declare module "@polkadot/api-base/types/consts" {
        * Starting reputation weight for a newly registered BSP.
        **/
       startingReputationWeight: u32 & AugmentedConst<ApiType>;
+      /**
+       * Period of time for a provider to top up their deposit after being slashed.
+       *
+       * If the provider does not top up their deposit within this period, they will be marked as insolvent.
+       **/
+      topUpGracePeriod: u32 & AugmentedConst<ApiType>;
       /**
        * The Treasury AccountId.
        * The account to which:

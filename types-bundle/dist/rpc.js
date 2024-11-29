@@ -113,8 +113,8 @@ export const rpcDefinitions = {
           type: "H256"
         },
         {
-          name: "challenged_file_keys",
-          type: "Vec<H256>"
+          name: "checkpoint_challenges",
+          type: "Option<Vec<CheckpointChallenge>>"
         }
       ],
       type: "Vec<u8>"

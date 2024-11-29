@@ -1,7 +1,7 @@
 use crate::{
     mock::*,
     types::{BalanceOf, ProviderLastChargeableInfo},
-    AccumulatedPriceIndex, CurrentPricePerUnitPerTick, DynamicRatePaymentStreams, Error, Event,
+    AccumulatedPriceIndex, CurrentPricePerGigaUnitPerTick, DynamicRatePaymentStreams, Error, Event,
     LastChargeableInfo, RegisteredUsers, UsersWithoutFunds,
 };
 
@@ -15,6 +15,7 @@ use frame_support::{
     weights::WeightMeter,
     BoundedVec,
 };
+use shp_constants::GIGAUNIT;
 use shp_traits::{PaymentStreamsInterface, ReadProvidersInterface};
 use sp_core::H256;
 use sp_runtime::{bounded_vec, traits::Convert, DispatchError};
@@ -23,6 +24,7 @@ use sp_runtime::{bounded_vec, traits::Convert, DispatchError};
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
 pub type NewStreamDeposit = <Test as crate::Config>::NewStreamDeposit;
+pub type BaseDeposit = <Test as crate::Config>::BaseDeposit;
 pub type UserWithoutFundsCooldown = <Test as crate::Config>::UserWithoutFundsCooldown;
 pub type BlockNumberToBalance = <Test as crate::Config>::BlockNumberToBalance;
 
@@ -34,6 +36,8 @@ pub type SpMinCapacity = <Test as pallet_storage_providers::Config>::SpMinCapaci
 pub type MaxMultiAddressAmount<Test> =
     <Test as pallet_storage_providers::Config>::MaxMultiAddressAmount;
 use pallet_storage_providers::types::MultiAddress;
+
+const GIGAUNIT_BALANCE: u128 = GIGAUNIT as u128;
 
 /// This module holds all tests for fixed-rate payment streams
 mod fixed_rate_streams {
@@ -69,9 +73,12 @@ mod fixed_rate_streams {
                 // The new balance of Bob should be his original balance minus `rate * NewStreamDeposit` (in this case 100)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed
+                    bob_initial_balance
+                        - rate * new_stream_deposit_blocks_balance_typed
+                        - base_deposit
                 );
 
                 // Get the payment stream information
@@ -305,8 +312,10 @@ mod fixed_rate_streams {
                 // Check that Bob's new balance is his initial balance minus the deposit
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_free_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_free_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
 
                 // Check how many streams Bob has
@@ -372,7 +381,8 @@ mod fixed_rate_streams {
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
-                let deposit = rate * <NewStreamDeposit as Get<u64>>::get() as u128;
+                let deposit = rate * <NewStreamDeposit as Get<u64>>::get() as u128
+                    + <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_msp_id,
@@ -389,7 +399,8 @@ mod fixed_rate_streams {
 
                 // Update the rate of the payment stream from Bob to Alice to 20 units per block
                 let new_rate: BalanceOf<Test> = 20;
-                let new_deposit = new_rate * <NewStreamDeposit as Get<u64>>::get() as u128;
+                let new_deposit = new_rate * <NewStreamDeposit as Get<u64>>::get() as u128
+                    + <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
                         &alice_msp_id,
@@ -629,8 +640,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -724,8 +737,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Delete the payment stream from Bob to Alice
@@ -822,8 +837,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -848,7 +865,9 @@ mod fixed_rate_streams {
                 // Check that Bob was returned his deposit AND charged 10 blocks at the 10 units/block rate after the payment stream was deleted
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
-                    bob_new_balance + rate * (new_stream_deposit_blocks_balance_typed - 10)
+                    bob_new_balance
+                        + rate * (new_stream_deposit_blocks_balance_typed - 10)
+                        + base_deposit
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
@@ -908,8 +927,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -983,8 +1004,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead, with a 10 units/block price index rate
@@ -1065,8 +1088,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Update the rate of the payment stream from Bob to Alice to 20 units per block
@@ -1185,8 +1210,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Update the rate of the payment stream from Bob to Alice to 20 units per block
@@ -1288,8 +1315,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -1419,13 +1448,16 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - bob_rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - bob_rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Check the new free balance of Charlie (after the new stream deposit)
                 let charlie_new_balance = charlie_initial_balance
-                    - charlie_rate * new_stream_deposit_blocks_balance_typed;
+                    - charlie_rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&charlie), charlie_new_balance);
 
                 // Set the last valid proof of the payment streams from Bob to Alice and from Charlie to Alice to 10 blocks ahead
@@ -1574,20 +1606,24 @@ mod fixed_rate_streams {
 
                 // Get the current price for dynamic-rate payment streams from the runtime
                 let current_storage_price: BalanceOf<Test> =
-                    PaymentStreams::get_current_price_per_unit_per_tick();
+                    PaymentStreams::get_current_price_per_giga_unit_per_tick();
 
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - bob_rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - bob_rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Check the new free balance of Charlie (after the new stream deposit)
                 let charlie_new_balance: BalanceOf<Test> = charlie_initial_balance
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * charlie_amount_provided as u128;
+                        * charlie_amount_provided as u128
+                        / GIGAUNIT_BALANCE
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&charlie), charlie_new_balance);
 
                 // Check the new free balance of Dave (after both new stream deposits)
@@ -1595,7 +1631,9 @@ mod fixed_rate_streams {
                     - dave_rate * new_stream_deposit_blocks_balance_typed
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * dave_amount_provided as u128;
+                        * dave_amount_provided as u128
+                        / GIGAUNIT_BALANCE
+                    - 2 * base_deposit;
                 assert_eq!(NativeBalance::free_balance(&dave), dave_new_balance);
 
                 // Set the last valid proof of the payment streams from Bob to Alice, from Charlie to Alice and from Dave to Alice to 10 blocks ahead
@@ -1638,12 +1676,14 @@ mod fixed_rate_streams {
                     NativeBalance::free_balance(&charlie),
                     charlie_new_balance
                         - 10 * current_storage_price * charlie_amount_provided as u128
+                            / GIGAUNIT_BALANCE
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: charlie,
                         provider_id: alice_msp_id,
-                        amount: 10 * current_storage_price * charlie_amount_provided as u128,
+                        amount: 10 * current_storage_price * charlie_amount_provided as u128
+                            / GIGAUNIT_BALANCE,
                         last_tick_charged: last_chargeable_tick,
                         charged_at_tick: System::block_number(),
                     }
@@ -1657,13 +1697,15 @@ mod fixed_rate_streams {
                     dave_new_balance
                         - 10 * dave_rate
                         - 10 * current_storage_price * dave_amount_provided as u128
+                            / GIGAUNIT_BALANCE
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: dave,
                         provider_id: alice_msp_id,
                         amount: 10 * dave_rate
-                            + 10 * current_storage_price * dave_amount_provided as u128,
+                            + 10 * current_storage_price * dave_amount_provided as u128
+                                / GIGAUNIT_BALANCE,
                         last_tick_charged: last_chargeable_tick,
                         charged_at_tick: System::block_number(),
                     }
@@ -1788,8 +1830,9 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let bob_balance_after_deposit =
-                    bob_new_balance - rate * new_stream_deposit_blocks_balance_typed;
+                    bob_new_balance - rate * new_stream_deposit_blocks_balance_typed - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_balance_after_deposit);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 1000 blocks ahead
@@ -1853,9 +1896,11 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let bob_new_balance = bob_initial_balance
                     - rate * new_stream_deposit_blocks_balance_typed
-                    - 10 * new_stream_deposit_blocks_balance_typed;
+                    - 10 * new_stream_deposit_blocks_balance_typed
+                    - 2 * base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -1951,8 +1996,10 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - (rate + 10) * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - (rate + 10) * new_stream_deposit_blocks_balance_typed
+                    - 2 * base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -2030,8 +2077,8 @@ mod fixed_rate_streams {
                 // Check that Bob is still flagged as a user without funds
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the UserPaidDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+                // Check that the UserPaidAllDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
             });
         }
 
@@ -2111,20 +2158,24 @@ mod fixed_rate_streams {
 
                 // Get the current price for dynamic-rate payment streams from the runtime
                 let current_storage_price: BalanceOf<Test> =
-                    PaymentStreams::get_current_price_per_unit_per_tick();
+                    PaymentStreams::get_current_price_per_giga_unit_per_tick();
 
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - bob_rate * new_stream_deposit_blocks_balance_typed;
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - bob_rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Check the new free balance of Charlie (after the new stream deposit)
                 let charlie_new_balance: BalanceOf<Test> = charlie_initial_balance
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * charlie_amount_provided as u128;
+                        * charlie_amount_provided as u128
+                        / GIGAUNIT_BALANCE
+                    - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&charlie), charlie_new_balance);
 
                 // Check the new free balance of Dave (after both new stream deposits)
@@ -2132,7 +2183,9 @@ mod fixed_rate_streams {
                     - dave_rate * new_stream_deposit_blocks_balance_typed
                     - current_storage_price
                         * new_stream_deposit_blocks_balance_typed
-                        * dave_amount_provided as u128;
+                        * dave_amount_provided as u128
+                        / GIGAUNIT_BALANCE
+                    - 2 * base_deposit;
                 assert_eq!(NativeBalance::free_balance(&dave), dave_new_balance);
 
                 // Set the last valid proof of the payment streams from Bob to Alice, from Charlie to Alice and from Dave to Alice to 20 blocks ahead
@@ -2215,19 +2268,19 @@ mod fixed_rate_streams {
                 let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
 
-                // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice_on_poll, 100);
-                let alice_msp_id =
+                // Register Alice as a BSP with 100 units of data and get her BSP ID
+                register_account_as_bsp(alice_on_poll, 100);
+                let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
 
-                // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
+                // Create a payment stream from Bob to Alice of 10 units provided
+                let amount_provided: u32 = 10;
                 assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
                         &bob,
-                        rate
+                        &amount_provided.into()
                     )
                 );
 
@@ -2238,12 +2291,12 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
                 // The payment stream should be updated with the correct last valid proof
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_tick,
-                    System::block_number()
+                    System::block_number() - 1
                 );
             });
         }
@@ -2255,18 +2308,18 @@ mod fixed_rate_streams {
                 let bob: AccountId = 1;
 
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice_on_poll, 100);
-                let alice_msp_id =
+                register_account_as_bsp(alice_on_poll, 100);
+                let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
+                let amount_provided: u32 = 10;
                 assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
                         &bob,
-                        rate
+                        &amount_provided.into()
                     )
                 );
 
@@ -2291,14 +2344,14 @@ mod fixed_rate_streams {
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
-                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
                 let current_tick = crate::OnPollTicker::<Test>::get();
 
                 // The payment stream should be updated and considering that the last chargeable tick
                 // is the current tick for the Payment Streams pallet.
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_tick,
-                    current_tick
+                    current_tick - 1
                 );
             });
         }
@@ -2322,8 +2375,8 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2331,7 +2384,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
@@ -2343,12 +2396,15 @@ mod dynamic_rate_streams {
                     )
                 );
 
-                // The new balance of Bob should be his original balance minus `current_price * amount_provided * NewStreamDeposit` (in this case 10 * 100 * 10 = 10000)
+                // The new balance of Bob should be his original balance minus `current_price * amount_provided * NewStreamDeposit + BaseDeposit` (in this case 10 * 100 * 10 + 10 = 10010)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_initial_balance - deposit_amount
@@ -2403,8 +2459,8 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2412,7 +2468,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
@@ -2441,11 +2497,11 @@ mod dynamic_rate_streams {
             ExtBuilder::build().execute_with(|| {
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Try to create a payment stream from Bob to a random not registered BSP of 100 units provided
@@ -2468,8 +2524,8 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2482,7 +2538,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units per block
@@ -2506,16 +2562,20 @@ mod dynamic_rate_streams {
                 // The new balance of Bob should be his original balance minus `current_price * amount_provided * NewStreamDeposit` (in this case 10 * 100 * 10 = 10000)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index to something that will make Bob run out of funds
-                let current_price_index =
-                    current_price_index + bob_new_balance / (amount_provided as u128) + 1;
+                let current_price_index = current_price_index
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -2560,8 +2620,8 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2569,7 +2629,7 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Transfer almost all of Bob's balance to Alice (Bob keeps `deposit_amount - 1` balance)
@@ -2577,7 +2637,8 @@ mod dynamic_rate_streams {
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE;
                 assert_ok!(Balances::transfer(
                     &bob,
                     &alice,
@@ -2604,12 +2665,12 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let charlie: AccountId = 2;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2637,9 +2698,12 @@ mod dynamic_rate_streams {
                 // Check that Bob's new balance is his initial balance minus the deposit
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_free_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
 
@@ -2698,11 +2762,11 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided: u64 = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2711,9 +2775,12 @@ mod dynamic_rate_streams {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 100 units provided
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit = current_price
                     * amount_provided as u128
-                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get())
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
@@ -2732,7 +2799,9 @@ mod dynamic_rate_streams {
                 let new_amount_provided: u64 = 200;
                 let new_deposit = current_price
                     * new_amount_provided as u128
-                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                    * BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get())
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
                         &alice_bsp_id,
@@ -2768,11 +2837,11 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2808,11 +2877,11 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2891,11 +2960,11 @@ mod dynamic_rate_streams {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -2929,16 +2998,19 @@ mod dynamic_rate_streams {
                 // The new balance of Bob should be his original balance minus `2 * current_price * amount_provided * NewStreamDeposit` (in this case 2 * 10 * 100 * 10 = 20000)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index to something that will make Bob run out of funds
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
@@ -2985,11 +3057,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3009,9 +3081,12 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3041,8 +3116,10 @@ mod dynamic_rate_streams {
                 let bob_balance_updated_deposit = bob_new_balance
                     - current_price
                         * u128::from(new_amount_provided - amount_provided)
-                        * new_stream_deposit_blocks_balance_typed;
-                let paid_for_storage = 10 * current_price * u128::from(amount_provided);
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE;
+                let paid_for_storage =
+                    10 * current_price * u128::from(amount_provided) / GIGAUNIT_BALANCE;
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_balance_updated_deposit - paid_for_storage
@@ -3092,11 +3169,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3116,9 +3193,12 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3198,11 +3278,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3222,16 +3302,20 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3294,11 +3378,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3318,16 +3402,20 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3380,11 +3468,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3404,16 +3492,20 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3469,11 +3561,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3493,9 +3585,12 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -3512,14 +3607,17 @@ mod dynamic_rate_streams {
                 // Check that Bob's deposit has also been updated
                 let new_deposit_amount = current_price
                     * (new_amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_new_balance - (new_deposit_amount - deposit_amount);
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (new_amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (new_amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3581,11 +3679,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3605,16 +3703,20 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    10 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3658,7 +3760,8 @@ mod dynamic_rate_streams {
                 // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
                 run_to_block(System::block_number() + 20);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
-                let amount_to_pay_for_storage = 20 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    20 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3741,11 +3844,11 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 100;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3765,9 +3868,12 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = current_price
                     * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * new_stream_deposit_blocks_balance_typed
+                    / GIGAUNIT_BALANCE
+                    + base_deposit;
                 let bob_balance_after_deposit = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_balance_after_deposit);
 
@@ -3803,11 +3909,11 @@ mod dynamic_rate_streams {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3841,16 +3947,19 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to something that will make Bob run out of funds
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
                 let last_chargeable_tick = System::block_number();
@@ -3912,11 +4021,11 @@ mod dynamic_rate_streams {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -3950,16 +4059,19 @@ mod dynamic_rate_streams {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 run_to_block(System::block_number() + 10);
                 let last_chargeable_tick = System::block_number();
@@ -4028,7 +4140,7 @@ mod dynamic_rate_streams {
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_new_balance + charlie_stream_deposit
-                        - current_price * amount_provided as u128
+                        - current_price * amount_provided as u128 / GIGAUNIT_BALANCE
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
@@ -4047,8 +4159,8 @@ mod dynamic_rate_streams {
                 // Check that Bob is still flagged as a user without funds
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the UserPaidDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+                // Check that the UserPaidAllDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
             });
         }
     }
@@ -4062,11 +4174,11 @@ mod dynamic_rate_streams {
                 let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
-                let initial_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let initial_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(initial_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -4118,11 +4230,11 @@ mod user_without_funds {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4158,10 +4270,13 @@ mod user_without_funds {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let total_deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4194,7 +4309,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
@@ -4263,12 +4378,14 @@ mod user_without_funds {
                 );
 
                 // Pay the outstanding debt of Bob
-                assert_ok!(PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(
-                    bob
-                )));
+                assert_ok!(PaymentStreams::pay_outstanding_debt(
+                    RuntimeOrigin::signed(bob),
+                    vec![charlie_bsp_id]
+                ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying Charlie
-                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let bob_new_balance =
                     bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -4291,8 +4408,8 @@ mod user_without_funds {
                 // Check that Bob is still flagged as a user without funds
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the UserPaidDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+                // Check that the UserPaidAllDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
 
                 // Check that Bob has no remaining payment streams
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
@@ -4308,11 +4425,11 @@ mod user_without_funds {
                 let david: AccountId = 3;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4363,10 +4480,13 @@ mod user_without_funds {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let total_deposit_amount = 3
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4418,7 +4538,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -4481,12 +4601,14 @@ mod user_without_funds {
                 );
 
                 // Pay the outstanding debt of Bob
-                assert_ok!(PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(
-                    bob
-                )));
+                assert_ok!(PaymentStreams::pay_outstanding_debt(
+                    RuntimeOrigin::signed(bob),
+                    vec![charlie_bsp_id, david_bsp_id]
+                ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying charlie and david
-                let amount_to_pay_for_storage = 3 * current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    3 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let bob_new_balance = bob_new_balance - amount_to_pay_for_storage
                     + charlie_deposit_amount
                     + david_deposit_amount;
@@ -4517,8 +4639,234 @@ mod user_without_funds {
                 // Check that Bob is still flagged as a user without funds
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the UserPaidDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+                // Check that the UserPaidAllDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
+            });
+        }
+
+        #[test]
+        fn pay_outstanding_debt_works_when_only_paying_partial_debt() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let charlie: AccountId = 2;
+                let david: AccountId = 3;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+                let amount_provided = 100;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
+
+                // Update the current price and current price index
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+                let alice_initial_balance = NativeBalance::free_balance(&alice);
+
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(charlie, 1000);
+                let charlie_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
+                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
+
+                // Register David as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(david, 1000);
+                let david_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(david).unwrap();
+                let david_initial_balance = NativeBalance::free_balance(&david);
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to Charlie of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to David of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &david_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Check the new free balance of Bob (after the new user deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let total_deposit_amount = 3
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
+                let bob_new_balance = bob_initial_balance - total_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that the deposit of Bob to Alice is one third of the total deposit
+                let alice_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(alice_deposit_amount, total_deposit_amount / 3);
+
+                // And that Charlie has the other third
+                let charlie_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(charlie_deposit_amount, total_deposit_amount / 3);
+
+                // And that David has the last third
+                let david_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(david_deposit_amount, total_deposit_amount / 3);
+
+                // Set the last chargeable price index of David to the equivalent of two blocks ahead
+                LastChargeableInfo::<Test>::insert(
+                    &david_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + 2 * current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Charlie to the equivalent of one block ahead
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+                run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
+                    + 1;
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: current_price_index,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Advance enough blocks for Bob to be flagged as a user without funds
+                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that the UserWithoutFunds event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+                // Check that no funds were charged from Bob's free balance
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Bob is flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the payment stream from Bob to Alice does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob),
+                    None
+                );
+
+                // Check that the payment stream from Bob to Charlie still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_some());
+
+                // Check that the payment stream from Bob to David still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob).is_some());
+
+                // Check that Bob's free balance has not changed but it's deposit to Alice has been transferred to her
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                assert_eq!(
+                    NativeBalance::free_balance(&alice),
+                    alice_initial_balance + alice_deposit_amount
+                );
+
+                // Check that Bob still has its deposit with Charlie and David
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    charlie_deposit_amount + david_deposit_amount
+                );
+
+                // Pay the outstanding debt of Bob, but only to Charlie
+                assert_ok!(PaymentStreams::pay_outstanding_debt(
+                    RuntimeOrigin::signed(bob),
+                    vec![charlie_bsp_id]
+                ));
+
+                // Check that Bob's balance has been updated with the correct amount after paying Charlie (but not David)
+                let amount_to_pay_for_storage_charlie =
+                    1 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
+                let bob_new_balance =
+                    bob_new_balance - amount_to_pay_for_storage_charlie + charlie_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Charlie has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_initial_balance + amount_to_pay_for_storage_charlie
+                );
+
+                // Check that David has NOT been paid
+                assert_eq!(NativeBalance::free_balance(&david), david_initial_balance);
+
+                // Check that Bob still has the deposit with David
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    david_deposit_amount
+                );
+
+                // Check that Bob still has a payment stream
+                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 1);
+
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the UserPaidSomeDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidSomeDebts { who: bob }.into());
             });
         }
 
@@ -4527,12 +4875,12 @@ mod user_without_funds {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
                 let amount_provided = 100;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -4551,7 +4899,10 @@ mod user_without_funds {
 
                 // Try to pay the outstanding debt of Bob without him being flagged as a user without funds
                 assert_noop!(
-                    PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(bob)),
+                    PaymentStreams::pay_outstanding_debt(
+                        RuntimeOrigin::signed(bob),
+                        vec![alice_bsp_id]
+                    ),
                     Error::<Test>::UserNotFlaggedAsWithoutFunds
                 );
             });
@@ -4570,11 +4921,11 @@ mod user_without_funds {
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4610,10 +4961,13 @@ mod user_without_funds {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let total_deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4646,7 +5000,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
@@ -4715,12 +5069,14 @@ mod user_without_funds {
                 );
 
                 // Pay the outstanding debt of Bob
-                assert_ok!(PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(
-                    bob
-                )));
+                assert_ok!(PaymentStreams::pay_outstanding_debt(
+                    RuntimeOrigin::signed(bob),
+                    vec![charlie_bsp_id]
+                ));
 
                 // Check that Bob's balance has been updated with the correct amount after paying Charlie
-                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let amount_to_pay_for_storage =
+                    current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
                 let bob_new_balance =
                     bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -4743,8 +5099,8 @@ mod user_without_funds {
                 // Check that Bob is still flagged as a user without funds
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the UserPaidDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+                // Check that the UserPaidAllDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
 
                 // Check that Bob has no remaining payment streams
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
@@ -4765,18 +5121,18 @@ mod user_without_funds {
         }
 
         #[test]
-        fn clear_insolvent_flag_works_if_there_are_remaining_payment_streams() {
+        fn clear_insolvent_flag_fails_if_there_are_remaining_payment_streams() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let charlie: AccountId = 2;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -4785,11 +5141,10 @@ mod user_without_funds {
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
                 let alice_initial_balance = NativeBalance::free_balance(&alice);
 
-                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
-                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -4812,10 +5167,13 @@ mod user_without_funds {
                 // Check the new free balance of Bob (after the new user deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
                 let total_deposit_amount = 2
-                    * current_price
-                    * (amount_provided as u128)
-                    * new_stream_deposit_blocks_balance_typed;
+                    * (current_price
+                        * (amount_provided as u128)
+                        * new_stream_deposit_blocks_balance_typed
+                        / GIGAUNIT_BALANCE
+                        + base_deposit);
                 let bob_new_balance = bob_initial_balance - total_deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
@@ -4848,7 +5206,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
@@ -4921,40 +5279,17 @@ mod user_without_funds {
                     System::block_number() + <UserWithoutFundsCooldown as Get<u64>>::get() + 1,
                 );
 
-                // Clear the insolvent flag of Bob
-                assert_ok!(PaymentStreams::clear_insolvent_flag(RuntimeOrigin::signed(
-                    bob
-                )));
-
-                // Check that Bob's balance has been updated with the correct amount after paying Charlie
-                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
-                let bob_new_balance =
-                    bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
-
-                // Check that Charlie has been paid
-                assert_eq!(
-                    NativeBalance::free_balance(&charlie),
-                    charlie_initial_balance + amount_to_pay_for_storage
+                // Try to clear the insolvent flag of Bob. It'll fail since there's still a payment stream
+                assert_noop!(
+                    PaymentStreams::clear_insolvent_flag(RuntimeOrigin::signed(bob)),
+                    Error::<Test>::UserHasRemainingDebt
                 );
 
-                // Check that Bob no longer has any deposits
-                assert_eq!(
-                    NativeBalance::balance_on_hold(
-                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
-                        &bob
-                    ),
-                    0
-                );
+                // Check that Bob still has a remaining payment stream
+                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 1);
 
-                // Check that the UserSolvent event was emitted for Bob
-                System::assert_last_event(Event::<Test>::UserSolvent { who: bob }.into());
-
-                // Check that Bob has no remaining payment streams
-                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
-
-                // Check that Bob is no longer flagged as a user without funds
-                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
             });
         }
 
@@ -4965,11 +5300,11 @@ mod user_without_funds {
                 let bob: AccountId = 1;
                 let charlie: AccountId = 2;
                 let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let current_price_index = 10000 * GIGAUNIT_BALANCE;
 
                 // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
                 AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
@@ -5006,7 +5341,7 @@ mod user_without_funds {
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
                 run_to_block(System::block_number() + 10);
                 let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                    + bob_new_balance / (amount_provided as u128)
+                    + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided as u128)
                     + 1;
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -5069,12 +5404,12 @@ mod users_with_debt_over_threshold {
             let dave: AccountId = 3;
             let amount_provided_bob = 100;
             let amount_provided_charlie = 1;
-            let current_price = 10;
-            let current_price_index = 10000;
+            let current_price = 10 * GIGAUNIT_BALANCE;
+            let current_price_index = 10000 * GIGAUNIT_BALANCE;
             let empty_account_id_vector: Vec<AccountId> = Vec::new();
 
             // Update the current price and current price index
-            CurrentPricePerUnitPerTick::<Test>::put(current_price);
+            CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
             AccumulatedPriceIndex::<Test>::put(current_price_index);
 
             // Register Alice as a BSP with 100 units of data and get her BSP ID
@@ -5178,7 +5513,7 @@ mod users_with_debt_over_threshold {
             run_to_block(System::block_number() + 10);
             let bob_new_balance = NativeBalance::free_balance(&bob);
             let current_price_index = AccumulatedPriceIndex::<Test>::get()
-                + bob_new_balance / (amount_provided_bob as u128)
+                + bob_new_balance * GIGAUNIT_BALANCE / (amount_provided_bob as u128)
                 + 1;
             LastChargeableInfo::<Test>::insert(
                 &alice_bsp_id,

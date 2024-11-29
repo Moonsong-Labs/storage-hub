@@ -1,4 +1,4 @@
-use crate::{configs::SpMinDeposit, Balance, BlockNumber, Perbill, Runtime, PICOUNIT, UNIT};
+use crate::{configs::SpMinDeposit, Balance, BlockNumber, Perbill, Runtime, NANOUNIT, UNIT};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
@@ -7,6 +7,7 @@ pub mod dynamic_params {
     #[dynamic_pallet_params]
     #[codec(index = 0)]
     pub mod runtime_config {
+
         use super::*;
 
         #[codec(index = 0)]
@@ -52,20 +53,20 @@ pub mod dynamic_params {
 
         #[codec(index = 6)]
         #[allow(non_upper_case_globals)]
-        /// 48 [`PICOUNIT`]s is the price per MB of data, per tick.
+        /// 50 [`NANOUNIT`]s is the price per GB of data, per tick.
         ///
         /// With 6 seconds per tick, this means that over a month, the price of 1 GB is:
-        /// 48e-12 * 10 ticks/min * 60 min/h * 24 h/day * 30 days/month * 1024 MB/GB = 21.23e-3 [`UNIT`]s
-        pub static MostlyStablePrice: Balance = 48 * PICOUNIT;
+        /// 50e-9 [`UNIT`]s * 10 ticks/min * 60 min/h * 24 h/day * 30 days/month = 21.6e-3 [`UNIT`]s
+        pub static MostlyStablePrice: Balance = 50 * NANOUNIT;
 
         #[codec(index = 7)]
         #[allow(non_upper_case_globals)]
-        /// [`MostlyStablePrice`] * 10 = 480 [`PICOUNIT`]s
+        /// [`MostlyStablePrice`] * 10 = 500 [`NANOUNIT`]s
         pub static MaxPrice: Balance = MostlyStablePrice::get() * 10;
 
         #[codec(index = 8)]
         #[allow(non_upper_case_globals)]
-        /// [`MostlyStablePrice`] / 5 = 9 [`PICOUNIT`]s
+        /// [`MostlyStablePrice`] / 5 = 10 [`NANOUNIT`]s
         pub static MinPrice: Balance = MostlyStablePrice::get() / 5;
 
         #[codec(index = 9)]
@@ -75,9 +76,9 @@ pub mod dynamic_params {
         ///
         /// [`MaxPrice`] = [`MostlyStablePrice`] + u * e ^ ( 1 - [`SystemUtilisationUpperThresholdPercentage`] )
         ///
-        /// 480 = 48 + u * (e ^ (1 - 0.95) - 1)
-        /// u = (480 - 48) / (e ^ (1 - 0.95) - 1) ≈ 8426
-        pub static UpperExponentFactor: u32 = 8426;
+        /// 500 = 50 + u * (e ^ (1 - 0.95) - 1)
+        /// u = (500 - 50) / (e ^ (1 - 0.95) - 1) ≈ 8777
+        pub static UpperExponentFactor: u32 = 8777;
 
         #[codec(index = 10)]
         #[allow(non_upper_case_globals)]
@@ -86,16 +87,16 @@ pub mod dynamic_params {
         ///
         /// [`MinPrice`] = [`MostlyStablePrice`] - u * e ^ ( [`SystemUtilisationLowerThresholdPercentage`] - 0 )
         ///
-        /// 9 = 48 - l * (e ^ (0.3 - 0) - 1)
-        /// l = (48 - 9) / (e ^ (0.3 - 0) - 1) ≈ 111
-        pub static LowerExponentFactor: u32 = 111;
+        /// 10 = 50 - l * (e ^ (0.3 - 0) - 1)
+        /// l = (50 - 10) / (e ^ (0.3 - 0) - 1) ≈ 114
+        pub static LowerExponentFactor: u32 = 114;
 
         #[codec(index = 11)]
         #[allow(non_upper_case_globals)]
-        /// 0-size bucket fixed rate payment stream representing the price for 1 MB of data.
+        /// 0-size bucket fixed rate payment stream representing the price for 1 GB of data.
         ///
         /// Base rate for a new fixed payment stream established between an MSP and a user.
-        pub static ZeroSizeBucketFixedRate: Balance = 48 * PICOUNIT;
+        pub static ZeroSizeBucketFixedRate: Balance = 50 * NANOUNIT;
 
         #[codec(index = 12)]
         #[allow(non_upper_case_globals)]

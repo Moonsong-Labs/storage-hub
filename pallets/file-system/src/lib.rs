@@ -111,7 +111,7 @@ pub mod pallet {
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
         >
-        + shp_traits::MutatePricePerUnitPerTickInterface<PricePerUnitPerTick = BalanceOf<Self>>;
+        + shp_traits::MutatePricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
 
         type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
             Price = BalanceOf<Self>,
@@ -478,6 +478,7 @@ pub mod pallet {
             msp_id: Option<ProviderIdFor<T>>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
+            root: MerkleHash<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
             value_prop_id: Option<ValuePropId<T>>,
@@ -541,7 +542,8 @@ pub mod pallet {
         BspConfirmedStoring {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
-            file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },
         /// Notifies that a storage request for a file key has been fulfilled.
@@ -638,6 +640,14 @@ pub mod pallet {
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
+        /// Failed to decrease bucket size for expired file deletion request
+        FailedToDecreaseBucketSize {
+            user: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
+            error: DispatchError,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -675,6 +685,8 @@ pub mod pallet {
         InsufficientAvailableCapacity,
         /// Number of removed BSPs volunteered from storage request prefix did not match the expected number.
         UnexpectedNumberOfRemovedVolunteeredBsps,
+        /// BSP cannot volunteer at this current tick.
+        BspNotEligibleToVolunteer,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
@@ -772,8 +784,14 @@ pub mod pallet {
         FixedRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
+        /// Failed to query earliest volunteer tick
+        FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
+        /// No file keys to confirm storing
+        NoFileKeysToConfirm,
+        /// Root was not updated after applying delta
+        RootNotUpdated,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -810,6 +828,7 @@ pub mod pallet {
                 msp_id,
                 bucket_id,
                 name,
+                root: <T::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                 collection_id: maybe_collection_id,
                 private,
                 value_prop_id,
@@ -947,7 +966,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register storage request
-            let file_key = Self::do_request_storage(
+            Self::do_request_storage(
                 who.clone(),
                 bucket_id,
                 location.clone(),
@@ -957,17 +976,6 @@ pub mod pallet {
                 None,
                 Some(peer_ids.clone()),
             )?;
-
-            // BSPs listen to this event and volunteer to store the file
-            Self::deposit_event(Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-            });
 
             Ok(())
         }

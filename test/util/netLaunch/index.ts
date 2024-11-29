@@ -32,7 +32,6 @@ import {
 import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
 import { spawn, spawnSync } from "node:child_process";
-import { DUMMY_BSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -662,8 +661,8 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.type === "bspnet") {
-      const multiAddressMsp = `/ip4/${bspIp}/tcp/30350/p2p/${DUMMY_BSP_ID}`;
-      await launchedNetwork.setupMsp(userApi, mspKey.address, multiAddressMsp);
+      const mockMspMultiAddress = `/ip4/${bspIp}/tcp/30350/p2p/${ShConsts.DUMMY_MSP_PEER_ID}`;
+      await launchedNetwork.setupMsp(userApi, mspKey.address, mockMspMultiAddress);
     }
 
     if (launchedNetwork.config.initialised === "multi") {

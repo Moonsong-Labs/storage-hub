@@ -3,12 +3,13 @@ import { after } from "node:test";
 import {
   bob,
   describeBspNet,
-  fetchEventData,
+  fetchEvent,
   ShConsts,
   sleep,
   type EnrichedBspApi
 } from "../../../util";
 import invariant from "tiny-invariant";
+import { BN } from "@polkadot/util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
@@ -45,7 +46,7 @@ describeBspNet(
           userApi.tx.paymentStreams.createDynamicRatePaymentStream(
             ShConsts.DUMMY_BSP_ID,
             bob.address,
-            10
+            1024 * 1024 // 1 MB
           )
         )
       );
@@ -224,6 +225,16 @@ describeBspNet(
     });
 
     it("Correctly updates payment stream on-chain to make user insolvent", async () => {
+      // Reduce the free balance of the user to make it insolvent
+      const initialFreeBalance = (await userApi.query.system.account(userAddress)).data.free;
+      const reduceFreeBalanceResult = await userApi.sealBlock(
+        userApi.tx.sudo.sudo(
+          userApi.tx.balances.forceSetBalance(userAddress, initialFreeBalance.divn(10))
+        )
+      );
+      const changeBalanceSuccess = reduceFreeBalanceResult.extSuccess;
+      strictEqual(changeBalanceSuccess, true, "Extrinsic should be successful");
+
       // Make sure the payment streams between the users and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
         await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
@@ -299,7 +310,8 @@ describeBspNet(
       await userApi.sealBlock();
 
       // Get the current price of storage from the runtime, the new stream deposit and the ED
-      const currentPriceOfStorage = await userApi.query.paymentStreams.currentPricePerUnitPerTick();
+      const currentPriceOfStorage =
+        await userApi.query.paymentStreams.currentPricePerGigaUnitPerTick();
       const newStreamDeposit = userApi.consts.paymentStreams.newStreamDeposit;
       const existentialDeposit = userApi.consts.balances.existentialDeposit;
 
@@ -307,12 +319,15 @@ describeBspNet(
       const freeBalance = (await userApi.query.system.account(userAddress)).data.free;
 
       // To make the user insolvent, we need to update the payment stream with a very high amount
-      // and advance new stream deposit blocks
-      // To do this, the new amount provided should be equal to the free balance of the user divided by
-      // the current price of storage multiplied by the new stream deposit
+      // of amount provided so when the BSP tries to charge it the user cannot pay its debt.
+      // We set the new provided amount to be as much as possible considering the deposit
+      // that the user is going to have to pay. We leave 10 * ED in the account to allow
+      // the user to pay its other debts.
+      const gigaUnit = new BN("1073741824", 10);
       const newAmountProvidedForInsolvency = freeBalance
-        .div(currentPriceOfStorage.mul(newStreamDeposit))
-        .sub(existentialDeposit);
+        .sub(existentialDeposit.muln(10))
+        .mul(gigaUnit)
+        .div(currentPriceOfStorage.mul(newStreamDeposit));
 
       // Make the user insolvent by updating the payment stream with a very high amount
       const updateDynamicRatePaymentStreamResult = await userApi.sealBlock(
@@ -334,14 +349,16 @@ describeBspNet(
         updateDynamicRatePaymentStreamResult.events
       );
       // Get the on-chain payment stream information
-      const [userAccount, providerId, newAmountProvided] = fetchEventData(
+      const {
+        data: { userAccount, providerId, newAmountProvided }
+      } = fetchEvent(
         userApi.events.paymentStreams.DynamicRatePaymentStreamUpdated,
         await userApi.query.system.events()
       );
       // Assert that the information on-chain is correct
       strictEqual(userAccount.toString(), userAddress);
       strictEqual(providerId.toString(), ShConsts.DUMMY_BSP_ID.toString());
-      strictEqual(newAmountProvided.toNumber(), newAmountProvidedForInsolvency.toNumber());
+      strictEqual(newAmountProvided.toString(), newAmountProvidedForInsolvency.toString());
     });
 
     it("Correctly flags update payment stream as without funds after charging", async () => {
@@ -673,76 +690,73 @@ describeBspNet(
       // We execute this loop three times since that's the amount of files the user has stored with the BSPs
       for (let i = 0; i < 3; i++) {
         console.log("Removing file from insolvent user, loop: ", i + 1);
-        // Check that the three Providers are trying to delete the files of the user
-        await userApi.assert
-          .extrinsicPresent({
+
+        try {
+          // Check that the three Providers are trying to delete the files of the user
+          const result = await userApi.assert.extrinsicPresent({
             method: "stopStoringForInsolventUser",
             module: "fileSystem",
             checkTxPool: true,
             assertLength: 3,
             timeout: 10000
-          })
-          // TODO: Remove this. This handling of the assertion is to debug race conditions if they appear.
-          .then(
-            async (result) => {
-              // console.log("Extrinsics present: ", result);
-              // We check for each BSP which file key it's deleting and print it
-              const txPool = await userApi.rpc.author.pendingExtrinsics();
-              const stopStoringForInsolventUserExts = result.map((match) => txPool[match.extIndex]);
-              for (let i = 0; i < stopStoringForInsolventUserExts.length; i++) {
-                const sender = stopStoringForInsolventUserExts[i].signer.toString();
-                const bspIdSender = (
-                  await userApi.query.providers.accountIdToBackupStorageProviderId(sender)
-                ).toString();
-                const fileKey = stopStoringForInsolventUserExts[i].args[0].toString();
-                console.log("BSP ", bspIdSender, " is deleting file with key: ", fileKey);
-              }
-            },
-            async (error) => {
-              console.log("Extrinsics not present: ", error);
-              // We check for each BSP if it has already deleted all files, which shouldn't happen
-              // We do this by checking the capacity of each BSP to make sure it's not 0, by using the
-              // runtime API to check its total capacity and comparing it to its available capacity
-              const bspOneAvailableCapacity =
-                await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
-                  ShConsts.DUMMY_BSP_ID
-                );
-              const bspOneTotalCapacity =
-                await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
-                  ShConsts.DUMMY_BSP_ID
-                );
-              console.log(
-                "BSP One total - available capacity: ",
-                bspOneTotalCapacity.toNumber() - bspOneAvailableCapacity.toNumber()
-              );
+          });
 
-              const bspTwoAvailableCapacity =
-                await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
-                  ShConsts.BSP_TWO_ID
-                );
-              const bspTwoTotalCapacity =
-                await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
-                  ShConsts.BSP_TWO_ID
-                );
-              console.log(
-                "BSP Two total - available capacity: ",
-                bspTwoTotalCapacity.toNumber() - bspTwoAvailableCapacity.toNumber()
-              );
+          // We check for each BSP which file key it's deleting and print it
+          const txPool = await userApi.rpc.author.pendingExtrinsics();
+          const stopStoringForInsolventUserExts = result.map((match) => txPool[match.extIndex]);
 
-              const bspThreeAvailableCapacity =
-                await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
-                  ShConsts.BSP_THREE_ID
-                );
-              const bspThreeTotalCapacity =
-                await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
-                  ShConsts.BSP_THREE_ID
-                );
-              console.log(
-                "BSP Three total - available capacity: ",
-                bspThreeTotalCapacity.toNumber() - bspThreeAvailableCapacity.toNumber()
-              );
-            }
+          for (const ext of stopStoringForInsolventUserExts) {
+            const sender = ext.signer.toString();
+            const bspIdSender = (
+              await userApi.query.providers.accountIdToBackupStorageProviderId(sender)
+            ).toString();
+            const fileKey = ext.args[0].toString();
+            console.log("BSP ", bspIdSender, " is deleting file with key: ", fileKey);
+          }
+        } catch (error) {
+          console.log("Extrinsics not present: ", error);
+          // We check for each BSP if it has already deleted all files, which shouldn't happen
+          // We do this by checking the capacity of each BSP to make sure it's not 0, by using the
+          // runtime API to check its total capacity and comparing it to its available capacity
+          const bspOneAvailableCapacity =
+            await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
+              ShConsts.DUMMY_BSP_ID
+            );
+          const bspOneTotalCapacity =
+            await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+              ShConsts.DUMMY_BSP_ID
+            );
+          console.log(
+            "BSP One total - available capacity: ",
+            bspOneTotalCapacity.toNumber() - bspOneAvailableCapacity.toNumber()
           );
+
+          const bspTwoAvailableCapacity =
+            await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
+              ShConsts.BSP_TWO_ID
+            );
+          const bspTwoTotalCapacity =
+            await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+              ShConsts.BSP_TWO_ID
+            );
+          console.log(
+            "BSP Two total - available capacity: ",
+            bspTwoTotalCapacity.toNumber() - bspTwoAvailableCapacity.toNumber()
+          );
+
+          const bspThreeAvailableCapacity =
+            await userApi.call.storageProvidersApi.queryAvailableStorageCapacity(
+              ShConsts.BSP_THREE_ID
+            );
+          const bspThreeTotalCapacity =
+            await userApi.call.storageProvidersApi.queryStorageProviderCapacity(
+              ShConsts.BSP_THREE_ID
+            );
+          console.log(
+            "BSP Three total - available capacity: ",
+            bspThreeTotalCapacity.toNumber() - bspThreeAvailableCapacity.toNumber()
+          );
+        }
 
         // Seal a block with the `stopStoringForInsolventUser` extrinsics.
         await userApi.sealBlock();

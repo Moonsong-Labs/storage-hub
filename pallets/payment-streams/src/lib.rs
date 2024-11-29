@@ -10,9 +10,10 @@
 
 pub mod types;
 mod utils;
+pub mod weights;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -28,7 +29,7 @@ use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::types::*;
+    use super::{types::*, weights::WeightInfo, Vec};
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::fungible::*,
@@ -43,6 +44,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
@@ -85,11 +89,15 @@ pub mod pallet {
             + HasCompact
             + Into<BalanceOf<Self>>;
 
+        /// The base deposit for a new payment stream. The actual deposit will be this constant + the deposit calculated using the `NewStreamDeposit` constant.
+        #[pallet::constant]
+        type BaseDeposit: Get<BalanceOf<Self>>;
+
         /// The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
         /// This means that, from the balance of the User for which the payment stream is being created, the amount
-        /// `NewStreamDeposit * rate` will be held as a deposit.
-        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
-        /// to be provided by the pallet using the `PaymentStreamsInterface` interface.
+        /// `NewStreamDeposit * rate + BaseDeposit` will be held as a deposit.
+        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided_in_giga_units * price_per_giga_unit_per_tick`, where `price_per_giga_unit_per_tick` is
+        /// obtained from the `CurrentPricePerGigaUnitPerTick` storage.
         #[pallet::constant]
         type NewStreamDeposit: Get<BlockNumberFor<Self>>;
 
@@ -175,11 +183,12 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// The last tick from the Providers Proof Submitters pallet that was registered.
+    /// The last tick that was processed by this pallet from the Proof Submitters interface.
     ///
-    /// This is used to keep track of the last tick from the Providers Proof Submitters pallet, that this pallet
-    /// registered. For the tick in this storage element, this pallet already knows the Providers that submitted
-    /// a valid proof.
+    /// This is used to keep track of the last tick processed by this pallet from the pallet that implements the from the ProvidersProofSubmitters interface.
+    /// This is done to know the last tick for which this pallet has registered the Providers that submitted a valid proof and updated their last chargeable info.
+    /// In the next `on_poll` hook execution, this pallet will update the last chargeable info of the Providers that submitted a valid proof in the tick that
+    /// follows the one saved in this storage element.
     #[pallet::storage]
     pub type LastSubmittersTickRegistered<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
@@ -210,14 +219,13 @@ pub mod pallet {
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
 
-    /// The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+    /// The current price per gigaunit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
-    /// This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+    /// This can be updated each tick by the system manager.
     ///
-    /// This storage is updated in:
-    /// - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
+    /// It is in giga-units to allow for a more granular price per unit considering the limitations in decimal places that the Balance type might have.
     #[pallet::storage]
-    pub type CurrentPricePerUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+    pub type CurrentPricePerGigaUnitPerTick<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
     /// The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
     ///
@@ -248,7 +256,7 @@ pub mod pallet {
         fn default() -> Self {
             let current_price = One::one();
 
-            CurrentPricePerUnitPerTick::<T>::put(current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(current_price);
 
             Self { current_price }
         }
@@ -257,7 +265,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            CurrentPricePerUnitPerTick::<T>::put(self.current_price);
+            CurrentPricePerGigaUnitPerTick::<T>::put(self.current_price);
         }
     }
 
@@ -333,10 +341,17 @@ pub mod pallet {
         /// stop providing services to that user.
         UserWithoutFunds { who: T::AccountId },
         /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
-        UserPaidDebts { who: T::AccountId },
+        UserPaidAllDebts { who: T::AccountId },
+        /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid some (but not all) of its outstanding debt.
+        UserPaidSomeDebts { who: T::AccountId },
         /// Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
         /// correctly paid all their outstanding debt and can now contract new services again.
         UserSolvent { who: T::AccountId },
+        /// Event emitted when the `on_poll` hook detects that the tick of the proof submitters that needs to process is not the one immediately after the last processed tick.
+        InconsistentTickProcessing {
+            last_processed_tick: BlockNumberFor<T>,
+            tick_to_process: BlockNumberFor<T>,
+        },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -374,6 +389,8 @@ pub mod pallet {
         UserNotFlaggedAsWithoutFunds,
         /// Error thrown when a user tries to clear the flag of being without funds before the cooldown period has passed
         CooldownPeriodNotPassed,
+        /// Error thrown when a user tries to clear the flag of being without funds before paying all its remaining debt
+        UserHasRemainingDebt,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -397,20 +414,15 @@ pub mod pallet {
         /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
-        fn on_poll(_n: BlockNumberFor<T>, weight: &mut sp_weights::WeightMeter) {
-            // TODO: Benchmark computational weight cost of this hook.
-
-            // Update the current tick since we are executing the `on_poll` hook.
-            let mut last_tick = OnPollTicker::<T>::get();
-            last_tick.saturating_inc();
-            OnPollTicker::<T>::set(last_tick);
+        fn on_poll(_n: BlockNumberFor<T>, meter: &mut sp_weights::WeightMeter) {
+            // Update the current tick since we are executing the `on_poll` hook
+            let (previous_tick, _new_tick) = Self::do_advance_tick(meter);
 
             // Update the last chargeable info of Providers that have sent a valid proof in the previous tick
-            Self::do_update_last_chargeable_info(last_tick, weight);
+            Self::do_update_last_chargeable_info(previous_tick, meter);
 
-            // Update the current global price and the global price index of the system
-            Self::do_update_current_price_per_unit_per_tick(weight);
-            Self::do_update_price_index(weight);
+            // Update the global price index of the system
+            Self::do_update_price_index(meter);
         }
     }
 
@@ -436,7 +448,7 @@ pub mod pallet {
         ///
         /// Emits `FixedRatePaymentStreamCreated` event when successful.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_fixed_rate_payment_stream())]
         pub fn create_fixed_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -477,7 +489,7 @@ pub mod pallet {
         ///
         /// Emits `FixedRatePaymentStreamUpdated` event when successful.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_fixed_rate_payment_stream())]
         pub fn update_fixed_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -517,7 +529,7 @@ pub mod pallet {
         ///
         /// Emits `FixedRatePaymentStreamDeleted` event when successful.
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_fixed_rate_payment_stream())]
         pub fn delete_fixed_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -558,7 +570,7 @@ pub mod pallet {
         ///
         /// Emits `DynamicRatePaymentStreamCreated` event when successful.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_dynamic_rate_payment_stream())]
         pub fn create_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -603,7 +615,7 @@ pub mod pallet {
         ///
         /// Emits `DynamicRatePaymentStreamUpdated` event when successful.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_dynamic_rate_payment_stream())]
         pub fn update_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -647,7 +659,7 @@ pub mod pallet {
         ///
         /// Emits `DynamicRatePaymentStreamDeleted` event when successful.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_dynamic_rate_payment_stream())]
         pub fn delete_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
@@ -698,7 +710,7 @@ pub mod pallet {
         /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
         /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::charge_payment_streams())]
         pub fn charge_payment_streams(
             origin: OriginFor<T>,
             user_account: T::AccountId,
@@ -762,7 +774,7 @@ pub mod pallet {
         /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
         /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::charge_multiple_users_payment_streams(user_accounts.len() as u32))]
         pub fn charge_multiple_users_payment_streams(
             origin: OriginFor<T>,
             user_accounts: BoundedVec<T::AccountId, T::MaxUsersToCharge>,
@@ -792,8 +804,8 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
-        /// its deposits.
+        /// Dispatchable extrinsic that allows a user flagged as without funds to pay the Providers that still have payment streams
+        /// with it, in order to recover as much of its deposits as possible.
         ///
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the User that has been flagged as without funds.
@@ -801,33 +813,43 @@ pub mod pallet {
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the user has been flagged as without funds.
-        /// 3. Release the user's funds that were held as a deposit for each payment stream.
-        /// 4. Get all payment streams of the user and charge them, paying the Providers for the services.
-        /// 5. Delete all payment streams of the user.
+        /// 3. Release the user's funds that were held as a deposit for each payment stream to be paid.
+        /// 4. Get the payment streams that the user has with the provided list of Providers, and pay them for the services.
+        /// 5. Delete the charged payment streams of the user.
         ///
-        /// Emits a 'UserPaidDebts' event when successful.
+        /// Emits a 'UserPaidSomeDebts' event when successful if the user has remaining debts. If the user has successfully paid all its debts,
+        /// it emits a 'UserPaidAllDebts' event.
         ///
-        /// Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
-        /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
-        /// finds more convenient to wait for Providers to get its deposits one by one instead.
+        /// Notes: this extrinsic iterates over the provided list of Providers, getting the payment streams they have with the user and charging
+        /// them, so the execution could get expensive. It's recommended to provide a list of Providers that the user actually has payment streams with,
+        /// which can be obtained by calling the `get_providers_with_payment_streams_with_user` runtime API.
+        /// There was an idea to limit the amount of Providers that can be received by this extrinsic using a constant in the configuration of this pallet,
+        /// but the correct benchmarking of this extrinsic should be enough to avoid any potential abuse.
         #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
-        pub fn pay_outstanding_debt(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+        #[pallet::weight(T::WeightInfo::pay_outstanding_debt(providers.len().try_into().unwrap_or(u32::MAX)))]
+        pub fn pay_outstanding_debt(
+            origin: OriginFor<T>,
+            providers: Vec<ProviderIdFor<T>>,
+        ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
             let user_account = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_pay_outstanding_debt(&user_account)?;
+            let fully_paid = Self::do_pay_outstanding_debt(&user_account, providers)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::UserPaidDebts { who: user_account });
+            if fully_paid {
+                Self::deposit_event(Event::<T>::UserPaidAllDebts { who: user_account });
+            } else {
+                Self::deposit_event(Event::<T>::UserPaidSomeDebts { who: user_account });
+            }
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
 
         /// Dispatchable extrinsic that allows a user flagged as without funds long ago enough to clear this flag from its account,
-        /// allowing it to begin contracting and paying for services again. If there's any outstanding debt, it will be charged and cleared.
+        /// allowing it to begin contracting and paying for services again. It should have previously paid all its outstanding debt.
         ///
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the User that has been flagged as without funds.
@@ -836,20 +858,12 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the user has been flagged as without funds.
         /// 3. Check that the cooldown period has passed since the user was flagged as without funds.
-        /// 4. Check if there's any outstanding debt and charge it. This is done by:
-        ///   a. Releasing any remaining funds held as a deposit for each payment stream.
-        ///   b. Getting all payment streams of the user and charging them, paying the Providers for the services.
-        ///   c. Returning the User any remaining funds.
-        ///   d. Deleting all payment streams of the user.
+        /// 4. Check that there's no remaining outstanding debt.
         /// 5. Unflag the user as without funds.
         ///
         /// Emits a 'UserSolvent' event when successful.
-        ///
-        /// Notes: this extrinsic iterates over all remaining payment streams of the user and charges them, so it can be expensive in terms of weight.
-        /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
-        /// finds more convenient to wait for Providers to get its deposits one by one instead.
         #[pallet::call_index(9)]
-        #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::clear_insolvent_flag())]
         pub fn clear_insolvent_flag(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
             let user_account = ensure_signed(origin)?;
@@ -962,8 +976,8 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function to get the current price per unit per tick of the system
-    pub fn get_current_price_per_unit_per_tick() -> BalanceOf<T> {
-        CurrentPricePerUnitPerTick::<T>::get()
+    pub fn get_current_price_per_giga_unit_per_tick() -> BalanceOf<T> {
+        CurrentPricePerGigaUnitPerTick::<T>::get()
     }
 
     /// A helper function to get the accumulated price index of the system

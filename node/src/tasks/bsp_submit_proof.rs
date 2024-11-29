@@ -196,12 +196,20 @@ where
         // Construct key challenges and generate key proofs for them.
         let mut key_proofs = KeyProofs::new();
         for file_key in &proven_keys {
-            // Generate the key proof for each file key.
-            let key_proof = self
-                .generate_key_proof(*file_key, event.data.seed, event.data.provider_id)
-                .await?;
+            // If the file key is a checkpoint challenge for a file deletion, we should NOT generate a key proof for it.
+            let should_generate_key_proof = !event
+                .data
+                .checkpoint_challenges
+                .contains(&(*file_key, Some(TrieRemoveMutation::default())));
 
-            key_proofs.insert(*file_key, key_proof);
+            if should_generate_key_proof {
+                // Generate the key proof for each file key.
+                let key_proof = self
+                    .generate_key_proof(*file_key, event.data.seed, event.data.provider_id)
+                    .await?;
+
+                key_proofs.insert(*file_key, key_proof);
+            };
         }
 
         // Construct full proof.
@@ -253,6 +261,7 @@ where
                     .with_max_tip(max_tip as f64)
                     .with_timeout(Duration::from_secs(self.storage_hub_handler.provider_config.extrinsic_retry_timeout))
                     .with_should_retry(Some(Box::new(should_retry))),
+                false
             )
             .await
             .map_err(|e| {

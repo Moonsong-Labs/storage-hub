@@ -16,7 +16,7 @@ use sp_runtime::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
         Saturating, Zero,
     },
-    ArithmeticError, BoundedVec, DispatchError,
+    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -36,12 +36,12 @@ use crate::{
     pallet,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileLocation,
-        Fingerprint, ForestProof, KeyProof, MaxBatchMspRespondStorageRequests, MerkleHash,
-        MoveBucketRequestMetadata, MultiAddresses, PeerIds, ProviderIdFor, RejectedStorageRequest,
-        ReplicationTargetType, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        StorageRequestMspResponse, TickNumber, ValuePropId,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
+        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
+        PeerIds, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
     PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
@@ -430,8 +430,8 @@ where
             (true, None) => {
                 Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
             }
-            // Handle case where the bucket has an existing collection.
-            (_, Some(current_collection_id))
+            // Handle case where the bucket has an existing collection, but the collection is not in storage.
+            (true, Some(current_collection_id))
             if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
                 {
                     Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
@@ -450,7 +450,7 @@ where
 
     /// Create and associate collection with a bucket.
     ///
-    /// *Callable only by the owner of the bucket. The bucket must be private.*
+    /// *Callable only by the owner of the bucket.*
     ///
     /// It is possible to have a bucket that is private but does not have a collection associated with it. This can happen if
     /// a user destroys the collection associated with the bucket by calling the NFTs pallet directly.
@@ -607,7 +607,7 @@ where
             fingerprint,
             size,
             msp,
-            user_peer_ids: user_peer_ids.unwrap_or_default(),
+            user_peer_ids: user_peer_ids.clone().unwrap_or_default(),
             bsps_required,
             bsps_confirmed: ReplicationTargetType::<T>::zero(),
             bsps_volunteered: ReplicationTargetType::<T>::zero(),
@@ -642,6 +642,17 @@ where
 
         let expiration_item = ExpirationItem::StorageRequest(file_key);
         Self::enqueue_expiration_item(expiration_item)?;
+
+        // BSPs listen to this event and volunteer to store the file
+        Self::deposit_event(Event::NewStorageRequest {
+            who: sender,
+            file_key,
+            bucket_id,
+            location,
+            fingerprint,
+            size,
+            peer_ids: user_peer_ids.unwrap_or_default(),
+        });
 
         Ok(file_key)
     }
@@ -703,10 +714,7 @@ where
                     &storage_request_metadata,
                 )?;
 
-                Self::deposit_event(Event::StorageRequestRejected {
-                    file_key: file_key,
-                    reason,
-                });
+                Self::deposit_event(Event::StorageRequestRejected { file_key, reason });
             }
         }
 
@@ -871,6 +879,11 @@ where
                 result
             );
 
+            // Notify that the storage request has been accepted by an MSP.
+            Self::deposit_event(Event::MspAcceptedStorageRequest {
+                file_key: file_key_with_proof.file_key,
+            });
+
             // Check if all BSPs have confirmed storing the file.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
                 // Remove storage request metadata.
@@ -913,11 +926,6 @@ where
                     &file_key_with_proof.file_key,
                     Some(storage_request_metadata.clone()),
                 );
-
-                // Notify that the storage request has been accepted by an MSP.
-                Self::deposit_event(Event::MspAcceptedStorageRequest {
-                    file_key: file_key_with_proof.file_key,
-                });
             }
         }
 
@@ -1014,16 +1022,22 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
-        let bsp_threshold =
-            Self::get_threshold_for_bsp_request(&bsp_id, &storage_request_metadata.fingerprint);
+        let earliest_volunteer_tick = Self::query_earliest_file_volunteer_tick(bsp_id, file_key)
+            .map_err({
+                |e| {
+                    log::error!("Failed to query earliest file volunteer tick: {:?}", e);
+                    Error::<T>::FailedToQueryEarliestFileVolunteerTick
+                }
+            })?;
 
-        // Compute threshold for BSP to succeed.
-        let (to_succeed, _slope) =
-            Self::compute_threshold_to_succeed(&bsp_id, storage_request_metadata.requested_at)?;
+        // Check if the BSP is eligible to volunteer for the storage request.
+        let current_tick_number =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-        // Check that the BSP's threshold is under the threshold required to volunteer for the storage request.
-        ensure!(bsp_threshold <= to_succeed, Error::<T>::AboveThreshold);
+        ensure!(
+            current_tick_number >= earliest_volunteer_tick,
+            Error::<T>::BspNotEligibleToVolunteer
+        );
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -1084,49 +1098,49 @@ where
             Error::<T>::NotABsp
         );
 
-        let file_keys = file_keys_and_proofs
-            .iter()
-            .map(|(fk, _)| *fk)
-            .collect::<Vec<_>>();
-
         // Verify the proof of non-inclusion.
         let proven_keys: BTreeSet<MerkleHash<T>> =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
-                file_keys.as_slice(),
+                file_keys_and_proofs
+                    .iter()
+                    .map(|(fk, _)| *fk)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
                 &non_inclusion_forest_proof,
             )?;
 
         // Create a queue to store the file keys and metadata to be processed.
-        let mut file_keys_and_metadatas: BoundedVec<
+        let mut file_keys_and_metadata: BoundedVec<
             (MerkleHash<T>, Vec<u8>),
             T::MaxBatchConfirmStorageRequests,
         > = BoundedVec::new();
 
         let mut seen_keys = BTreeSet::new();
+        let mut skipped_file_keys: BoundedBTreeSet<
+            MerkleHash<T>,
+            T::MaxBatchConfirmStorageRequests,
+        > = BoundedBTreeSet::new();
         for file_key in file_keys_and_proofs.iter() {
             // Skip any duplicates.
             if !seen_keys.insert(file_key.0) {
                 continue;
             }
 
-            // Check that the storage request exists.
-            let mut storage_request_metadata =
-                <StorageRequests<T>>::get(&file_key.0).ok_or(Error::<T>::StorageRequestNotFound)?;
-
-            if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
+            let mut storage_request_metadata = match <StorageRequests<T>>::get(&file_key.0) {
+                Some(metadata) if metadata.bsps_confirmed < metadata.bsps_required => metadata,
                 // Since BSPs need to race one another to confirm storage requests, it is entirely possible that a BSP confirms a storage request
-                // after the storage request has been fulfilled within the same block.
-                // TODO: Accumulate a list of storage requests that have been skipped for the BSP to confirm what it can.
-                continue;
-            }
-
-            expect_or_err!(
-                storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
-                "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
-                Error::<T>::StorageRequestBspsRequiredFulfilled,
-                bool
-            );
+                // after the storage request has been fulfilled or the replication target has been reached (bsps_required == bsps_confirmed).
+                Some(_) | None => {
+                    expect_or_err!(
+                        skipped_file_keys.try_insert(file_key.0),
+                        "Failed to push file key to skipped_file_keys",
+                        Error::<T>::TooManyStorageRequestResponses,
+                        result
+                    );
+                    continue;
+                }
+            };
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
@@ -1216,7 +1230,7 @@ where
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
             expect_or_err!(
-                file_keys_and_metadatas.try_push((file_key.0, encoded_trie_value)),
+                file_keys_and_metadata.try_push((file_key.0, encoded_trie_value)),
                 "Failed to push file key and metadata",
                 Error::<T>::FileMetadataProcessingQueueFull,
                 result
@@ -1273,6 +1287,14 @@ where
             }
         }
 
+        // Remove all the skipped file keys from file_keys_and_metadata
+        file_keys_and_metadata.retain(|(fk, _)| !skipped_file_keys.contains(fk));
+
+        ensure!(
+            !file_keys_and_metadata.is_empty(),
+            Error::<T>::NoFileKeysToConfirm
+        );
+
         // Check if this is the first file added to the BSP's Forest. If so, initialise last tick proven by this BSP.
         let old_root = expect_or_err!(
             <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
@@ -1293,25 +1315,48 @@ where
             });
         }
 
+        let mutations = file_keys_and_metadata
+            .iter()
+            .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+            .collect::<Vec<_>>();
+
         // Compute new root after inserting new file keys in forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &bsp_id,
-            file_keys_and_metadatas
-                .iter()
-                .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
-                .collect::<Vec<_>>()
-                .as_slice(),
+            mutations.as_slice(),
             &non_inclusion_forest_proof,
         )?;
+
+        // Root should have changed.
+        ensure!(old_root != new_root, Error::<T>::RootNotUpdated);
 
         // Update root of BSP.
         <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
-        // Emit event.
+        // This should not fail since `skipped_file_keys` purposely share the same bound as `file_keys_and_metadata`.
+        let skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
+            skipped_file_keys.into_iter().collect::<Vec<_>>().try_into(),
+            "Failed to convert skipped_file_keys to BoundedVec",
+            Error::<T>::TooManyStorageRequestResponses,
+            result
+        );
+
+        let file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
+            file_keys_and_metadata
+                .into_iter()
+                .map(|(fk, _)| fk)
+                .collect::<Vec<_>>()
+                .try_into(),
+            "Failed to convert file_keys_and_metadata to BoundedVec",
+            Error::<T>::TooManyStorageRequestResponses,
+            result
+        );
+
         Self::deposit_event(Event::BspConfirmedStoring {
             who: sender,
             bsp_id,
-            file_keys: file_keys.to_vec().try_into().unwrap(),
+            confirmed_file_keys: file_keys,
+            skipped_file_keys,
             new_root,
         });
 
@@ -1841,8 +1886,14 @@ where
                     .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
-                let expiration_item =
-                    ExpirationItem::PendingFileDeletionRequests((sender, file_key));
+                let expiration_item = ExpirationItem::PendingFileDeletionRequests(
+                    FileDeletionRequestExpirationItem::<T> {
+                        user: sender.clone(),
+                        file_key,
+                        bucket_id,
+                        file_size: size,
+                    },
+                );
                 Self::enqueue_expiration_item(expiration_item)?;
 
                 false
@@ -2114,7 +2165,9 @@ mod hooks {
     use crate::{
         pallet,
         types::MerkleHash,
-        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
+        utils::{
+            BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
+        },
         Event, FileDeletionRequestExpirations, NextStartingBlockToCleanUp, Pallet,
         PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
         StorageRequestBsps, StorageRequestExpirations, StorageRequests,
@@ -2130,20 +2183,20 @@ mod hooks {
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
-            let current_data_price_per_unit =
-                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::get_price_per_unit_per_tick();
+            let current_data_price_per_giga_unit =
+                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
             weight.consume(T::DbWeight::get().reads(1));
 
-            let new_data_price_per_unit =
+            let new_data_price_per_giga_unit =
                 <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
-                    current_data_price_per_unit,
+                    current_data_price_per_giga_unit,
                     <T::Providers as shp_traits::SystemMetricsInterface>::get_total_used_capacity(),
                     <T::Providers as shp_traits::SystemMetricsInterface>::get_total_capacity(),
                 );
 
-            if new_data_price_per_unit != current_data_price_per_unit {
-                <T::PaymentStreams as shp_traits::MutatePricePerUnitPerTickInterface>::set_price_per_unit_per_tick(
-                    new_data_price_per_unit,
+            if new_data_price_per_giga_unit != current_data_price_per_giga_unit {
+                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
+                    new_data_price_per_giga_unit,
                 );
                 weight.consume(T::DbWeight::get().writes(1));
             }
@@ -2211,8 +2264,11 @@ mod hooks {
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
             // TODO: process all the expired file deletion requests. If not, we should return early.
-            while let Some((user, file_key)) = expired_file_deletion_requests.pop() {
-                Self::process_expired_pending_file_deletion(user, file_key, remaining_weight)
+            while let Some(expired_file_deletion_request) = expired_file_deletion_requests.pop() {
+                Self::process_expired_pending_file_deletion(
+                    expired_file_deletion_request,
+                    remaining_weight,
+                )
             }
 
             // If there are remaining items which were not processed, put them back in storage
@@ -2290,8 +2346,7 @@ mod hooks {
         }
 
         fn process_expired_pending_file_deletion(
-            user: T::AccountId,
-            file_key: MerkleHash<T>,
+            expired_file_deletion_request: FileDeletionRequestExpirationItem<T>,
             remaining_weight: &mut Weight,
         ) {
             let db_weight = T::DbWeight::get();
@@ -2301,34 +2356,66 @@ mod hooks {
                 return;
             }
 
-            let requests = PendingFileDeletionRequests::<T>::get(&user);
+            let requests =
+                PendingFileDeletionRequests::<T>::get(&expired_file_deletion_request.user);
 
             // Check if the file key is still a pending deletion requests.
-            let expired_item_index = match requests.iter().position(|(key, _)| key == &file_key) {
+            let expired_item_index = match requests
+                .iter()
+                .position(|(key, _)| key == &expired_file_deletion_request.file_key)
+            {
                 Some(i) => i,
                 None => return,
             };
 
             // Remove the file key from the pending deletion requests.
-            PendingFileDeletionRequests::<T>::mutate(&user, |requests| {
-                requests.remove(expired_item_index);
-            });
+            PendingFileDeletionRequests::<T>::mutate(
+                &expired_file_deletion_request.user,
+                |requests| {
+                    requests.remove(expired_item_index);
+                },
+            );
+
+            let user = expired_file_deletion_request.user.clone();
+
+            // Attempt to decrease the bucket size while also reducing the fixed rate payment stream between the user and the MSP
+            if let Err(e) =
+                <T::Providers as shp_traits::MutateBucketsInterface>::decrease_bucket_size(
+                    &expired_file_deletion_request.bucket_id,
+                    expired_file_deletion_request.file_size,
+                )
+            {
+                Self::deposit_event(Event::FailedToDecreaseBucketSize {
+                    user: user.clone(),
+                    bucket_id: expired_file_deletion_request.bucket_id,
+                    file_key: expired_file_deletion_request.file_key,
+                    file_size: expired_file_deletion_request.file_size,
+                    error: e,
+                });
+
+                if !<T::Providers as shp_traits::ReadBucketsInterface>::bucket_exists(
+                    &expired_file_deletion_request.bucket_id,
+                ) {
+                    // Skip expired file deletion request if the bucket does not exist.
+                    return;
+                }
+            }
 
             // Queue a priority challenge to remove the file key from all the providers.
             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
+                &expired_file_deletion_request.file_key,
                 Some(TrieRemoveMutation),
             )
             .map_err(|_| {
                 Self::deposit_event(Event::FailedToQueuePriorityChallenge {
                     user: user.clone(),
-                    file_key,
+                    file_key: expired_file_deletion_request.file_key,
                 });
             });
-            // Emit event.
+
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrMspId::<T>::AccountId(user),
-                file_key,
+                issuer: EitherAccountIdOrMspId::<T>::AccountId(user.clone()),
+                file_key: expired_file_deletion_request.file_key,
             });
 
             remaining_weight.saturating_reduce(potential_weight);

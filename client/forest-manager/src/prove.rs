@@ -19,7 +19,7 @@ use crate::{
 /// - `None` indicates that no relevant keys were found (unevaluable situation).
 /// - An instance of `Proven`, which depending on the located keys, could be:
 ///   1. An exact match.
-///   2. Neighboring leaves (previous and next to the challenged key).
+///   2. Neighbouring leaves (previous and next to the challenged key).
 ///   3. The leaf before the challenged key (if the challenged key is greater than the largest key in the trie).
 ///   4. The leaf after the challenged key (if the challenged key is smaller than the smallest key in the trie).
 ///

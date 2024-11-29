@@ -187,6 +187,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspNotConfirmed: AugmentedError<ApiType>;
       /**
+       * BSP cannot volunteer at this current tick.
+       **/
+      BspNotEligibleToVolunteer: AugmentedError<ApiType>;
+      /**
        * BSP has not volunteered to store the given file.
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
@@ -242,6 +246,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to get owner account of ID of provider
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
+      /**
+       * Failed to query earliest volunteer tick
+       **/
+      FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
       /**
        * Failed to convert to primitive type.
        **/
@@ -320,6 +328,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
       /**
+       * No file keys to confirm storing
+       **/
+      NoFileKeysToConfirm: AugmentedError<ApiType>;
+      /**
        * No global reputation weight set.
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
@@ -367,6 +379,10 @@ declare module "@polkadot/api-base/types/errors" {
        * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
        **/
       RequestWithoutMsp: AugmentedError<ApiType>;
+      /**
+       * Root was not updated after applying delta
+       **/
+      RootNotUpdated: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
@@ -759,6 +775,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UpdateRateToSameRate: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to clear the flag of being without funds before paying all its remaining debt
+       **/
+      UserHasRemainingDebt: AugmentedError<ApiType>;
+      /**
        * Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
        **/
       UserNotFlaggedAsWithoutFunds: AugmentedError<ApiType>;
@@ -927,6 +947,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ForestProofVerificationFailed: AugmentedError<ApiType>;
       /**
+       * The number of key proofs submitted does not match the number of keys proven in the forest proof.
+       **/
+      IncorrectNumberOfKeyProofs: AugmentedError<ApiType>;
+      /**
        * There is at least one key proven in the forest proof, that does not have a corresponding
        * key proof.
        **/
@@ -979,6 +1003,11 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       TooManyValidProofSubmitters: AugmentedError<ApiType>;
       /**
+       * After successfully applying delta for a set of mutations, the number of mutated keys is
+       * not the same as the number of mutations expected to have been applied.
+       **/
+      UnexpectedNumberOfRemoveMutations: AugmentedError<ApiType>;
+      /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be
        * submitting proofs.
@@ -1030,6 +1059,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Deposit too low to determine capacity.
+       **/
+      DepositTooLow: AugmentedError<ApiType>;
       /**
        * Error thrown when a fixed payment stream is not found.
        **/
@@ -1146,6 +1179,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
        **/
       StorageTooLow: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a provider attempts to top up their deposit when not required.
+       **/
+      TopUpNotRequired: AugmentedError<ApiType>;
       /**
        * Error thrown when value proposition under a given id already exists.
        **/

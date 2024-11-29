@@ -77,6 +77,7 @@ import type {
   PalletFileSystemFileKeyWithProof,
   PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemStorageRequestBspsMetadata,
@@ -148,6 +149,7 @@ import type {
   PalletStorageProvidersSignUpRequest,
   PalletStorageProvidersSignUpRequestSpParams,
   PalletStorageProvidersStorageProviderId,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
   PalletSudoCall,
@@ -175,6 +177,8 @@ import type {
   ShpFileKeyVerifierFileKeyProof,
   ShpFileMetadataFileMetadata,
   ShpFileMetadataFingerprint,
+  ShpTraitsTrieAddMutation,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
@@ -361,6 +365,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
     PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
+    PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
@@ -432,6 +437,7 @@ declare module "@polkadot/types/types/registry" {
     PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
     PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
     PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
+    PalletStorageProvidersTopUpMetadata: PalletStorageProvidersTopUpMetadata;
     PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
     PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
     PalletSudoCall: PalletSudoCall;
@@ -459,6 +465,8 @@ declare module "@polkadot/types/types/registry" {
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
     ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
     ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
+    ShpTraitsTrieAddMutation: ShpTraitsTrieAddMutation;
+    ShpTraitsTrieMutation: ShpTraitsTrieMutation;
     ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;

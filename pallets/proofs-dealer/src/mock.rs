@@ -18,7 +18,7 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, IdentityLookup},
+    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
@@ -151,6 +151,7 @@ impl Get<AccountId> for TreasuryAccount {
 // Payment streams pallet:
 impl pallet_payment_streams::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
     type RuntimeHoldReason = RuntimeHoldReason;
@@ -162,6 +163,7 @@ impl pallet_payment_streams::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -171,20 +173,54 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
     }
 }
 
+/// Mock implementation of the relay chain data provider, which should return the relay chain block
+/// that the previous parachain block was anchored to.
+pub struct MockRelaychainDataProvider;
+impl BlockNumberProvider for MockRelaychainDataProvider {
+    type BlockNumber = u32;
+    fn current_block_number() -> Self::BlockNumber {
+        frame_system::Pallet::<Test>::block_number()
+            .saturating_sub(1)
+            .try_into()
+            .unwrap()
+    }
+}
+
+type StorageDataUnit = u64;
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
 // Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u64;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ProviderId = H256;
+    type ProviderIdHashing = BlakeTwo256;
+    type ValuePropId = H256;
+    type ValuePropIdHashing = BlakeTwo256;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
+    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU64<2>;
@@ -203,6 +239,9 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
+    type TopUpGracePeriod = ConstU32<5>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -286,7 +325,7 @@ impl crate::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type MaxSubmittersPerTick = ConstU32<100>;
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
@@ -300,6 +339,7 @@ impl crate::Config for Test {
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = ConstU32<100>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
