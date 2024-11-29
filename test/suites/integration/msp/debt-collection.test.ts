@@ -1,10 +1,12 @@
 import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
+import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
+import type { H256 } from "@polkadot/types/interfaces";
 
 describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let mspApi: EnrichedBspApi;
+  let bucketId: H256;
 
   before(async () => {
     userApi = await createUserApi();
@@ -35,8 +37,8 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
     assert(newBucketEventDataBlob, "NewBucket event data does not match expected type");
+    bucketId = newBucketEventDataBlob.bucketId;
 
     const txs = [];
     for (let i = 0; i < source.length; i++) {
@@ -45,12 +47,12 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
           source[i],
           destination[i],
           userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
+          bucketId
         );
 
       txs.push(
         userApi.tx.fileSystem.issueStorageRequest(
-          newBucketEventDataBlob.bucketId,
+          bucketId,
           location,
           fingerprint,
           file_size,
@@ -230,25 +232,48 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     let currentBlockNumber = currentBlock.number.toNumber();
 
     const blocksToAdvance = MSP_CHARGING_PERIOD - (currentBlockNumber % MSP_CHARGING_PERIOD) + 1;
-    await userApi.block.skipTo(currentBlockNumber + blocksToAdvance);
+    await userApi.block.skipTo(currentBlockNumber + blocksToAdvance - 1);
+
+    // Wait for the MSP to try to charge the user and seal a block.
+    await sleep(2000);
+    await userApi.sealBlock();
 
     // Verify that the MSP charged the users after the notified.
     await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
 
     // Advance many MSP charging periods, to charge again, but this time with a known number of
     // blocks since last charged. That way, we can check for the exact amount charged.
+    // Since the MSP is going to charge each period, the last charge should be for one period.
     currentBlock = await userApi.rpc.chain.getHeader();
     currentBlockNumber = currentBlock.number.toNumber();
     await userApi.block.skipTo(currentBlockNumber + 10 * MSP_CHARGING_PERIOD);
 
-    // Calculating the expected amount of charged tokens.
+    // Calculate the expected rate of the payment stream and compare it to the actual rate.
     const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
       userApi.shConsts.DUMMY_MSP_ID
     );
+    const bucketSize = (await userApi.query.providers.buckets(bucketId)).unwrap().size_.toNumber();
     const pricePerGigaUnitOfDataPerBlock =
       valueProps[0].value_prop.price_per_giga_unit_of_data_per_block.toNumber();
-    const expectedChargedAmount =
-      (pricePerGigaUnitOfDataPerBlock * 10 * MSP_CHARGING_PERIOD) / 1024 / 1024;
+    const unitsInGigaUnit = 1024 * 1024 * 1024;
+    const expectedRateOfPaymentStream =
+      Math.ceil((pricePerGigaUnitOfDataPerBlock * bucketSize) / unitsInGigaUnit) +
+      userApi.consts.providers.zeroSizeBucketFixedRate.toNumber();
+    const paymentStream = (
+      await userApi.query.paymentStreams.fixedRatePaymentStreams(
+        DUMMY_MSP_ID,
+        userApi.shConsts.NODE_INFOS.user.AddressId
+      )
+    ).unwrap();
+    const paymentStreamRate = paymentStream.rate.toNumber();
+    strictEqual(
+      paymentStreamRate,
+      expectedRateOfPaymentStream,
+      "Payment stream rate not matching the expected value"
+    );
+
+    // The expected amount to be charged is the rate of the payment stream times the charging period.
+    const expectedChargedAmount = paymentStreamRate * MSP_CHARGING_PERIOD;
 
     // Verify that it charged for the correct amount.
     const paymentStreamChargedEvent = await userApi.assert.eventPresent(
@@ -258,13 +283,10 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     assert(userApi.events.paymentStreams.PaymentStreamCharged.is(paymentStreamChargedEvent.event));
     const paymentStreamChargedEventAmount = paymentStreamChargedEvent.event.data.amount.toNumber();
 
-    console.log("Expected charged amount: ", expectedChargedAmount);
-    console.log("Charged amount: ", paymentStreamChargedEventAmount);
-
-    // strictEqual(
-    //   paymentStreamChargedEventAmount,
-    //   expectedChargedAmount,
-    //   "Charged amount not matching the expected value"
-    // );
+    strictEqual(
+      paymentStreamChargedEventAmount,
+      expectedChargedAmount,
+      "Charged amount not matching the expected value"
+    );
   });
 });
