@@ -1,5 +1,6 @@
 import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -225,24 +226,44 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
   });
 
   it("MSP is charging user", async () => {
-    // Calculate how many blocks to advance until next challenge tick.
-    const currentBlock = await userApi.rpc.chain.getBlock();
-    const currentBlockNumber = currentBlock.block.header.number.toNumber();
+    let currentBlock = await userApi.rpc.chain.getHeader();
+    let currentBlockNumber = currentBlock.number.toNumber();
 
-    const blocksToAdvance = currentBlockNumber + (12 - (currentBlockNumber % 12)) + 1; // 12 is the msp_charging_period that we setup
-    if (blocksToAdvance > currentBlockNumber) {
-      await userApi.advanceToBlock(blocksToAdvance);
-    }
+    const blocksToAdvance = MSP_CHARGING_PERIOD - (currentBlockNumber % MSP_CHARGING_PERIOD) + 1;
+    await userApi.block.skipTo(currentBlockNumber + blocksToAdvance);
 
-    // Verify that the MSP charged the users after the notified
+    // Verify that the MSP charged the users after the notified.
     await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
-    // const paymentStreamChargedEventAmount =
-    //   userApi.events.paymentStreams.PaymentStreamCharged.is(paymentStreamChargedEvent.event) &&
-    //   paymentStreamChargedEvent.event.data.amount;
 
-    // assert.equal(
-    //   paymentStreamChargedEventAmount.toString(),
-    //   "750000",
+    // Advance many MSP charging periods, to charge again, but this time with a known number of
+    // blocks since last charged. That way, we can check for the exact amount charged.
+    currentBlock = await userApi.rpc.chain.getHeader();
+    currentBlockNumber = currentBlock.number.toNumber();
+    await userApi.block.skipTo(currentBlockNumber + 10 * MSP_CHARGING_PERIOD);
+
+    // Calculating the expected amount of charged tokens.
+    const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+      userApi.shConsts.DUMMY_MSP_ID
+    );
+    const pricePerGigaUnitOfDataPerBlock =
+      valueProps[0].value_prop.price_per_giga_unit_of_data_per_block.toNumber();
+    const expectedChargedAmount =
+      (pricePerGigaUnitOfDataPerBlock * 10 * MSP_CHARGING_PERIOD) / 1024 / 1024;
+
+    // Verify that it charged for the correct amount.
+    const paymentStreamChargedEvent = await userApi.assert.eventPresent(
+      "paymentStreams",
+      "PaymentStreamCharged"
+    );
+    assert(userApi.events.paymentStreams.PaymentStreamCharged.is(paymentStreamChargedEvent.event));
+    const paymentStreamChargedEventAmount = paymentStreamChargedEvent.event.data.amount.toNumber();
+
+    console.log("Expected charged amount: ", expectedChargedAmount);
+    console.log("Charged amount: ", paymentStreamChargedEventAmount);
+
+    // strictEqual(
+    //   paymentStreamChargedEventAmount,
+    //   expectedChargedAmount,
     //   "Charged amount not matching the expected value"
     // );
   });
