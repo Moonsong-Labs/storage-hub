@@ -1,12 +1,16 @@
+use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
+
 use async_trait::async_trait;
+use log::error;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage,
     rocksdb::{self, RocksDBForestStorage},
     traits::{ForestStorage, ForestStorageHandler},
 };
-use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
+
+const LOG_TARGET: &str = "forest-storage-handler";
 
 /// Forest storage handler that manages a single forest storage instance.
 #[derive(Debug)]
@@ -204,7 +208,8 @@ where
     async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
-        // Return potentially existing instance since we waited for the lock
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `insert` at the same time with the same `key`.
         if let Some(fs) = fs_instances.get(key) {
             return fs.clone();
         }
@@ -224,11 +229,26 @@ where
 
     async fn snapshot(
         &self,
-        _key: &Self::Key,
-        _key_for_copy: &Self::Key,
+        src_key: &Self::Key,
+        dest_key: &Self::Key,
     ) -> Option<Arc<RwLock<Self::FS>>> {
-        // TODO: Implement snapshotting
-        todo!("Not implemented yet");
+        let mut fs_instances = self.fs_instances.write().await;
+
+        // Return potentially existing instance since we waited for the lock
+        // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
+        if let Some(fs) = fs_instances.get(dest_key) {
+            return Some(fs.clone());
+        }
+
+        let forest_storage_src = fs_instances.get(src_key)?;
+
+        // Create a copy of the Forest Storage
+        let forest_storage_dest = forest_storage_src.read().await.clone();
+        let forest_storage_dest = Arc::new(RwLock::new(forest_storage_dest));
+
+        fs_instances.insert(dest_key.clone(), forest_storage_dest.clone());
+
+        Some(forest_storage_dest)
     }
 }
 
@@ -285,10 +305,39 @@ where
 
     async fn snapshot(
         &self,
-        _key: &Self::Key,
-        _key_for_copy: &Self::Key,
+        src_key: &Self::Key,
+        dest_key: &Self::Key,
     ) -> Option<Arc<RwLock<Self::FS>>> {
-        // TODO: Implement snapshotting
-        todo!("Not implemented yet");
+        let mut fs_instances = self.fs_instances.write().await;
+
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
+        if let Some(fs) = fs_instances.get(dest_key) {
+            return Some(fs.clone());
+        }
+
+        let storage_path = self
+            .storage_path
+            .clone()
+            .expect("Storage path should be set");
+        let src = format!("{}_{:?}", storage_path, src_key);
+        let dest = format!("{}_{:?}", storage_path, dest_key);
+
+        let underlying_db = match rocksdb::copy_db(src, dest) {
+            Ok(db) => db,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to copy RocksDB: {}", e);
+                return None;
+            }
+        };
+
+        let forest_storage =
+            RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
+
+        let forest_storage = Arc::new(RwLock::new(forest_storage));
+
+        fs_instances.insert(dest_key.clone(), forest_storage.clone());
+
+        Some(forest_storage)
     }
 }

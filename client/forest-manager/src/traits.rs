@@ -61,7 +61,7 @@ pub trait ForestStorageHandler {
     /// The instance returned is the one corresponding to `key`, not the one corresponding to `key_for_copy`.
     async fn snapshot(
         &self,
-        key: &Self::Key,
-        key_for_copy: &Self::Key,
+        src_key: &Self::Key,
+        dest_key: &Self::Key,
     ) -> Option<Arc<RwLock<Self::FS>>>;
 }
