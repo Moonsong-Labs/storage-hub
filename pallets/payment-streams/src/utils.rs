@@ -70,6 +70,11 @@ where
             Error::<T>::NotAProvider
         );
 
+        // We do not allow creating a payment stream if the provider is insolvent
+        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
+            return Err(Error::<T>::ProviderInsolvent.into());
+        }
+
         // Check that the given rate is not 0
         ensure!(rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
@@ -159,6 +164,11 @@ where
             Error::<T>::NotAProvider
         );
 
+        // We do not allow updating a payment stream if the provider is insolvent
+        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
+            return Err(Error::<T>::ProviderInsolvent.into());
+        }
+
         // Ensure that the new rate is not 0 (should use remove_fixed_rate_payment_stream instead)
         ensure!(new_rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
@@ -239,6 +249,7 @@ where
             Error::<T>::PaymentStreamNotFound
         );
 
+        // Charge the user if the provider is not insolvent
         // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
         let (amount_charged, last_tick_charged) =
             Self::do_charge_payment_streams(&provider_id, user_account)?;
@@ -295,6 +306,11 @@ where
             <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
+
+        // We do not allow creating a payment stream if the provider is insolvent
+        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
+            return Err(Error::<T>::ProviderInsolvent.into());
+        }
 
         // Check that the given amount provided is not 0
         ensure!(
@@ -395,6 +411,11 @@ where
             <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
+
+        // We do not allow updating a payment stream if the provider is insolvent
+        if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(*provider_id) {
+            return Err(Error::<T>::ProviderInsolvent.into());
+        }
 
         // Ensure that the new amount provided is not 0 (should use remove_dynamic_rate_payment_stream instead)
         ensure!(
@@ -530,7 +551,7 @@ where
     /// This function holds the logic that checks if any payment stream exists between a Provider and a User and, if so,
     /// charges the payment stream/s from the User's balance.
     /// For fixed-rate payment streams, the charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last chargeable tick and
-    /// the last charged tick of this payment stream.  As such, the last charged tick can't ever be greater than the last chargeable tick, and if they are equal then no charge is made.
+    /// the last charged tick of this payment stream. As such, the last charged tick can't ever be greater than the last chargeable tick, and if they are equal then no charge is made.
     /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_tick)`. In this case,
     /// the price index at the last charged tick can't ever be greater than the price index at the last chargeable tick, and if they are equal then no charge is made.
     pub fn do_charge_payment_streams(
@@ -583,7 +604,7 @@ where
                 }
                 None => {
                     // If the user hasn't been flagged as without funds, charge the payment stream
-                    // Calculate the time passed between the last chargeable tick and the last charged tick
+                    // Calculate the time passed between the adjusted last chargeable tick and the last charged tick
                     if let Some(time_passed) = last_chargeable_tick
                         .checked_sub(&fixed_rate_payment_stream.last_charged_tick)
                     {
@@ -618,10 +639,10 @@ where
                                         user_account,
                                         |payment_stream| {
                                             let payment_stream = expect_or_err!(
-												payment_stream,
-												"Payment stream should exist if it was found before.",
-												Error::<T>::PaymentStreamNotFound
-											);
+                                            payment_stream,
+                                            "Payment stream should exist if it was found before.",
+                                            Error::<T>::PaymentStreamNotFound
+                                        );
                                             payment_stream.out_of_funds_tick = Some(current_tick);
                                             Ok::<(), DispatchError>(())
                                         },
@@ -661,12 +682,12 @@ where
 
                             // Get the payment account of the SP
                             let provider_payment_account = expect_or_err!(
-								<T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-									*provider_id
-								),
-								"Provider should exist and have a payment account if its ID exists.",
-								Error::<T>::ProviderInconsistencyError
-							);
+                            <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                                *provider_id
+                            ),
+                            "Provider should exist and have a payment account if its ID exists.",
+                            Error::<T>::ProviderInconsistencyError
+                        );
 
                             // Check if the total amount charged would overflow
                             ensure!(
@@ -700,7 +721,7 @@ where
                                 Preservation::Preserve,
                             )?;
 
-                            // Set the last charged tick to the tick number of the last chargeable tick
+                            // Set the last charged tick to the adjusted last chargeable tick
                             FixedRatePaymentStreams::<T>::mutate(
                                 provider_id,
                                 user_account,
@@ -771,10 +792,10 @@ where
                                         user_account,
                                         |payment_stream| {
                                             let payment_stream = expect_or_err!(
-                                        payment_stream,
-                                        "Payment stream should exist if it was found before.",
-                                        Error::<T>::PaymentStreamNotFound
-                                    );
+                                            payment_stream,
+                                            "Payment stream should exist if it was found before.",
+                                            Error::<T>::PaymentStreamNotFound
+                                        );
                                             payment_stream.out_of_funds_tick = Some(current_tick);
                                             Ok::<(), DispatchError>(())
                                         },
@@ -814,12 +835,12 @@ where
 
                             // Get the payment account of the SP
                             let provider_payment_account = expect_or_err!(
-                        		<T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-                            		*provider_id
-                        		),
-                        		"Provider should exist and have a payment account if its ID exists.",
-                        		Error::<T>::ProviderInconsistencyError
-                    		);
+                            <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                                *provider_id
+                            ),
+                            "Provider should exist and have a payment account if its ID exists.",
+                            Error::<T>::ProviderInconsistencyError
+                        );
 
                             // Check if the total amount charged would overflow
                             // NOTE: We check this BEFORE transferring the amount to the provider.
@@ -854,7 +875,7 @@ where
                                 Preservation::Preserve,
                             )?;
 
-                            // Set the last charged price index to be the price index of the last chargeable tick
+                            // Set the last charged price index to be the adjusted price index at the last chargeable tick
                             DynamicRatePaymentStreams::<T>::mutate(
                                 provider_id,
                                 user_account,
@@ -1189,6 +1210,13 @@ where
         if let Some(proof_submitters_to_process) = maybe_proof_submitters {
             // Update the last chargeable info of all Providers that submitted a valid proof in the tick to process.
             for provider_id in &proof_submitters_to_process {
+                // Skip if provider is insolvent
+                if <T::ProvidersPallet as ReadProvidersInterface>::is_provider_insolvent(
+                    *provider_id,
+                ) {
+                    continue;
+                }
+
                 // Update the last chargeable tick and last chargeable price index of the Provider.
                 // The last chargeable tick is set to the current tick of THIS PALLET. That means that if the tick from
                 // the pallet that implements the `ProofSubmittersInterface` trait is stalled for some time (and this pallet
@@ -1441,7 +1469,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type ProviderId = ProviderIdFor<T>;
     type Balance = T::NativeBalance;
-    type BlockNumber = BlockNumberFor<T>;
+    type TickNumber = BlockNumberFor<T>;
     type Units = UnitsProvidedFor<T>;
     type FixedRatePaymentStream = FixedRatePaymentStream<T>;
     type DynamicRatePaymentStream = DynamicRatePaymentStream<T>;
@@ -1618,6 +1646,10 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
 
         Ok(())
     }
+
+    fn current_tick() -> BlockNumberFor<T> {
+        OnPollTicker::<T>::get()
+    }
 }
 
 impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
@@ -1740,15 +1772,37 @@ where
         payment_streams
     }
 
+    /// Returns the `ProviderLastChargeableInfo` of a Provider, which includes the last chargeable tick and the last chargeable price index.
+    ///
+    /// If the provider is insolvent, the last chargeable tick is set to the block at which the provider became insolvent since we do not allow
+    /// Providers to charge for the time they were insolvent. `LastChargeableInfo` is updated to reflect this change.
     pub fn get_last_chargeable_info_with_privilege(
         provider_id: &ProviderIdFor<T>,
     ) -> ProviderLastChargeableInfo<T> {
+        let current_tick = Self::get_current_tick();
+
+        // Get the block number when the provider became insolvent (if any)
+        let provider_insolvency_block =
+            <T::ProvidersPallet as ReadProvidersInterface>::insolvency_block(*provider_id);
+
+        // Adjust the last chargeable tick to exclude the time when the provider has been insolvent
+        let adjusted_last_chargeable_tick = match provider_insolvency_block {
+            Some(insolvency_block) => current_tick.min(insolvency_block),
+            None => current_tick,
+        };
+
         // If this is a Privileged Provider, then it is allowed to charge up to the current tick.
         if let Some(_) = PrivilegedProviders::<T>::get(provider_id) {
             return ProviderLastChargeableInfo {
-                last_chargeable_tick: Self::get_current_tick(),
+                last_chargeable_tick: adjusted_last_chargeable_tick,
                 price_index: Default::default(),
             };
+        }
+
+        if current_tick != adjusted_last_chargeable_tick {
+            LastChargeableInfo::<T>::mutate(provider_id, |info| {
+                info.last_chargeable_tick = adjusted_last_chargeable_tick;
+            });
         }
 
         return LastChargeableInfo::<T>::get(provider_id);

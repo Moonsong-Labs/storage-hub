@@ -430,11 +430,12 @@ pub mod pallet {
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
-    /// Number of BSPs required to fulfill a storage request
+    /// Maximum number of BSPs required to fulfill a storage request.
     ///
-    /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
+    /// This is also used as a default value if the replication target is not specified when creating a storage request.
     #[pallet::storage]
-    pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
+    pub type MaxReplicationTarget<T: Config> =
+        StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
     /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
@@ -451,7 +452,7 @@ pub mod pallet {
             let replication_target = 1u32.into();
             let tick_range_to_maximum_threshold = 10u32.into();
 
-            ReplicationTarget::<T>::put(replication_target);
+            MaxReplicationTarget::<T>::put(replication_target);
             TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
 
             Self {
@@ -464,7 +465,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            ReplicationTarget::<T>::put(self.replication_target);
+            MaxReplicationTarget::<T>::put(self.replication_target);
             TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
         }
     }
@@ -664,7 +665,7 @@ pub mod pallet {
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
-        BspsRequiredExceedsTarget,
+        ReplicationTargetExceedsMaximum,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
@@ -963,6 +964,7 @@ pub mod pallet {
             size: StorageData<T>,
             msp_id: Option<ProviderIdFor<T>>,
             peer_ids: PeerIds<T>,
+            replication_target: Option<ReplicationTargetType<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -975,7 +977,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 msp_id,
-                None,
+                replication_target,
                 Some(peer_ids.clone()),
             )?;
 
@@ -1294,7 +1296,7 @@ pub mod pallet {
                     Error::<T>::ReplicationTargetCannotBeZero
                 );
 
-                ReplicationTarget::<T>::put(replication_target);
+                MaxReplicationTarget::<T>::put(replication_target);
             }
 
             if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {

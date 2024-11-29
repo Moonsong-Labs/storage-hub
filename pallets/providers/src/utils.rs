@@ -30,8 +30,8 @@ use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
     MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, RelayBlockNumber,
-    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
-    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
+    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TickNumberFor,
+    TopUpMetadata, ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -1844,6 +1844,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
     type ProviderId = ProviderIdFor<T>;
+    type TickNumber = TickNumberFor<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -1920,6 +1921,14 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         BackupStorageProviders::<T>::contains_key(&who)
             || MainStorageProviders::<T>::contains_key(&who)
             || Buckets::<T>::contains_key(&who)
+    }
+
+    fn is_provider_insolvent(who: Self::ProviderId) -> bool {
+        InsolventProviders::<T>::get(&who).is_some()
+    }
+
+    fn insolvency_block(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
+        InsolventProviders::<T>::get(&who)
     }
 }
 
@@ -2316,8 +2325,10 @@ mod hooks {
             // Mark the provider as insolvent if it was awaiting a top up
             // If the provider was not awaiting a top up, it means they already topped up either via an
             // automatic top up or a manual top up.
+            let current_tick =
+                <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::current_tick();
             if maybe_awaiting_top_up.is_some() {
-                InsolventProviders::<T>::insert(provider_id, ());
+                InsolventProviders::<T>::insert(provider_id, current_tick);
 
                 Self::deposit_event(Event::ProviderInsolvent { provider_id });
 

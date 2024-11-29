@@ -497,8 +497,11 @@ pub mod pallet {
     /// A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
     ///
     /// Providers are marked insolvent by the `on_idle` hook.
+    ///
+    /// This stores the block number at which the provider was marked insolvent.
     #[pallet::storage]
-    pub type InsolventProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
+    pub type InsolventProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TickNumberFor<T>>;
 
     // Events & Errors:
 

@@ -43,9 +43,9 @@ use crate::{
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
-    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
-    ReplicationTarget, StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
+    BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
+    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+    PendingStopStoringRequests, StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -538,7 +538,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         msp_id: Option<ProviderIdFor<T>>,
-        bsps_required: Option<ReplicationTargetType<T>>,
+        replication_target: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // Check that the file size is greater than zero.
@@ -587,18 +587,20 @@ where
             None
         };
 
-        let bsps_required = bsps_required.unwrap_or(ReplicationTarget::<T>::get());
+        let replication_target = replication_target.unwrap_or(MaxReplicationTarget::<T>::get());
 
-        if bsps_required.is_zero() {
+        if replication_target.is_zero() {
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if bsps_required > ReplicationTarget::<T>::get().into() {
-            return Err(Error::<T>::BspsRequiredExceedsTarget)?;
+        if replication_target > MaxReplicationTarget::<T>::get().into() {
+            return Err(Error::<T>::ReplicationTargetExceedsMaximum)?;
         }
 
         let current_tick =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+
+        let zero = ReplicationTargetType::<T>::zero();
         let storage_request_metadata = StorageRequestMetadata::<T> {
             requested_at: current_tick,
             owner: sender.clone(),
@@ -608,9 +610,9 @@ where
             size,
             msp,
             user_peer_ids: user_peer_ids.clone().unwrap_or_default(),
-            bsps_required,
-            bsps_confirmed: ReplicationTargetType::<T>::zero(),
-            bsps_volunteered: ReplicationTargetType::<T>::zero(),
+            bsps_required: replication_target,
+            bsps_confirmed: zero,
+            bsps_volunteered: zero,
         };
 
         // Compute the file key used throughout this file's lifespan.
@@ -2112,7 +2114,7 @@ where
         let threshold_global_starting_point = maximum_threshold
             .checked_div(&global_weight)
             .unwrap_or(T::ThresholdType::one())
-            .checked_mul(&ReplicationTarget::<T>::get().into()).unwrap_or({
+            .checked_mul(&MaxReplicationTarget::<T>::get().into()).unwrap_or({
                 log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
                 maximum_threshold
             })
@@ -2168,9 +2170,9 @@ mod hooks {
         utils::{
             BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
         },
-        Event, FileDeletionRequestExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
-        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        Event, FileDeletionRequestExpirations, MaxReplicationTarget, NextStartingBlockToCleanUp,
+        Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
+        StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -2302,10 +2304,13 @@ mod hooks {
         fn process_expired_storage_request(file_key: MerkleHash<T>, remaining_weight: &mut Weight) {
             let db_weight = T::DbWeight::get();
 
-            // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `ReplicationTarget`.
+            // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
             // We could increase this potential weight to account for potentially more volunteers.
-            let potential_weight =
-                db_weight.writes(ReplicationTarget::<T>::get().saturating_plus_one().into());
+            let potential_weight = db_weight.writes(
+                MaxReplicationTarget::<T>::get()
+                    .saturating_plus_one()
+                    .into(),
+            );
 
             if !remaining_weight.all_gte(potential_weight) {
                 return;

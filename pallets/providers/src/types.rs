@@ -6,6 +6,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
+use shp_traits::PaymentStreamsInterface;
 use sp_runtime::{
     traits::{BlockNumberProvider, CheckedAdd},
     ArithmeticError, BoundedVec,
@@ -292,3 +293,7 @@ pub type StorageDataUnitAndBalanceConverter<T> =
 
 /// Type alias for the `ProviderTopUpTtl` type used in the Storage Providers pallet.
 pub type ProviderTopUpTtl<T> = <T as crate::Config>::ProviderTopUpTtl;
+
+/// Type alias for the `TickNumber` type used in the Storage Providers pallet.
+pub type TickNumberFor<T> =
+    <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::TickNumber;

@@ -55,7 +55,7 @@ pub mod pallet {
             + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
         /// The trait for reading provider data.
-        type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId>
+        type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId, TickNumber = BlockNumberFor<Self>>
             + SystemMetricsInterface<ProvidedUnit = Self::Units>;
 
         /// The trait exposing data of which providers submitted valid proofs in which ticks
@@ -388,6 +388,8 @@ pub mod pallet {
         CooldownPeriodNotPassed,
         /// Error thrown when a user tries to clear the flag of being without funds before paying all its remaining debt
         UserHasRemainingDebt,
+        /// Error thrown when a charge is attempted when the provider is marked as insolvent
+        ProviderInsolvent,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

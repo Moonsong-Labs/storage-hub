@@ -5268,7 +5268,10 @@ mod slash_and_top_up {
                 assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
 
                 // Held deposit was slashed
-                if InsolventProviders::<Test>::get(&self.provider_id).is_some() {
+                if let Some(block) = InsolventProviders::<Test>::get(&self.provider_id) {
+                    // Block stored should be the current local block number
+                    assert_eq!(block, <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::current_tick());
+
                     assert_eq!(
                         NativeBalance::balance_on_hold(
                             &StorageProvidersHoldReason::get(),

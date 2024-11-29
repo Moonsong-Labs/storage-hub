@@ -586,6 +586,11 @@ pub trait ReadProvidersInterface {
         + MaxEncodedLen
         + FullCodec;
 
+    /// The type which represents ticks.
+    ///
+    /// Used to keep track of the system time.
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
     /// The Balance type of the runtime, which should correspond to the type of
     /// the staking balance of a registered Provider.
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
@@ -612,6 +617,12 @@ pub trait ReadProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Check if the provider is insolvent.
+    fn is_provider_insolvent(who: Self::ProviderId) -> bool;
+
+    /// Get the block number of the last time the provider was insolvent.
+    fn insolvency_block(who: Self::ProviderId) -> Option<Self::TickNumber>;
 }
 
 /// A trait to mutate the state of a generic Provider, such as updating their root.
@@ -910,8 +921,10 @@ pub trait PaymentStreamsInterface {
         + Ord
         + MaxEncodedLen
         + Copy;
-    /// The type which represents a block number.
-    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents ticks.
+    ///
+    /// Used to keep track of the system time.
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a fixed-rate payment stream.
     type FixedRatePaymentStream: Encode
         + Decode
@@ -1015,6 +1028,9 @@ pub trait PaymentStreamsInterface {
 
     /// Remove a priviledge provider to the PriviledgerProvider storage.
     fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+
+    /// Get current tick
+    fn current_tick() -> Self::TickNumber;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.
