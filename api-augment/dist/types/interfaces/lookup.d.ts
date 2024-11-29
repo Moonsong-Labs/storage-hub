@@ -1404,6 +1404,12 @@ declare const _default: {
         mspId: string;
         valuePropId: string;
       };
+      MspDeleted: {
+        providerId: string;
+      };
+      BspDeleted: {
+        providerId: string;
+      };
     };
   };
   /**
@@ -3343,6 +3349,9 @@ declare const _default: {
         providerId: string;
       };
       top_up_deposit: string;
+      delete_provider: {
+        providerId: string;
+      };
     };
   };
   /**
@@ -3449,7 +3458,7 @@ declare const _default: {
         forestProof: string;
       };
       set_global_parameters: {
-        replicationTarget: string;
+        newMaxReplicationTarget: string;
         tickRangeToMaximumThreshold: string;
       };
     };

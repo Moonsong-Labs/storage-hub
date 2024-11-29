@@ -300,6 +300,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
       /**
+       * Max replication target cannot be smaller than default replication target.
+       **/
+      MaxReplicationTargetSmallerThanDefault: AugmentedError<ApiType>;
+      /**
        * Max number of user pending deletion requests reached.
        **/
       MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
@@ -359,6 +363,10 @@ declare module "@polkadot/api-base/types/errors" {
        * The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
        **/
       NotSelectedMsp: AugmentedError<ApiType>;
+      /**
+       * Operations not allowed for insolvent provider
+       **/
+      OperationNotAllowedForInsolventProvider: AugmentedError<ApiType>;
       /**
        * Pending stop storing request already exists.
        **/
@@ -1072,6 +1080,12 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Failed to delete a provider due to conditions not being met.
+       *
+       * Call `can_delete_provider` runtime API to check if the provider can be deleted.
+       **/
+      DeleteProviderConditionsNotMet: AugmentedError<ApiType>;
+      /**
        * Deposit too low to determine capacity.
        **/
       DepositTooLow: AugmentedError<ApiType>;
@@ -1155,6 +1169,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Operation not allowed for insolvent provider
+       **/
+      OperationNotAllowedForInsolventProvider: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to update a payment stream that does not exist.
        **/

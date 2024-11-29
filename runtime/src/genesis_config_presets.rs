@@ -88,6 +88,11 @@ fn storagehub_genesis(
             ..Default::default()
         },
         sudo: SudoConfig { key: root },
+        file_system: FileSystemConfig {
+            // TODO: Find a sensible values
+            max_replication_target: 10,
+            tick_range_to_maximum_threshold: 1000,
+        },
         ..Default::default()
     };
 

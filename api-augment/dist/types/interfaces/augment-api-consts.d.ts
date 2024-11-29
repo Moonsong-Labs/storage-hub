@@ -66,6 +66,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**
+       * Default replication target
+       **/
+      defaultReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;

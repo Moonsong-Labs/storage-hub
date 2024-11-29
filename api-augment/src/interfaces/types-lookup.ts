@@ -1899,6 +1899,14 @@ declare module "@polkadot/types/lookup" {
       readonly mspId: H256;
       readonly valuePropId: H256;
     } & Struct;
+    readonly isMspDeleted: boolean;
+    readonly asMspDeleted: {
+      readonly providerId: H256;
+    } & Struct;
+    readonly isBspDeleted: boolean;
+    readonly asBspDeleted: {
+      readonly providerId: H256;
+    } & Struct;
     readonly type:
       | "MspRequestSignUpSuccess"
       | "MspSignUpSuccess"
@@ -1916,7 +1924,9 @@ declare module "@polkadot/types/lookup" {
       | "MultiAddressAdded"
       | "MultiAddressRemoved"
       | "ValuePropAdded"
-      | "ValuePropUnavailable";
+      | "ValuePropUnavailable"
+      | "MspDeleted"
+      | "BspDeleted";
   }
 
   /** @name PalletStorageProvidersValuePropositionWithId (128) */
@@ -4290,6 +4300,10 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
     } & Struct;
     readonly isTopUpDeposit: boolean;
+    readonly isDeleteProvider: boolean;
+    readonly asDeleteProvider: {
+      readonly providerId: H256;
+    } & Struct;
     readonly type:
       | "RequestMspSignUp"
       | "RequestBspSignUp"
@@ -4305,7 +4319,8 @@ declare module "@polkadot/types/lookup" {
       | "ForceMspSignUp"
       | "ForceBspSignUp"
       | "Slash"
-      | "TopUpDeposit";
+      | "TopUpDeposit"
+      | "DeleteProvider";
   }
 
   /** @name PalletFileSystemCall (335) */
@@ -4415,7 +4430,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isSetGlobalParameters: boolean;
     readonly asSetGlobalParameters: {
-      readonly replicationTarget: Option<u32>;
+      readonly newMaxReplicationTarget: Option<u32>;
       readonly tickRangeToMaximumThreshold: Option<u32>;
     } & Struct;
     readonly type:
@@ -5474,6 +5489,8 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketHasNoValueProposition: boolean;
     readonly isMaxBlockNumberReached: boolean;
     readonly isBlockNumberConversionFailed: boolean;
+    readonly isOperationNotAllowedForInsolventProvider: boolean;
+    readonly isDeleteProviderConditionsNotMet: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
@@ -5520,6 +5537,8 @@ declare module "@polkadot/types/lookup" {
       | "BucketHasNoValueProposition"
       | "MaxBlockNumberReached"
       | "BlockNumberConversionFailed"
+      | "OperationNotAllowedForInsolventProvider"
+      | "DeleteProviderConditionsNotMet"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
       | "PaymentStreamNotFound";
@@ -5566,6 +5585,7 @@ declare module "@polkadot/types/lookup" {
     readonly isStorageRequestExists: boolean;
     readonly isReplicationTargetCannotBeZero: boolean;
     readonly isReplicationTargetExceedsMaximum: boolean;
+    readonly isMaxReplicationTargetSmallerThanDefault: boolean;
     readonly isNotABsp: boolean;
     readonly isNotAMsp: boolean;
     readonly isNotASp: boolean;
@@ -5630,6 +5650,7 @@ declare module "@polkadot/types/lookup" {
     readonly isNoFileKeysToConfirm: boolean;
     readonly isRootNotUpdated: boolean;
     readonly isNoPrivacyChange: boolean;
+    readonly isOperationNotAllowedForInsolventProvider: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5637,6 +5658,7 @@ declare module "@polkadot/types/lookup" {
       | "StorageRequestExists"
       | "ReplicationTargetCannotBeZero"
       | "ReplicationTargetExceedsMaximum"
+      | "MaxReplicationTargetSmallerThanDefault"
       | "NotABsp"
       | "NotAMsp"
       | "NotASp"
@@ -5700,7 +5722,8 @@ declare module "@polkadot/types/lookup" {
       | "FailedToGetOwnerAccount"
       | "NoFileKeysToConfirm"
       | "RootNotUpdated"
-      | "NoPrivacyChange";
+      | "NoPrivacyChange"
+      | "OperationNotAllowedForInsolventProvider";
   }
 
   /** @name PalletProofsDealerError (465) */

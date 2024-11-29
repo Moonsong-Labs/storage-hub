@@ -5088,9 +5088,20 @@ mod bsp_confirm {
                 // Setup BSP
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let default_replication_target: u32 =
+                    <Test as Config>::DefaultReplicationTarget::get();
+
                 // Set global parameters
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(1), Some(1)).unwrap();
-                assert_eq!(MaxReplicationTarget::<Test>::get(), 1);
+                FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    Some(default_replication_target + 1),
+                    Some(1),
+                )
+                .unwrap();
+                assert_eq!(
+                    MaxReplicationTarget::<Test>::get(),
+                    default_replication_target + 1
+                );
                 assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 // Create file keys with different file locations
@@ -5105,7 +5116,7 @@ mod bsp_confirm {
                     size,
                     Some(msp_id),
                     peer_ids.clone(),
-                    None
+                    Some(1)
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5390,9 +5401,20 @@ mod bsp_confirm {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
+                let default_replication_target: u32 =
+                    <Test as Config>::DefaultReplicationTarget::get();
+
                 // Set global parameters
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(1), Some(1)).unwrap();
-                assert_eq!(MaxReplicationTarget::<Test>::get(), 1);
+                FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    Some(default_replication_target + 1),
+                    Some(1),
+                )
+                .unwrap();
+                assert_eq!(
+                    MaxReplicationTarget::<Test>::get(),
+                    default_replication_target + 1
+                );
                 assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
 
                 // Create file keys with different file locations
@@ -6999,6 +7021,23 @@ mod set_global_parameters_tests {
                 assert_noop!(
                     FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0)),
                     Error::<Test>::TickRangeToMaximumThresholdCannotBeZero
+                );
+            });
+        }
+
+        #[test]
+        fn set_global_parameters_max_replication_target_less_than_default() {
+            new_test_ext().execute_with(|| {
+                let default_replication_target: u32 =
+                    <Test as Config>::DefaultReplicationTarget::get();
+
+                assert_noop!(
+                    FileSystem::set_global_parameters(
+                        RuntimeOrigin::root(),
+                        Some(default_replication_target - 1),
+                        None
+                    ),
+                    Error::<Test>::MaxReplicationTargetSmallerThanDefault
                 );
             });
         }

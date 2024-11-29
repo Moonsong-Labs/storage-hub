@@ -719,7 +719,7 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       setGlobalParameters: AugmentedSubmittable<
         (
-          replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
+          newMaxReplicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
           tickRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
         [Option<u32>, Option<u32>]
@@ -3493,6 +3493,24 @@ declare module "@polkadot/api-base/types/submittable" {
           providerAccount: Option<AccountId32> | null | Uint8Array | AccountId32 | string
         ) => SubmittableExtrinsic<ApiType>,
         [Option<AccountId32>]
+      >;
+      /**
+       * Delete a provider from the system.
+       *
+       * This can only be done if the following conditions are met:
+       * - The provider is insolvent.
+       * - The provider has no active payment streams.
+       *
+       * This is a free operation and can be called by anyone with a signed transaction.
+       *
+       * You can utilize the runtime API `can_delete_provider` to check if a provider can be deleted
+       * to automate the process.
+       *
+       * Emits `MspDeleted` or `BspDeleted` event when successful.
+       **/
+      deleteProvider: AugmentedSubmittable<
+        (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Dispatchable extrinsic that allows to forcefully and automatically sing up a Backup Storage Provider.

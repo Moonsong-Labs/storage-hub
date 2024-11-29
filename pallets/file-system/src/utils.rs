@@ -611,7 +611,7 @@ where
             None
         };
 
-        let replication_target = replication_target.unwrap_or(MaxReplicationTarget::<T>::get());
+        let replication_target = replication_target.unwrap_or(T::DefaultReplicationTarget::get());
 
         if replication_target.is_zero() {
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;

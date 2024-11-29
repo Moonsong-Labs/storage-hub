@@ -1684,6 +1684,10 @@ declare module "@polkadot/api-base/types/events" {
         { providerId: H256; topUpMetadata: PalletStorageProvidersTopUpMetadata }
       >;
       /**
+       * Event emitted when a BSP has been deleted.
+       **/
+      BspDeleted: AugmentedEvent<ApiType, [providerId: H256], { providerId: H256 }>;
+      /**
        * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
        * that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
        **/
@@ -1740,6 +1744,10 @@ declare module "@polkadot/api-base/types/events" {
           nextBlockWhenChangeAllowed: u32;
         }
       >;
+      /**
+       * Event emitted when an MSP has been deleted.
+       **/
+      MspDeleted: AugmentedEvent<ApiType, [providerId: H256], { providerId: H256 }>;
       /**
        * Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
        * that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.

@@ -543,6 +543,7 @@ impl crate::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget = ConstU32<2>;
 }
 
 // If we ever require a better mock that doesn't just return true if it is Eve, change this.
@@ -566,7 +567,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .unwrap();
 
     crate::GenesisConfig::<Test> {
-        replication_target: 2,
+        max_replication_target: 2,
         tick_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)

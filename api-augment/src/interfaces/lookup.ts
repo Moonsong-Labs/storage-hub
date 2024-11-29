@@ -1419,6 +1419,12 @@ export default {
       ValuePropUnavailable: {
         mspId: "H256",
         valuePropId: "H256"
+      },
+      MspDeleted: {
+        providerId: "H256"
+      },
+      BspDeleted: {
+        providerId: "H256"
       }
     }
   },
@@ -3418,7 +3424,10 @@ export default {
       slash: {
         providerId: "H256"
       },
-      top_up_deposit: "Null"
+      top_up_deposit: "Null",
+      delete_provider: {
+        providerId: "H256"
+      }
     }
   },
   /**
@@ -3525,7 +3534,7 @@ export default {
         forestProof: "SpTrieStorageProofCompactProof"
       },
       set_global_parameters: {
-        replicationTarget: "Option<u32>",
+        newMaxReplicationTarget: "Option<u32>",
         tickRangeToMaximumThreshold: "Option<u32>"
       }
     }
@@ -4363,6 +4372,8 @@ export default {
       "BucketHasNoValueProposition",
       "MaxBlockNumberReached",
       "BlockNumberConversionFailed",
+      "OperationNotAllowedForInsolventProvider",
+      "DeleteProviderConditionsNotMet",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
       "PaymentStreamNotFound"
@@ -4419,6 +4430,7 @@ export default {
       "StorageRequestExists",
       "ReplicationTargetCannotBeZero",
       "ReplicationTargetExceedsMaximum",
+      "MaxReplicationTargetSmallerThanDefault",
       "NotABsp",
       "NotAMsp",
       "NotASp",
@@ -4482,7 +4494,8 @@ export default {
       "FailedToGetOwnerAccount",
       "NoFileKeysToConfirm",
       "RootNotUpdated",
-      "NoPrivacyChange"
+      "NoPrivacyChange",
+      "OperationNotAllowedForInsolventProvider"
     ]
   },
   /**

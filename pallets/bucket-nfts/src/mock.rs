@@ -265,6 +265,7 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget = ConstU32<2>;
 }
 
 pub struct MockUserSolvency;
