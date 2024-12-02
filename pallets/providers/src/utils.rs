@@ -2435,7 +2435,7 @@ mod hooks {
     };
 
     use super::{
-        types::RelayBlockGetter, AwaitingTopUpFromProviders, BackupStorageProviders,
+        types::RelayBlockGetter, AwaitingTopUpFromProviders, BackupStorageProviders, Event,
         MainStorageProviders, ProviderTopUpExpirations,
     };
 
