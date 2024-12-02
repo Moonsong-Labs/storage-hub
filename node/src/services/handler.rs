@@ -8,10 +8,11 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated,
-        MultipleNewChallengeSeeds, NewStorageRequest, ProcessConfirmStoringRequest,
-        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
+        ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
+        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
+        SpStopStoringInsolventUser, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -22,11 +23,12 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::tasks::{
-    bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
-    bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-    msp_delete_bucket::MspStoppedStoringTask, msp_upload_file::MspUploadFileTask,
-    sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
-    BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
+    bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
+    bsp_download_file::BspDownloadFileTask, bsp_submit_proof::BspSubmitProofTask,
+    bsp_upload_file::BspUploadFileTask, msp_delete_bucket::MspStoppedStoringTask,
+    msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
+    user_sends_file::UserSendsFileTask, BspForestStorageHandlerT, FileStorageT,
+    MspForestStorageHandlerT,
 };
 
 /// Configuration paramaters for Storage Providers.
@@ -282,5 +284,15 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         sp_stop_storing_insolvent_user_event_bus_listener.start();
+
+        // Delete file and update the root.
+        let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
+        let bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
+            BspConfirmStoppedStoring,
+            _,
+        > = bsp_delete_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        bsp_confirm_stopped_storing_event_bus_listener.start();
     }
 }

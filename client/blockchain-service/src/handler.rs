@@ -50,7 +50,7 @@ use storage_hub_runtime::RuntimeEvent;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -1220,6 +1220,21 @@ impl BlockchainService {
                                 owner,
                                 size,
                             })
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&bsp_id) {
+                                self.emit(BspConfirmStoppedStoring {
+                                    bsp_id,
+                                    file_key: file_key.into(),
+                                    new_root,
+                                });
+                            }
                         }
                         // Ignore all other events.
                         _ => {}

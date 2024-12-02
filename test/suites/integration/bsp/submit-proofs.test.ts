@@ -219,14 +219,17 @@ describeBspNet(
           "fileSystem",
           "BspConfirmStoppedStoring",
         );
+        // wait for line in docker logs
+        await sleep(2000);
         // Make sure the new root was updated correctly.
         // userApi.rpc.fileSystem.deleteFile(fileMetadata.fileKey); // Not sure if this is the correct way to do it.
-        const newRoot = await bspThreeApi.rpc.storagehubclient.getForestRoot(null);
-        const newRootInRuntime = userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event) && confirmStopStoringEvent.event.data;
+        const newRoot = (await bspThreeApi.rpc.storagehubclient.getForestRoot(null)).unwrap();
+        assert(userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event));
+        const newRootInRuntime = confirmStopStoringEvent.event.data;
 
         console.log(newRootInRuntime.newRoot.toString());
         console.log(newRoot.toString());
-        assert(newRoot === newRootInRuntime, "The new root should be updated correctly");
+        strictEqual(newRoot, newRootInRuntime.newRoot, "The new root should be updated correctly");
       }
     );
 
