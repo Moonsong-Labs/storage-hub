@@ -288,6 +288,10 @@ pub mod pallet {
         #[pallet::constant]
         type TopUpGracePeriod: Get<u32>;
 
+        /// Trait that has benchmark helpers
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelpers: crate::benchmarking::BenchmarkHelpers<Self>;
+
         /// Time-to-live for a provider to top up their deposit to cover a capacity deficit.
         #[pallet::constant]
         type ProviderTopUpTtl: Get<RelayBlockNumber<Self>>;
