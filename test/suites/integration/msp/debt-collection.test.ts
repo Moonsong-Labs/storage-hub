@@ -114,12 +114,9 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
         ) && mspAcceptedStorageRequestEvent.event.data;
     }
 
-    let acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
+    const acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
 
-    assert(
-      acceptedFileKey,
-      "MspAcceptedStorageRequest event were found"
-    );
+    assert(acceptedFileKey, "MspAcceptedStorageRequest event were found");
 
     // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
     strictEqual(
