@@ -62,7 +62,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       );
     }
 
-    await userApi.sealBlock(txs, shUser);
+    await userApi.block.seal({ calls: txs, signer: shUser });
 
     // Allow time for the MSP to receive and store the file from the user
     await sleep(3000);

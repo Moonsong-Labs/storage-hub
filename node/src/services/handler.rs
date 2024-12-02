@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
@@ -16,7 +18,6 @@ use shc_file_transfer_service::{
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use std::sync::Arc;
 use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
