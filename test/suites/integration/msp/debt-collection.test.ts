@@ -57,7 +57,8 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
           fingerprint,
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         )
       );
     }

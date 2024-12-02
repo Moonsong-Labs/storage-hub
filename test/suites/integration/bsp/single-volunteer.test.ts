@@ -64,7 +64,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
         userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
         userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+        null
       ),
       shUser
     );
@@ -124,7 +125,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         fingerprint,
         file_size,
         userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+        null
       ),
       shUser
     );
@@ -239,7 +241,8 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
           fingerprint,
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         )
       );
     }
