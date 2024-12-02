@@ -44,11 +44,9 @@ describeBspNet(
         200,
         "Threshold should have changed"
       );
-      strictEqual(
-        (await userApi.query.fileSystem.replicationTarget()).toNumber(),
-        87,
-        "Replication Target should have changed"
-      );
+      const replicationTarget = await userApi.query.fileSystem.replicationTarget();
+
+      strictEqual(replicationTarget.toString(), 87, "Replication Target should have changed");
     });
 
     it("Shouldn't be able to setGlobalParams without sudo", async () => {
@@ -66,11 +64,8 @@ describeBspNet(
         1,
         "Threshold should not have changed"
       );
-      strictEqual(
-        (await userApi.query.fileSystem.replicationTarget()).toNumber(),
-        1,
-        "Replication Target should not have changed"
-      );
+      const replicationTarget = await userApi.query.fileSystem.replicationTarget();
+      strictEqual(replicationTarget.toString(), 1, "Replication Target should not have changed");
     });
 
     it("Reputation increased on successful storage", { skip: "Not Implemented" }, async () => {
