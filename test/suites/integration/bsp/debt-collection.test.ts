@@ -102,7 +102,7 @@ describeBspNet(
       let currentBlockNumber = currentBlock.block.header.number.toNumber();
       if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
-        await userApi.advanceToBlock(nextChallengeTick);
+        await userApi.block.skipTo(nextChallengeTick);
       }
 
       await userApi.assert.extrinsicPresent({
