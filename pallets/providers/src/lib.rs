@@ -294,7 +294,7 @@ pub mod pallet {
 
         /// Time-to-live for a provider to top up their deposit to cover a capacity deficit.
         #[pallet::constant]
-        type ProviderTopUpTtl: Get<RelayBlockNumber<Self>>;
+        type ProviderTopUpTtl: Get<RelayChainBlockNumber>;
 
         /// Maximum number of expired items (per type) to clean up in a single block.
         #[pallet::constant]

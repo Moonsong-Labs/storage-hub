@@ -35,7 +35,8 @@ export const sendNewStorageRequest = async (
       fileMetadata.fingerprint,
       fileMetadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
-      [ShConsts.NODE_INFOS.user.expectedPeerId]
+      [ShConsts.NODE_INFOS.user.expectedPeerId],
+      null
     ),
     issueOwner
   );
@@ -117,7 +118,8 @@ export const createBucketAndSendNewStorageRequest = async (
       fileMetadata.fingerprint,
       fileMetadata.file_size,
       localMspId,
-      [ShConsts.NODE_INFOS.user.expectedPeerId]
+      [ShConsts.NODE_INFOS.user.expectedPeerId],
+      null
     ),
     owner ?? shUser
   );

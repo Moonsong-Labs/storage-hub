@@ -2418,7 +2418,7 @@ mod hooks {
     use crate::{
         pallet,
         utils::{BlockNumberFor, ProviderIdFor},
-        Event, HoldReason, InsolventProviders, NextStartingBlockToCleanUp, Pallet,
+        HoldReason, InsolventProviders, NextStartingBlockToCleanUp, Pallet,
     };
 
     use frame_support::{
