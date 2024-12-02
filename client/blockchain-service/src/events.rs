@@ -246,6 +246,14 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+/// Notify period event.
+///
+/// This event is emitted when a X amount of block has passed. It is configured at the start of the service.
+#[derive(Debug, Clone)]
+pub struct NotifyPeriod {}
+
+impl EventBusMessage for NotifyPeriod {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -268,6 +276,7 @@ pub struct BlockchainServiceEventBusProvider {
     user_without_funds_event_bus: EventBus<UserWithoutFunds>,
     sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
     finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
+    notify_period_event_bus: EventBus<NotifyPeriod>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -288,6 +297,7 @@ impl BlockchainServiceEventBusProvider {
             user_without_funds_event_bus: EventBus::new(),
             sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
             finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
+            notify_period_event_bus: EventBus::new(),
         }
     }
 }
@@ -381,5 +391,11 @@ impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusP
 impl ProvidesEventBus<FinalisedMspStoppedStoringBucket> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<FinalisedMspStoppedStoringBucket> {
         &self.finalised_msp_stopped_storing_bucket_event_bus
+    }
+}
+
+impl ProvidesEventBus<NotifyPeriod> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<NotifyPeriod> {
+        &self.notify_period_event_bus
     }
 }
