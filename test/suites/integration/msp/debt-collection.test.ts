@@ -98,10 +98,9 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
 
     // Seal block containing the MSP's transaction response to the storage request
     await userApi.wait.mspResponseInTxPool();
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     let mspAcceptedStorageRequestDataBlob: any = undefined;
-    let storageRequestFulfilledDataBlob: any = undefined;
 
     const eventsRecorded = await userApi.query.system.events();
     const mspAcceptedStorageRequestEvent = eventsRecorded.find(
@@ -115,27 +114,11 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
         ) && mspAcceptedStorageRequestEvent.event.data;
     }
 
-    const storageRequestFulfilledEvent = eventsRecorded.find(
-      (e) => e.event.section === "fileSystem" && e.event.method === "StorageRequestFulfilled"
-    );
-
-    if (storageRequestFulfilledEvent) {
-      storageRequestFulfilledDataBlob =
-        userApi.events.fileSystem.StorageRequestFulfilled.is(storageRequestFulfilledEvent.event) &&
-        storageRequestFulfilledEvent.event.data;
-    }
-
-    let acceptedFileKey: string | undefined = undefined;
-    // We expect either the MSP accepted the storage request or the storage request was fulfilled
-    if (mspAcceptedStorageRequestDataBlob) {
-      acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
-    } else if (storageRequestFulfilledDataBlob) {
-      acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
-    }
+    let acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
 
     assert(
       acceptedFileKey,
-      "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
+      "MspAcceptedStorageRequest event were found"
     );
 
     // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
@@ -176,7 +159,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
 
     // Seal block containing the MSP's transaction response to the storage request
     await userApi.wait.mspResponseInTxPool();
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     const fileKeys2: string[] = [];
 
@@ -236,7 +219,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
 
     // Wait for the MSP to try to charge the user and seal a block.
     await sleep(2000);
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     // Verify that the MSP charged the users after the notified.
     await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
