@@ -51,19 +51,18 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
+        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{StopStoringForInsolventUserRequest, SubmitProofRequest},
-};
-use crate::{
-    events::FinalisedMspStoppedStoringBucket, state::OngoingProcessMspRespondStorageRequestCf,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -1303,6 +1302,21 @@ impl BlockchainService {
                                     owner,
                                     bucket_id,
                                 })
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&bsp_id) {
+                                self.emit(FinalisedBspConfirmStoppedStoring {
+                                    bsp_id,
+                                    file_key: file_key.into(),
+                                    new_root,
+                                });
                             }
                         }
                         // Ignore all other events.

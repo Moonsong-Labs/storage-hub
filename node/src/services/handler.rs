@@ -8,9 +8,9 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
-        ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
+        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MultipleNewChallengeSeeds,
+        NewStorageRequest, ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
         ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -294,5 +294,12 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         bsp_confirm_stopped_storing_event_bus_listener.start();
+        let finalised_bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
+            FinalisedBspConfirmStoppedStoring,
+            _,
+        > = bsp_delete_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        finalised_bsp_confirm_stopped_storing_event_bus_listener.start();
     }
 }
