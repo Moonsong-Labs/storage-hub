@@ -1350,16 +1350,10 @@ pub mod pallet {
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
             let default_replication_target = T::DefaultReplicationTarget::get();
-            let max_replication_target = MaxReplicationTarget::<T>::get();
 
             assert!(
                 default_replication_target > T::ReplicationTargetType::zero(),
                 "Default replication target cannot be zero."
-            );
-
-            assert!(
-                max_replication_target >= default_replication_target,
-                "Max replication target should be greater or equal to the default replication target."
             );
         }
     }

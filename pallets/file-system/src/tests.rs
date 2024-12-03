@@ -864,9 +864,6 @@ mod request_move_bucket {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
                 let size = 1000;
 
-                // Set replication target to 1 to automatically fulfill the storage request after a single bsp confirms.
-                crate::MaxReplicationTarget::<Test>::put(1);
-
                 assert_ok!(FileSystem::issue_storage_request(
                     origin.clone(),
                     bucket_id,
@@ -875,7 +872,7 @@ mod request_move_bucket {
                     size,
                     Some(msp_charlie_id),
                     peer_ids.clone(),
-                    None
+                    Some(1)
                 ));
 
                 // Compute the file key.
@@ -2057,7 +2054,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2187,7 +2184,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2225,7 +2222,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2342,7 +2339,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -3333,9 +3330,6 @@ mod msp_respond_storage_request {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-                // Set replication target to 1
-                MaxReplicationTarget::<Test>::put(1);
-
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -3345,7 +3339,7 @@ mod msp_respond_storage_request {
                     size,
                     Some(msp_id),
                     peer_ids.clone(),
-                    None
+                    Some(1)
                 ));
 
                 // Compute the file key.
@@ -3627,7 +3621,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: None,
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     },
@@ -3695,7 +3689,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: None,
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     },
@@ -3927,7 +3921,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: Some((expected_msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     },
@@ -3999,7 +3993,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     },
@@ -5314,7 +5308,7 @@ mod bsp_confirm {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -5428,6 +5422,7 @@ mod bsp_confirm {
                 let file_keys: Vec<_> = locations
                     .iter()
                     .map(|location| {
+                        // Set replication target to 1 so that the storage request would be skipped if the confirmed bsps are equal to 1.
                         assert_ok!(FileSystem::issue_storage_request(
                             owner_signed.clone(),
                             bucket_id,
@@ -5436,7 +5431,7 @@ mod bsp_confirm {
                             size,
                             Some(msp_id),
                             peer_ids.clone(),
-                            None
+                            Some(1)
                         ));
 
                         let file_key = FileSystem::compute_file_key(
@@ -5591,7 +5586,7 @@ mod bsp_confirm {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -5695,7 +5690,7 @@ mod bsp_confirm {
                         size: new_size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -5887,7 +5882,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6007,7 +6002,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6130,7 +6125,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6268,7 +6263,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6312,7 +6307,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -6439,7 +6434,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6489,7 +6484,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -6597,7 +6592,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6641,7 +6636,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -6792,7 +6787,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: Default::default(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -6874,7 +6869,7 @@ mod bsp_stop_storing {
                 ));
 
                 let current_bsps_required: <Test as Config>::ReplicationTargetType =
-                    MaxReplicationTarget::<Test>::get();
+                    <Test as Config>::DefaultReplicationTarget::get();
 
                 // Assert that the storage request bsps_required was incremented
                 assert_eq!(
@@ -8556,7 +8551,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -8756,7 +8751,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, true)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -8899,7 +8894,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -9119,7 +9114,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -9314,7 +9309,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: MaxReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
