@@ -73,7 +73,10 @@ describeMspNet(
       const matchedEvents = events.filter((e) =>
         userApi.events.fileSystem.NewStorageRequest.is(e.event)
       );
-      assert(matchedEvents.length === source.length, `Expected ${source.length} NewStorageRequest events`);
+      assert(
+        matchedEvents.length === source.length,
+        `Expected ${source.length} NewStorageRequest events`
+      );
 
       // Allow time for the MSP to receive and store the files from the user
       // TODO: Ideally, this should be turned into a polling helper function.
@@ -90,7 +93,10 @@ describeMspNet(
           newStorageRequestDataBlob.fileKey
         );
 
-        assert(result.isFileFound, `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`);
+        assert(
+          result.isFileFound,
+          `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
+        );
       }
 
       // Seal block containing the MSP's first response.
@@ -114,7 +120,10 @@ describeMspNet(
       const bucketRootChangedDataBlob =
         userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
         bucketRootChangedEvent.data;
-      assert(bucketRootChangedDataBlob, "Expected BucketRootChanged event but received event of different type");
+      assert(
+        bucketRootChangedDataBlob,
+        "Expected BucketRootChanged event but received event of different type"
+      );
 
       strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
 
@@ -156,7 +165,10 @@ describeMspNet(
       const bucketRootChangedDataBlob2 =
         userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
         bucketRootChangedEvent2.data;
-      assert(bucketRootChangedDataBlob2, "Expected BucketRootChanged event but received event of different type");
+      assert(
+        bucketRootChangedDataBlob2,
+        "Expected BucketRootChanged event but received event of different type"
+      );
 
       strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
 

@@ -195,41 +195,45 @@ describeBspNet(
       );
     });
 
-    it(
-      "BSP can correctly delete a file from its forest and runtime correctly updates its root",
-      async () => {
-        // TODO: Setup a BSP that has two files which lie under the same NibbledBranch in the forest.
-        const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
-          null,
-          [fileMetadata.fileKey]
-        );
-        // Wait enough blocks for the deletion to be allowed.
-        const currentBlock = await userApi.rpc.chain.getBlock();
-        const currentBlockNumber = currentBlock.block.header.number.toNumber();
-        const cooldown = currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
-        await userApi.advanceToBlock(cooldown);
-        // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-        await userApi.sealBlock(bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
+    it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
+      // TODO: Setup a BSP that has two files which lie under the same NibbledBranch in the forest.
+      const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
+        null,
+        [fileMetadata.fileKey]
+      );
+      // Wait enough blocks for the deletion to be allowed.
+      const currentBlock = await userApi.rpc.chain.getBlock();
+      const currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const cooldown =
+        currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+      await userApi.advanceToBlock(cooldown);
+      // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
+      await userApi.sealBlock(
+        bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
           fileMetadata.fileKey,
-          inclusionForestProof.toString(),
-        ), bspThreeKey
-        );
-        // Check for the confirm stopped storing event.
-        const confirmStopStoringEvent = await userApi.assert.eventPresent(
-          "fileSystem",
-          "BspConfirmStoppedStoring",
-        );
-        // wait for line in docker logs
-        await sleep(2000);
-        // Make sure the new root was updated correctly.
-        const newRoot = (await bspThreeApi.rpc.storagehubclient.getForestRoot(null)).unwrap();
-        assert(userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event));
-        const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
+          inclusionForestProof.toString()
+        ),
+        bspThreeKey
+      );
+      // Check for the confirm stopped storing event.
+      const confirmStopStoringEvent = await userApi.assert.eventPresent(
+        "fileSystem",
+        "BspConfirmStoppedStoring"
+      );
+      // wait for line in docker logs
+      await sleep(2000);
+      // Make sure the new root was updated correctly.
+      const newRoot = (await bspThreeApi.rpc.storagehubclient.getForestRoot(null)).unwrap();
+      assert(userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event));
+      const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
 
-        // Important! Keep the string conversion to avoid a recursive call that lead to a crash in javascript.
-        strictEqual(newRoot.toString(), newRootInRuntime.toString(), "The new root should be updated correctly");
-      }
-    );
+      // Important! Keep the string conversion to avoid a recursive call that lead to a crash in javascript.
+      strictEqual(
+        newRoot.toString(),
+        newRootInRuntime.toString(),
+        "The new root should be updated correctly"
+      );
+    });
 
     it("BSP is not challenged any more", { skip: "Not implemented yet." }, async () => {
       // TODO: Check that BSP-Three no longer has a challenge deadline.

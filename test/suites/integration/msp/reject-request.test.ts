@@ -32,9 +32,7 @@ describeMspNet(
 
       assert(bucketId, "Bucket ID not found");
 
-      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
-        bucketId.toString()
-      );
+      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 
       await userApi.sealBlock(
         userApi.tx.fileSystem.issueStorageRequest(

@@ -67,7 +67,10 @@ describeMspNet(
       const newStorageRequestDataBlob =
         userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
-      assert(newStorageRequestDataBlob, "NewStorageRequest event data does not match expected type");
+      assert(
+        newStorageRequestDataBlob,
+        "NewStorageRequest event data does not match expected type"
+      );
 
       strictEqual(
         newStorageRequestDataBlob.who.toString(),
@@ -130,7 +133,10 @@ describeMspNet(
         acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
       }
 
-      assert(acceptedFileKey, "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found");
+      assert(
+        acceptedFileKey,
+        "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
+      );
       strictEqual(acceptedFileKey.toString(), event.data.fileKey.toString());
 
       const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
@@ -142,7 +148,10 @@ describeMspNet(
         userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
         bucketRootChangedEvent.data;
 
-      assert(bucketRootChangedDataBlob, "Expected BucketRootChanged event but received event of different type");
+      assert(
+        bucketRootChangedDataBlob,
+        "Expected BucketRootChanged event but received event of different type"
+      );
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
