@@ -246,6 +246,7 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+
 /// BSP stopped storing a specific file.
 ///
 /// This event is emitted when a BSP confirm stop storing a file.
@@ -269,6 +270,15 @@ pub struct FinalisedBspConfirmStoppedStoring {
 }
 
 impl EventBusMessage for FinalisedBspConfirmStoppedStoring {}
+
+/// Notify period event.
+///
+/// This event is emitted when a X amount of block has passed. It is configured at the start of the service.
+#[derive(Debug, Clone)]
+pub struct NotifyPeriod {}
+
+impl EventBusMessage for NotifyPeriod {}
+
 
 /// The event bus provider for the BlockchainService actor.
 ///
@@ -294,6 +304,7 @@ pub struct BlockchainServiceEventBusProvider {
     finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
     bsp_stop_storing_event_bus: EventBus<BspConfirmStoppedStoring>,
     finalised_bsp_stop_storing_event_bus: EventBus<FinalisedBspConfirmStoppedStoring>,
+    notify_period_event_bus: EventBus<NotifyPeriod>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -316,6 +327,7 @@ impl BlockchainServiceEventBusProvider {
             finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
             bsp_stop_storing_event_bus: EventBus::new(),
             finalised_bsp_stop_storing_event_bus: EventBus::new(),
+            notify_period_event_bus: EventBus::new(),
         }
     }
 }
@@ -421,5 +433,11 @@ impl ProvidesEventBus<BspConfirmStoppedStoring> for BlockchainServiceEventBusPro
 impl ProvidesEventBus<FinalisedBspConfirmStoppedStoring> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<FinalisedBspConfirmStoppedStoring> {
         &self.finalised_bsp_stop_storing_event_bus
+    }
+}
+
+impl ProvidesEventBus<NotifyPeriod> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<NotifyPeriod> {
+        &self.notify_period_event_bus
     }
 }

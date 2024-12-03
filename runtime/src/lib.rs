@@ -182,6 +182,7 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 // Unit = the base number of indivisible units for balances
 pub const UNIT: Balance = 1_000_000_000_000;
+pub const CENTS: Balance = UNIT / 100;
 pub const MILLIUNIT: Balance = 1_000_000_000;
 pub const MICROUNIT: Balance = 1_000_000;
 pub const NANOUNIT: Balance = 1_000;
@@ -309,6 +310,8 @@ mod benches {
         [pallet_parameters, Parameters]
         [pallet_payment_streams, PaymentStreams]
         [pallet_proofs_dealer, ProofsDealer]
+        [pallet_storage_providers, Providers]
+        [pallet_randomness, Randomness]
     );
 }
 

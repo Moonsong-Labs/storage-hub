@@ -1428,7 +1428,7 @@ export default {
    * Lookup129: pallet_storage_providers::types::ValueProposition<T>
    **/
   PalletStorageProvidersValueProposition: {
-    pricePerUnitOfDataPerBlock: "u128",
+    pricePerGigaUnitOfDataPerBlock: "u128",
     commitment: "Bytes",
     bucketDataLimit: "u64",
     available: "bool"
@@ -3359,7 +3359,7 @@ export default {
       request_msp_sign_up: {
         capacity: "u64",
         multiaddresses: "Vec<Bytes>",
-        valuePropPricePerUnitOfDataPerBlock: "u128",
+        valuePropPricePerGigaUnitOfDataPerBlock: "u128",
         commitment: "Bytes",
         valuePropMaxDataLimit: "u64",
         paymentAccount: "AccountId32"
@@ -3379,7 +3379,7 @@ export default {
         newCapacity: "u64"
       },
       add_value_prop: {
-        pricePerUnitOfDataPerBlock: "u128",
+        pricePerGigaUnitOfDataPerBlock: "u128",
         commitment: "Bytes",
         bucketDataLimit: "u64"
       },
@@ -3397,7 +3397,7 @@ export default {
         mspId: "H256",
         capacity: "u64",
         multiaddresses: "Vec<Bytes>",
-        valuePropPricePerUnitOfDataPerBlock: "u128",
+        valuePropPricePerGigaUnitOfDataPerBlock: "u128",
         commitment: "Bytes",
         valuePropMaxDataLimit: "u64",
         paymentAccount: "AccountId32"
@@ -3625,7 +3625,7 @@ export default {
         userAccounts: "Vec<AccountId32>"
       },
       pay_outstanding_debt: {
-        amountOfStreamsToPay: "u32"
+        providers: "Vec<H256>"
       },
       clear_insolvent_flag: "Null"
     }

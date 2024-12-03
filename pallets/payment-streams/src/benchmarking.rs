@@ -30,6 +30,7 @@ mod benchmarks {
         types::{MaxMultiAddressAmount, MultiAddress},
         TotalBspsCapacity, UsedBspsCapacity,
     };
+    use shp_constants::GIGAUNIT;
     use sp_runtime::{
         format,
         traits::{Hash, One},
@@ -187,7 +188,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::FixedRatePaymentStreamCreated {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 rate: rate.into(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -234,7 +235,7 @@ mod benchmarks {
         // Worst-case scenario is when the runtime has to actually charge both this fixed-rate and a dynamic-rate
         // payment stream when updating this one (because somehow the provider has both types), so we create a dynamic-rate
         // payment stream for the user and update the last chargeable info of the provider
-        let amount_provided = 1000u32;
+        let amount_provided = 100_000u32;
         let amount_provided_as_balance: BalanceOf<T> = amount_provided.into();
         Pallet::<T>::create_dynamic_rate_payment_stream(
             RawOrigin::Root.into(),
@@ -270,11 +271,12 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted.
         let amount_charged: BalanceOf<T> = initial_rate_as_balance
-            + (amount_provided_as_balance * CurrentPricePerUnitPerTick::<T>::get());
+            + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -284,7 +286,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::FixedRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 new_rate: new_rate.into(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -348,7 +350,7 @@ mod benchmarks {
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 amount: rate.into(),
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -358,7 +360,7 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::FixedRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -404,7 +406,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
             Event::<T>::DynamicRatePaymentStreamCreated {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 amount_provided: amount_provided.into(),
             },
         );
@@ -440,7 +442,7 @@ mod benchmarks {
         let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Amount of the to-be-created payment stream
-        let initial_amount = 1000u32;
+        let initial_amount = 100_000u32;
         let initial_amount_as_balance: BalanceOf<T> = initial_amount.into();
 
         // Create the dynamic-rate payment stream
@@ -490,12 +492,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted.
-        let amount_charged: BalanceOf<T> =
-            rate_as_balance + (initial_amount_as_balance * CurrentPricePerUnitPerTick::<T>::get());
+        let amount_charged: BalanceOf<T> = rate_as_balance
+            + (initial_amount_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -505,7 +508,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
             Event::<T>::DynamicRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 new_amount_provided: new_amount_provided.into(),
             },
         );
@@ -541,7 +544,7 @@ mod benchmarks {
         let provider_id: ProviderIdFor<T> = provider_id.into();
 
         // Amount of the to-be-created payment stream
-        let amount_provided = 1000u32;
+        let amount_provided = 100_000u32;
         let amount_provided_as_balance: BalanceOf<T> = amount_provided.into();
 
         // Create the dynamic-rate payment stream
@@ -583,12 +586,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted.
-        let amount_charged: BalanceOf<T> =
-            rate_as_balance + (amount_provided_as_balance * CurrentPricePerUnitPerTick::<T>::get());
+        let amount_charged: BalanceOf<T> = rate_as_balance
+            + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -599,7 +603,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
             Event::<T>::DynamicRatePaymentStreamDeleted {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
             },
         );
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -631,7 +635,7 @@ mod benchmarks {
 
         // Worst case scenario: the provider has to charge both types of payment streams in the extrinsic:
         // Create the dynamic-rate payment stream
-        let amount_provided = 1000u32;
+        let amount_provided = 100_000u32;
         let amount_provided_as_balance: BalanceOf<T> = amount_provided.into();
         Pallet::<T>::create_dynamic_rate_payment_stream(
             RawOrigin::Root.into(),
@@ -671,12 +675,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted.
-        let amount_charged: BalanceOf<T> =
-            rate_as_balance + (amount_provided_as_balance * CurrentPricePerUnitPerTick::<T>::get());
+        let amount_charged: BalanceOf<T> = rate_as_balance
+            + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
+                / GIGAUNIT.into());
         let charge_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                provider_id: provider_id,
+                provider_id,
                 amount: amount_charged,
                 last_tick_charged: frame_system::Pallet::<T>::block_number(),
                 charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -705,7 +710,7 @@ mod benchmarks {
         };
         let rate = 100u32;
         let rate_as_balance: BalanceOf<T> = rate.into();
-        let amount_provided = 1000u32;
+        let amount_provided = 100_000u32;
         let amount_provided_as_balance: BalanceOf<T> = amount_provided.into();
         for i in 0..n.into() {
             let user_account: T::AccountId = account("Alice", 0, i);
@@ -758,13 +763,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the charge event was emitted for each user
-        let amount_charged: BalanceOf<T> =
-            rate_as_balance + (amount_provided_as_balance * CurrentPricePerUnitPerTick::<T>::get());
+        let amount_charged: BalanceOf<T> = rate_as_balance
+            + (amount_provided_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
+                / GIGAUNIT.into());
         for user_account in user_accounts.iter() {
             let charge_event =
                 <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
                     user_account: user_account.clone(),
-                    provider_id: provider_id,
+                    provider_id,
                     amount: amount_charged,
                     last_tick_charged: frame_system::Pallet::<T>::block_number(),
                     charged_at_tick: frame_system::Pallet::<T>::block_number(),
@@ -780,7 +786,7 @@ mod benchmarks {
         /***********  Setup initial conditions: ***********/
         // Set up an account with some balance.
         let user_account: T::AccountId = account("Alice", 0, 0);
-        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+        let user_balance = match 1_000_000_000_000_000_000u128.try_into() {
             Ok(balance) => balance,
             Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
         };
@@ -789,7 +795,8 @@ mod benchmarks {
             user_balance,
         ));
 
-        // Since we have to create a payment stream per iteration, the easiest way is to set up
+        // Since we have to create a dynamic-rate and a fixed-rate payment stream per iteration
+        // to analyze the worst case scenario, the easiest way is to set up
         // a Provider with an account with some balance per iteration number.
         let n: u32 = n.into();
         let mut provider_ids: Vec<ProviderIdFor<T>> = Vec::new();
@@ -797,13 +804,16 @@ mod benchmarks {
             let (_provider_account, provider_id) = register_provider::<T>(i)?;
             let provider_id: ProviderIdFor<T> = provider_id.into();
             let amount_provided = 1000u32;
+            let rate = 100u32;
 
-            // Ensure that a payment stream between the user and this provider does not exist
+            // Ensure that a dynamic-rate payment stream between the user and this provider does not exist
             let dynamic_rate_stream =
                 DynamicRatePaymentStreams::<T>::get(provider_id, user_account.clone());
             match dynamic_rate_stream {
                 Some(_) => {
-                    return Err(BenchmarkError::Stop("Payment stream already exists."));
+                    return Err(BenchmarkError::Stop(
+                        "Dynamic-rate payment stream already exists.",
+                    ));
                 }
                 None => {}
             }
@@ -819,6 +829,29 @@ mod benchmarks {
                 BenchmarkError::Stop("Dynamic rate payment stream not created successfully.")
             })?;
 
+            // Ensure that a fixed-rate payment stream between the user and this provider does not exist
+            let fixed_rate_stream =
+                FixedRatePaymentStreams::<T>::get(provider_id, user_account.clone());
+            match fixed_rate_stream {
+                Some(_) => {
+                    return Err(BenchmarkError::Stop(
+                        "Fixed-rate payment stream already exists.",
+                    ));
+                }
+                None => {}
+            }
+
+            // Create the fixed-rate payment stream
+            Pallet::<T>::create_fixed_rate_payment_stream(
+                RawOrigin::Root.into(),
+                provider_id,
+                user_account.clone(),
+                rate.into(),
+            )
+            .map_err(|_| {
+                BenchmarkError::Stop("Fixed rate payment stream not created successfully.")
+            })?;
+
             provider_ids.push(provider_id);
         }
 
@@ -828,7 +861,7 @@ mod benchmarks {
             last_chargeable_tick: frame_system::Pallet::<T>::block_number(),
             price_index: AccumulatedPriceIndex::<T>::get(),
         };
-        for provider_id in provider_ids {
+        for provider_id in provider_ids.clone() {
             update_last_chargeable_info::<T>(provider_id, new_last_chargeable_info.clone());
         }
 
@@ -840,7 +873,7 @@ mod benchmarks {
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(RawOrigin::Signed(user_account.clone()), n);
+        _(RawOrigin::Signed(user_account.clone()), provider_ids);
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the user paid all debts event was emitted for the user

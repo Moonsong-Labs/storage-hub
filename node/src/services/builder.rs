@@ -107,6 +107,7 @@ where
     max_storage_capacity: Option<StorageDataUnit>,
     jump_capacity: Option<StorageDataUnit>,
     extrinsic_retry_timeout: u64,
+    notify_period: Option<u32>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -125,6 +126,7 @@ where
             max_storage_capacity: None,
             jump_capacity: None,
             extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
+            notify_period: None,
         }
     }
 
@@ -166,6 +168,17 @@ where
         self
     }
 
+    // Add an alert notification for every X blocks to the blockchain service. Cannot be added if the service has already been spawn.
+    pub fn with_notify_period(&mut self, notify_period: u32) -> &mut Self {
+        if self.blockchain.is_some() {
+            panic!(
+                "`with_notify_period`should never be called after starting the blockchain service."
+            );
+        }
+        self.notify_period = Some(notify_period);
+        self
+    }
+
     pub async fn with_blockchain(
         &mut self,
         client: Arc<ParachainClient>,
@@ -181,6 +194,7 @@ where
             rpc_handlers.clone(),
             keystore.clone(),
             rocksdb_root_path,
+            self.notify_period,
         )
         .await;
 
@@ -429,6 +443,7 @@ where
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
         }
+
         self.with_max_storage_capacity(max_storage_capacity);
         self.with_jump_capacity(jump_capacity);
         self.with_retry_timeout(extrinsic_retry_timeout);

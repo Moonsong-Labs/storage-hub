@@ -9,6 +9,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::SlashableProviders;
+use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
     CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
@@ -59,6 +60,8 @@ mod test_runtime {
     pub type ProofsDealer = pallet_proofs_dealer;
     #[runtime::pallet_index(4)]
     pub type PaymentStreams = pallet_payment_streams;
+    #[runtime::pallet_index(5)]
+    pub type RandomnessPallet = pallet_randomness;
 }
 
 parameter_types! {
@@ -118,7 +121,7 @@ impl Get<AccountId> for TreasuryAccount {
         1000
     }
 }
-
+// Randomness pallet:
 /// Mock implementation of the relay chain data provider, which should return the relay chain block
 /// that the previous parachain block was anchored to.
 pub struct MockRelaychainDataProvider;
@@ -130,6 +133,28 @@ impl BlockNumberProvider for MockRelaychainDataProvider {
             .try_into()
             .unwrap()
     }
+}
+
+pub struct BabeDataGetter;
+impl GetBabeData<u64, H256> for BabeDataGetter {
+    fn get_epoch_index() -> u64 {
+        frame_system::Pallet::<Test>::block_number()
+    }
+    fn get_epoch_randomness() -> H256 {
+        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
+    }
+    fn get_parent_randomness() -> H256 {
+        H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
+        ))
+    }
+}
+
+impl pallet_randomness::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = MockRelaychainDataProvider;
+    type WeightInfo = ();
 }
 
 // Proofs dealer pallet:
@@ -145,7 +170,7 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type MaxSubmittersPerTick = ConstU32<100>;
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
@@ -259,6 +284,7 @@ impl pallet_payment_streams::Config for Test {
     type TreasuryCutCalculator = NoCutTreasuryCutCalculator<Balance, Self::Units>;
     type TreasuryAccount = TreasuryAccount;
     type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 // Converter from the BlockNumber type to the Balance type for math
 pub struct BlockNumberToBalance;
@@ -285,6 +311,7 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
@@ -322,6 +349,8 @@ impl crate::Config for Test {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
     type TopUpGracePeriod = ConstU32<5>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelpers = ();
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

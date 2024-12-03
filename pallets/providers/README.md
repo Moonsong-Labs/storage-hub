@@ -233,13 +233,15 @@ BspRequestSignUpSuccess {
 
 ### `BspSignUpSuccess`
 
-This event is emitted when a Backup Storage Provider has confirmed its requested sign up successfully. It provides information about that Backup Storage Provider's account ID, the list of valid multiaddresses that it has registered and the total capacity that it has registered.
+This event is emitted when a Backup Storage Provider has confirmed its requested sign up successfully. It provides information about that Backup Storage Provider's account ID, its BSP ID, the root with which it was initialized and the list of valid multiaddresses that it has registered and the total capacity that it has registered.
 
 The nature of this event is to allow the newly registered Backup Storage Provider to know that the confirmation of its request to sign up as a Backup Storage Provider was successful and that from now on, the user is a Backup Storage Provider and can start volunteering to store user data. It also allows Main Storage Providers to know that a new Backup Storage Provider has joined the network, which can be useful for them when they need to retrieve files from the network.
 
 ```rust
 BspSignUpSuccess {
     who: T::AccountId,
+    bsp_id: ProviderIdFor<T>,
+    root: MerklePatriciaRoot<T>,
     multiaddresses: Multiaddresses<T>,
     capacity: StorageData<T>,
 }

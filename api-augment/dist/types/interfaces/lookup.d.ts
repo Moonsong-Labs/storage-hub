@@ -1414,7 +1414,7 @@ declare const _default: {
    * Lookup129: pallet_storage_providers::types::ValueProposition<T>
    **/
   PalletStorageProvidersValueProposition: {
-    pricePerUnitOfDataPerBlock: string;
+    pricePerGigaUnitOfDataPerBlock: string;
     commitment: string;
     bucketDataLimit: string;
     available: string;
@@ -3285,7 +3285,7 @@ declare const _default: {
       request_msp_sign_up: {
         capacity: string;
         multiaddresses: string;
-        valuePropPricePerUnitOfDataPerBlock: string;
+        valuePropPricePerGigaUnitOfDataPerBlock: string;
         commitment: string;
         valuePropMaxDataLimit: string;
         paymentAccount: string;
@@ -3305,7 +3305,7 @@ declare const _default: {
         newCapacity: string;
       };
       add_value_prop: {
-        pricePerUnitOfDataPerBlock: string;
+        pricePerGigaUnitOfDataPerBlock: string;
         commitment: string;
         bucketDataLimit: string;
       };
@@ -3323,7 +3323,7 @@ declare const _default: {
         mspId: string;
         capacity: string;
         multiaddresses: string;
-        valuePropPricePerUnitOfDataPerBlock: string;
+        valuePropPricePerGigaUnitOfDataPerBlock: string;
         commitment: string;
         valuePropMaxDataLimit: string;
         paymentAccount: string;
@@ -3551,7 +3551,7 @@ declare const _default: {
         userAccounts: string;
       };
       pay_outstanding_debt: {
-        amountOfStreamsToPay: string;
+        providers: string;
       };
       clear_insolvent_flag: string;
     };

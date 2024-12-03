@@ -16,6 +16,7 @@ import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
 import * as Assertions from "../asserts";
 import invariant from "tiny-invariant";
+import { waitForLog } from "./docker";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -24,6 +25,59 @@ export interface SealedBlock {
   events?: EventRecord[];
   extSuccess?: boolean;
 }
+
+/**
+ * Extends a fork in the blockchain by creating new blocks on top of a specified parent block.
+ *
+ * This function is used for testing chain fork scenarios. It creates
+ * a specified number of new blocks, each building on top of the previous one, starting
+ * from a given parent block hash.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param options - Configuration options for extending the fork:
+ *   @param options.parentBlockHash - The hash of the parent block to build upon.
+ *   @param options.amountToExtend - The number of blocks to add to the fork.
+ *   @param options.verbose - (optional) If true, logs detailed information about the fork extension process.
+ *
+ * @throws Will throw an assertion error if amountToExtend is not greater than 0.
+ * @returns A Promise that resolves when all blocks have been created.
+ */
+export const extendFork = async (
+  api: ApiPromise,
+  options: { parentBlockHash: string; amountToExtend: number; verbose?: boolean }
+) => {
+  let parentBlockHash: string = options.parentBlockHash;
+  let parentHeight = (await api.rpc.chain.getHeader(parentBlockHash)).number.toNumber();
+  assert(options.amountToExtend > 0, "extendFork: amountToExtend must be greater than 0!");
+
+  for (let i = 0; i < options.amountToExtend; i++) {
+    if (options.verbose) {
+      console.log(`Extending fork by 1 block. Current height: ${parentHeight}`);
+      console.log(`Parent block hash: ${parentBlockHash}`);
+    }
+    const { blockHash } = await api.rpc.engine.createBlock(true, false, parentBlockHash);
+    if (options.verbose) {
+      console.log(`New block hash: ${blockHash.toHex()}`);
+    }
+    parentBlockHash = blockHash.toHex();
+    const newBlockNumber = (await api.rpc.chain.getHeader(blockHash)).number.toNumber();
+    if (options.verbose) {
+      console.log(`New block number: ${newBlockNumber}`);
+    }
+    assert(
+      newBlockNumber > parentHeight,
+      "Fork is not extended! this is a bug in logic, please raise"
+    );
+    parentHeight = newBlockNumber;
+
+    // TODO replace with something smarter eventually
+    await waitForLog({
+      containerName: "docker-sh-user-1", // we can only produce blocks via the user node for now
+      searchString: "💤 Idle",
+      timeout: 5000
+    });
+  }
+};
 
 /**
  * Seals a block with optional extrinsics and finalizes it.
@@ -161,7 +215,11 @@ export const skipBlocksToMinChangeTime: (
       console.log(
         `\tSkipping to block #${blockToAdvanceTo} to go beyond MinBlocksBetweenCapacityChanges`
       );
-    await advanceToBlock(api, blockToAdvanceTo, false, [bspId.toString()]);
+    await advanceToBlock(api, {
+      blockNumber: blockToAdvanceTo,
+      verbose: false,
+      watchForBspProofs: [bspId.toString()]
+    });
   } else {
     verbose &&
       console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
@@ -242,21 +300,24 @@ export async function runToNextChallengePeriodBlock(
  */
 export const advanceToBlock = async (
   api: ApiPromise,
-  blockNumber: number,
-  waitBetweenBlocks?: number | boolean,
-  watchForBspProofs?: string[],
-  spam?: number | boolean,
-  verbose?: boolean
+  options: {
+    blockNumber: number;
+    waitBetweenBlocks?: number | boolean;
+    watchForBspProofs?: string[];
+    finalised?: boolean;
+    spam?: number | boolean;
+    verbose?: boolean;
+  }
 ): Promise<SealedBlock> => {
   // If watching for BSP proofs, we need to know the blocks at which they are challenged.
   const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
-  if (watchForBspProofs) {
-    for (const bspId of watchForBspProofs) {
+  if (options.watchForBspProofs) {
+    for (const bspId of options.watchForBspProofs) {
       // First we get the last tick for which the BSP submitted a proof.
       const lastTickResult =
         await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
       if (lastTickResult.isErr) {
-        verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
+        options.verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
         continue;
       }
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
@@ -280,15 +341,15 @@ export const advanceToBlock = async (
   let blockResult = null;
 
   invariant(
-    blockNumber > currentBlockNumber,
-    `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
+    options.blockNumber > currentBlockNumber,
+    `Block number ${options.blockNumber} is lower than current block number ${currentBlockNumber}`
   );
-  const blocksToAdvance = blockNumber - currentBlockNumber;
+  const blocksToAdvance = options.blockNumber - currentBlockNumber;
 
   let blocksToSpam = 0;
-  if (spam) {
-    if (typeof spam === "number") {
-      blocksToSpam = spam;
+  if (options.spam) {
+    if (typeof options.spam === "number") {
+      blocksToSpam = options.spam;
     } else {
       blocksToSpam = blocksToAdvance;
     }
@@ -299,8 +360,8 @@ export const advanceToBlock = async (
   const maxNormalBlockWeight = api.consts.system.blockWeights.perClass.normal.maxTotal.unwrap();
 
   for (let i = 0; i < blocksToAdvance; i++) {
-    if (spam && i < blocksToSpam) {
-      if (verbose) {
+    if (options.spam && i < blocksToSpam) {
+      if (options.verbose) {
         console.log(`Spamming block ${i + 1} of ${blocksToSpam}`);
       }
       // The nonce of the spamming transactions should be incremented by 1 for each transaction.
@@ -322,13 +383,13 @@ export const advanceToBlock = async (
       }
     }
 
-    blockResult = await sealBlock(api);
+    blockResult = await sealBlock(api, [], undefined, options.finalised);
     currentBlockNumber += 1;
 
     const blockWeight = await api.query.system.blockWeight();
     const blockWeightNormal = blockWeight.normal;
 
-    if (spam && i < blocksToSpam && verbose) {
+    if (options.spam && i < blocksToSpam && options.verbose) {
       console.log(`Normal block weight for block ${i + 1}: ${blockWeightNormal}`);
 
       const currentTick = (await api.call.proofsDealerApi.getCurrentTick()).toNumber();
@@ -336,7 +397,7 @@ export const advanceToBlock = async (
     }
 
     // Check if we need to wait for BSP proofs.
-    if (watchForBspProofs) {
+    if (options.watchForBspProofs) {
       for (const challengeBlockNumber of challengeBlockNumbers) {
         if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
           // Wait for the BSP to process the proof.
@@ -349,9 +410,9 @@ export const advanceToBlock = async (
       }
     }
 
-    if (waitBetweenBlocks) {
-      if (typeof waitBetweenBlocks === "number") {
-        await sleep(waitBetweenBlocks);
+    if (options.waitBetweenBlocks) {
+      if (typeof options.waitBetweenBlocks === "number") {
+        await sleep(options.waitBetweenBlocks);
       } else {
         await sleep(500);
       }
@@ -374,7 +435,7 @@ export const advanceToBlock = async (
  * @throws Will throw an error if the head block is already finalized.
  * @returns A Promise that resolves when the chain reorganization is complete.
  */
-export async function reOrgBlocks(api: ApiPromise): Promise<void> {
+export async function reOrgWithFinality(api: ApiPromise): Promise<void> {
   const currentBlockHeader = await api.rpc.chain.getHeader();
   const finalisedHash = await api.rpc.chain.getFinalizedHead();
 
@@ -386,4 +447,66 @@ export async function reOrgBlocks(api: ApiPromise): Promise<void> {
     throw "Cannot reorg a finalised block";
   }
   await api.rpc.engine.createBlock(true, true, finalisedHash);
+}
+
+/**
+ * Performs a chain reorganization by creating a longer forked chain.
+ * If no parent starting block is provided, the chain will start the fork from the last
+ * finalised block.
+ *
+ * !!! WARNING !!!
+ * The number of blocks this function can create for the alternative fork is limited by the
+ * "unincluded segment capacity" parameter, set in the `ConsensusHook` config type of the
+ * `cumulus-pallet-parachain-system`. If you try to build more blocks than this limit to
+ * achieve the reorg, the node will panic when building the block.
+ *
+ * This function is used to simulate network forks and test the system's ability to handle
+ * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+ * in face of potential consensus issues.
+ *
+ * @param api - The ApiPromise instance.
+ * @param startingBlock - Optional. The hash of the starting block to create the fork from.
+ * @throws Will throw an error if the last finalised block is greater than the starting block
+ *         or if the starting block is the same or higher than the current block.
+ * @returns A Promise that resolves when the chain reorganization is complete.
+ */
+export async function reOrgWithLongerChain(
+  api: ApiPromise,
+  startingBlockHash?: string
+): Promise<void> {
+  const blockHash = startingBlockHash ?? (await api.rpc.chain.getFinalizedHead());
+  const startingBlock = await api.rpc.chain.getHeader(blockHash);
+  const startingBlockNumber = startingBlock.number.toNumber();
+
+  const finalisedHash = await api.rpc.chain.getFinalizedHead();
+  const finalisedBlock = await api.rpc.chain.getHeader(finalisedHash);
+  const finalisedBlockNumber = finalisedBlock.number.toNumber();
+
+  const currentBlock = await api.rpc.chain.getHeader();
+  const currentBlockNumber = currentBlock.number.toNumber();
+
+  if (finalisedBlockNumber > startingBlockNumber) {
+    throw new Error(
+      `Last finalised block #${finalisedBlockNumber} is greater than starting block #${startingBlockNumber}. So a fork cannot start from it.`
+    );
+  }
+
+  if (startingBlockNumber === currentBlockNumber) {
+    throw new Error(
+      `Starting block #${startingBlockNumber} is the same as the current block #${currentBlockNumber}. So a fork cannot start from it.`
+    );
+  }
+
+  if (startingBlockNumber > currentBlockNumber) {
+    throw new Error(
+      `Starting block #${startingBlockNumber} is higher than the current block #${currentBlockNumber}. So a fork cannot start from it.`
+    );
+  }
+
+  const parentHash = blockHash;
+  extendFork(api, {
+    parentBlockHash: parentHash.toString(),
+    amountToExtend: currentBlockNumber - startingBlockNumber + 1,
+    verbose: false
+  });
 }
