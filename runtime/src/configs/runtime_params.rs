@@ -134,6 +134,11 @@ pub mod dynamic_params {
         #[codec(index = 17)]
         #[allow(non_upper_case_globals)]
         pub static ProviderTopUpTtl: RelayChainBlockNumber = 14_400;
+
+        /// Default replication target when issuing storage requests via the file system pallet.
+        #[codec(index = 18)]
+        #[allow(non_upper_case_globals)]
+        pub static DefaultReplicationTarget: u32 = 3;
     }
 }
 
