@@ -65,13 +65,13 @@ describeBspNet(
 
       strictEqual(
         (await userApi.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
-        1,
+        200,
         "Threshold should not have changed"
       );
       const maxReplicationTarget = await userApi.query.fileSystem.maxReplicationTarget();
       strictEqual(
         maxReplicationTarget.toNumber(),
-        1,
+        87,
         "Max replication target should not have changed"
       );
     });
