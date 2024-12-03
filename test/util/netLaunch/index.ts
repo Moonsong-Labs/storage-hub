@@ -475,6 +475,14 @@ export class NetworkLauncher {
     await api.sealBlock(
       api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))
     );
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 3]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
   }
 
   public async execDemoTransfer() {
