@@ -246,7 +246,6 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
-
 /// BSP stopped storing a specific file.
 ///
 /// This event is emitted when a BSP confirm stop storing a file.
@@ -278,7 +277,6 @@ impl EventBusMessage for FinalisedBspConfirmStoppedStoring {}
 pub struct NotifyPeriod {}
 
 impl EventBusMessage for NotifyPeriod {}
-
 
 /// The event bus provider for the BlockchainService actor.
 ///
