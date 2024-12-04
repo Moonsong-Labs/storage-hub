@@ -498,7 +498,7 @@ export class NetworkLauncher {
       bucketName,
       null,
       DUMMY_MSP_ID,
-      null,
+      shUser,
       1
     );
 

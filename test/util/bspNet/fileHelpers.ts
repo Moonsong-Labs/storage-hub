@@ -77,6 +77,7 @@ export const createBucketAndSendNewStorageRequest = async (
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
   let localMspId = mspId;
+  let localOwner = owner;
 
   if (!localValuePropId) {
     localMspId = ShConsts.DUMMY_MSP_ID;
@@ -89,6 +90,10 @@ export const createBucketAndSendNewStorageRequest = async (
 
   if (!localValuePropId) {
     throw new Error("No value proposition found");
+  }
+
+  if (!localOwner) {
+    localOwner = shUser;
   }
 
   const newBucketEventEvent = await createBucket(
