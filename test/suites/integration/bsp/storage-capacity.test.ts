@@ -43,68 +43,77 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
   });
 
-  it("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
-    const capacityUsed = (
-      await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
-    )
-      .unwrap()
-      .capacityUsed.toNumber();
-    await userApi.block.skipToMinChangeTime();
-    const minCapacity = userApi.consts.providers.spMinCapacity.toNumber();
-    const newCapacity = Math.max(minCapacity, capacityUsed + 1);
+  it(
+    "Change capacity ext called before volunteering for file size greater than available capacity",
+    { only: true },
+    async () => {
+      // 1 block to maxthreshold (i.e. instant acceptance)
+      await userApi.sealBlock(
+        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+      );
 
-    // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
-    const { extSuccess } = await userApi.sealBlock(
-      userApi.tx.providers.changeCapacity(newCapacity),
-      bspKey
-    );
-    assert.strictEqual(extSuccess, true);
+      const capacityUsed = (
+        await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
+      )
+        .unwrap()
+        .capacityUsed.toNumber();
+      await userApi.block.skipToMinChangeTime();
+      const minCapacity = userApi.consts.providers.spMinCapacity.toNumber();
+      const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
-    const source = "res/cloud.jpg";
-    const location = "test/cloud.jpg";
-    const bucketName = "toobig-1";
-    await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
+      // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
+      const { extSuccess } = await userApi.sealBlock(
+        userApi.tx.providers.changeCapacity(newCapacity),
+        bspKey
+      );
+      assert.strictEqual(extSuccess, true);
 
-    //To allow for BSP to react to request
-    await sleep(500);
+      const source = "res/cloud.jpg";
+      const location = "test/cloud.jpg";
+      const bucketName = "toobig-1";
+      await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
-    // Skip block height until BSP sends a call to change capacity.
-    await userApi.block.skipToMinChangeTime();
-    // Allow BSP enough time to send call to change capacity.
-    await sleep(500);
-    // Assert BSP has sent a call to increase its capacity.
-    await userApi.assert.extrinsicPresent({
-      module: "providers",
-      method: "changeCapacity",
-      checkTxPool: true
-    });
+      //To allow for BSP to react to request
+      await sleep(500);
 
-    await userApi.sealBlock();
+      // Skip block height until BSP sends a call to change capacity.
+      await userApi.block.skipToMinChangeTime();
+      // Allow BSP enough time to send call to change capacity.
+      await sleep(500);
+      // Assert BSP has sent a call to increase its capacity.
+      await userApi.assert.extrinsicPresent({
+        module: "providers",
+        method: "changeCapacity",
+        checkTxPool: true
+      });
 
-    // Assert that the capacity has changed.
-    await userApi.assert.eventPresent("providers", "CapacityChanged");
+      await userApi.sealBlock();
 
-    // Allow BSP enough time to send call to volunteer for the storage request.
-    await sleep(500);
+      // Assert that the capacity has changed.
+      await userApi.assert.eventPresent("providers", "CapacityChanged");
 
-    // Assert that the BSP has send a call to volunteer for the storage request.
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspVolunteer",
-      checkTxPool: true
-    });
+      // Allow BSP enough time to send call to volunteer for the storage request.
+      await sleep(500);
 
-    await userApi.sealBlock();
+      // Assert that the BSP has send a call to volunteer for the storage request.
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true
+      });
 
-    const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
-    const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
-      bspApi.shConsts.DUMMY_BSP_ID
-    );
-    assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
+      await userApi.sealBlock();
 
-    // Assert that the BSP was accepted as a volunteer.
-    await userApi.assert.eventPresent("fileSystem", "AcceptedBspVolunteer");
-  });
+      const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+      const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
+        bspApi.shConsts.DUMMY_BSP_ID
+      );
+      assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
+
+      // Assert that the BSP was accepted as a volunteer.
+      await userApi.assert.eventPresent("fileSystem", "AcceptedBspVolunteer");
+    }
+  );
 
   it("Total capacity updated when single BSP capacity updated", async () => {
     const newCapacity =

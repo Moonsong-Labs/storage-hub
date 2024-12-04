@@ -65,6 +65,7 @@ pub mod pallet {
         },
         BoundedVec,
     };
+    use sp_weights::WeightMeter;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -1338,11 +1339,10 @@ pub mod pallet {
         }
 
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
-            let mut remaining_weight = remaining_weight;
+            let mut meter = WeightMeter::with_limit(remaining_weight);
+            Self::do_on_idle(current_block, &mut meter);
 
-            Self::do_on_idle(current_block, &mut remaining_weight);
-
-            remaining_weight
+            meter.consumed()
         }
 
         /// Any code located in this hook is placed in an auto-generated test, and generated as a part

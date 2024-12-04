@@ -325,7 +325,9 @@ describeBspNet(
       });
 
       // Resume BSP-Two and BSP-Three.
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-two" });
+      await userApi.docker.resumeBspContainer({
+        containerName: "sh-bsp-two"
+      });
       await userApi.docker.resumeBspContainer({
         containerName: "sh-bsp-three"
       });

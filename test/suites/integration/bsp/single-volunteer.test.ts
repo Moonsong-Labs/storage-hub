@@ -212,6 +212,11 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
   });
 
   it("bsp volunteers multiple files properly", async () => {
+    // 1 block to maxthreshold (i.e. instant acceptance)
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+    );
+
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
     const bucketName = "something-3";

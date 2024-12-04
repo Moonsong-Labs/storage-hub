@@ -313,7 +313,8 @@ export class BspNetTestApi implements AsyncDisposable {
         bucketName: string,
         valuePropId?: HexString | null,
         msp_id?: HexString | null,
-        owner?: KeyringPair
+        owner?: KeyringPair,
+        replicationTarget?: number
       ) =>
         Files.createBucketAndSendNewStorageRequest(
           this._api,
@@ -322,7 +323,8 @@ export class BspNetTestApi implements AsyncDisposable {
           bucketName,
           valuePropId,
           msp_id,
-          owner
+          owner,
+          replicationTarget
         )
     };
 
@@ -361,7 +363,11 @@ export class BspNetTestApi implements AsyncDisposable {
          *  e.g. true
          */
         verbose?: boolean;
-      }) => BspNetBlock.extendFork(this._api, { ...options, verbose: options.verbose ?? false }),
+      }) =>
+        BspNetBlock.extendFork(this._api, {
+          ...options,
+          verbose: options.verbose ?? false
+        }),
       /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.

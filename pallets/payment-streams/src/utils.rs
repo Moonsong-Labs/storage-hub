@@ -1647,8 +1647,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn has_active_payment_streams(provider_id: &Self::ProviderId) -> bool {
-        !Self::get_fixed_rate_payment_streams_of_provider(provider_id).is_empty()
-            || !Self::get_dynamic_rate_payment_streams_of_provider(provider_id).is_empty()
+        Self::provider_has_payment_streams(provider_id)
     }
 
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {

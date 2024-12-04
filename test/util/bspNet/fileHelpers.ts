@@ -72,7 +72,8 @@ export const createBucketAndSendNewStorageRequest = async (
   bucketName: string,
   valuePropId?: HexString | null,
   mspId?: HexString | null,
-  owner?: KeyringPair
+  owner?: KeyringPair,
+  replicationTarget?: number
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
   let localMspId = mspId;
@@ -117,9 +118,9 @@ export const createBucketAndSendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      localMspId,
+      localMspId ?? null,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
-      null
+      replicationTarget ?? null
     ),
     owner ?? shUser
   );

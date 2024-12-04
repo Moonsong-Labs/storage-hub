@@ -21,6 +21,7 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+use frame_support::StorageDoubleMap;
 use frame_system::pallet_prelude::BlockNumberFor;
 pub use pallet::*;
 use scale_info::prelude::vec::Vec;
@@ -928,7 +929,17 @@ impl<T: Config> Pallet<T> {
             .collect()
     }
 
+    /// A helper function to check if a provider has at least 1 payment stream with any user
+    pub fn provider_has_payment_streams(provider_id: &ProviderIdFor<T>) -> bool {
+        FixedRatePaymentStreams::<T>::contains_prefix(provider_id)
+            || DynamicRatePaymentStreams::<T>::contains_prefix(provider_id)
+    }
+
     /// A helper function that gets all fixed-rate payment streams of a Provider
+    ///
+    /// WARNING: Do not use this function unless you are sure of the amount of payment streams that the Provider has.
+    /// Calling this during block execution could potentially result in a big unbounded weight consumption. This is meant
+    /// to be used in a runtime API.
     pub fn get_fixed_rate_payment_streams_of_provider(
         provider_id: &ProviderIdFor<T>,
     ) -> Vec<(T::AccountId, FixedRatePaymentStream<T>)> {
@@ -936,6 +947,10 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function that gets all dynamic-rate payment streams of a Provider
+    ///
+    /// WARNING: Do not use this function unless you are sure of the amount of payment streams that the Provider has.
+    /// Calling this during block execution could potentially result in a big unbounded weight consumption. This is meant
+    /// to be used in a runtime API.
     pub fn get_dynamic_rate_payment_streams_of_provider(
         provider_id: &ProviderIdFor<T>,
     ) -> Vec<(T::AccountId, DynamicRatePaymentStream<T>)> {

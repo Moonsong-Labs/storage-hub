@@ -2223,10 +2223,10 @@ mod hooks {
         traits::{Get, One, Zero},
         Saturating,
     };
-    use sp_weights::Weight;
+    use sp_weights::WeightMeter;
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_poll(weight: &mut frame_support::weights::WeightMeter) {
+        pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
             weight.consume(T::DbWeight::get().reads(1));
@@ -2248,15 +2248,15 @@ mod hooks {
 
         pub(crate) fn do_on_idle(
             current_block: BlockNumberFor<T>,
-            mut remaining_weight: &mut Weight,
-        ) -> &mut Weight {
+            mut meter: &mut WeightMeter,
+        ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
             let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
 
-            while block_to_clean <= current_block && !remaining_weight.is_zero() {
-                Self::process_block_expired_items(block_to_clean, &mut remaining_weight);
+            while block_to_clean <= current_block && !meter.remaining().is_zero() {
+                Self::process_block_expired_items(block_to_clean, &mut meter);
 
-                if remaining_weight.is_zero() {
+                if meter.remaining().is_zero() {
                     break;
                 }
 
@@ -2266,84 +2266,70 @@ mod hooks {
             // Update the next starting block for cleanup
             if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
                 NextStartingBlockToCleanUp::<T>::put(block_to_clean);
-                remaining_weight.saturating_reduce(db_weight.writes(1));
+                meter.consume(db_weight.writes(1));
             }
 
-            remaining_weight
+            meter
         }
 
-        fn process_block_expired_items(block: BlockNumberFor<T>, remaining_weight: &mut Weight) {
+        fn process_block_expired_items(block: BlockNumberFor<T>, meter: &mut WeightMeter) {
             let db_weight = T::DbWeight::get();
             let minimum_required_weight_processing_expired_items = db_weight.reads_writes(1, 1);
 
-            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
                 return;
             }
 
-            // Remove expired storage requests if any existed and process them.
+            // Storage requests section
             let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&block);
-            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
+            meter.consume(minimum_required_weight_processing_expired_items);
 
-            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
-            // TODO: process all the expired storage requests. If not, we should return early.
             while let Some(file_key) = expired_storage_requests.pop() {
-                Self::process_expired_storage_request(file_key, remaining_weight)
+                Self::process_expired_storage_request(file_key, meter);
             }
 
-            // If there are remaining items which were not processed, put them back in storage
             if !expired_storage_requests.is_empty() {
                 StorageRequestExpirations::<T>::insert(&block, expired_storage_requests);
-                remaining_weight.saturating_reduce(db_weight.writes(1));
+                meter.consume(db_weight.writes(1));
             }
 
-            // Check if there is enough remaining weight to process the expired file deletion requests.
-            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+            // File deletion requests section
+            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
                 return;
             }
 
-            // Remove expired file deletion requests if any existed and process them.
             let mut expired_file_deletion_requests =
                 FileDeletionRequestExpirations::<T>::take(&block);
-            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
+            meter.consume(minimum_required_weight_processing_expired_items);
 
-            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
-            // TODO: process all the expired file deletion requests. If not, we should return early.
             while let Some(expired_file_deletion_request) = expired_file_deletion_requests.pop() {
-                Self::process_expired_pending_file_deletion(
-                    expired_file_deletion_request,
-                    remaining_weight,
-                )
+                Self::process_expired_pending_file_deletion(expired_file_deletion_request, meter);
             }
 
-            // If there are remaining items which were not processed, put them back in storage
             if !expired_file_deletion_requests.is_empty() {
                 FileDeletionRequestExpirations::<T>::insert(&block, expired_file_deletion_requests);
-                remaining_weight.saturating_reduce(db_weight.writes(1));
+                meter.consume(db_weight.writes(1));
             }
 
-            // Check if there is enough remaining weight to process expired move bucket requests
-            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+            // Move bucket requests section
+            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
                 return;
             }
 
-            // Remove expired move bucket requests if any existed and process them.
             let mut expired_move_bucket_requests = MoveBucketRequestExpirations::<T>::take(&block);
-            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
+            meter.consume(minimum_required_weight_processing_expired_items);
 
-            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
-            // TODO: process all the expired move bucket requests. If not, we should return early.
             while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
-                Self::process_expired_move_bucket_request(msp_id, bucket_id, remaining_weight);
+                Self::process_expired_move_bucket_request(msp_id, bucket_id, meter);
             }
 
-            // If there are remaining items which were not processed, put them back in storage
             if !expired_move_bucket_requests.is_empty() {
                 MoveBucketRequestExpirations::<T>::insert(&block, expired_move_bucket_requests);
-                remaining_weight.saturating_reduce(db_weight.writes(1));
+                meter.consume(db_weight.writes(1));
             }
         }
 
-        fn process_expired_storage_request(file_key: MerkleHash<T>, remaining_weight: &mut Weight) {
+        fn process_expired_storage_request(file_key: MerkleHash<T>, meter: &mut WeightMeter) {
             let db_weight = T::DbWeight::get();
 
             // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
@@ -2354,7 +2340,13 @@ mod hooks {
                     .into(),
             );
 
-            if !remaining_weight.all_gte(potential_weight) {
+            log::info!(
+            "[process_expired_storage_request] Starting with remaining_weight: {:?}, potential_weight: {:?}",
+            meter,
+            potential_weight
+            );
+
+            if !meter.can_consume(potential_weight) {
                 return;
             }
 
@@ -2363,7 +2355,8 @@ mod hooks {
             let removed =
                 StorageRequestBsps::<T>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1u32);
 
-            remaining_weight.saturating_reduce(db_weight.writes(1.saturating_add(removed.into())));
+            let weight_used = db_weight.writes(1.saturating_add(removed.into()));
+            meter.consume(weight_used);
 
             match storage_request_metadata {
                 Some(storage_request_metadata) => match storage_request_metadata.msp {
@@ -2384,7 +2377,9 @@ mod hooks {
                             });
                         }
                     }
-                    None => Self::deposit_event(Event::StorageRequestExpired { file_key }),
+                    None => {
+                        Self::deposit_event(Event::StorageRequestExpired { file_key });
+                    }
                 },
                 None => {
                     // This should never happen.
@@ -2394,12 +2389,12 @@ mod hooks {
 
         fn process_expired_pending_file_deletion(
             expired_file_deletion_request: FileDeletionRequestExpirationItem<T>,
-            remaining_weight: &mut Weight,
+            meter: &mut WeightMeter,
         ) {
             let db_weight = T::DbWeight::get();
             let potential_weight = db_weight.reads_writes(2, 3);
 
-            if !remaining_weight.all_gte(potential_weight) {
+            if !meter.can_consume(potential_weight) {
                 return;
             }
 
@@ -2465,25 +2460,25 @@ mod hooks {
                 file_key: expired_file_deletion_request.file_key,
             });
 
-            remaining_weight.saturating_reduce(potential_weight);
+            meter.consume(potential_weight);
         }
 
         fn process_expired_move_bucket_request(
             msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
-            remaining_weight: &mut Weight,
+            meter: &mut WeightMeter,
         ) {
             let db_weight = T::DbWeight::get();
             let potential_weight = db_weight.reads_writes(0, 2);
 
-            if !remaining_weight.all_gte(potential_weight) {
+            if !meter.can_consume(potential_weight) {
                 return;
             }
 
             PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
             PendingBucketsToMove::<T>::remove(&bucket_id);
 
-            remaining_weight.saturating_reduce(potential_weight);
+            meter.consume(potential_weight);
 
             Self::deposit_event(Event::MoveBucketRequestExpired { msp_id, bucket_id });
         }

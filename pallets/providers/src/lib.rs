@@ -33,6 +33,7 @@ pub mod pallet {
     use super::{types::*, weights::WeightInfo};
     use codec::{FullCodec, HasCompact};
     use frame_support::traits::Randomness;
+    use frame_support::weights::WeightMeter;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -1458,11 +1459,10 @@ pub mod pallet {
         u32: TryFrom<BlockNumberFor<T>>,
     {
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
-            let mut remaining_weight = remaining_weight;
+            let mut meter = WeightMeter::with_limit(remaining_weight);
+            Self::do_on_idle(current_block, &mut meter);
 
-            Self::do_on_idle(current_block, &mut remaining_weight);
-
-            remaining_weight
+            meter.consumed()
         }
     }
 }

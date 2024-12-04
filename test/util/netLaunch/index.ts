@@ -516,7 +516,16 @@ export class NetworkLauncher {
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 1)));
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 4]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
+
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.

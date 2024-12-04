@@ -2422,12 +2422,12 @@ mod hooks {
     };
 
     use frame_support::{
-        pallet_prelude::Weight,
-        traits::Get,
         traits::{
             fungible::{InspectHold, MutateHold},
             tokens::{Fortitude, Precision, Restriction},
+            Get,
         },
+        weights::WeightMeter,
     };
     use sp_runtime::{
         traits::{BlockNumberProvider, One, Zero},
@@ -2442,15 +2442,15 @@ mod hooks {
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_idle(
             current_block: BlockNumberFor<T>,
-            mut remaining_weight: &mut Weight,
-        ) -> &mut Weight {
+            mut meter: &mut WeightMeter,
+        ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
             let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
 
-            while block_to_clean <= current_block && !remaining_weight.is_zero() {
-                Self::process_block_expired_items(&mut remaining_weight);
+            while block_to_clean <= current_block && !meter.remaining().is_zero() {
+                Self::process_block_expired_items(&mut meter);
 
-                if remaining_weight.is_zero() {
+                if meter.remaining().is_zero() {
                     break;
                 }
 
@@ -2460,33 +2460,34 @@ mod hooks {
             // Update the next starting block for cleanup
             if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
                 NextStartingBlockToCleanUp::<T>::put(block_to_clean);
-                remaining_weight.saturating_reduce(db_weight.writes(1));
+                meter.consume(db_weight.writes(1));
             }
 
-            remaining_weight
+            meter
         }
 
-        fn process_block_expired_items(remaining_weight: &mut Weight) {
+        fn process_block_expired_items(meter: &mut WeightMeter) {
             let db_weight = T::DbWeight::get();
             let minimum_required_weight_processing_expired_items = db_weight.reads_writes(2, 1);
 
             // Check if there is enough remaining weight to process expired move bucket requests
-            if !remaining_weight.all_gte(minimum_required_weight_processing_expired_items) {
+            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
                 return;
             }
 
             // Provider top up expirations expire based on the relay chain block number, not the local block number.
+            // TODO: use next starting block to clean up instead of current block number here
             let relay_chain_block_number = RelayBlockGetter::<T>::current_block_number();
 
             // Remove expired move bucket requests if any existed and process them.
             let mut provider_top_up_expirations =
                 ProviderTopUpExpirations::<T>::take(&relay_chain_block_number);
-            remaining_weight.saturating_reduce(minimum_required_weight_processing_expired_items);
+            meter.consume(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
             // TODO: process all the expired move bucket requests. If not, we should return early.
             while let Some(provider_id) = provider_top_up_expirations.pop() {
-                Self::process_expired_provider_top_up_period(provider_id, remaining_weight);
+                Self::process_expired_provider_top_up_period(provider_id, meter);
             }
 
             // If there are remaining items which were not processed, put them back in storage
@@ -2495,18 +2496,18 @@ mod hooks {
                     &relay_chain_block_number,
                     provider_top_up_expirations,
                 );
-                remaining_weight.saturating_reduce(db_weight.writes(1));
+                meter.consume(db_weight.writes(1));
             }
         }
 
         fn process_expired_provider_top_up_period(
             provider_id: ProviderIdFor<T>,
-            remaining_weight: &mut Weight,
+            meter: &mut WeightMeter,
         ) {
             let db_weight = T::DbWeight::get();
             let potential_weight = db_weight.reads_writes(0, 2);
 
-            if !remaining_weight.all_gte(potential_weight) {
+            if !meter.can_consume(potential_weight) {
                 return;
             }
 
@@ -2562,7 +2563,7 @@ mod hooks {
                 }
             }
 
-            remaining_weight.saturating_reduce(potential_weight);
+            meter.consume(potential_weight);
         }
     }
 }
