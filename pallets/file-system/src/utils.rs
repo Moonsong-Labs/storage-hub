@@ -2340,12 +2340,6 @@ mod hooks {
                     .into(),
             );
 
-            log::info!(
-            "[process_expired_storage_request] Starting with remaining_weight: {:?}, potential_weight: {:?}",
-            meter,
-            potential_weight
-            );
-
             if !meter.can_consume(potential_weight) {
                 return;
             }

@@ -76,20 +76,15 @@ export const createBucketAndSendNewStorageRequest = async (
   replicationTarget?: number | null
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
-  let localMspId = mspId;
   let localOwner = owner;
 
-  if (!localValuePropId) {
-    localMspId = ShConsts.DUMMY_MSP_ID;
-  }
-
-  if (!localValuePropId) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(localMspId);
+  if (!localValuePropId && mspId) {
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
     localValuePropId = valueProps[0].id;
-  }
 
-  if (!localValuePropId) {
-    throw new Error("No value proposition found");
+    if (!localValuePropId) {
+      throw new Error("No value proposition found");
+    }
   }
 
   if (!localOwner) {
@@ -100,8 +95,8 @@ export const createBucketAndSendNewStorageRequest = async (
     api,
     bucketName,
     localValuePropId,
-    localMspId,
-    owner
+    mspId,
+    localOwner
   );
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
@@ -122,7 +117,7 @@ export const createBucketAndSendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      localMspId ?? null,
+      mspId ?? null,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       replicationTarget ?? null
     ),

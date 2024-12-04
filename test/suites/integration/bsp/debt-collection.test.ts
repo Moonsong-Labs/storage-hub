@@ -258,7 +258,9 @@ describeBspNet(
         "test/cloud.jpg",
         "bucket-1",
         null,
-        null
+        null,
+        null,
+        3 // There are 3 running BSPs to fulfill the storage request
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
@@ -271,7 +273,9 @@ describeBspNet(
         "test/adolphus.jpg",
         "bucket-3",
         null,
-        null
+        null,
+        null,
+        3 // There are 3 running BSPs to fulfill the storage request
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);

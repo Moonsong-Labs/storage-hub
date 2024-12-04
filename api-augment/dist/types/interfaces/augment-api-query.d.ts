@@ -314,9 +314,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * Maximum number of BSPs required to fulfill a storage request.
-       *
-       * This is also used as a default value if the replication target is not specified when creating a storage request.
+       * Maximum number replication target allowed to be set for a storage request to be fulfilled.
        **/
       maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;

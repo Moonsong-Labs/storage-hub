@@ -256,7 +256,9 @@ describeBspNet(
         location,
         bucketName,
         null,
-        null
+        null,
+        null,
+        3
       );
       oneBspfileMetadata = fileMetadata;
     });

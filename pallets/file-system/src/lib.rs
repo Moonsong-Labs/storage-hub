@@ -435,9 +435,7 @@ pub mod pallet {
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
-    /// Maximum number of BSPs required to fulfill a storage request.
-    ///
-    /// This is also used as a default value if the replication target is not specified when creating a storage request.
+    /// Maximum number replication target allowed to be set for a storage request to be fulfilled.
     #[pallet::storage]
     pub type MaxReplicationTarget<T: Config> =
         StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
