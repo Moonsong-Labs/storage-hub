@@ -1,6 +1,5 @@
 import assert, { strictEqual } from "node:assert";
 import { describeMspNet, mspKey, sleep, type EnrichedBspApi } from "../../../util";
-import invariant from "tiny-invariant";
 import type { H256 } from "@polkadot/types/interfaces";
 
 describeMspNet(

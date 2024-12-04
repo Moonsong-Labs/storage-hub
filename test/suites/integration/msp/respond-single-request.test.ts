@@ -1,6 +1,5 @@
 import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP accepting storage request",

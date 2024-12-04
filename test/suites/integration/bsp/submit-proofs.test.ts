@@ -206,7 +206,7 @@ describeBspNet(
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
-      await userApi.advanceToBlock(cooldown);
+      await userApi.block.skipTo(cooldown);
       // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
       await userApi.sealBlock(
         bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
