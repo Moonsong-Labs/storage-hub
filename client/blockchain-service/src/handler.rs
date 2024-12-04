@@ -60,13 +60,17 @@ use crate::{
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{StopStoringForInsolventUserRequest, SubmitProofRequest},
+    types::{
+        BestBlockInfo, NewBlockNotificationKind, StopStoringForInsolventUserRequest,
+        SubmitProofRequest,
+    },
 };
 use crate::{
     events::FinalisedMspStoppedStoringBucket, state::OngoingProcessMspRespondStorageRequestCf,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
+// TODO: Define properly the number of blocks to come out of sync mode
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// The BlockchainService actor.
@@ -83,6 +87,8 @@ pub struct BlockchainService {
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
     pub(crate) rpc_handlers: Arc<RpcHandlers>,
+    /// The hash and number of the current best block.
+    pub(crate) best_block: BestBlockInfo,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
@@ -102,6 +108,7 @@ pub struct BlockchainService {
     /// The last block number that was processed by the BlockchainService.
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks.
+    /// TODO: Consider if this should be removed in favour of the BestBlockInfo.
     pub(crate) last_block_processed: BlockNumber,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
@@ -109,6 +116,8 @@ pub struct BlockchainService {
     /// various edge cases when restarting the node, all originating from the "dynamic" way of
     /// computing the next challenges tick. This case is handled separately.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
+    /// Notify period value to know when to trigger the NotifyPeriod event.
+    pub(crate) notify_period: Option<u32>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -931,12 +940,14 @@ impl BlockchainService {
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
         rocksdb_root_path: impl Into<PathBuf>,
+        notify_period: Option<u32>,
     ) -> Self {
         Self {
-            client,
-            rpc_handlers,
-            keystore,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
+            client,
+            keystore,
+            rpc_handlers,
+            best_block: BestBlockInfo::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -945,6 +956,7 @@ impl BlockchainService {
             last_block_processed: Zero::zero(),
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
+            notify_period,
         }
     }
 
@@ -954,15 +966,28 @@ impl BlockchainService {
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let block_hash: H256 = notification.hash;
-        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+        let BestBlockInfo {
+            number: block_number,
+            hash: block_hash,
+        } = match new_block_notification_kind {
+            NewBlockNotificationKind::NewBestBlock(new_best_block_info) => new_best_block_info,
+            NewBlockNotificationKind::NewNonBestBlock(_) => return,
+            NewBlockNotificationKind::Reorg {
+                old_best_block: _,
+                new_best_block,
+            } => {
+                // TODO: Handle catch up of reorgs.
+                new_best_block
+            }
+        };
 
-        // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.pre_block_processing_checks(&block_hash);
 
+        // If this is the first block import notification, we might need to catch up.
         // Check if we just came out of syncing mode.
         if block_number - self.last_block_processed < SYNC_MODE_MIN_BLOCKS_BEHIND {
             self.handle_initial_sync(notification).await;
@@ -1063,6 +1088,9 @@ impl BlockchainService {
 
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
+
+        // Check that trigger an event every X amount of blocks (specified in config).
+        self.check_for_notify(&block_number);
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.

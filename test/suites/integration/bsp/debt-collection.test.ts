@@ -100,11 +100,9 @@ describeBspNet(
       // Calculate how many blocks to advance until next challenge tick.
       let currentBlock = await userApi.rpc.chain.getBlock();
       let currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const blocksToAdvance = nextChallengeTick - currentBlockNumber;
-
-      // Advance blocksToAdvance blocks.
-      for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+      if (nextChallengeTick > currentBlockNumber) {
+        // Advance to the next challenge tick if needed
+        await userApi.block.skipTo(nextChallengeTick);
       }
 
       await userApi.assert.extrinsicPresent({
