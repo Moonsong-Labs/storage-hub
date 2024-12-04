@@ -72,23 +72,22 @@ export const createBucketAndSendNewStorageRequest = async (
   bucketName: string,
   valuePropId?: HexString | null,
   mspId?: HexString | null,
-  owner?: KeyringPair,
-  replicationTarget?: number
+  owner?: KeyringPair | null,
+  replicationTarget?: number | null
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
   let localMspId = mspId;
 
-  if (localMspId === undefined) {
+  if (!localValuePropId) {
     localMspId = ShConsts.DUMMY_MSP_ID;
   }
 
-  if (localValuePropId === undefined) {
+  if (!localValuePropId) {
     const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(localMspId);
-
     localValuePropId = valueProps[0].id;
   }
 
-  if (localValuePropId === undefined) {
+  if (!localValuePropId) {
     throw new Error("No value proposition found");
   }
 
@@ -152,7 +151,7 @@ export const createBucket = async (
   bucketName: string,
   valuePropId?: HexString | null,
   mspId: HexString | null = ShConsts.DUMMY_MSP_ID,
-  owner: KeyringPair = shUser
+  owner: KeyringPair | null = shUser
 ) => {
   let localValuePropId = valuePropId;
 
@@ -171,7 +170,7 @@ export const createBucket = async (
   const createBucketResult = await sealBlock(
     api,
     api.tx.fileSystem.createBucket(mspId, bucketName, false, localValuePropId),
-    owner
+    owner ?? undefined
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 

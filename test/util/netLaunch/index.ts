@@ -32,6 +32,7 @@ import {
 import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
 import { spawn, spawnSync } from "node:child_process";
+import { DUMMY_MSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -494,7 +495,11 @@ export class NetworkLauncher {
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
       source,
       destination,
-      bucketName
+      bucketName,
+      null,
+      DUMMY_MSP_ID,
+      null,
+      1
     );
 
     if (this.type === "bspnet") {

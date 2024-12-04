@@ -313,8 +313,8 @@ export class BspNetTestApi implements AsyncDisposable {
         bucketName: string,
         valuePropId?: HexString | null,
         msp_id?: HexString | null,
-        owner?: KeyringPair,
-        replicationTarget?: number
+        owner?: KeyringPair | null,
+        replicationTarget?: number | null
       ) =>
         Files.createBucketAndSendNewStorageRequest(
           this._api,
