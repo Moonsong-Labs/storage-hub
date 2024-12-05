@@ -2,7 +2,7 @@ use crate::{
     mock::*,
     types::{BalanceOf, ProviderLastChargeableInfo},
     AccumulatedPriceIndex, CurrentPricePerGigaUnitPerTick, DynamicRatePaymentStreams, Error, Event,
-    LastChargeableInfo, RegisteredUsers, UsersWithoutFunds,
+    FixedRatePaymentStreams, LastChargeableInfo, RegisteredUsers, UsersWithoutFunds,
 };
 
 use frame_support::{
@@ -365,8 +365,6 @@ mod fixed_rate_streams {
 
     /// This module holds the tests for updating a payment stream (right now, only the rate can be updated)
     mod update_stream {
-
-        use crate::FixedRatePaymentStreams;
 
         use super::*;
 
