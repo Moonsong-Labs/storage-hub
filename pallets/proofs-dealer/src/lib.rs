@@ -30,11 +30,12 @@ pub mod pallet {
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
-        ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
+        ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+        TrieRemoveMutation,
     };
     use sp_runtime::{
-        traits::{CheckedSub, Convert, Saturating},
-        Perbill,
+        traits::{CheckedSub, Convert, Saturating, Zero},
+        Perbill, SaturatedConversion,
     };
     use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
@@ -217,11 +218,22 @@ pub mod pallet {
         /// If less than this percentage of blocks are not full, the networks is considered to be presumably
         /// under a spam attack.
         /// This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
-        /// if this is set to `Perbill::from_percent(50)`, then if more than half of the last `BlockFullnessPeriod`
+        /// if this is set to `Perbill::from_percent(50)`, then if more than half of the last [`Config::BlockFullnessPeriod`]
         /// blocks are not full, then one of those blocks surely was produced by an honest collator, meaning
-        /// that there was at least one truly _not_ full block in the last `BlockFullnessPeriod` blocks.
+        /// that there was at least one truly _not_ full block in the last [`Config::BlockFullnessPeriod`] blocks.
         #[pallet::constant]
         type MinNotFullBlocksRatio: Get<Perbill>;
+
+        /// The maximum number of Providers that can be slashed per tick.
+        ///
+        /// Providers are marked as slashable if they are found in the [`TickToProvidersDeadlines`] StorageMap
+        /// for the current challenges tick. It is expected that most of the times, there will be little to
+        /// no Providers in the [`TickToProvidersDeadlines`] StorageMap for the current challenges tick. That
+        /// is because Providers are expected to submit proofs in time. However, in the extreme scenario where
+        /// a large number of Providers are missing the proof submissions, this configuration is used to keep
+        /// the execution of the `on_poll` hook bounded.
+        #[pallet::constant]
+        type MaxSlashableProvidersPerTick: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -334,7 +346,6 @@ pub mod pallet {
     /// ticks, where availability only up to the last [`Config::TargetTicksStorageOfSubmitters`] ticks is guaranteed.
     /// This storage is then made available for other pallets to use through the `ProofSubmittersInterface`.
     #[pallet::storage]
-    #[pallet::getter(fn valid_proof_submitters_last_ticks)]
     pub type ValidProofSubmittersLastTicks<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
@@ -347,7 +358,6 @@ pub mod pallet {
     /// This is used to know which tick to delete from the [`ValidProofSubmittersLastTicks`] StorageMap when the
     /// `on_idle` hook is called.
     #[pallet::storage]
-    #[pallet::getter(fn last_deleted_tick)]
     pub type LastDeletedTick<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A boolean that represents whether the [`ChallengesTicker`] is paused.
@@ -359,7 +369,6 @@ pub mod pallet {
     /// - No new checkpoint challenges would be emitted and added to [`TickToCheckpointChallenges`].
     /// - Deadlines for proof submissions are indefinitely postponed.
     #[pallet::storage]
-    #[pallet::getter(fn challenges_ticker_paused)]
     pub type ChallengesTickerPaused<T: Config> = StorageValue<_, ()>;
 
     /// A mapping from block number to the weight used in that block.
@@ -367,7 +376,6 @@ pub mod pallet {
     /// This is used to check if the network is presumably under a spam attack.
     /// It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
     #[pallet::storage]
-    #[pallet::getter(fn past_blocks_fullness)]
     pub type PastBlocksWeight<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Weight>;
 
@@ -375,8 +383,47 @@ pub mod pallet {
     ///
     /// This is used to check if the network is presumably under a spam attack.
     #[pallet::storage]
-    #[pallet::getter(fn not_full_blocks_count)]
     pub type NotFullBlocksCount<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    /// The tick to check and see if Providers failed to submit proofs before their deadline.
+    ///
+    /// In a normal situation, this should always be equal to [`ChallengesTicker`].
+    /// However, in the unlikely scenario where a large number of Providers fail to submit proofs (larger
+    /// than [`Config::MaxSlashableProvidersPerTick`]), and all of them had the same deadline, not all of
+    /// them will be marked as slashable. Only the first [`Config::MaxSlashableProvidersPerTick`] will be.
+    /// In that case, this stored tick will lag behind [`ChallengesTicker`].
+    ///
+    /// It is expected that this tick should catch up to [`ChallengesTicker`], as blocks with less
+    /// slashable Providers follow.
+    #[pallet::storage]
+    pub type TickToCheckForSlashableProviders<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        /// The checkpoint challenges that will be registered for the first checkpoint challenge (i.e. tick 0).
+        pub initial_checkpoint_challenges:
+            BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            // Start with an empty vector of checkpoint challenges.
+            Self {
+                initial_checkpoint_challenges: Default::default(),
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            TickToCheckpointChallenges::<T>::insert(
+                &BlockNumberFor::<T>::zero(),
+                &self.initial_checkpoint_challenges,
+            );
+        }
+    }
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -431,7 +478,7 @@ pub mod pallet {
         /// A set of mutations has been applied to the Forest.
         MutationsApplied {
             provider: ProviderIdFor<T>,
-            mutations: Vec<(KeyFor<T>, TrieRemoveMutation)>,
+            mutations: Vec<(KeyFor<T>, TrieMutation)>,
             new_root: KeyFor<T>,
         },
 
@@ -516,6 +563,9 @@ pub mod pallet {
         /// not sufficient for the challenges made.
         ForestProofVerificationFailed,
 
+        /// The number of key proofs submitted does not match the number of keys proven in the forest proof.
+        IncorrectNumberOfKeyProofs,
+
         /// There is at least one key proven in the forest proof, that does not have a corresponding
         /// key proof.
         KeyProofNotFound,
@@ -527,6 +577,10 @@ pub mod pallet {
 
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
+
+        /// After successfully applying delta for a set of mutations, the number of mutated keys is
+        /// not the same as the number of mutations expected to have been applied.
+        UnexpectedNumberOfRemoveMutations,
 
         /// Failed to update the provider after a key removal mutation.
         FailedToUpdateProviderAfterKeyRemoval,
@@ -583,7 +637,26 @@ pub mod pallet {
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+            let max_random_key_proofs = T::RandomChallengesPerBlock::get().saturating_mul(2u32.into());
+            let max_custom_key_proofs = T::MaxCustomChallengesPerBlock::get().saturating_mul(2u32.into());
+
+            let max_key_proofs = max_random_key_proofs.saturating_add(max_custom_key_proofs);
+
+            let key_proofs_len = SaturatedConversion::saturated_into::<u32>(
+                proof.key_proofs.len()
+            );
+            match key_proofs_len {
+                n if n <= max_random_key_proofs => {
+                    T::WeightInfo::submit_proof_no_checkpoint_challenges_key_proofs(n)
+                }
+                n if n <= max_key_proofs => {
+                    T::WeightInfo::submit_proof_with_checkpoint_challenges_key_proofs(n)
+                }
+                // More key proofs than `max_key_proofs` would inevitably fail the transaction.
+                n => T::WeightInfo::submit_proof_with_checkpoint_challenges_key_proofs(n),
+            }
+        })]
         pub fn submit_proof(
             origin: OriginFor<T>,
             proof: Proof<T>,
@@ -623,7 +696,7 @@ pub mod pallet {
         /// Sets the last tick the Provider submitted a proof for to the current tick, and sets the
         /// deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::force_initialise_challenge_cycle())]
         pub fn force_initialise_challenge_cycle(
             origin: OriginFor<T>,
             provider: ProviderIdFor<T>,
@@ -642,7 +715,7 @@ pub mod pallet {
         ///
         /// Only callable by sudo.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::set_paused())]
         pub fn set_paused(origin: OriginFor<T>, paused: bool) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin.
             ensure_root(origin)?;
@@ -670,8 +743,6 @@ pub mod pallet {
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut sp_weights::WeightMeter) {
-            // TODO: Benchmark computational weight cost of this hook.
-
             // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.
             if ChallengesTickerPaused::<T>::get().is_none() {
                 Self::do_new_challenges_round(weight);
@@ -686,11 +757,19 @@ pub mod pallet {
             Self::do_check_spamming_condition(weight);
         }
 
+        /// This hook is used to trim down the `ValidProofSubmittersLastTicks` StorageMap up to the `TargetTicksOfProofsStorage`.
+        ///
+        /// It runs when the block is being finalized (but before the `on_finalize` hook) and can consume all remaining weight.
+        /// It returns the used weight, so it can be used to calculate the remaining weight for the block for any other
+        /// pallets that have `on_idle` hooks.
+        fn on_idle(n: BlockNumberFor<T>, weight: Weight) -> Weight {
+            Self::do_trim_valid_proof_submitters_last_ticks(n, weight)
+        }
+
         /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
         /// let block builders know how much weight to reserve for it
-        /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
         fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
-            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(0, 2)
+            T::WeightInfo::on_finalize()
         }
 
         fn on_finalize(block_number: BlockNumberFor<T>) {
@@ -741,16 +820,6 @@ pub mod pallet {
                 T::BlockFullnessPeriod::get(),
                 T::ChallengeTicksTolerance::get()
             );
-        }
-
-        /// This hook is used to trim down the `ValidProofSubmittersLastTicks` StorageMap up to the `TargetTicksOfProofsStorage`.
-        ///
-        /// It runs when the block is being finalized (but before the `on_finalize` hook) and can consume all remaining weight.
-        /// It returns the used weight, so it can be used to calculate the remaining weight for the block for any other
-        /// pallets that have `on_idle` hooks.
-        fn on_idle(n: BlockNumberFor<T>, weight: Weight) -> Weight {
-            // TODO: Benchmark computational and proof size weight cost of this hook.
-            Self::do_trim_valid_proof_submitters_last_ticks(n, weight)
         }
     }
 }

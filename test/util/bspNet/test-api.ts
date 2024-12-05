@@ -1,8 +1,9 @@
-import "@storagehub/api-augment";
+import "@storagehub/api-augment"; // must be first import
+
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -13,10 +14,10 @@ import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
+import { addBsp } from "./helpers";
 import * as NodeBspNet from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
-import { addBsp } from "./helpers";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -105,16 +106,22 @@ export class BspNetTestApi implements AsyncDisposable {
     return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
-  private async sendNewStorageRequest(
+  private async createBucketAndSendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string,
     valuePropId: HexString
   ) {
-    return Files.sendNewStorageRequest(this._api, source, location, bucketName, valuePropId);
+    return Files.createBucketAndSendNewStorageRequest(
+      this._api,
+      source,
+      location,
+      bucketName,
+      valuePropId
+    );
   }
 
-  private async createBucket(bucketName: string, valuePropId?: HexString) {
+  private async createBucket(bucketName: string, valuePropId?: HexString | null) {
     return Files.createBucket(this._api, bucketName, valuePropId);
   }
 
@@ -122,55 +129,9 @@ export class BspNetTestApi implements AsyncDisposable {
     return Assertions.assertEventPresent(this._api, module, method, events);
   }
 
-  /**
-   * Advances the blockchain to a specified block number.
-   *
-   * This function seals blocks until the specified block number is reached. It can optionally
-   * wait between blocks and watch for BSP proofs.
-   *
-   * @param api - The ApiPromise instance to interact with the blockchain.
-   * @param blockNumber - The target block number to advance to.
-   * @param waitBetweenBlocks - Optional. If specified:
-   *                            - If a number, waits for that many milliseconds between blocks.
-   *                            - If true, waits for 500ms between blocks.
-   *                            - If false or undefined, doesn't wait between blocks.
-   * @param watchForBspProofs - Optional. An array of BSP IDs to watch for proofs.
-   *                            If specified, the function will wait for BSP proofs at appropriate intervals.
-   *
-   * @returns A Promise that resolves to a SealedBlock object representing the last sealed block.
-   *
-   * @throws Will throw an error if the target block number is lower than the current block number.
-   *
-   * @example
-   * // Advance to block 100 with no waiting
-   * const result = await advanceToBlock(api, 100);
-   *
-   * @example
-   * // Advance to block 200, waiting 1000ms between blocks
-   * const result = await advanceToBlock(api, 200, 1000);
-   *
-   * @example
-   * // Advance to block 300, watching for proofs from two BSPs
-   * const result = await advanceToBlock(api, 300, true, ['bsp1', 'bsp2']);
-   */
-  private advanceToBlock(
-    blockNumber: number,
-    options?: {
-      waitBetweenBlocks?: number | boolean;
-      waitForBspProofs?: string[];
-    }
-  ) {
-    return BspNetBlock.advanceToBlock(
-      this._api,
-      blockNumber,
-      options?.waitBetweenBlocks,
-      options?.waitForBspProofs
-    );
-  }
-
   private enrichApi() {
     const remappedAssertNs = {
-      fetchEventData: Assertions.fetchEventData,
+      fetchEvent: Assertions.fetchEvent,
 
       /**
        * Asserts that a specific event is present in the given events or the latest block.
@@ -258,14 +219,16 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts),
+      bspStored: (expectedExts?: number, bspAccount?: Address) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**
-       * Waits for a MSP to respond to storage requests.
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has responded to storage requests.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
        */
-      mspResponse: (expectedExts?: number) => Waits.waitForMspResponse(this._api, expectedExts),
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -313,8 +276,26 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString) =>
+      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString | null) =>
         Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
+
+      /**
+       * Issue a new storage request.
+       *
+       * @param source - The local path to the file to be uploaded.
+       * @param location - The StorageHub "location" field of the file to be uploaded.
+       * @param bucketID - The ID of the bucket to use for the new storage request.
+       * @param owner - Signer with which to issue the newStorageRequest Defaults to SH_USER.
+       * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
+       * @returns A promise that resolves to file metadata.
+       */
+      newStorageRequest: (
+        source: string,
+        location: string,
+        bucketId: H256,
+        owner?: KeyringPair,
+        msp_id?: HexString
+      ) => Files.sendNewStorageRequest(this._api, source, location, bucketId, owner, msp_id),
 
       /**
        * Creates a new bucket and submits a new storage request.
@@ -326,15 +307,15 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to file metadata.
        */
-      newStorageRequest: (
+      createBucketAndSendNewStorageRequest: (
         source: string,
         location: string,
         bucketName: string,
-        valuePropId?: HexString,
-        msp_id?: HexString,
+        valuePropId?: HexString | null,
+        msp_id?: HexString | null,
         owner?: KeyringPair
       ) =>
-        Files.sendNewStorageRequest(
+        Files.createBucketAndSendNewStorageRequest(
           this._api,
           source,
           location,
@@ -350,6 +331,37 @@ export class BspNetTestApi implements AsyncDisposable {
      * Contains methods for manipulating and interacting with blocks in the BSP network.
      */
     const remappedBlockNs = {
+      /**
+       * Extends a fork in the blockchain by creating new blocks on top of a specified parent block.
+       *
+       * This function is used for testing chain fork scenarios. It creates a specified number
+       * of new blocks, each building on top of the previous one, starting from a given parent
+       * block hash.
+       *
+       * @param options - Configuration options for extending the fork:
+       *   @param options.parentBlockHash - The hash of the parent block to build upon.
+       *   @param options.amountToExtend - The number of blocks to add to the fork.
+       *   @param options.verbose - If true, logs detailed information about the fork extension process.
+       *
+       * @returns A Promise that resolves when all blocks have been created.
+       */
+      extendFork: (options: {
+        /**
+         * The hash of the parent block to build upon.
+         *  e.g. "0x827392aa...."
+         */
+        parentBlockHash: string;
+        /**
+         * The number of blocks to add to the fork.
+         *  e.g. 5
+         */
+        amountToExtend: number;
+        /**
+         * If true, logs detailed information about the fork extension process.
+         *  e.g. true
+         */
+        verbose?: boolean;
+      }) => BspNetBlock.extendFork(this._api, { ...options, verbose: options.verbose ?? false }),
       /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.
@@ -384,29 +396,29 @@ export class BspNetTestApi implements AsyncDisposable {
         options?: {
           waitBetweenBlocks?: number | boolean;
           waitForBspProofs?: string[];
+          finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;
         }
-      ) =>
-        BspNetBlock.advanceToBlock(
-          this._api,
-          blockNumber,
-          options?.waitBetweenBlocks,
-          options?.waitForBspProofs,
-          options?.spam,
-          options?.verbose
-        ),
+      ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.
        */
       skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
-       * Causes a chain re-org by creating a finalized block on top of the parent block.
-       * Note: This requires the head block to be unfinalized, otherwise it will throw!
+       * Causes a chain re-org by creating a finalised block on top of the last finalised block.
+       * Note: This requires the head block to be unfinalised, otherwise it will throw!
        * @returns A promise that resolves when the chain re-org is complete.
        */
-      reOrg: () => BspNetBlock.reOrgBlocks(this._api)
+      reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
+      /**
+       * Causes a chain re-org by creating a longer forked chain.
+       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * @returns A promise that resolves when the chain re-org is complete.
+       */
+      reOrgWithLongerChain: (startingBlockHash?: string) =>
+        BspNetBlock.reOrgWithLongerChain(this._api, startingBlockHash)
     };
 
     const remappedNodeNs = {
@@ -434,6 +446,7 @@ export class BspNetTestApi implements AsyncDisposable {
         bspStartingWeight?: bigint;
         maxStorageCapacity?: number;
         additionalArgs?: string[];
+        waitForIdle?: boolean;
       }) => addBsp(this._api, options.bspSigner, options)
     };
 
@@ -445,9 +458,9 @@ export class BspNetTestApi implements AsyncDisposable {
       sealBlock: this.sealBlock.bind(this),
       /**
        * Soon Deprecated. Use api.file.newStorageRequest() instead.
-       * @see {@link sendNewStorageRequest}
+       * @see {@link createBucketAndSendNewStorageRequest}
        */
-      sendNewStorageRequest: this.sendNewStorageRequest.bind(this),
+      createBucketAndSendNewStorageRequest: this.createBucketAndSendNewStorageRequest.bind(this),
       /**
        * Soon Deprecated. Use api.file.newBucket() instead.
        * @see {@link createBucket}
@@ -458,11 +471,6 @@ export class BspNetTestApi implements AsyncDisposable {
        * @see {@link assertEvent}
        */
       assertEvent: this.assertEvent.bind(this),
-      /**
-       * Soon Deprecated. Use api.assert.eventPresent() instead.
-       * @see {@link advanceToBlock}
-       */
-      advanceToBlock: this.advanceToBlock.bind(this),
       /**
        * Assertions namespace
        * Provides methods for asserting various conditions in the BSP network tests.

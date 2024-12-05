@@ -3,7 +3,7 @@ use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
     Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
-    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieRemoveMutation,
+    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieMutation, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -63,6 +63,20 @@ pub struct NewStorageRequest {
 }
 
 impl EventBusMessage for NewStorageRequest {}
+
+/// MSP stopped storing bucket event.
+///
+/// This event is emitted when an MSP stops storing a bucket.
+#[derive(Debug, Clone)]
+pub struct FinalisedMspStoppedStoringBucket {
+    /// MSP ID who stopped storing the bucket.
+    pub msp_id: ProviderId,
+    /// Account ID owner of the bucket.
+    pub owner: AccountId32,
+    pub bucket_id: BucketId,
+}
+
+impl EventBusMessage for FinalisedMspStoppedStoringBucket {}
 
 /// Accepted BSP volunteer event.
 ///
@@ -186,7 +200,7 @@ impl EventBusMessage for SlashableProvider {}
 #[derive(Debug, Clone)]
 pub struct FinalisedTrieRemoveMutationsApplied {
     pub provider_id: ProviderId,
-    pub mutations: Vec<(ForestRoot, TrieRemoveMutation)>,
+    pub mutations: Vec<(ForestRoot, TrieMutation)>,
     pub new_root: H256,
 }
 
@@ -232,6 +246,14 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+/// Notify period event.
+///
+/// This event is emitted when a X amount of block has passed. It is configured at the start of the service.
+#[derive(Debug, Clone)]
+pub struct NotifyPeriod {}
+
+impl EventBusMessage for NotifyPeriod {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -253,6 +275,8 @@ pub struct BlockchainServiceEventBusProvider {
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
     user_without_funds_event_bus: EventBus<UserWithoutFunds>,
     sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
+    finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
+    notify_period_event_bus: EventBus<NotifyPeriod>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -272,6 +296,8 @@ impl BlockchainServiceEventBusProvider {
             last_chargeable_info_updated_event_bus: EventBus::new(),
             user_without_funds_event_bus: EventBus::new(),
             sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
+            finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
+            notify_period_event_bus: EventBus::new(),
         }
     }
 }
@@ -359,5 +385,17 @@ impl ProvidesEventBus<UserWithoutFunds> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<SpStopStoringInsolventUser> {
         &self.sp_stop_storing_insolvent_user_event_bus
+    }
+}
+
+impl ProvidesEventBus<FinalisedMspStoppedStoringBucket> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FinalisedMspStoppedStoringBucket> {
+        &self.finalised_msp_stopped_storing_bucket_event_bus
+    }
+}
+
+impl ProvidesEventBus<NotifyPeriod> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<NotifyPeriod> {
+        &self.notify_period_event_bus
     }
 }

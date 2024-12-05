@@ -98,6 +98,7 @@ import type {
 } from "@polkadot/types/interfaces/system";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
+  CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
   SaveFileToDisk
@@ -1042,7 +1043,17 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (
           provider_id: H256 | string | Uint8Array,
           seed: H256 | string | Uint8Array,
-          challenged_file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
+          checkpoint_challenges:
+            | Option<Vec<CheckpointChallenge>>
+            | null
+            | Uint8Array
+            | Vec<CheckpointChallenge>
+            | (
+                | CheckpointChallenge
+                | { file_key?: any; should_remove_file?: any }
+                | string
+                | Uint8Array
+              )[]
         ) => Observable<Bytes>
       >;
       /**
@@ -1058,7 +1069,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Get the root of the forest trie.
        **/
       getForestRoot: AugmentedRpc<
-        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<H256>
+        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<Option<H256>>
       >;
       /**
        * Generate and insert new keys of type BCSV into the keystore.

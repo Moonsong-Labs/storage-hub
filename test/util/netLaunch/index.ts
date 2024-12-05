@@ -31,6 +31,7 @@ import {
 } from "../pjsKeyring";
 import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
+import { spawn, spawnSync } from "node:child_process";
 
 export type ShEntity = {
   port: number;
@@ -46,45 +47,25 @@ export class NetworkLauncher {
     private readonly config: NetLaunchConfig
   ) {}
 
-  private selectComposeFile() {
+  private loadComposeFile() {
     invariant(this.type, "Network type has not been set yet");
-
-    // TODO: Add noisy fullnet
     const composeFiles = {
-      bspnet: "local-dev-bsp-compose.yml",
-      fullnet: "local-dev-full-rocksdb-compose.yml",
-      rocksdb: "local-dev-bsp-rocksdb-compose.yml",
-      noisy: "noisy-bsp-compose.yml"
+      bspnet: "bspnet-base-template.yml",
+      fullnet: "fullnet-base-template.yml"
     } as const;
 
-    if (this.config.noisy && this.type === "fullnet") {
-      invariant(false, "Noisy fullnet not supported");
-    }
+    // if (this.config.noisy && this.type === "fullnet") {
+    //   invariant(false, "Noisy fullnet not supported");
+    // }
 
-    const file = this.config.noisy
-      ? composeFiles.noisy
-      : this.config.rocksdb && this.type === "bspnet"
-        ? composeFiles.rocksdb
-        : composeFiles[this.type];
+    const file = this.type === "fullnet" ? composeFiles.fullnet : composeFiles.bspnet;
 
-    invariant(file, "Compose file not found for network type");
+    invariant(file, `Compose file not found for ${this.type} network`);
 
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
     const composeYaml = yaml.parse(composeFile);
-    if (this.config.extrinsicRetryTimeout) {
-      composeYaml.services["sh-bsp"].command.push(
-        `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
-      );
-      composeYaml.services["sh-user"].command.push(
-        `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
-      );
-      if (this.type === "fullnet") {
-        composeYaml.services["sh-msp"].command.push(
-          `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
-        );
-      }
-    }
+
     this.composeYaml = composeYaml;
     return this;
   }
@@ -106,7 +87,7 @@ export class NetworkLauncher {
   private populateEntities() {
     invariant(
       this.composeYaml,
-      "Compose file has not been selected yet, run selectComposeFile() first"
+      "Compose file has not been selected yet, run loadComposeFile() first"
     );
     const shServices: ShEntity[] = Object.entries(this.composeYaml.services)
       .filter(([_serviceName, service]: [string, any]) => service.image === "storage-hub:local")
@@ -119,20 +100,79 @@ export class NetworkLauncher {
     return this;
   }
 
+  // TODO: Turn this into a submodule system with separate handlers for each option
   private remapComposeYaml() {
     invariant(
       this.composeYaml,
-      "Compose file has not been selected yet, run selectComposeFile() first"
+      "Compose file has not been selected yet, run loadComposeFile() first"
     );
 
+    const composeYaml = this.composeYaml;
+
+    if (this.config.noisy) {
+      for (const svcName of Object.keys(composeYaml.services)) {
+        if (svcName === "toxiproxy") {
+          continue;
+        }
+        composeYaml.services[`${svcName}`].ports = composeYaml.services[`${svcName}`].ports.filter(
+          (portMapping: `${string}:${string}`) =>
+            !portMapping
+              .split(":")
+              .some((port: string) => port.startsWith("30") && port.length === 5)
+        );
+        composeYaml.services[`${svcName}`].networks = {
+          "storage-hub-network": { aliases: [`${svcName}`] }
+        };
+      }
+    } else {
+      // biome-ignore lint/performance/noDelete: to ensure compose file is valid
+      delete composeYaml.services.toxiproxy;
+    }
+
+    if (this.config.extrinsicRetryTimeout) {
+      composeYaml.services["sh-bsp"].command.push(
+        `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
+      );
+      composeYaml.services["sh-user"].command.push(
+        `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
+      );
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp"].command.push(
+          `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
+        );
+      }
+    }
+
+    if (this.config.rocksdb) {
+      composeYaml.services["sh-bsp"].command.push("--storage-layer=rocks-db");
+      composeYaml.services["sh-bsp"].command.push(
+        "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
+      );
+      composeYaml.services["sh-user"].command.push("--storage-layer=rocks-db");
+      composeYaml.services["sh-user"].command.push(
+        "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
+      );
+    }
+
+    if (this.config.indexer) {
+      composeYaml.services["sh-user"].command.push("--indexer");
+      composeYaml.services["sh-user"].command.push(
+        "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+      );
+    }
+
     const cwd = path.resolve(process.cwd(), "..", "docker");
-    const entries = Object.entries(this.composeYaml.services).map(([key, value]: any) => {
-      const remappedValue = {
-        ...value,
-        volumes: value.volumes.map((volume: any) => volume.replace("./", `${cwd}/`))
-      };
-      return { node: key, spec: remappedValue };
+    const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
+      let remappedValue: any;
+      if ("volumes" in value) {
+        remappedValue = {
+          ...value,
+          volumes: value.volumes.map((volume: any) => volume.replace("./", `${cwd}/`))
+        };
+      }
+      return { node: key, spec: remappedValue ?? value };
     });
+
     const remappedYamlContents = entries.reduce(
       (acc, curr) => ({ ...acc, [curr.node]: curr.spec }),
       {}
@@ -243,6 +283,16 @@ export class NetworkLauncher {
       }
     }
 
+    if (this.config.indexer) {
+      await compose.upOne("sh-postgres", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose
+      });
+
+      await this.runMigrations();
+    }
+
     await compose.upOne("sh-user", {
       cwd: cwd,
       config: tmpFile,
@@ -262,10 +312,47 @@ export class NetworkLauncher {
     console.log(services);
   }
 
+  private async runMigrations() {
+    invariant(this.config.indexer, "Indexer must be enabled to run migrations");
+
+    const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
+    invariant(
+      dieselCheck.status === 0,
+      "Error running Diesel CLI. Visit https://diesel.rs/guides/getting-started for install instructions."
+    );
+    // TODO Poll this with a ping
+    await sleep(2000);
+
+    const cwd = path.resolve(process.cwd(), "..", "client", "indexer-db");
+
+    const result = await new Promise((resolve, reject) => {
+      const env = {
+        ...process.env,
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/storage_hub"
+      };
+
+      const diesel = spawn("diesel", ["migration", "run"], {
+        cwd,
+        env,
+        stdio: "inherit"
+      });
+
+      diesel.on("close", (code) => {
+        if (code === 0) {
+          resolve(true);
+        } else {
+          reject(new Error(`Diesel migrations failed with code ${code}`));
+        }
+      });
+    });
+
+    return result;
+  }
+
   private getPort(serviceName: string) {
     invariant(
       this.composeYaml,
-      "Compose file has not been selected yet, run selectComposeFile() first"
+      "Compose file has not been selected yet, run loadComposeFile() first"
     );
     const service = this.composeYaml.services[serviceName];
     invariant(service, `Service ${serviceName} not found in compose file`);
@@ -334,9 +421,10 @@ export class NetworkLauncher {
           this.config.capacity || ShConsts.CAPACITY_512,
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           [multiAddressMsp],
-          1,
+          // The MSP will charge 100 UNITS per GigaUnit of data per block.
+          100 * 1024 * 1024,
           "Terms of Service...",
-          500,
+          9999999,
           who
         )
       )
@@ -395,7 +483,11 @@ export class NetworkLauncher {
     const source = "res/whatsup.jpg";
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
-    const fileMetadata = await api.file.newStorageRequest(source, destination, bucketName);
+    const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
+      source,
+      destination,
+      bucketName
+    );
 
     if (this.type === "bspnet") {
       await api.wait.bspVolunteer();
@@ -405,7 +497,8 @@ export class NetworkLauncher {
     if (this.type === "fullnet") {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
-      await api.wait.mspResponse();
+      await api.wait.mspResponseInTxPool();
+      await api.sealBlock();
       await api.wait.bspStored();
     }
 
@@ -451,7 +544,13 @@ export class NetworkLauncher {
     // Wait for a few seconds for all BSPs to be synced
     await sleep(5000);
 
-    const fileMetadata = await api.file.newStorageRequest(source, location, bucketName);
+    const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
+      source,
+      location,
+      bucketName,
+      null,
+      null
+    );
     await api.wait.bspVolunteer(4);
     await api.wait.bspStored(4);
 
@@ -483,11 +582,10 @@ export class NetworkLauncher {
     | { bspTwoRpcPort: number; bspThreeRpcPort: number; fileMetadata: FileMetadata }
     | undefined
   > {
-    console.log(
-      `\n\nLaunching network config ${config.noisy ? "with" : "without"} noise and ${config.rocksdb ? "with" : "without"} RocksDB for ${type} network`
-    );
+    console.log("\n=== Launching network config ===");
+    console.table({ config });
     const launchedNetwork = await new NetworkLauncher(type, config)
-      .selectComposeFile()
+      .loadComposeFile()
       .populateEntities()
       .startNetwork();
 
@@ -564,7 +662,8 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.type === "bspnet") {
-      await launchedNetwork.setupMsp(userApi, mspKey.address, multiAddressBsp);
+      const mockMspMultiAddress = `/ip4/${bspIp}/tcp/30350/p2p/${ShConsts.DUMMY_MSP_PEER_ID}`;
+      await launchedNetwork.setupMsp(userApi, mspKey.address, mockMspMultiAddress);
     }
 
     if (launchedNetwork.config.initialised === "multi") {
@@ -620,6 +719,12 @@ export type NetLaunchConfig = {
    * Measured in bytes.
    */
   bspStartingWeight?: bigint;
+
+  /**
+   * Optional parameter to set whether to enable indexer service on the user node.
+   * This will also launch the environment with an attached postgres db
+   */
+  indexer?: boolean;
 
   /**
    * Optional parameter to define what toxics to apply to the network.

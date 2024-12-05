@@ -19,7 +19,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
-  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
   PalletNftsCollectionConfig,
@@ -420,13 +420,6 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
-       * Add yourself as a data server for providing the files of the bucket requested to be moved.
-       **/
-      bspAddDataServerForMoveBucketRequest: AugmentedSubmittable<
-        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
-      >;
-      /**
        * Executed by a BSP to confirm to stop storing a file.
        *
        * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
@@ -516,12 +509,12 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       createBucket: AugmentedSubmittable<
         (
-          mspId: H256 | string | Uint8Array,
+          mspId: Option<H256> | null | Uint8Array | H256 | string,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
-          valuePropId: H256 | string | Uint8Array
+          valuePropId: Option<H256> | null | Uint8Array | H256 | string
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool, H256]
+        [Option<H256>, Bytes, bool, Option<H256>]
       >;
       /**
        * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
@@ -562,10 +555,10 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          mspId: H256 | string | Uint8Array,
+          mspId: Option<H256> | null | Uint8Array | H256 | string,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, H256, Vec<Bytes>]
+        [H256, Bytes, H256, u64, Option<H256>, Vec<Bytes>]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
@@ -592,19 +585,20 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       mspRespondStorageRequestsMultipleBuckets: AugmentedSubmittable<
         (
-          fileKeyResponsesInput:
-            | Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>
-            | [
-                H256 | string | Uint8Array,
-                (
-                  | PalletFileSystemMspStorageRequestResponse
-                  | { accept?: any; reject?: any }
-                  | string
-                  | Uint8Array
-                )
-              ][]
+          storageRequestMspResponse:
+            | Vec<PalletFileSystemStorageRequestMspBucketResponse>
+            | (
+                | PalletFileSystemStorageRequestMspBucketResponse
+                | { bucketId?: any; accept?: any; reject?: any }
+                | string
+                | Uint8Array
+              )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Vec<ITuple<[H256, PalletFileSystemMspStorageRequestResponse]>>]
+        [Vec<PalletFileSystemStorageRequestMspBucketResponse>]
+      >;
+      mspStopStoringBucket: AugmentedSubmittable<
+        (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
@@ -1990,7 +1984,7 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       /**
        * Dispatchable extrinsic that allows a user flagged as without funds long ago enough to clear this flag from its account,
-       * allowing it to begin contracting and paying for services again. If there's any outstanding debt, it will be charged and cleared.
+       * allowing it to begin contracting and paying for services again. It should have previously paid all its outstanding debt.
        *
        * The dispatch origin for this call must be Signed.
        * The origin must be the User that has been flagged as without funds.
@@ -1999,18 +1993,10 @@ declare module "@polkadot/api-base/types/submittable" {
        * 1. Check that the extrinsic was signed and get the signer.
        * 2. Check that the user has been flagged as without funds.
        * 3. Check that the cooldown period has passed since the user was flagged as without funds.
-       * 4. Check if there's any outstanding debt and charge it. This is done by:
-       * a. Releasing any remaining funds held as a deposit for each payment stream.
-       * b. Getting all payment streams of the user and charging them, paying the Providers for the services.
-       * c. Returning the User any remaining funds.
-       * d. Deleting all payment streams of the user.
+       * 4. Check that there's no remaining outstanding debt.
        * 5. Unflag the user as without funds.
        *
        * Emits a 'UserSolvent' event when successful.
-       *
-       * Notes: this extrinsic iterates over all remaining payment streams of the user and charges them, so it can be expensive in terms of weight.
-       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
-       * finds more convenient to wait for Providers to get its deposits one by one instead.
        **/
       clearInsolventFlag: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
@@ -2118,8 +2104,8 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256, AccountId32]
       >;
       /**
-       * Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
-       * its deposits.
+       * Dispatchable extrinsic that allows a user flagged as without funds to pay the Providers that still have payment streams
+       * with it, in order to recover as much of its deposits as possible.
        *
        * The dispatch origin for this call must be Signed.
        * The origin must be the User that has been flagged as without funds.
@@ -2127,17 +2113,23 @@ declare module "@polkadot/api-base/types/submittable" {
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed and get the signer.
        * 2. Check that the user has been flagged as without funds.
-       * 3. Release the user's funds that were held as a deposit for each payment stream.
-       * 4. Get all payment streams of the user and charge them, paying the Providers for the services.
-       * 5. Delete all payment streams of the user.
+       * 3. Release the user's funds that were held as a deposit for each payment stream to be paid.
+       * 4. Get the payment streams that the user has with the provided list of Providers, and pay them for the services.
+       * 5. Delete the charged payment streams of the user.
        *
-       * Emits a 'UserPaidDebts' event when successful.
+       * Emits a 'UserPaidSomeDebts' event when successful if the user has remaining debts. If the user has successfully paid all its debts,
+       * it emits a 'UserPaidAllDebts' event.
        *
-       * Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
-       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
-       * finds more convenient to wait for Providers to get its deposits one by one instead.
+       * Notes: this extrinsic iterates over the provided list of Providers, getting the payment streams they have with the user and charging
+       * them, so the execution could get expensive. It's recommended to provide a list of Providers that the user actually has payment streams with,
+       * which can be obtained by calling the `get_providers_with_payment_streams_with_user` runtime API.
+       * There was an idea to limit the amount of Providers that can be received by this extrinsic using a constant in the configuration of this pallet,
+       * but the correct benchmarking of this extrinsic should be enough to avoid any potential abuse.
        **/
-      payOutstandingDebt: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      payOutstandingDebt: AugmentedSubmittable<
+        (providers: Vec<H256> | (H256 | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>,
+        [Vec<H256>]
+      >;
       /**
        * Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
        *
@@ -2843,7 +2835,7 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       addValueProp: AugmentedSubmittable<
         (
-          pricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          pricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
           commitment: Bytes | string | Uint8Array,
           bucketDataLimit: u64 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
@@ -3005,7 +2997,7 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
           commitment: Bytes | string | Uint8Array,
           valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
@@ -3125,7 +3117,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           capacity: u64 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          valuePropPricePerUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
+          valuePropPricePerGigaUnitOfDataPerBlock: u128 | AnyNumber | Uint8Array,
           commitment: Bytes | string | Uint8Array,
           valuePropMaxDataLimit: u64 | AnyNumber | Uint8Array,
           paymentAccount: AccountId32 | string | Uint8Array
@@ -3137,11 +3129,21 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
        * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
+       *
+       * This is a free operation.
        **/
       slash: AugmentedSubmittable<
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
+      /**
+       * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
+       *
+       * The dispatch origin for this call must be signed.
+       *
+       * This is a free transaction if the user successfully tops up their deposit.
+       **/
+      topUpDeposit: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
        * Generic tx
        **/

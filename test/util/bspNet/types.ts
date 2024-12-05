@@ -8,6 +8,10 @@ import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { SealedBlock } from "./block";
 import type { BspNetTestApi } from "./test-api";
 import type { NetworkLauncher } from "../netLaunch";
+import type postgres from "postgres";
+
+// biome-ignore lint/complexity/noBannedTypes: Good enough untill we integrate ORM
+export type SqlClient = postgres.Sql<{}>;
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -28,21 +32,6 @@ export interface BspNetApi extends ApiPromise {
   ): Promise<SealedBlock>;
 
   /**
-   * @description Advances the block number to the given block number.
-   *
-   * @param blockNumber - The block number to advance to.
-   * @param waitBetweenBlocks - Whether to wait between blocks. Defaults to false. Can also be set to a number to wait that many milliseconds between blocks.
-   * @returns A promise that resolves when the block number is advanced.
-   */
-  advanceToBlock: (
-    blockNumber: number,
-    options?: {
-      waitBetweenBlocks?: number | boolean;
-      waitForBspProofs?: string[];
-    }
-  ) => Promise<SealedBlock>;
-
-  /**
    * @description Creates a new bucket and submits a new storage request.
    *
    * @param source - The local path to the file to be uploaded.
@@ -50,7 +39,7 @@ export interface BspNetApi extends ApiPromise {
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to file metadata.
    */
-  sendNewStorageRequest(
+  createBucketAndSendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string,
@@ -173,6 +162,11 @@ export type BspNetConfig = {
    * Only applies when `noisy` is set to true.
    */
   toxics?: ToxicInfo[];
+
+  /**
+   * If true, runs launched userNode has attached indexer service enabled.
+   */
+  indexer?: boolean;
 };
 
 /**
@@ -268,6 +262,12 @@ export type FullNetContext = {
   ) => ReturnType<typeof BspNetTestApi.create>;
 
   /**
+   * Creates and returns a sql client connected to the local postgres database.
+   * @returns A sql client instance for interacting with the indexer db.
+   */
+  createSqlClient: () => SqlClient;
+
+  /**
    * The current configuration of the BSP network for this test run.
    */
   bspNetConfig: BspNetConfig;
@@ -344,6 +344,8 @@ export type TestOptions = {
   toxics?: ToxicInfo[];
   /** Set a custom timeout interval for submit extrinsic retries */
   extrinsicRetryTimeout?: number;
+  /** If true, runs launched userNode has attached indexer service enabled. */
+  indexer?: boolean;
 };
 
 /**

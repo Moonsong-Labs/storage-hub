@@ -27,14 +27,16 @@ import type {
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   PalletFileSystemEitherAccountIdOrMspId,
-  PalletFileSystemMspRespondStorageRequestsResult,
+  PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
@@ -409,8 +411,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspConfirmedStoring: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bspId: H256, fileKeys: Vec<H256>, newRoot: H256],
-        { who: AccountId32; bspId: H256; fileKeys: Vec<H256>; newRoot: H256 }
+        [
+          who: AccountId32,
+          bspId: H256,
+          confirmedFileKeys: Vec<H256>,
+          skippedFileKeys: Vec<H256>,
+          newRoot: H256
+        ],
+        {
+          who: AccountId32;
+          bspId: H256;
+          confirmedFileKeys: Vec<H256>;
+          skippedFileKeys: Vec<H256>;
+          newRoot: H256;
+        }
       >;
       /**
        * Notifies that a BSP has stopped storing a file.
@@ -420,9 +434,6 @@ declare module "@polkadot/api-base/types/events" {
         [bspId: H256, fileKey: H256, newRoot: H256],
         { bspId: H256; fileKey: H256; newRoot: H256 }
       >;
-      /**
-       * Notifies that a BSP has opened a request to stop storing a file.
-       **/
       BspRequestedToStopStoring: AugmentedEvent<
         ApiType,
         [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes],
@@ -445,12 +456,24 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; bucketId: H256; collectionId: Option<u32>; private: bool }
       >;
       /**
-       * Notifies that a data server has been registered for a move bucket request.
+       * Failed to decrease bucket size for expired file deletion request
        **/
-      DataServerRegisteredForMoveBucket: AugmentedEvent<
+      FailedToDecreaseBucketSize: AugmentedEvent<
         ApiType,
-        [bspId: H256, bucketId: H256],
-        { bspId: H256; bucketId: H256 }
+        [
+          user: AccountId32,
+          bucketId: H256,
+          fileKey: H256,
+          fileSize: u64,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          user: AccountId32;
+          bucketId: H256;
+          fileKey: H256;
+          fileSize: u64;
+          error: SpRuntimeDispatchError;
+        }
       >;
       /**
        * Notifies that a priority challenge failed to be queued for pending file deletion.
@@ -465,8 +488,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       FileDeletionRequest: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256, bucketId: H256, mspId: H256, proofOfInclusion: bool],
-        { user: AccountId32; fileKey: H256; bucketId: H256; mspId: H256; proofOfInclusion: bool }
+        [
+          user: AccountId32,
+          fileKey: H256,
+          bucketId: H256,
+          mspId: Option<H256>,
+          proofOfInclusion: bool
+        ],
+        {
+          user: AccountId32;
+          fileKey: H256;
+          bucketId: H256;
+          mspId: Option<H256>;
+          proofOfInclusion: bool;
+        }
       >;
       /**
        * Notifies that a bucket has been moved to a new MSP.
@@ -501,12 +536,24 @@ declare module "@polkadot/api-base/types/events" {
         { mspId: H256; bucketId: H256 }
       >;
       /**
-       * Notifies that a MSP has responded to storage request(s).
+       * Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
+       *
+       * This event is emitted when an MSP agrees to store a file, but the storage request
+       * is not yet fully fulfilled (i.e., the required number of Backup Storage Providers
+       * have not yet confirmed storage).
+       *
+       * # Note
+       * This event is not emitted when the storage request is immediately fulfilled upon
+       * MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
        **/
-      MspRespondedToStorageRequests: AugmentedEvent<
+      MspAcceptedStorageRequest: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
+      /**
+       * Notifies that a MSP has stopped storing a bucket.
+       **/
+      MspStoppedStoringBucket: AugmentedEvent<
         ApiType,
-        [results: PalletFileSystemMspRespondStorageRequestsResult],
-        { results: PalletFileSystemMspRespondStorageRequestsResult }
+        [mspId: H256, owner: AccountId32, bucketId: H256],
+        { mspId: H256; owner: AccountId32; bucketId: H256 }
       >;
       /**
        * Notifies that a new bucket has been created.
@@ -515,21 +562,23 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
-          mspId: H256,
+          mspId: Option<H256>,
           bucketId: H256,
           name: Bytes,
+          root: H256,
           collectionId: Option<u32>,
           private: bool,
-          valuePropId: H256
+          valuePropId: Option<H256>
         ],
         {
           who: AccountId32;
-          mspId: H256;
+          mspId: Option<H256>;
           bucketId: H256;
           name: Bytes;
+          root: H256;
           collectionId: Option<u32>;
           private: bool;
-          valuePropId: H256;
+          valuePropId: Option<H256>;
         }
       >;
       /**
@@ -589,15 +638,33 @@ declare module "@polkadot/api-base/types/events" {
         { spId: H256; fileKey: H256; owner: AccountId32; location: Bytes; newRoot: H256 }
       >;
       /**
-       * Notifies the expiration of a storage request.
+       * Notifies the expiration of a storage request. This means that the storage request has
+       * been accepted by the MSP but the BSP target has not been reached (possibly 0 BSPs).
+       * Note: This is a valid storage outcome, the user being responsible to track the number
+       * of BSPs and choose to either delete the file and re-issue a storage request or continue.
        **/
       StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Notifies that a storage request for a file key has been fulfilled.
+       * This means that the storage request has been accepted by the MSP and the BSP target
+       * has been reached.
        **/
       StorageRequestFulfilled: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
+       * Notifies that a storage request has either been directly rejected by the MSP or
+       * the MSP did not respond to the storage request in time.
+       * Note: There might be BSPs that have volunteered and confirmed the file already, for
+       * which a priority challenge to delete the file will be issued.
+       **/
+      StorageRequestRejected: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, reason: PalletFileSystemRejectedStorageRequestReason],
+        { fileKey: H256; reason: PalletFileSystemRejectedStorageRequestReason }
+      >;
+      /**
        * Notifies that a storage request has been revoked by the user who initiated it.
+       * Note: the BSPs who confirmed the file are also issued a priority challenge to delete the
+       * file.
        **/
       StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
@@ -1178,6 +1245,14 @@ declare module "@polkadot/api-base/types/events" {
         { userAccount: AccountId32; providerId: H256; newRate: u128 }
       >;
       /**
+       * Event emitted when the `on_poll` hook detects that the tick of the proof submitters that needs to process is not the one immediately after the last processed tick.
+       **/
+      InconsistentTickProcessing: AugmentedEvent<
+        ApiType,
+        [lastProcessedTick: u32, tickToProcess: u32],
+        { lastProcessedTick: u32; tickToProcess: u32 }
+      >;
+      /**
        * Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
        * the tick number of the last chargeable tick and the price index at that tick.
        **/
@@ -1210,7 +1285,11 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
        **/
-      UserPaidDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      UserPaidAllDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      /**
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid some (but not all) of its outstanding debt.
+       **/
+      UserPaidSomeDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
        * Event emitted when multiple payment streams have been charged from a Provider. Provides information about
        * the charged users, the Provider that received the funds and the tick when the charge happened.
@@ -1518,16 +1597,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [
-          provider: H256,
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
-          newRoot: H256
-        ],
-        {
-          provider: H256;
-          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
-          newRoot: H256;
-        }
+        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
+        { provider: H256; mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; newRoot: H256 }
       >;
       /**
        * A manual challenge was submitted.
@@ -1604,6 +1675,15 @@ declare module "@polkadot/api-base/types/events" {
     };
     providers: {
       /**
+       * Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
+       * signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+       **/
+      AwaitingTopUp: AugmentedEvent<
+        ApiType,
+        [providerId: H256, topUpMetadata: PalletStorageProvidersTopUpMetadata],
+        { providerId: H256; topUpMetadata: PalletStorageProvidersTopUpMetadata }
+      >;
+      /**
        * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
        * that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
        **/
@@ -1623,12 +1703,21 @@ declare module "@polkadot/api-base/types/events" {
       >;
       /**
        * Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
-       * that BSP's account id, the total data it can store according to its stake, and its multiaddress.
+       * that BSP's account id, the initial root of the Merkle Patricia Trie that it stores, the total data it can store
+       * according to its stake, and its multiaddress.
        **/
       BspSignUpSuccess: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bspId: H256, multiaddresses: Vec<Bytes>, capacity: u64],
-        { who: AccountId32; bspId: H256; multiaddresses: Vec<Bytes>; capacity: u64 }
+        [who: AccountId32, bspId: H256, root: H256, multiaddresses: Vec<Bytes>, capacity: u64],
+        { who: AccountId32; bspId: H256; root: H256; multiaddresses: Vec<Bytes>; capacity: u64 }
+      >;
+      /**
+       * Event emitted when a bucket's root has been changed.
+       **/
+      BucketRootChanged: AugmentedEvent<
+        ApiType,
+        [bucketId: H256, oldRoot: H256, newRoot: H256],
+        { bucketId: H256; oldRoot: H256; newRoot: H256 }
       >;
       /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about
@@ -1712,12 +1801,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SignUpRequestCanceled: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
-       * Event emitted when an SP has been slashed.
+       * Event emitted when a SP has been slashed.
        **/
       Slashed: AugmentedEvent<
         ApiType,
-        [providerId: H256, amountSlashed: u128],
-        { providerId: H256; amountSlashed: u128 }
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
+      >;
+      /**
+       * Event emitted when an SP has topped up its deposit based on slash amount.
+       **/
+      TopUpFulfilled: AugmentedEvent<
+        ApiType,
+        [providerId: H256, amount: u128],
+        { providerId: H256; amount: u128 }
       >;
       /**
        * Event emitted when an MSP adds a new value proposition.

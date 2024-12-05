@@ -1,11 +1,13 @@
 use crate::*;
 use codec::Encode;
 use frame_support::{
-    dispatch::{DispatchResultWithPostInfo, Pays},
     ensure,
     pallet_prelude::DispatchResult,
     sp_runtime::{
-        traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
+        traits::{
+            BlockNumberProvider, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating,
+            Zero,
+        },
         ArithmeticError, BoundedVec, DispatchError,
     },
     traits::{
@@ -20,16 +22,20 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
+use shp_constants::GIGAUNIT;
 use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
 };
+use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
+use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderId, SignUpRequestSpParams, StorageProviderId, ValuePropId,
+    Multiaddresses, ProviderIdFor, RateDeltaParam, RelayBlockGetter, SignUpRequestSpParams,
+    StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropIdFor,
     ValueProposition, ValuePropositionWithId,
 };
 
@@ -72,8 +78,6 @@ where
     pub fn do_request_msp_sign_up(
         sign_up_request: MainStorageProviderSignUpRequest<T>,
     ) -> DispatchResult {
-        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
-
         let who = sign_up_request.msp_info.owner_account.clone();
 
         // Check that the user does not have a pending sign up request
@@ -112,17 +116,7 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = sign_up_request
-            .msp_info
-            .capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let deposit = Self::compute_deposit_needed_for_capacity(sign_up_request.msp_info.capacity)?;
 
         // Check if the user has enough balance to pay the deposit
         let user_balance =
@@ -153,8 +147,6 @@ where
     /// This function holds the logic that checks if a user can request to sign up as a Backup Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
     pub fn do_request_bsp_sign_up(bsp_info: &BackupStorageProvider<T>) -> DispatchResult {
-        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
-
         let who = &bsp_info.owner_account;
 
         // Check that the user does not have a pending sign up request
@@ -193,16 +185,7 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = bsp_info
-            .capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let deposit = Self::compute_deposit_needed_for_capacity(bsp_info.capacity)?;
 
         // Check if the user has enough balance to pay the deposit
         let user_balance =
@@ -308,7 +291,9 @@ where
 
         let (_, value_prop) = Self::do_add_value_prop(
             who,
-            sign_up_request.value_prop.price_per_unit_of_data_per_block,
+            sign_up_request
+                .value_prop
+                .price_per_giga_unit_of_data_per_block,
             sign_up_request.value_prop.commitment,
             sign_up_request.value_prop.bucket_data_limit,
         )?;
@@ -333,7 +318,7 @@ where
             who: who.clone(),
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
-            capacity: sign_up_request.msp_info.capacity.clone(),
+            capacity: sign_up_request.msp_info.capacity,
             value_prop: ValuePropositionWithId {
                 id: value_prop_id,
                 value_prop: value_prop.clone(),
@@ -395,6 +380,7 @@ where
         Self::deposit_event(Event::<T>::BspSignUpSuccess {
             who: who.clone(),
             bsp_id,
+            root: bsp_info.root,
             multiaddresses: bsp_info.multiaddresses.clone(),
             capacity: bsp_info.capacity,
         });
@@ -587,15 +573,7 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = new_capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let new_deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let new_deposit = Self::compute_deposit_needed_for_capacity(new_capacity)?;
 
         // Check how much has the MSP already deposited for the current capacity
         let current_deposit = T::NativeBalance::balance_on_hold(
@@ -662,16 +640,7 @@ where
             Error::<T>::NewCapacityLessThanUsedStorage
         );
 
-        // Calculate how much deposit will the signer have to pay to register with this amount of data
-        let capacity_over_minimum = new_capacity
-            .checked_sub(&T::SpMinCapacity::get())
-            .ok_or(Error::<T>::StorageTooLow)?;
-        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        let new_deposit = T::SpMinDeposit::get()
-            .checked_add(&deposit_for_capacity_over_minimum)
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let new_deposit = Self::compute_deposit_needed_for_capacity(new_capacity)?;
 
         // Check how much has the used already deposited for the current capacity
         let current_deposit = T::NativeBalance::balance_on_hold(
@@ -736,7 +705,7 @@ where
     pub fn do_add_multiaddress(
         who: &T::AccountId,
         new_multiaddress: &MultiAddress<T>,
-    ) -> Result<HashId<T>, DispatchError> {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             // If the provider is a MSP, add the new multiaddress to the MSP's storage,
@@ -778,7 +747,7 @@ where
     pub fn do_remove_multiaddress(
         who: &T::AccountId,
         multiaddress: &MultiAddress<T>,
-    ) -> Result<HashId<T>, DispatchError> {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             // If the provider is a MSP, remove the multiaddress from the MSP's storage.
@@ -829,58 +798,217 @@ where
         Ok(provider_id)
     }
 
-    /// Slash a Storage Provider.
+    /// Slash a storage provider based on accrued failed proof submissions.
     ///
-    /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
-    /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
+    /// Calculates the slashable amount and slashes the provider's held deposit, consequentially reducing the provider's capacity.
+    /// If the provider's capacity drops below their used capacity after slashing, we will hold the required amount needed to cover the used capacity deficit
+    /// if they have enough free balance. If they don't have enough free balance, we will initiate a grace period for manual top-up.
     ///
-    /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
-    /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
+    /// # Events
     ///
-    /// Successfully slashing a Storage Provider should be a free operation.
-    pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
-        let account_id = if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
-            provider.owner_account
-        } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
-            provider.owner_account
-        } else {
-            return Err(Error::<T>::ProviderNotSlashable.into());
-        };
+    /// - `Slashed`: Emitted when the provider is slashed, indicating the amount slashed.
+    /// - `TopUpFulfilled`: Emitted when the provider's held deposit is topped up to match the used capacity, indicating the amount topped up.
+    /// - `AwaitingTopUp`: Emitted if there is a capacity deficit (i.e. the provider's capacity is falls below the used capacity) and therefore are required to top up their held deposit.
+    /// This can be done manually by executing the `top_up_deposit` extrinsic.
+    pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResult {
+        let (account_id, _capacity, used_capacity) = Self::get_provider_details(*provider_id)?;
 
-        // Calculate slashable amount.
-        // Doubling the slash for each failed proof submission is necessary since it is more probabilistic for a Storage Provider to have
-        // responded with two file key proofs given a random or custom challenge.
+        // Calculate slashable amount for the current number of accrued failed proof submissions
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
 
-        let amount_slashed = T::NativeBalance::transfer_on_hold(
+        // Clear the accrued failed proof submissions for the Storage Provider
+        <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+
+        // Slash the held deposit since there's not enough free balance
+        let actual_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
             &T::Treasury::get(),
             slashable_amount,
             Precision::BestEffort,
             Restriction::Free,
-            Fortitude::Polite,
+            Fortitude::Force,
         )?;
 
-        // Clear the accrued failed proof submissions for the Storage Provider
-        <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+        // Calculate the new capacity after slashing the held deposit
+        let new_decreased_capacity = Self::compute_capacity_from_held_deposit(actual_slashed)?;
 
-        // Provider held funds have been completely depleted.
-        if amount_slashed <= slashable_amount {
-            // TODO: Force sign off the provider.
-        }
+        // Decrease capacity by the amount slashed from the held deposit
+        let mut final_capacity = new_decreased_capacity;
 
+        // Slash amount could be 0, but this is still emitted as a signal for the provider and users to be aware
         Self::deposit_event(Event::<T>::Slashed {
             provider_id: *provider_id,
-            amount_slashed,
+            amount: actual_slashed,
         });
 
-        Ok(Pays::No.into())
+        // Capacity needed for the provider to remain active
+        let needed_capacity = used_capacity.max(T::SpMinCapacity::get());
+
+        // Held deposit needed for required capacity
+        let required_held_amt = Self::compute_deposit_needed_for_capacity(needed_capacity)?;
+
+        // Needed balance to be held to increase capacity back to `needed_capacity`
+        let held_deposit_difference =
+            required_held_amt.saturating_sub(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+            ));
+
+        // Short circuit there is nothing left to do if the provider's held deposit covers the `needed_capacity`
+        if held_deposit_difference == BalanceOf::<T>::zero() {
+            return Ok(());
+        }
+
+        // At this point, we know the provider is running with a capacity deficit
+        // Try to hold the required amount from provider's free balance
+        if T::NativeBalance::can_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &account_id,
+            held_deposit_difference,
+        ) {
+            // Hold the required amount
+            T::NativeBalance::hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+                held_deposit_difference,
+            )?;
+
+            // Increase capacity up to the used capacity
+            final_capacity = needed_capacity;
+
+            if AwaitingTopUpFromProviders::<T>::contains_key(provider_id) {
+                // Clear provider tracked storage
+                let top_up_metadata = expect_or_err!(
+                    AwaitingTopUpFromProviders::<T>::take(provider_id),
+                    "Top up metadata should exist when there is a capacity deficit",
+                    Error::<T>::TopUpNotRequired
+                );
+
+                GracePeriodToSlashedProviders::<T>::remove(
+                    top_up_metadata.end_block_grace_period,
+                    provider_id,
+                );
+            }
+
+            Self::deposit_event(Event::<T>::TopUpFulfilled {
+                provider_id: *provider_id,
+                amount: held_deposit_difference,
+            });
+        } else {
+            // Cannot hold enough balance, start tracking grace period and awaited top up
+            let end_block_grace_period = RelayBlockGetter::<T>::current_block_number()
+                .saturating_add(T::TopUpGracePeriod::get());
+
+            GracePeriodToSlashedProviders::<T>::insert(end_block_grace_period, provider_id, ());
+
+            let top_up_metadata = TopUpMetadata {
+                end_block_grace_period,
+            };
+
+            AwaitingTopUpFromProviders::<T>::insert(provider_id, top_up_metadata.clone());
+
+            // Signal to the provider that they need to top up their held deposit to match the current used capacity
+            Self::deposit_event(Event::<T>::AwaitingTopUp {
+                provider_id: *provider_id,
+                top_up_metadata,
+            });
+        }
+
+        // Update the provider's capacity
+        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
+            provider.capacity = final_capacity;
+            MainStorageProviders::<T>::set(provider_id, Some(provider));
+        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
+            provider.capacity = final_capacity;
+            BackupStorageProviders::<T>::set(provider_id, Some(provider));
+        }
+
+        Ok(())
+    }
+
+    /// Allows a storage provider to manually top up their held deposit to restore capacity up to their currently used capacity.
+    ///
+    /// The provider must be within a grace period due to insufficient capacity.
+    /// Holds the required amount from the provider's free balance to match their used capacity.
+    ///
+    /// This will error out if the provider is not registered or lacks sufficient balance.
+    pub(crate) fn do_top_up_deposit(account_id: &T::AccountId) -> DispatchResult {
+        let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
+            .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
+            .ok_or(Error::<T>::NotRegistered)?;
+
+        let (account_id, _capacity, used_capacity) = Self::get_provider_details(provider_id)?;
+
+        // Capacity needed for the provider to remain active
+        let needed_capacity = used_capacity.max(T::SpMinCapacity::get());
+
+        // Additional balance needed to be held to match the used capacity
+        let required_held_amt = Self::compute_deposit_needed_for_capacity(needed_capacity)?;
+
+        // Needed balance to be held to increase capacity back to `needed_capacity`
+        let held_deposit_difference =
+            required_held_amt.saturating_sub(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+            ));
+
+        // Early return if the provider's held deposit covers the `needed_capacity`
+        if held_deposit_difference == BalanceOf::<T>::zero() {
+            return Ok(());
+        }
+
+        // Check if the provider has enough free balance to top up the slashed amount
+        ensure!(
+            T::NativeBalance::can_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &account_id,
+                held_deposit_difference,
+            ),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the slashable amount from the free balance
+        T::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &account_id,
+            held_deposit_difference,
+        )?;
+
+        // Update the provider's capacity in storage
+        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
+            provider.capacity = needed_capacity;
+            MainStorageProviders::<T>::set(provider_id, Some(provider));
+        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
+            provider.capacity = needed_capacity;
+            BackupStorageProviders::<T>::set(provider_id, Some(provider));
+        }
+
+        let top_up_metadata = expect_or_err!(
+            AwaitingTopUpFromProviders::<T>::get(provider_id),
+            "Top up metadata should exist when there is a capacity deficit",
+            Error::<T>::TopUpNotRequired
+        );
+
+        // Clear provider tracked storage
+        GracePeriodToSlashedProviders::<T>::remove(
+            top_up_metadata.end_block_grace_period,
+            provider_id,
+        );
+        AwaitingTopUpFromProviders::<T>::remove(provider_id);
+
+        // Signal that the slashed amount has been topped up
+        Self::deposit_event(Event::<T>::TopUpFulfilled {
+            provider_id,
+            amount: held_deposit_difference,
+        });
+
+        Ok(())
     }
 
     pub(crate) fn do_add_value_prop(
         who: &T::AccountId,
-        price_per_unit_of_data_per_block: BalanceOf<T>,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
         commitment: Commitment<T>,
         bucket_data_limit: StorageDataUnit<T>,
     ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
@@ -888,7 +1016,7 @@ where
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
         let value_prop = ValueProposition::<T>::new(
-            price_per_unit_of_data_per_block,
+            price_per_giga_unit_of_data_per_block,
             commitment,
             bucket_data_limit,
         );
@@ -905,7 +1033,7 @@ where
 
     pub(crate) fn do_make_value_prop_unavailable(
         who: &T::AccountId,
-        value_prop_id: ValuePropId<T>,
+        value_prop_id: ValuePropIdFor<T>,
     ) -> Result<MainStorageProviderId<T>, DispatchError> {
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
@@ -992,9 +1120,11 @@ where
     /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
     /// submit a proof of storage for the neighbouring file keys of the missing challenged file key.
     ///
-    /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
+    /// The slashing amount is calculated as the product of the [`SlashAmountPerMaxFileSize`](Config::SlashAmountPerMaxFileSize)
+    /// (an assumption that most file sizes fall below this large arbitrary size) and the accrued failed proof submissions multiplied
+    /// by `2` to account for the worst case scenario where the provider would have proved two file keys surrounding the challenged file key.
     pub fn compute_worst_case_scenario_slashable_amount(
-        provider_id: &HashId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         let accrued_failed_submission_count = <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id)
             .ok_or(Error::<T>::ProviderNotSlashable)?.into();
@@ -1002,6 +1132,264 @@ where
         Ok(T::SlashAmountPerMaxFileSize::get()
             .saturating_mul(accrued_failed_submission_count)
             .saturating_mul(2u32.into()))
+    }
+
+    /// Adjust the fixed rate payment stream between a user and an MSP based on the [`RateDeltaParam`].
+    ///
+    /// Handles creating, updating, or deleting the fixed rate payment stream storage.
+    fn apply_delta_fixed_rate_payment_stream(
+        msp_id: &MainStorageProviderId<T>,
+        bucket_id: &BucketId<T>,
+        user_id: &T::AccountId,
+        delta: RateDeltaParam<T>,
+    ) -> Result<(), DispatchError> {
+        let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+            &msp_id,
+            &user_id,
+        )
+        .unwrap_or_default();
+
+        let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        ensure!(
+            bucket.value_prop_id.is_some(),
+            Error::<T>::BucketHasNoValueProposition
+        );
+
+        let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+            &msp_id,
+            &bucket.value_prop_id.unwrap(),
+        )
+        .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+        let zero_sized_bucket_rate = T::ZeroSizeBucketFixedRate::get();
+
+        match delta {
+            RateDeltaParam::NewBucket => {
+                // Get the rate of the new bucket to add.
+                // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
+                // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
+                // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
+                // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
+                let bucket_rate = if bucket.size.is_zero() {
+                    zero_sized_bucket_rate
+                } else {
+                    value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?
+                };
+
+                let new_rate = current_rate
+                    .checked_add(&bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                    &msp_id, &user_id,
+                ) {
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                    &msp_id,
+                    &user_id,
+                    new_rate,
+                )?;
+                } else {
+                    <T::PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &msp_id,
+                        &user_id,
+                        new_rate,
+                    )?;
+                }
+            }
+            RateDeltaParam::RemoveBucket => {
+                // Get the current rate of the bucket to remove.
+                // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
+                // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
+                // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
+                // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
+                let bucket_rate = if bucket.size.is_zero() {
+                    zero_sized_bucket_rate
+                } else {
+                    value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?
+                };
+
+                let new_rate = current_rate.saturating_sub(bucket_rate);
+
+                if new_rate.is_zero() {
+                    <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                    &msp_id,
+                    &user_id,
+                )?;
+                } else {
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                        &msp_id,
+                        &user_id,
+                        new_rate,
+                    )?;
+                }
+            }
+            RateDeltaParam::Increase(delta) => {
+                // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
+                let bucket_rate = value_prop
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_add(&zero_sized_bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Calculate the new bucket's size.
+                let new_bucket_size = bucket
+                    .size
+                    .checked_add(&delta)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Ensure the new bucket size does not exceed the bucket data limit of associated value proposition
+                ensure!(
+                    new_bucket_size <= value_prop.bucket_data_limit,
+                    Error::<T>::BucketSizeExceedsLimit
+                );
+
+                // Calculate what would be the new bucket rate with the new size.
+                let new_bucket_rate = value_prop
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_add(&zero_sized_bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Get the delta rate, which is the difference between the old and new rates for this bucket.
+                let delta_rate = new_bucket_rate
+                    .checked_sub(&bucket_rate)
+                    .ok_or(ArithmeticError::Underflow)?;
+
+                // If the rate has changed, update the payment stream.
+                if !delta_rate.is_zero() {
+                    // Since this is an increase, add the delta rate to the current rate.
+                    let new_rate = current_rate
+                        .checked_add(&delta_rate)
+                        .ok_or(ArithmeticError::Overflow)?;
+
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                    &msp_id, &user_id, new_rate,
+                	)?;
+                }
+            }
+            RateDeltaParam::Decrease(delta) => {
+                // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
+                let bucket_rate = value_prop
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_add(&zero_sized_bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Calculate the new bucket's size.
+                let new_bucket_size = bucket
+                    .size
+                    .checked_sub(&delta)
+                    .ok_or(ArithmeticError::Underflow)?;
+
+                // Calculate what would be the new bucket rate with the new size.
+                let new_bucket_rate = value_prop
+                    .price_per_giga_unit_of_data_per_block
+                    .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
+                    .ok_or(ArithmeticError::Overflow)?
+                    .checked_add(&zero_sized_bucket_rate)
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // Get the delta rate, which is the difference between the old and new rates for this bucket.
+                let delta_rate = bucket_rate
+                    .checked_sub(&new_bucket_rate)
+                    .ok_or(ArithmeticError::Underflow)?;
+
+                // If the rate has changed, update the payment stream.
+                if !delta_rate.is_zero() {
+                    // Since this is a decrease, subtract the delta rate from the current rate.
+                    let new_rate = current_rate.saturating_sub(delta_rate);
+
+                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+                    &msp_id, &user_id, new_rate,
+                	)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Compute the deposit needed for a given capacity.
+    pub(crate) fn compute_deposit_needed_for_capacity(
+        capacity: T::StorageDataUnit,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        let capacity_over_minimum = capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(ArithmeticError::Overflow)?;
+        T::SpMinDeposit::get()
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(ArithmeticError::Overflow.into())
+    }
+
+    /// Computes the capacity corresponding to a given held deposit.
+    /// This is the inverse of `compute_deposit_needed_for_capacity` but returns 0 if the held deposit is less than the minimum required instead of an error.
+    pub(crate) fn compute_capacity_from_held_deposit(
+        held_deposit: BalanceOf<T>,
+    ) -> Result<T::StorageDataUnit, DispatchError> {
+        // Subtract the minimum deposit to get the excess deposit
+        let deposit_over_minimum = match held_deposit.checked_sub(&T::SpMinDeposit::get()) {
+            Some(d) => d,
+            // A held deposit smaller than the minimum required will result in a capacity of 0
+            None => return Ok(T::StorageDataUnit::zero()),
+        };
+
+        // Calculate the capacity over the minimum
+        let capacity_over_minimum = if deposit_over_minimum >= BalanceOf::<T>::one() {
+            let storage_data_units = deposit_over_minimum
+                .checked_div(&T::DepositPerData::get())
+                .ok_or(ArithmeticError::Underflow)?;
+
+            StorageDataUnitAndBalanceConverter::<T>::convert_back(storage_data_units)
+        } else {
+            T::StorageDataUnit::zero()
+        };
+
+        // Add the minimum capacity to get the total capacity
+        let total_capacity = T::SpMinCapacity::get()
+            .checked_add(&capacity_over_minimum)
+            .ok_or(ArithmeticError::Overflow)?;
+
+        Ok(total_capacity)
+    }
+
+    fn get_provider_details(
+        provider_id: ProviderIdFor<T>,
+    ) -> Result<(T::AccountId, StorageDataUnit<T>, StorageDataUnit<T>), DispatchError>
+    where
+        T: pallet::Config,
+    {
+        if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
+            Ok((
+                provider.owner_account,
+                provider.capacity,
+                provider.capacity_used,
+            ))
+        } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            Ok((
+                provider.owner_account,
+                provider.capacity,
+                provider.capacity_used,
+            ))
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
     }
 }
 
@@ -1028,7 +1416,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type BucketId = BucketId<T>;
     type BucketNameLimit = T::BucketNameLimit;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
@@ -1038,26 +1426,23 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     }
 
     fn derive_bucket_id(
-        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId {
-        let concat = msp_id
+        let concat = owner
             .encode()
             .into_iter()
-            .chain(
-                owner
-                    .encode()
-                    .into_iter()
-                    .chain(bucket_name.encode().into_iter()),
-            )
+            .chain(bucket_name.encode().into_iter())
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
-        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
+        <<T as crate::Config>::ProviderIdHashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 
-    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
-        Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
+    fn get_msp_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.msp_id)
     }
 
     fn get_read_access_group_id_of_bucket(
@@ -1082,7 +1467,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 
     fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
         if let Some(bucket) = Buckets::<T>::get(bucket_id) {
-            bucket.msp_id == *msp_id
+            bucket.msp_id == Some(*msp_id)
         } else {
             false
         }
@@ -1102,7 +1487,9 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Ok(bucket.size)
     }
 
-    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError> {
+    fn get_msp_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(bucket.msp_id)
     }
@@ -1112,30 +1499,24 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
 impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type BucketId = BucketId<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
-    type ValuePropId = ValuePropId<T>;
+    type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
-        provider_id: Self::ProviderId,
+        provider_id: Option<Self::ProviderId>,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Self::ValuePropId,
+        value_prop_id: Option<Self::ValuePropId>,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
             !Buckets::<T>::contains_key(&bucket_id),
             Error::<T>::BucketAlreadyExists
-        );
-
-        // Check if the MSP exists
-        ensure!(
-            MainStorageProviders::<T>::contains_key(&provider_id),
-            Error::<T>::NotRegistered
         );
 
         let user_balance = T::NativeBalance::reducible_balance(
@@ -1144,14 +1525,26 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
-        let value_prop =
-            MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+        if let Some(provider_id) = provider_id {
+            // Check if the MSP exists
+            ensure!(
+                MainStorageProviders::<T>::contains_key(&provider_id),
+                Error::<T>::NotRegistered
+            );
+
+            if let Some(value_prop_id) = value_prop_id {
+                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+                    &provider_id,
+                    &value_prop_id,
+                )
                 .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-        ensure!(
-            value_prop.available,
-            Error::<T>::ValuePropositionNotAvailable
-        );
+                ensure!(
+                    value_prop.available,
+                    Error::<T>::ValuePropositionNotAvailable
+                );
+            }
+        }
 
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
@@ -1168,31 +1561,98 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             msp_id: provider_id,
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
-            user_id,
+            user_id: user_id.clone(),
             size: T::StorageDataUnit::zero(),
             value_prop_id,
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        MainStorageProviderIdsToBuckets::<T>::try_append(&provider_id, bucket_id)
-            .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+        if let Some(provider_id) = provider_id {
+            MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+
+            Self::apply_delta_fixed_rate_payment_stream(
+                &provider_id,
+                &bucket_id,
+                &user_id,
+                RateDeltaParam::NewBucket,
+            )?;
+        }
 
         Ok(())
     }
 
-    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult {
+    fn assign_msp_to_bucket(
+        bucket_id: &Self::BucketId,
+        new_msp: &Self::ProviderId,
+    ) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.msp_id = *new_msp;
 
-            Ok(())
+            if let Some(msp_id) = bucket.msp_id {
+                if msp_id == *new_msp {
+                    return Err(Error::<T>::MspAlreadyAssignedToBucket.into());
+                }
+
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::RemoveBucket,
+                )?;
+
+                MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+            }
+
+            bucket.msp_id = Some(*new_msp);
+
+            Self::apply_delta_fixed_rate_payment_stream(
+                new_msp,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::NewBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp, bucket_id, ());
+
+            Ok::<_, DispatchError>(())
+        })
+    }
+
+    fn unassign_msp_from_bucket(bucket_id: &Self::BucketId) -> DispatchResult {
+        Buckets::<T>::try_mutate(bucket_id, |bucket| {
+            let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            // MSP should exist within the context of this execution.
+            let msp_id = bucket
+                .msp_id
+                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
+
+            bucket.msp_id = None;
+
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::RemoveBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+
+            Ok::<_, DispatchError>(())
         })
     }
 
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            Self::deposit_event(Event::<T>::BucketRootChanged {
+                bucket_id,
+                old_root: bucket.root,
+                new_root,
+            });
+
             bucket.root = new_root;
 
             Ok(())
@@ -1200,21 +1660,26 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     }
 
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
-        let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        MainStorageProviderIdsToBuckets::<T>::mutate_exists(
-            &bucket.msp_id,
-            |buckets| match buckets {
-                Some(b) => {
-                    b.retain(|b| b != &bucket_id);
-
-                    if b.is_empty() {
-                        *buckets = None;
-                    }
-                }
-                _ => {}
-            },
+        // Check if the bucket is empty
+        ensure!(
+            bucket.root == T::DefaultMerkleRoot::get(),
+            Error::<T>::BucketNotEmpty
         );
+
+        if let Some(msp_id) = bucket.msp_id {
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::RemoveBucket,
+            )?;
+
+            MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
+        };
+
+        Buckets::<T>::remove(&bucket_id);
 
         // Release the bucket deposit hold
         T::NativeBalance::release(
@@ -1230,6 +1695,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.private = privacy;
 
             Ok(())
@@ -1242,6 +1708,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.read_access_group_id = maybe_read_access_group_id;
 
             Ok(())
@@ -1252,12 +1719,27 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.size = bucket.size.saturating_add(delta);
 
-            Ok(())
-        })
+            Ok::<_, DispatchError>((
+                bucket
+                    .msp_id
+                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
+                bucket.user_id.clone(),
+            ))
+        })?;
+
+        Self::apply_delta_fixed_rate_payment_stream(
+            &msp_id,
+            bucket_id,
+            &user_id,
+            RateDeltaParam::Increase(delta),
+        )?;
+
+        Ok(())
     }
 
     fn decrease_bucket_size(
@@ -1266,7 +1748,17 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
             bucket.size = bucket.size.saturating_sub(delta);
+
+            if let Some(msp_id) = bucket.msp_id {
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::Decrease(delta),
+                )?;
+            }
 
             Ok(())
         })
@@ -1275,7 +1767,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
 /// Implement the ReadStorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type StorageDataUnit = T::StorageDataUnit;
     type SpCount = T::SpCount;
     type MultiAddress = MultiAddress<T>;
@@ -1352,7 +1844,7 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
 
 /// Implement the MutateStorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> MutateStorageProvidersInterface for pallet::Pallet<T> {
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
     type StorageDataUnit = T::StorageDataUnit;
 
     fn decrease_capacity_used(
@@ -1420,7 +1912,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -1432,8 +1924,9 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
-            let msp_for_bucket = bucket.msp_id;
-            if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
+            let msp_id = bucket.msp_id?;
+
+            if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
                 Some(msp.owner_account)
             } else {
                 None
@@ -1502,7 +1995,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 /// Implement the MutateProvidersInterface for the Storage Providers pallet.
 impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bucket) = Buckets::<T>::get(&who) {
@@ -1533,7 +2026,7 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
     type AccountId = T::AccountId;
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -1590,7 +2083,7 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
 /// Implement the MutateChallengeableProvidersInterface for the Storage Providers pallet.
 impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet<T> {
     type MerkleHash = MerklePatriciaRoot<T>;
-    type ProviderId = HashId<T>;
+    type ProviderId = ProviderIdFor<T>;
 
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
@@ -1685,7 +2178,7 @@ where
     }
 
     pub fn query_storage_provider_capacity(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<StorageDataUnit<T>, QueryStorageProviderCapacityError> {
         if MainStorageProviders::<T>::contains_key(provider_id) {
             let msp = MainStorageProviders::<T>::get(provider_id)
@@ -1701,7 +2194,7 @@ where
     }
 
     pub fn query_available_storage_capacity(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<StorageDataUnit<T>, QueryAvailableStorageCapacityError> {
         if MainStorageProviders::<T>::contains_key(provider_id) {
             let msp = MainStorageProviders::<T>::get(provider_id)
@@ -1725,7 +2218,7 @@ where
     }
 
     pub fn get_worst_case_scenario_slashable_amount(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         Self::compute_worst_case_scenario_slashable_amount(provider_id)
     }
@@ -1736,14 +2229,14 @@ where
 
     pub fn query_msp_id_of_bucket_id(
         bucket_id: &BucketId<T>,
-    ) -> Result<MainStorageProviderId<T>, QueryMspIdOfBucketIdError> {
+    ) -> Result<Option<MainStorageProviderId<T>>, QueryMspIdOfBucketIdError> {
         let bucket =
             Buckets::<T>::get(bucket_id).ok_or(QueryMspIdOfBucketIdError::BucketNotFound)?;
         Ok(bucket.msp_id)
     }
 
     pub fn query_provider_multiaddresses(
-        provider_id: &ProviderId<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<Multiaddresses<T>, QueryProviderMultiaddressesError> {
         if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
             Ok(bsp.multiaddresses)

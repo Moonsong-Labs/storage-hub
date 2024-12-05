@@ -62,7 +62,8 @@ async function main() {
   );
 
   const metadata = await fetchMetadata();
-  fs.writeFileSync(metadataPath, Buffer.from(metadata));
+  const jsonResponse = await new Response(metadata).json();
+  fs.writeFileSync(metadataPath, JSON.stringify(jsonResponse, null, 2));
 
   console.log("✅ Metadata file written to:", metadataPath);
 }

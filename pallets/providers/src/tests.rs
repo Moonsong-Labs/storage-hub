@@ -2,24 +2,31 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
-        MainStorageProviderId, MaxBuckets, MaxMultiAddressAmount, MultiAddress,
-        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
+        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, RelayBlockGetter,
+        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata, ValueProposition,
         ValuePropositionWithId,
     },
-    Error, Event,
+    Error, Event, MainStorageProviders,
 };
 
-use frame_support::{assert_err, assert_noop, assert_ok, dispatch::Pays, BoundedVec};
+use frame_support::traits::fungible::MutateHold;
+use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
-    traits::{fungible::InspectHold, Get, OnFinalize, OnIdle, OnInitialize},
+    traits::{
+        fungible::{InspectHold, Mutate},
+        Get, OnFinalize, OnIdle, OnInitialize,
+    },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use shp_constants::GIGAUNIT;
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface,
+    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    ReadBucketsInterface, ReadProvidersInterface,
 };
+use sp_arithmetic::{MultiplyRational, Rounding};
 use sp_runtime::bounded_vec;
+use sp_runtime::traits::BlockNumberProvider;
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -31,6 +38,7 @@ type DepositPerData = <Test as crate::Config>::DepositPerData;
 type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
 type DefaultMerkleRoot = <Test as crate::Config>::DefaultMerkleRoot;
 type BucketDeposit = <Test as crate::Config>::BucketDeposit;
+type TopUpGracePeriod = <Test as crate::Config>::TopUpGracePeriod;
 
 // Runtime constants:
 // This is the duration of an epoch in blocks, a constant from the runtime configuration that we mock here
@@ -97,7 +105,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -138,7 +146,6 @@ mod sign_up {
                             sp_sign_up_request: SignUpRequestSpParams::MainStorageProvider(
                                 MainStorageProviderSignUpRequest {
                                     msp_info: MainStorageProvider {
-                                        buckets: BoundedVec::new(),
                                         capacity: storage_amount,
                                         capacity_used: 0,
                                         multiaddresses,
@@ -198,7 +205,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -295,7 +302,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -411,7 +418,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -422,7 +429,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         bob
@@ -499,7 +506,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -514,7 +521,6 @@ mod sign_up {
                             == SignUpRequestSpParams::MainStorageProvider(
                                 MainStorageProviderSignUpRequest {
                                     msp_info: MainStorageProvider {
-                                        buckets: BoundedVec::new(),
                                         capacity: storage_amount,
                                         capacity_used: 0,
                                         multiaddresses: multiaddresses.clone(),
@@ -749,6 +755,7 @@ mod sign_up {
                     System::assert_last_event(
                         Event::<Test>::BspSignUpSuccess {
                             who: alice,
+                            root: DefaultMerkleRoot::get(),
                             multiaddresses,
                             capacity: storage_amount,
                             bsp_id: alice_sp_id.unwrap(),
@@ -853,6 +860,7 @@ mod sign_up {
                     System::assert_last_event(
                         Event::<Test>::BspSignUpSuccess {
                             who: alice,
+                            root: DefaultMerkleRoot::get(),
                             multiaddresses,
                             capacity: storage_amount,
                             bsp_id: alice_sp_id.unwrap(),
@@ -1112,7 +1120,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1211,7 +1219,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1304,7 +1312,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1366,6 +1374,7 @@ mod sign_up {
                         Event::<Test>::BspSignUpSuccess {
                             who: bob,
                             multiaddresses,
+                            root: DefaultMerkleRoot::get(),
                             capacity: storage_amount_bob,
                             bsp_id: bob_sp_id.unwrap(),
                         }
@@ -1415,7 +1424,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1505,7 +1514,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1606,7 +1615,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1744,7 +1753,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1802,7 +1811,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1859,7 +1868,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -1871,7 +1880,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
@@ -2065,7 +2074,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -2122,7 +2131,8 @@ mod sign_up {
                     let bob: AccountId = 1;
 
                     // Register Alice as a Main Storage Provider
-                    let (_alice_deposit, alice_msp, _) = register_account_as_msp(alice, 100);
+                    let (_alice_deposit, alice_msp, _) =
+                        register_account_as_msp(alice, 100, None, None);
                     // Register Bob as a Backup Storage Provider
                     let (_bob_deposit, bob_bsp) = register_account_as_bsp(bob, 100);
 
@@ -2207,7 +2217,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit,
                         alice
@@ -2238,7 +2248,7 @@ mod sign_up {
                             RuntimeOrigin::signed(bob),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             bob
@@ -2275,7 +2285,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
@@ -2323,7 +2333,7 @@ mod sign_up {
                             RuntimeOrigin::signed(helen),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             helen
@@ -2364,7 +2374,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.price_per_unit_of_data_per_block,
+                            value_prop.price_per_giga_unit_of_data_per_block,
                             value_prop.commitment.clone(),
                             value_prop.bucket_data_limit,
                             alice
@@ -2449,7 +2459,7 @@ mod sign_off {
                     let alice: AccountId = accounts::ALICE.0;
                     let storage_amount: StorageDataUnit<Test> = 100;
                     let (deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, storage_amount);
+                        register_account_as_msp(alice, storage_amount, None, None);
 
                     // Check the new free and held balance of Alice
                     assert_eq!(
@@ -2597,7 +2607,7 @@ mod sign_off {
                     let alice = 0;
                     let storage_amount: StorageDataUnit<Test> = 100;
                     let (deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, storage_amount);
+                        register_account_as_msp(alice, storage_amount, None, None);
 
                     // Check the new free and held balance of Alice
                     assert_eq!(
@@ -2787,7 +2797,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let increased_storage_amount: StorageDataUnit<Test> = 200;
                     let (old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Check the new free and held balance of Alice
                     assert_eq!(
@@ -2858,7 +2868,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let decreased_storage_amount: StorageDataUnit<Test> = 50;
                     let (old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Check the new free and held balance of Alice
                     assert_eq!(
@@ -2930,7 +2940,7 @@ mod change_capacity {
                     let minimum_storage_amount: StorageDataUnit<Test> =
                         <SpMinCapacity as Get<u64>>::get();
                     let (old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Check the new free and held balance of Alice
                     assert_eq!(
@@ -3269,7 +3279,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let new_storage_amount: StorageDataUnit<Test> = 200;
                     let (_old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Try to change the capacity of Alice before enough time has passed
                     assert_noop!(
@@ -3296,7 +3306,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let zero_storage_amount: StorageDataUnit<Test> = 0;
                     let (_old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Try to change the capacity of Alice to zero
                     assert_noop!(
@@ -3323,7 +3333,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let new_storage_amount: StorageDataUnit<Test> = old_storage_amount;
                     let (_old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Try to change the capacity of Alice to the same as before
                     assert_noop!(
@@ -3350,7 +3360,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let decreased_storage_amount: StorageDataUnit<Test> = 1;
                     let (_old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Advance enough blocks to allow Alice to change her capacity
                     run_to_block(
@@ -3383,7 +3393,7 @@ mod change_capacity {
                     let old_storage_amount: StorageDataUnit<Test> = 100;
                     let decreased_storage_amount: StorageDataUnit<Test> = 50;
                     let (_old_deposit_amount, _alice_sp_id, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     let alice_msp_id =
                         crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
@@ -3430,7 +3440,7 @@ mod change_capacity {
                             .try_into()
                             .unwrap();
                     let (_old_deposit_amount, _alice_msp, _) =
-                        register_account_as_msp(alice, old_storage_amount);
+                        register_account_as_msp(alice, old_storage_amount, None, None);
 
                     // Advance enough blocks to allow Alice to change her capacity
                     run_to_block(
@@ -3743,56 +3753,6 @@ mod change_capacity {
     }
 }
 
-mod change_bucket {
-    use super::*;
-    mod failure {
-        use super::*;
-
-        #[test]
-        fn change_bucket_fails_when_bucket_id_already_exists() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
-                    &bucket_owner,
-                    bucket_name,
-                );
-
-                // Add a bucket for Alice
-                assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
-                    bucket_owner,
-                    bucket_id,
-                    false,
-                    None,
-                    value_prop_id
-                ));
-
-                // Try to change the bucket for Alice with the same bucket id
-                assert_noop!(
-                    StorageProviders::add_bucket(
-                        msp_id,
-                        bucket_owner,
-                        bucket_id,
-                        false,
-                        None,
-                        value_prop_id
-                    ),
-                    Error::<Test>::BucketAlreadyExists
-                );
-            });
-        }
-    }
-}
-
 mod add_bucket {
     use super::*;
     mod failure {
@@ -3804,37 +3764,36 @@ mod add_bucket {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Try to add the bucket for Alice with the same bucket id
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ),
                     Error::<Test>::BucketAlreadyExists
                 );
@@ -3847,7 +3806,6 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3855,66 +3813,190 @@ mod add_bucket {
                 // Try to add a bucket to a non-registered MSP
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        MainStorageProviderId::<Test>::default(),
+                        Some(MainStorageProviderId::<Test>::default()),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        HashId::<Test>::default()
+                        Some(HashId::<Test>::default())
                     ),
                     Error::<Test>::NotRegistered
                 );
             });
         }
+    }
+
+    mod success {
+        use crate::Config;
+
+        use super::*;
 
         #[test]
-        fn add_bucket_passed_max_bucket_msp_capacity() {
+        fn add_bucket() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                // Check payment stream was added
+                assert!(
+                    <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
+                );
+
+                let new_stream_deposit: u64 = <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
+				let base_deposit: u128 = <Test as pallet_payment_streams::Config>::BaseDeposit::get();
+                assert_eq!(
+                    NativeBalance::free_balance(&bucket_owner),
+                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get() - new_stream_deposit as u128 - base_deposit
+                );
+
+                let new_rate = <<Test as Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                    &msp_id,
+                    &bucket_owner
+                ).unwrap_or_default();
+
+                let zero_size_bucket_rate: u128 = <Test as Config>::ZeroSizeBucketFixedRate::get();
+
+                // Check that the fixed rate payment stream increased by 10 zero size bucket rates
+                assert_eq!(zero_size_bucket_rate, new_rate);
+
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                    BucketDeposit::get()
+                );
+
+                assert!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
+                    .is_some()
+                );
+
+                let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
+
+                assert_eq!(
+                    bucket,
+                    Bucket::<Test> {
+                        root: DefaultMerkleRoot::get(),
+                        user_id: bucket_owner,
+                        msp_id: Some(msp_id),
+                        private: false,
+                        read_access_group_id: None,
+                        size: 0,
+                        value_prop_id: Some(value_prop_id),
+                    }
+                );
+
+            });
+        }
+
+        #[test]
+        fn add_multiple_buckets() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+
                 // Add the maximum amount of buckets for Alice
-                for i in 0..MaxBuckets::<Test>::get() {
+                let num_buckets = 10;
+                for i in 0..10 {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ));
+
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                        expected_hold_amount
+                    );
+
+
+                    // Check that the fixed rate payment stream matches the expected zero size bucket rate * the current number of buckets
+                    let zero_size_bucket_rate: u128 = <Test as crate::Config>::ZeroSizeBucketFixedRate::get();
+                    let expected_fixed_payment_stream_value = zero_size_bucket_rate * (i + 1) as u128;
+                    let fixed_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+                    assert_eq!(fixed_payment_stream_value, expected_fixed_payment_stream_value);
                 }
 
-                // Try to add another bucket for Alice
-                assert_err!(
-                    StorageProviders::add_bucket(
-                        msp_id,
-                        bucket_owner,
-                        bucket_id,
-                        false,
-                        None,
-                        value_prop_id
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::iter_key_prefix(&msp_id)
+                        .collect::<Vec<_>>();
+
+                assert_eq!(buckets.len(), num_buckets);
+            });
+        }
+    }
+}
+
+mod unassign_msp_from_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn bucket_not_found() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to change a bucket that does not exist
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
                     ),
-                    Error::<Test>::AppendBucketToMspFailed
+                    Error::<Test>::BucketNotFound
                 );
             });
         }
@@ -3924,106 +4006,225 @@ mod add_bucket {
         use super::*;
 
         #[test]
-        fn add_bucket() {
+        fn unassign_msp_from_bucket_works() {
             ExtBuilder::build().execute_with(|| {
+                // Register Alice as MSP
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Create bucket
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                assert!(
+                    <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
+                );
+
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id),
+                );
+
+                assert!(
+                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
+                );
+
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id),
+                    Error::<Test>::BucketMustHaveMspForOperation
+                );
+            });
+        }
+    }
+}
+
+mod assign_msp_to_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn bucket_not_found() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
-                // Add a bucket for Alice
-                assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
-                    bucket_owner,
-                    bucket_id,
-                    false,
-                    None,
-                    value_prop_id
-                ));
-
-                assert_eq!(
-                    NativeBalance::free_balance(&bucket_owner),
-                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get()
-                );
-
-                assert_eq!(
-                    NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
-                    BucketDeposit::get()
-                );
-
-                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
-
-                assert_eq!(buckets.len(), 1);
-
-                let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
-
-                assert_eq!(
-                    bucket,
-                    Bucket::<Test> {
-                        root: DefaultMerkleRoot::get(),
-                        user_id: bucket_owner,
-                        msp_id,
-                        private: false,
-                        read_access_group_id: None,
-                        size: 0,
-                        value_prop_id
-                    }
+                // Try to change a bucket that does not exist
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
+                        &bucket_id, &msp_id,
+                    ),
+                    Error::<Test>::BucketNotFound
                 );
             });
         }
 
         #[test]
-        fn add_buckets_to_max_capacity() {
+        fn msp_already_assigned_to_bucket() {
             ExtBuilder::build().execute_with(|| {
+                // Register Alice as MSP
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
+                // Create bucket
                 let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
 
-                // Add the maximum amount of buckets for Alice
-                for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name =
-                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
-                        &bucket_owner,
-                        bucket_name,
-                    );
-                    assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
-                        bucket_owner,
-                        bucket_id,
-                        false,
-                        None,
-                        value_prop_id
-                    ));
+                // Add bucket
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
 
-                    let expected_hold_amount =
-                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
-                    assert_eq!(
-                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
-                        expected_hold_amount
-                    );
-                }
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
+                        &bucket_id, &msp_id,
+                    ),
+                    Error::<Test>::MspAlreadyAssignedToBucket
+                );
+            });
+        }
+    }
 
-                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+    mod success {
+        use super::*;
 
-                let max_buckets: u32 = MaxBuckets::<Test>::get();
-                assert_eq!(buckets.len(), max_buckets as usize);
+        #[test]
+        fn assign_msp_to_bucket() {
+            ExtBuilder::build().execute_with(|| {
+                // Register Alice as MSP
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let alice_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Register Charlie as MSP
+                let charlie: AccountId = accounts::CHARLIE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _charlie_msp, _) =
+                    register_account_as_msp(charlie, storage_amount, None, None);
+
+                let charlie_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&charlie).unwrap();
+
+                // Create bucket
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add bucket
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(alice_msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                // check payment stream exists for alice
+                assert!(
+                    <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &alice_msp_id,
+                        &bucket_owner
+                    )
+                );
+
+                // Change MSP of bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
+                        &bucket_id,
+                        &charlie_msp_id,
+                    )
+                );
+
+                // Check that the bucket was removed from alice
+                assert!(crate::MainStorageProviderIdsToBuckets::<Test>::get(
+                    &alice_msp_id,
+                    bucket_id
+                )
+                .is_none());
+
+                // Check that the bucket was added to the default MSP
+                assert!(crate::MainStorageProviderIdsToBuckets::<Test>::get(
+                    &charlie_msp_id,
+                    bucket_id
+                )
+                .is_some());
+
+                // Check that the bucket was updated
+                let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
+                assert_eq!(
+                    bucket.msp_id,
+                    Some(charlie_msp_id)
+                );
+
+                // check payment stream exists for charlie
+                assert!(
+                    <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &charlie_msp_id,
+                        &bucket_owner
+                    )
+                );
+
+                // check payment stream does not exist for alice
+                assert!(
+                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &alice_msp_id,
+                        &bucket_owner
+                    )
+                );
             });
         }
     }
@@ -4041,12 +4242,11 @@ mod remove_root_bucket {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4069,32 +4269,31 @@ mod remove_root_bucket {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
+                    Some(msp_id),
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    value_prop_id
+                    Some(value_prop_id)
                 ));
 
                 // Check that the bucket was added to the MSP
-                assert_eq!(
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap(),
-                    vec![bucket_id]
+                assert!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
+                        .is_some()
                 );
 
                 // Remove the bucket
@@ -4113,9 +4312,17 @@ mod remove_root_bucket {
                 assert_eq!(crate::Buckets::<Test>::get(&bucket_id), None);
 
                 // Check that the bucket was removed from the MSP
-                assert_eq!(
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
-                    None
+                assert!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id, bucket_id)
+                        .is_none()
+                );
+
+                // Check payment stream was removed
+                assert!(
+                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
                 );
             });
         }
@@ -4126,28 +4333,28 @@ mod remove_root_bucket {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
 
                 // Add the maximum amount of buckets for Alice
-                for i in 0..MaxBuckets::<Test>::get() {
+                let num_buckets = 10;
+                for i in 0..10 {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ));
 
                     let expected_hold_amount =
@@ -4158,21 +4365,39 @@ mod remove_root_bucket {
                     );
                 }
 
-                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::iter_key_prefix(&msp_id)
+                        .collect::<Vec<_>>();
 
-                let max_buckets: u32 = MaxBuckets::<Test>::get();
-                assert_eq!(buckets.len(), max_buckets as usize);
+                assert_eq!(buckets.len(), num_buckets);
 
                 // Remove all the buckets
-                for i in 0..MaxBuckets::<Test>::get() {
+                for i in 0..num_buckets {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+                    if i < num_buckets - 1 {
+                        // Check that the payment streams still exists if we haven't removed the last bucket
+                        assert!(
+                            <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                                &msp_id,
+                                &bucket_owner
+                            )
+                        );
+
+                        // Check that the fixed rate payment stream matches the expected zero size bucket rate * the current number of buckets
+                        let zero_size_bucket_rate: u128 = <Test as crate::Config>::ZeroSizeBucketFixedRate::get();
+                        let expected_fixed_payment_stream_value = zero_size_bucket_rate * (num_buckets - i - 1) as u128;
+                        let fixed_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                            &msp_id,
+                            &bucket_owner
+                        ).unwrap_or_default();
+                        assert_eq!(fixed_payment_stream_value, expected_fixed_payment_stream_value);
+                    }
                 }
 
                 // Check that the bucket deposits are returned to the bucket owner
@@ -4186,17 +4411,409 @@ mod remove_root_bucket {
 
                 // Check that all the buckets were removed
                 assert_eq!(
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
-                    None
+                    crate::MainStorageProviderIdsToBuckets::<Test>::iter_key_prefix(&msp_id)
+                        .count(),
+                    0
+                );
+
+                // Check that the payment streams was removed
+                assert!(
+                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+                        &msp_id,
+                        &bucket_owner
+                    )
                 );
             });
         }
     }
 }
 
-mod slash {
+mod increase_bucket_size {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn bucket_does_not_exist() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to remove a bucket that does not exist
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id, 100
+                    ),
+                    Error::<Test>::BucketNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn bucket_must_have_msp_for_operation() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                // Remove the MSP from the bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
+                );
+
+                // Try to increase the size of a bucket that does not have an MSP
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id, 100
+                    ),
+                    Error::<Test>::BucketMustHaveMspForOperation
+                );
+            });
+        }
+    }
+
+    mod success {
+        use crate::MainStorageProviderIdsToValuePropositions;
+
+        use super::*;
+
+        #[test]
+        fn increase_bucket_size_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+
+                let num_buckets = 10;
+                let delta_increase = 100 * 1024 * 1024;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, Some(100), Some(num_buckets * delta_increase));
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..10 {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        Some(msp_id),
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None,
+                        Some(value_prop_id)
+                    ));
+
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                        expected_hold_amount
+                    );
+                }
+
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::iter_key_prefix(&msp_id)
+                        .collect::<Vec<_>>();
+
+                assert_eq!(buckets.len(), num_buckets as usize);
+
+                // Increment the size of all buckets
+                for i in 0..num_buckets {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+
+                    let current_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+
+                    assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id,
+                        delta_increase
+                    ));
+
+                    // Check that the fixed rate payment stream matches the expected rate
+                    let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
+                    let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
+                    let expected_rate = current_rate + delta_rate;
+
+                    let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+
+                    assert_eq!(actual_rate, expected_rate);
+                }
+            });
+        }
+    }
+}
+
+mod decrease_bucket_size {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn bucket_does_not_exist() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to remove a bucket that does not exist
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(
+                        &bucket_id, 100
+                    ),
+                    Error::<Test>::BucketNotFound
+                );
+            });
+        }
+    }
+
+    mod success {
+        use crate::MainStorageProviderIdsToValuePropositions;
+
+        use super::*;
+
+        #[test]
+        fn increase_bucket_size_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+
+                let num_buckets = 10;
+                let delta_increase = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, Some(10), Some(num_buckets * delta_increase));
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..10 {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        Some(msp_id),
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None,
+                        Some(value_prop_id)
+                    ));
+
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                        expected_hold_amount
+                    );
+                }
+
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::iter_key_prefix(&msp_id)
+                        .collect::<Vec<_>>();
+
+                assert_eq!(buckets.len(), num_buckets as usize);
+
+                // Increase the bucket size of all buckets
+                for i in 0..num_buckets {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+
+                    let current_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+
+                    assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id,
+                        delta_increase
+                    ));
+
+					// Check that the fixed rate payment stream matches the expected rate
+                    let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
+                    let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
+                    let expected_rate = current_rate + delta_rate;
+                    let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+
+                    assert_eq!(actual_rate, expected_rate);
+                }
+
+                // Decrease the bucket size of all buckets
+                for i in 0..num_buckets {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+
+                    let current_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+
+                    assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(
+                        &bucket_id,
+                        delta_increase
+                    ));
+
+					// Check that the fixed rate payment stream matches the expected rate
+                    let value_prop = MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, value_prop_id).unwrap();
+                    let delta_rate = value_prop.price_per_giga_unit_of_data_per_block.multiply_rational(delta_increase as u128, GIGAUNIT as u128, Rounding::NearestPrefUp).unwrap();
+                    let expected_rate = current_rate - delta_rate;
+                    let actual_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+                        &msp_id,
+                        &bucket_owner
+                    ).unwrap_or_default();
+
+                    assert_eq!(actual_rate, expected_rate);
+                }
+            });
+        }
+
+        #[test]
+        fn decrease_bucket_size_without_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                // Remove the MSP from the bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
+                );
+
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(
+                        &bucket_id, 100
+                    ),
+                );
+            });
+        }
+    }
+}
+
+mod storage_data_unit_and_balance_converters {
+    use super::*;
+
+    #[test]
+    fn ensure_conversion_results_match() {
+        ExtBuilder::build().execute_with(|| {
+            let sp_min_capacity = SpMinCapacity::get();
+            let capacities = vec![
+                sp_min_capacity,
+                sp_min_capacity + 100,
+                sp_min_capacity + 500,
+                sp_min_capacity * 2,
+            ];
+
+            for storage_data_unit in capacities {
+                let computed_deposit =
+                    StorageProviders::compute_deposit_needed_for_capacity(storage_data_unit)
+                        .unwrap();
+
+                let computed_capacity =
+                    StorageProviders::compute_capacity_from_held_deposit(computed_deposit).unwrap();
+
+                assert_eq!(storage_data_unit, computed_capacity);
+            }
+        });
+    }
+}
+
+mod slash_and_top_up {
     use super::*;
     mod failure {
+        use frame_support::traits::tokens::{Fortitude, Precision};
         use sp_core::H256;
 
         use super::*;
@@ -4209,7 +4826,7 @@ mod slash {
                 // Try to slash a provider that is not registered
                 assert_noop!(
                     StorageProviders::slash(RuntimeOrigin::signed(caller), H256::default()),
-                    Error::<Test>::ProviderNotSlashable
+                    Error::<Test>::NotRegistered
                 );
             });
         }
@@ -4221,173 +4838,467 @@ mod slash {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let provider_id =
                     crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let caller = accounts::BOB.0;
 
-                // Try to slash the provider
+                // Try to slash an unslashable provider
                 assert_noop!(
                     StorageProviders::slash(RuntimeOrigin::signed(caller), provider_id),
                     Error::<Test>::ProviderNotSlashable
                 );
             });
         }
-    }
-
-    mod success {
-        use super::*;
 
         #[test]
-        fn slash_storage_provider() {
+        fn top_up_when_provider_not_registered() {
             ExtBuilder::build().execute_with(|| {
-                // register msp
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
-
-                let provider_id =
-                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                // Set proofs-dealer storage to have a slashable provider
-                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&provider_id, 1);
-
-                let deposit_on_hold =
-                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
-
                 let caller = accounts::BOB.0;
 
-                let treasury_balance =
-                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
-
-                let slash_factor: BalanceOf<Test> =
-                    StorageProviders::compute_worst_case_scenario_slashable_amount(&provider_id)
-                        .expect("Failed to compute slashable amount");
-
-                // Slash the provider
-                assert_ok!(StorageProviders::slash(
-                    RuntimeOrigin::signed(caller),
-                    provider_id
-                ));
-
-                // Check that the provider is no longer slashable
-                assert_eq!(
-                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&provider_id),
-                    None
-                );
-
-                // Check that the held deposit of the provider has been reduced by slash factor
-                assert_eq!(
-                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
-                    deposit_on_hold.saturating_sub(slash_factor)
-                );
-
-                // If the slash factor is greater than the deposit on hold, the slash amount is the deposit on hold
-                let actual_slashed_amount = slash_factor.min(deposit_on_hold);
-
-                // Check that the Treasury has received the slash amount
-                assert_eq!(
-                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
-                    treasury_balance + actual_slashed_amount
+                // Try to top up a provider that is not registered
+                assert_noop!(
+                    StorageProviders::top_up_deposit(RuntimeOrigin::signed(caller),),
+                    Error::<Test>::NotRegistered
                 );
             });
         }
 
         #[test]
-        fn slash_multiple_storage_providers() {
+        fn top_up_when_not_enough_for_held_deposit() {
             ExtBuilder::build().execute_with(|| {
-                // register msp and bsp
+                // register msp
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
-                let bob: AccountId = accounts::BOB.0;
-                let (_deposit_amount, _bob_bsp) = register_account_as_bsp(bob, storage_amount);
-
-                let alice_provider_id =
+                let alice_msp_id =
                     crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-                let bob_provider_id =
-                    crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
 
-                let alice_accrued_failed_proof_submissions = 5;
-                let bob_accrued_failed_proof_submissions = 10;
+                // Manually set a capacity deficit to avoid having to slash the provider
+                MainStorageProviders::<Test>::mutate(alice_msp_id, |p| {
+                    let p = p.as_mut().unwrap();
+                    p.capacity_used = 100;
+                    p.capacity = 0;
+                });
 
-                // Set proofs-dealer storage to have a slashable provider
-                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
-                    &alice_provider_id,
-                    alice_accrued_failed_proof_submissions,
+                // Manually set the provider's held deposit to have a capacity deficit
+                NativeBalance::burn_all_held(
+                    &StorageProvidersHoldReason::get(),
+                    &alice,
+                    Precision::BestEffort,
+                    Fortitude::Force,
+                )
+                .unwrap();
+
+                // Set provider's balance to existential deposit to simulate the provider not having enough balance to cover the held deposit
+                NativeBalance::set_balance(&alice, ExistentialDeposit::get());
+
+                // Try to top up a provider that does not have enough balance to cover the held deposit
+                assert_noop!(
+                    StorageProviders::top_up_deposit(RuntimeOrigin::signed(alice)),
+                    Error::<Test>::CannotHoldDeposit
                 );
-                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
-                    &bob_provider_id,
-                    bob_accrued_failed_proof_submissions,
+            });
+        }
+    }
+
+    mod success {
+        use core::u32;
+
+        use frame_support::traits::fungible::Inspect;
+        use sp_runtime::traits::ConvertBack;
+
+        use crate::{AwaitingTopUpFromProviders, GracePeriodToSlashedProviders};
+
+        use super::*;
+
+        struct TestSetup {
+            account: AccountId,
+            provider_id: HashId<Test>,
+            /// Sets accrued slashes to have the provider's deposit be slashed completely
+            induce_capacity_deficit: bool,
+            /// Sets the provider's balance to cover the top up required amount
+            automatic_top_up: bool,
+        }
+
+        impl Default for TestSetup {
+            fn default() -> Self {
+                let alice: AccountId = accounts::ALICE.0;
+                Self::new(alice)
+            }
+        }
+
+        impl TestSetup {
+            fn new(account: AccountId) -> Self {
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(account, storage_amount, None, None);
+
+                let provider_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&account).unwrap();
+
+                MainStorageProviders::<Test>::mutate(provider_id, |p| {
+                    p.as_mut().unwrap().capacity_used = 50;
+                });
+
+                Self {
+                    account,
+                    provider_id,
+                    induce_capacity_deficit: false,
+                    automatic_top_up: false,
+                }
+            }
+
+            fn slash_and_verify(&self) {
+                // Utility function to calculate the required hold amount needed to cover a potential capacity deficit
+                let deposit_needed_for_capacity_used_fn = || -> BalanceOf<Test> {
+                    let provider = MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+                    let deposit_needed_for_capacity_used: BalanceOf<Test> =
+                        StorageProviders::compute_deposit_needed_for_capacity(
+                            provider.capacity_used,
+                        )
+                        .unwrap()
+                        .into();
+                    deposit_needed_for_capacity_used.saturating_sub(NativeBalance::balance_on_hold(
+                        &StorageProvidersHoldReason::get(),
+                        &self.account,
+                    ))
+                };
+
+                let pre_state_held_deposit = NativeBalance::balance_on_hold(
+                    &StorageProvidersHoldReason::get(),
+                    &self.account,
                 );
 
-                let alice_deposit_on_hold =
-                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
-                let bob_deposit_on_hold =
-                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob);
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&self.provider_id, 1);
 
-                let caller = accounts::CHARLIE.0;
+                let computed_slash_amount_for_single_accrued_slash =
+                    StorageProviders::compute_worst_case_scenario_slashable_amount(
+                        &self.provider_id,
+                    )
+                    .unwrap();
 
-                let treasury_balance =
+                // Set proofs-dealer storage to have a slashable provider with an accrued slashes based on the test setup
+                let accrued_slashes = if self.induce_capacity_deficit {
+                    pre_state_held_deposit
+                        .saturating_div(computed_slash_amount_for_single_accrued_slash)
+                        .max(1)
+                } else {
+                    1
+                };
+
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
+                    &self.provider_id,
+                    accrued_slashes as u32,
+                );
+
+                // Compute slash amount based on actual accrued slashes
+                let computed_slash_amount =
+                    StorageProviders::compute_worst_case_scenario_slashable_amount(
+                        &self.provider_id,
+                    )
+                    .unwrap();
+
+                // Amount expected to be slashed from the held deposit
+                // Since `do_slash` will slash on a BestEffort basis, the slash amount is either the entire computed slash amount or the amount in held deposit
+                let expected_slash_amount = pre_state_held_deposit.min(computed_slash_amount);
+
+                let pre_state_balance = if self.automatic_top_up {
+                    let max_balance_can_add = BalanceOf::<Test>::max_value()
+                        - <<Test as crate::Config>::NativeBalance as Inspect<AccountId>>::total_issuance();
+                    // Provider will be able to top up capacity deficit
+                    NativeBalance::set_balance(&self.account, max_balance_can_add)
+                } else {
+                    // Provider will not be able to top up any capacity deficit
+                    NativeBalance::set_balance(&self.account, ExistentialDeposit::get())
+                };
+
+                // Get the pre-state values
+                let pre_state_treasury_balance =
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+                let pre_state_provider =
+                    MainStorageProviders::<Test>::get(self.provider_id).unwrap();
 
-                // Check that the held deposit of the providers has been reduced by slash factor
-                let alice_slash_amount: BalanceOf<Test> =
-                    StorageProviders::compute_worst_case_scenario_slashable_amount(
-                        &alice_provider_id,
-                    )
-                    .expect("Failed to compute slashable amount");
-
-                let bob_slash_amount: BalanceOf<Test> =
-                    StorageProviders::compute_worst_case_scenario_slashable_amount(
-                        &bob_provider_id,
-                    )
-                    .expect("Failed to compute slashable amount");
-
-                // Slash the providers
+                // Slash the provider
                 assert_ok!(StorageProviders::slash(
-                    RuntimeOrigin::signed(caller),
-                    alice_provider_id
-                ));
-                assert_ok!(StorageProviders::slash(
-                    RuntimeOrigin::signed(caller),
-                    bob_provider_id
+                    RuntimeOrigin::signed(self.account),
+                    self.provider_id
                 ));
 
-                // Check that the providers are no longer slashable
-                assert_eq!(
-                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&alice_provider_id),
-                    None
-                );
-                assert_eq!(
-                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&bob_provider_id),
-                    None
-                );
+                let post_state_provider =
+                    MainStorageProviders::<Test>::get(self.provider_id).unwrap();
 
-                assert_eq!(
-                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
-                    alice_deposit_on_hold.saturating_sub(alice_slash_amount)
-                );
+                // Verify the slash event
+                let last_slashed_event = System::events()
+                    .iter()
+                    .rev()
+                    .find_map(|event| {
+                        if let RuntimeEvent::StorageProviders(Event::<Test>::Slashed {
+                            provider_id,
+                            amount,
+                        }) = event.event
+                        {
+                            Some((provider_id, amount))
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Expected Slashed event");
 
-                assert_eq!(
-                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
-                    bob_deposit_on_hold.saturating_sub(bob_slash_amount)
-                );
+                assert_eq!(last_slashed_event.0, self.provider_id);
+                assert_eq!(last_slashed_event.1, expected_slash_amount);
 
-                // If slash amount is greater than deposit then the actual slash amount should be the deposit amount
-                let actual_alice_slashed_amount = alice_slash_amount.min(alice_deposit_on_hold);
-                let actual_bob_slashed_amount = bob_slash_amount.min(bob_deposit_on_hold);
+                let grace_period: u32 = TopUpGracePeriod::get();
+                let end_block_grace_period =
+                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+
+                // Verify post state based on the test setup
+                if self.automatic_top_up {
+                    let required_held_amount = deposit_needed_for_capacity_used_fn();
+
+                    // There should be no more required held amount (i.e. no more capacity deficit)
+                    assert_eq!(required_held_amount, 0);
+
+                    // Get the amount that was automatically topped up
+                    let amount = System::events()
+                        .iter()
+                        .rev()
+                        .find_map(|event| {
+                            if let RuntimeEvent::StorageProviders(Event::<Test>::TopUpFulfilled {
+                                provider_id: _,
+                                amount,
+                            }) = event.event
+                            {
+                                Some(amount)
+                            } else {
+                                None
+                            }
+                        })
+                        .expect("Expected TopUpFulfilled event");
+
+                    // Free balance should be reduced by the amount needed to cover the outstanding top up slash amount
+                    assert_eq!(
+                        NativeBalance::free_balance(self.account),
+                        pre_state_balance - amount
+                    );
+
+                    // Check that the held deposit of the provider has been automatically topped up to cover the capacity needed
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(
+                            &StorageProvidersHoldReason::get(),
+                            &self.account
+                        ),
+                        StorageProviders::compute_deposit_needed_for_capacity(
+                            post_state_provider.capacity_used.max(SpMinCapacity::get()),
+                        )
+                        .unwrap()
+                        .into()
+                    );
+
+                    // Check that the storage has been cleared
+                    assert!(GracePeriodToSlashedProviders::<Test>::get(
+                        end_block_grace_period,
+                        self.provider_id
+                    )
+                    .is_none());
+                    assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+
+                    // Check that the provider's capacity is equal to used capacity
+                    assert_eq!(
+                        post_state_provider.capacity_used,
+                        post_state_provider.capacity
+                    );
+                } else if deposit_needed_for_capacity_used_fn() > 0 {
+                    System::assert_has_event(
+                        Event::<Test>::AwaitingTopUp {
+                            provider_id: self.provider_id,
+                            top_up_metadata: TopUpMetadata {
+                                end_block_grace_period,
+                            },
+                        }
+                        .into(),
+                    );
+
+                    // Check that the held deposit of the provider has been slashed and not automatically topped up
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(
+                            &StorageProvidersHoldReason::get(),
+                            &self.account
+                        ),
+                        pre_state_held_deposit.saturating_sub(expected_slash_amount)
+                    );
+
+                    // Check that the provider's free balance hasn't been reduced since there was not enough to top up
+                    assert_eq!(NativeBalance::free_balance(self.account), pre_state_balance);
+
+                    // Check that the AwaitingTopUpFromProviders storage has been updated
+                    let top_up_metadata =
+                        AwaitingTopUpFromProviders::<Test>::get(self.provider_id).unwrap();
+                    assert_eq!(
+                        top_up_metadata.end_block_grace_period,
+                        end_block_grace_period
+                    );
+
+                    // Check that the provider's capacity was reduced by the converted slash amount (storage data units)
+                    let expected_capacity_delta =
+                        StorageDataUnitAndBalanceConverter::convert_back(expected_slash_amount);
+                    assert_eq!(
+                        post_state_provider.capacity,
+                        pre_state_provider
+                            .capacity
+                            .saturating_sub(expected_capacity_delta)
+                    );
+                }
 
                 // Check that the Treasury has received the slash amount
                 assert_eq!(
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
-                    treasury_balance + actual_alice_slashed_amount + actual_bob_slashed_amount
+                    pre_state_treasury_balance + expected_slash_amount
                 );
+            }
+
+            fn manual_top_up(&self) {
+                let grace_period: u32 = TopUpGracePeriod::get();
+                let end_block_grace_period =
+                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+
+                let pre_state_provider =
+                    MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+
+                let pre_state_held_amount = NativeBalance::balance_on_hold(
+                    &StorageProvidersHoldReason::get(),
+                    &self.account,
+                );
+
+                let hold_amount_needed_for_capacity =
+                    StorageProviders::compute_deposit_needed_for_capacity(
+                        pre_state_provider.capacity_used.max(SpMinCapacity::get()),
+                    )
+                    .unwrap();
+
+                let expected_delta_amount =
+                    hold_amount_needed_for_capacity.saturating_sub(pre_state_held_amount);
+
+                // Set provider's balance to cover the `expected_delta_hold_amount`
+                NativeBalance::set_balance(
+                    &self.account,
+                    expected_delta_amount + ExistentialDeposit::get(),
+                );
+                let pre_state_balance = NativeBalance::free_balance(self.account);
+
+                // Top up the provider
+                assert_ok!(StorageProviders::top_up_deposit(RuntimeOrigin::signed(
+                    self.account
+                ),));
+
+                // Get the amount that was automatically topped up
+                let amount = System::events()
+                    .iter()
+                    .rev()
+                    .find_map(|event| {
+                        if let RuntimeEvent::StorageProviders(Event::<Test>::TopUpFulfilled {
+                            provider_id: _,
+                            amount,
+                        }) = event.event
+                        {
+                            Some(amount)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Expected TopUpFulfilled event");
+
+                // Free balance should be reduced by the amount needed to cover the outstanding top up slash amount
+                assert_eq!(
+                    NativeBalance::free_balance(self.account),
+                    pre_state_balance - amount
+                );
+
+                // Check that the held deposit covers the used capacity
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &StorageProvidersHoldReason::get(),
+                        &self.account
+                    ),
+                    pre_state_held_amount + amount
+                );
+
+                // Check that the storage has been cleared
+                assert!(GracePeriodToSlashedProviders::<Test>::get(
+                    end_block_grace_period,
+                    self.provider_id
+                )
+                .is_none());
+                assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+            }
+        }
+
+        #[test]
+        fn slash_storage_provider_automatic_top_up() {
+            ExtBuilder::build().execute_with(|| {
+                let mut test_setup = TestSetup::default();
+
+                test_setup.induce_capacity_deficit = true;
+                test_setup.automatic_top_up = true;
+                test_setup.slash_and_verify();
+            });
+        }
+
+        #[test]
+        fn slash_storage_provider_automatic_top_up_after_first_slash() {
+            ExtBuilder::build().execute_with(|| {
+                let mut test_setup = TestSetup::default();
+
+                test_setup.induce_capacity_deficit = true;
+                test_setup.slash_and_verify();
+
+                test_setup.automatic_top_up = true;
+                test_setup.slash_and_verify();
+            });
+        }
+
+        #[test]
+        fn slash_storage_provider_manual_top_up() {
+            ExtBuilder::build().execute_with(|| {
+                let mut test_setup = TestSetup::default();
+
+                test_setup.induce_capacity_deficit = true;
+                test_setup.slash_and_verify();
+
+                test_setup.manual_top_up();
+            });
+        }
+
+        #[test]
+        fn automatic_top_up_after_many_slashes() {
+            ExtBuilder::build().execute_with(|| {
+                let mut test_setup = TestSetup::default();
+                // Test accrued slashes
+                test_setup.slash_and_verify();
+                test_setup.induce_capacity_deficit = true;
+                test_setup.slash_and_verify();
+
+                // Test automatic top up when provider is slashed
+                test_setup.automatic_top_up = true;
+                test_setup.slash_and_verify();
+            });
+        }
+
+        #[test]
+        fn manual_top_up_after_many_slashes() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.induce_capacity_deficit = true;
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.manual_top_up();
             });
         }
     }
@@ -4427,7 +5338,7 @@ mod multiaddresses {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let new_multiaddress: MultiAddress<Test> =
                     "/ip4/127.0.0.1/udp/1234/new/multiaddress"
@@ -4459,7 +5370,7 @@ mod multiaddresses {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 // Add the maximum amount of multiaddresses for Alice (we start at 1 since Alice already has a MultiAddress)
                 for i in 1..MaxMultiAddressAmount::<Test>::get() {
@@ -4523,7 +5434,7 @@ mod multiaddresses {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 // Add a new multiaddress to Alice
                 let new_multiaddress: MultiAddress<Test> =
@@ -4562,7 +5473,7 @@ mod multiaddresses {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 // Try to remove the only multiaddress of Alice
                 assert_noop!(
@@ -4595,7 +5506,7 @@ mod multiaddresses {
                         .unwrap();
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 // Add a multiaddress to Alice
                 assert_ok!(StorageProviders::add_multiaddress(
@@ -4618,7 +5529,7 @@ mod multiaddresses {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 // Add the maximum amount of multiaddresses for Alice (we start at 1 since Alice already has a MultiAddress)
                 for i in 1usize..<MaxMultiAddressAmount<Test> as Get<u32>>::get() as usize {
@@ -4651,7 +5562,7 @@ mod multiaddresses {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _value_prop_id) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 // We first add a multiaddress to Alice
                 let new_multiaddress: MultiAddress<Test> =
@@ -4703,7 +5614,7 @@ mod add_value_prop {
                 assert_noop!(
                     StorageProviders::add_value_prop(
                         RuntimeOrigin::signed(alice),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit
                     ),
@@ -4718,13 +5629,13 @@ mod add_value_prop {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -4732,7 +5643,7 @@ mod add_value_prop {
                 assert_noop!(
                     StorageProviders::add_value_prop(
                         RuntimeOrigin::signed(alice),
-                        value_prop.price_per_unit_of_data_per_block,
+                        value_prop.price_per_giga_unit_of_data_per_block,
                         value_prop.commitment.clone(),
                         value_prop.bucket_data_limit
                     ),
@@ -4751,14 +5662,14 @@ mod add_value_prop {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
                 let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -4815,7 +5726,7 @@ mod make_value_prop_unavailable {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
@@ -4839,14 +5750,14 @@ mod make_value_prop_unavailable {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
                 let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -4874,7 +5785,7 @@ mod make_value_prop_unavailable {
                     )
                     .unwrap(),
                     ValueProposition::<Test> {
-                        price_per_unit_of_data_per_block: 999,
+                        price_per_giga_unit_of_data_per_block: 999,
                         commitment: bounded_vec![],
                         bucket_data_limit: 999,
                         available: false
@@ -4889,7 +5800,7 @@ mod make_value_prop_unavailable {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp, _) =
-                    register_account_as_msp(alice, storage_amount);
+                    register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
@@ -4897,7 +5808,7 @@ mod make_value_prop_unavailable {
 
                 assert_ok!(StorageProviders::add_value_prop(
                     RuntimeOrigin::signed(alice),
-                    value_prop.price_per_unit_of_data_per_block,
+                    value_prop.price_per_giga_unit_of_data_per_block,
                     value_prop.commitment.clone(),
                     value_prop.bucket_data_limit
                 ));
@@ -4912,7 +5823,6 @@ mod make_value_prop_unavailable {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -4920,12 +5830,12 @@ mod make_value_prop_unavailable {
                 // Try to add a bucket with an unavailable value proposition
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        msp_id,
+                        Some(msp_id),
                         bucket_owner,
                         bucket_id,
                         false,
                         None,
-                        value_prop_id
+                        Some(value_prop_id)
                     ),
                     Error::<Test>::ValuePropositionNotAvailable
                 );
@@ -4942,6 +5852,8 @@ mod make_value_prop_unavailable {
 fn register_account_as_msp(
     account: AccountId,
     storage_amount: StorageDataUnit<Test>,
+    value_prop_price_per_giga_unit_of_data_per_block: Option<BalanceOf<Test>>,
+    value_prop_bucket_size_limit: Option<StorageDataUnit<Test>>,
 ) -> (BalanceOf<Test>, MainStorageProvider<Test>, HashId<Test>) {
     // Initialize variables:
     let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -4965,14 +5877,20 @@ fn register_account_as_msp(
     // Check the balance of the account to make sure it has more than the deposit amount needed
     assert!(NativeBalance::free_balance(&account) >= deposit_for_storage_amount);
 
+    let value_prop = ValueProposition::<Test>::new(
+        value_prop_price_per_giga_unit_of_data_per_block.unwrap_or(1),
+        bounded_vec![],
+        value_prop_bucket_size_limit.unwrap_or(100),
+    );
+
     // Request to sign up the account as a Main Storage Provider
     assert_ok!(StorageProviders::request_msp_sign_up(
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        1,
+        value_prop.price_per_giga_unit_of_data_per_block,
         bounded_vec![],
-        10,
+        value_prop.bucket_data_limit,
         account
     ));
 
@@ -4997,7 +5915,6 @@ fn register_account_as_msp(
 
     let msp_id = StorageProviders::get_provider_id(account).unwrap();
 
-    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
     let value_prop_id = value_prop.derive_id();
 
     // Check that the confirm MSP sign up event was emitted
@@ -5009,7 +5926,7 @@ fn register_account_as_msp(
             capacity: storage_amount,
             value_prop: ValuePropositionWithId {
                 id: value_prop_id,
-                value_prop: value_prop.clone(),
+                value_prop,
             },
         }
         .into(),
@@ -5019,7 +5936,6 @@ fn register_account_as_msp(
     (
         deposit_for_storage_amount,
         MainStorageProvider {
-            buckets: BoundedVec::new(),
             capacity: storage_amount,
             capacity_used: 0,
             multiaddresses,
@@ -5095,6 +6011,7 @@ fn register_account_as_bsp(
         Event::<Test>::BspSignUpSuccess {
             who: account,
             bsp_id,
+            root: DefaultMerkleRoot::get(),
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
         }
@@ -5123,6 +6040,7 @@ fn run_to_block(n: u64) {
     assert!(n > System::block_number(), "Cannot go back in time");
 
     while System::block_number() < n {
+        pallet_randomness::InherentIncluded::<Test>::put(());
         AllPalletsWithSystem::on_finalize(System::block_number());
         System::set_block_number(System::block_number() + 1);
         AllPalletsWithSystem::on_initialize(System::block_number());

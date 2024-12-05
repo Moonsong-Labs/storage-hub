@@ -69,23 +69,21 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletCollatorSelectionError,
   PalletCollatorSelectionEvent,
-  PalletFileSystemAcceptedStorageRequestParameters,
-  PalletFileSystemBatchResponses,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemFileKeyWithProof,
   PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
-  PalletFileSystemMspAcceptedBatchStorageRequests,
-  PalletFileSystemMspFailedBatchStorageRequests,
-  PalletFileSystemMspRejectedBatchStorageRequests,
-  PalletFileSystemMspRespondStorageRequestsResult,
-  PalletFileSystemMspStorageRequestResponse,
+  PalletFileSystemPendingFileDeletionRequest,
+  PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
+  PalletFileSystemStorageRequestMspAcceptedFileKeys,
+  PalletFileSystemStorageRequestMspBucketResponse,
   PalletMessageQueueBookState,
   PalletMessageQueueCall,
   PalletMessageQueueError,
@@ -151,6 +149,7 @@ import type {
   PalletStorageProvidersSignUpRequest,
   PalletStorageProvidersSignUpRequestSpParams,
   PalletStorageProvidersStorageProviderId,
+  PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
   PalletSudoCall,
@@ -178,6 +177,8 @@ import type {
   ShpFileKeyVerifierFileKeyProof,
   ShpFileMetadataFileMetadata,
   ShpFileMetadataFingerprint,
+  ShpTraitsTrieAddMutation,
+  ShpTraitsTrieMutation,
   ShpTraitsTrieRemoveMutation,
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
@@ -234,6 +235,7 @@ import type {
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
@@ -355,23 +357,21 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionCandidateInfo: PalletCollatorSelectionCandidateInfo;
     PalletCollatorSelectionError: PalletCollatorSelectionError;
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
-    PalletFileSystemAcceptedStorageRequestParameters: PalletFileSystemAcceptedStorageRequestParameters;
-    PalletFileSystemBatchResponses: PalletFileSystemBatchResponses;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
     PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
-    PalletFileSystemMspAcceptedBatchStorageRequests: PalletFileSystemMspAcceptedBatchStorageRequests;
-    PalletFileSystemMspFailedBatchStorageRequests: PalletFileSystemMspFailedBatchStorageRequests;
-    PalletFileSystemMspRejectedBatchStorageRequests: PalletFileSystemMspRejectedBatchStorageRequests;
-    PalletFileSystemMspRespondStorageRequestsResult: PalletFileSystemMspRespondStorageRequestsResult;
-    PalletFileSystemMspStorageRequestResponse: PalletFileSystemMspStorageRequestResponse;
+    PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
+    PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
+    PalletFileSystemStorageRequestMspAcceptedFileKeys: PalletFileSystemStorageRequestMspAcceptedFileKeys;
+    PalletFileSystemStorageRequestMspBucketResponse: PalletFileSystemStorageRequestMspBucketResponse;
     PalletMessageQueueBookState: PalletMessageQueueBookState;
     PalletMessageQueueCall: PalletMessageQueueCall;
     PalletMessageQueueError: PalletMessageQueueError;
@@ -437,6 +437,7 @@ declare module "@polkadot/types/types/registry" {
     PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
     PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
     PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
+    PalletStorageProvidersTopUpMetadata: PalletStorageProvidersTopUpMetadata;
     PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
     PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
     PalletSudoCall: PalletSudoCall;
@@ -464,6 +465,8 @@ declare module "@polkadot/types/types/registry" {
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
     ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
     ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
+    ShpTraitsTrieAddMutation: ShpTraitsTrieAddMutation;
+    ShpTraitsTrieMutation: ShpTraitsTrieMutation;
     ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;
@@ -520,6 +523,7 @@ declare module "@polkadot/types/types/registry" {
     StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage;
     StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage;
     StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor;
+    StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate: StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate;
     StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters: StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters;
     StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
     StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue;

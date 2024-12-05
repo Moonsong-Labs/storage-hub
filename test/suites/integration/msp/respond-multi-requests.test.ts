@@ -7,6 +7,10 @@ describeMspNet(
   ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
+    const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
+    const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
+    const bucketName = "nothingmuch-3";
+    let bucketId: string;
 
     before(async () => {
       userApi = await createUserApi();
@@ -26,25 +30,24 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("MSP receives files from user after issued storage requests", async () => {
-      const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
-      const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
-      const bucketName = "nothingmuch-3";
-
+    it("User submits 3 storage requests in the same bucket", async () => {
+      // Get value propositions form the MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
       );
-
       const valuePropId = valueProps[0].id;
 
+      // Create a new bucket where all the files will be stored.
       const newBucketEventEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
       if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
+        throw new Error("NewBucket event data does not match expected type");
       }
+      bucketId = newBucketEventDataBlob.bucketId.toString();
 
+      // Seal block with 3 storage requests.
       const txs = [];
       for (let i = 0; i < source.length; i++) {
         const { fingerprint, file_size, location } =
@@ -52,12 +55,12 @@ describeMspNet(
             source[i],
             destination[i],
             userApi.shConsts.NODE_INFOS.user.AddressId,
-            newBucketEventDataBlob.bucketId
+            bucketId
           );
 
         txs.push(
           userApi.tx.fileSystem.issueStorageRequest(
-            newBucketEventDataBlob.bucketId,
+            bucketId,
             location,
             fingerprint,
             file_size,
@@ -66,29 +69,31 @@ describeMspNet(
           )
         );
       }
-
       await userApi.sealBlock(txs, shUser);
+    });
 
-      // Allow time for the MSP to receive and store the file from the user
-      await sleep(3000);
-
+    it("MSP receives files from user and accepts them", async () => {
+      // Get the events of the storage requests to extract the file keys and check
+      // that the MSP received them.
       const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
-
       const matchedEvents = events.filter((e) =>
         userApi.events.fileSystem.NewStorageRequest.is(e.event)
       );
-
       if (matchedEvents.length !== source.length) {
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
-      const issuedFileKeys = [];
+      // Allow time for the MSP to receive and store the files from the user
+      // TODO: Ideally, this should be turned into a polling helper function.
+      await sleep(3000);
+
+      // Check if the MSP received the files.
       for (const e of matchedEvents) {
         const newStorageRequestDataBlob =
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
 
         if (!newStorageRequestDataBlob) {
-          throw new Error("Event doesn't match Type");
+          throw new Error("Event doesn't match NewStorageRequest type");
         }
 
         const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(
@@ -100,82 +105,100 @@ describeMspNet(
             `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
           );
         }
-
-        issuedFileKeys.push(newStorageRequestDataBlob.fileKey);
       }
 
-      // Seal block containing the MSP's transaction response to the storage request
-      const responses = await userApi.wait.mspResponse();
+      // Seal block containing the MSP's first response.
+      // MSPs batch responses to achieve higher throughput in periods of high demand. But they
+      // also prioritise a fast response, so if the Forest Write Lock is available, it will send
+      // the first response it can immediately.
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
 
-      if (responses.length !== 1) {
-        throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
-        );
+      // Give time for the MSP to update the local forest root.
+      // TODO: Ideally, this should be turned into a polling helper function.
+      await sleep(1000);
+
+      // Check that the local forest root is updated, and matches th on-chain root.
+      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
+
+      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+        "providers",
+        "BucketRootChanged"
+      );
+      const bucketRootChangedDataBlob =
+        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+        bucketRootChangedEvent.data;
+      if (!bucketRootChangedDataBlob) {
+        throw new Error("Expected BucketRootChanged event but received event of different type");
       }
 
-      const response = responses[0].asAccepted;
+      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
 
-      strictEqual(response.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
-
-      // There is only a single key being accepted since it is the first file key to be processed and there is nothing to batch.
-      strictEqual(
-        issuedFileKeys.some((key) => key.toString() === response.fileKeys[0].toString()),
-        true
+      // The MSP should have accepted exactly one file.
+      // Register how many were accepted in the last block sealed.
+      const acceptedFileKeys: string[] = [];
+      const mspAcceptedStorageRequestEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "MspAcceptedStorageRequest"
+      );
+      for (const e of mspAcceptedStorageRequestEvents) {
+        const mspAcceptedStorageRequestDataBlob =
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(e.event) && e.event.data;
+        if (mspAcceptedStorageRequestDataBlob) {
+          acceptedFileKeys.push(mspAcceptedStorageRequestDataBlob.fileKey.toString());
+        }
+      }
+      invariant(
+        acceptedFileKeys.length === 1,
+        "Expected 1 file key accepted in first block after storage requests"
       );
 
-      // Allow time for the MSP to update the local forest root
-      await sleep(3000);
+      // An additional block needs to be sealed to accept the rest of the files.
+      // There should be a pending transaction to accept the rest of the files.
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.sealBlock();
 
-      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
-        response.bucketId.toString()
+      // Give time for the MSP to update the local forest root.
+      // TODO: Ideally, this should be turned into a polling helper function.
+      await sleep(1000);
+
+      // Check that the local forest root is updated, and matches th on-chain root.
+      const localBucketRoot2 = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
+
+      const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
+        "providers",
+        "BucketRootChanged"
       );
-
-      strictEqual(response.newBucketRoot.toString(), local_bucket_root.toString());
-
-      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
-        response.bucketId.toString(),
-        response.fileKeys[0]
-      );
-
-      invariant(isFileInForest.isTrue, "File is not in forest");
-
-      // Seal block containing the MSP's transaction response to the storage request
-      const responses2 = await userApi.wait.mspResponse();
-
-      if (responses2.length !== 1) {
-        throw new Error(
-          "Expected 1 response since there is only a single bucket and should have been accepted"
-        );
+      const bucketRootChangedDataBlob2 =
+        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
+        bucketRootChangedEvent2.data;
+      if (!bucketRootChangedDataBlob2) {
+        throw new Error("Expected BucketRootChanged event but received event of different type");
       }
 
-      const response2 = responses2[0].asAccepted;
+      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
 
-      strictEqual(response2.bucketId.toString(), newBucketEventDataBlob.bucketId.toString());
-
-      // There are two keys being accepted at once since they are batched.
-      strictEqual(
-        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[0].toString()),
-        true
+      // The MSP should have accepted at least one file.
+      // Register how many were accepted in the last block sealed.
+      const mspAcceptedStorageRequestEvents2 = await userApi.assert.eventMany(
+        "fileSystem",
+        "MspAcceptedStorageRequest"
       );
-      strictEqual(
-        issuedFileKeys.some((key) => key.toString() === response2.fileKeys[1].toString()),
-        true
-      );
+      for (const e of mspAcceptedStorageRequestEvents2) {
+        const mspAcceptedStorageRequestDataBlob =
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(e.event) && e.event.data;
+        if (mspAcceptedStorageRequestDataBlob) {
+          acceptedFileKeys.push(mspAcceptedStorageRequestDataBlob.fileKey.toString());
+        }
+      }
 
-      // Allow time for the MSP to update the local forest root
-      await sleep(3000);
+      // Now for sure, the total number of accepted files should be `source.length`.
+      invariant(acceptedFileKeys.length === source.length, `Expected ${source.length} file keys`);
 
-      const local_bucket_root2 = await mspApi.rpc.storagehubclient.getForestRoot(
-        response2.bucketId.toString()
-      );
-
-      strictEqual(response2.newBucketRoot.toString(), local_bucket_root2.toString());
-
-      for (const fileKey of response2.fileKeys) {
-        const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
-          response2.bucketId.toString(),
-          fileKey
-        );
+      // And they should be in the Forest storage of the MSP, in the Forest corresponding
+      // to the bucket ID.
+      for (const fileKey of acceptedFileKeys) {
+        const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
         invariant(isFileInForest.isTrue, "File is not in forest");
       }
     });

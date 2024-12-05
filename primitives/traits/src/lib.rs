@@ -9,6 +9,7 @@ use frame_support::{
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
+use serde::{Deserialize, Serialize};
 use sp_core::Get;
 use sp_runtime::{
     traits::{
@@ -151,7 +152,9 @@ pub trait ReadBucketsInterface {
     ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError>;
 
     /// Get the MSP ID of the MSP that's storing a bucket.
-    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId>;
+    fn get_msp_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError>;
 
     /// Check if an account is the owner of a bucket.
     fn is_bucket_owner(
@@ -162,9 +165,8 @@ pub trait ReadBucketsInterface {
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
 
-    /// Derive the Bucket Id of a bucket, from its MSP, owner and name.
+    /// Derive the Bucket Id of a bucket, from its owner and name.
     fn derive_bucket_id(
-        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId;
@@ -179,7 +181,9 @@ pub trait ReadBucketsInterface {
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError>;
 
     /// Get the MSP of a bucket.
-    fn get_msp_bucket(bucket_id: &Self::BucketId) -> Result<Self::ProviderId, DispatchError>;
+    fn get_msp_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError>;
 }
 
 /// A trait to change the state of buckets registered in the system, such as updating their privacy
@@ -272,16 +276,22 @@ pub trait MutateBucketsInterface {
     /// If `privacy` is true, the bucket will be private and optionally the `read_access_group_id` will be used to
     /// determine the collection of NFTs that can access the bucket.
     fn add_bucket(
-        provider_id: Self::ProviderId,
+        provider_id: Option<Self::ProviderId>,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Self::ValuePropId,
+        value_prop_id: Option<Self::ValuePropId>,
     ) -> DispatchResult;
 
     /// Change MSP of a bucket.
-    fn change_msp_bucket(bucket_id: &Self::BucketId, new_msp: &Self::ProviderId) -> DispatchResult;
+    fn assign_msp_to_bucket(
+        bucket_id: &Self::BucketId,
+        new_msp: &Self::ProviderId,
+    ) -> DispatchResult;
+
+    /// Set a bucket's `msp_id` to `None` and also removing the element from the list in `MainStorageProviderIdsToBuckets`
+    fn unassign_msp_from_bucket(bucket_id: &Self::BucketId) -> DispatchResult;
 
     /// Change the root of a bucket.
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult;
@@ -828,7 +838,18 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+#[derive(
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    PartialEq,
+    Debug,
+    Default,
+    Serialize,
+    Deserialize,
+)]
 pub struct TrieRemoveMutation;
 
 impl Into<TrieMutation> for TrieRemoveMutation {
@@ -939,6 +960,18 @@ pub trait PaymentStreamsInterface {
         user_account: &Self::AccountId,
     ) -> Option<Self::FixedRatePaymentStream>;
 
+    /// Get inner rate value of a fixed-rate payment stream between a User and a Provider
+    fn get_inner_fixed_rate_payment_stream_value(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Check if a fixed-rate payment stream exists between a User and a Provider.
+    fn fixed_rate_payment_stream_exists(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> bool;
+
     /// Create a new dynamic-rate payment stream from a User to a Provider.
     fn create_dynamic_rate_payment_stream(
         provider_id: &Self::ProviderId,
@@ -993,19 +1026,22 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
-/// A trait to mutate the price per unit per tick.
+/// A trait to mutate the price per giga-unit per tick.
 ///
-/// This is used by the Payment Streams pallet to expose the function to update the price per unit per tick,
+/// This is used by the Payment Streams pallet to expose the function to update the price per giga-unit per tick,
 /// which governs the amount to charge for dynamic-rate payment streams.
-pub trait MutatePricePerUnitPerTickInterface {
+///
+/// The use of giga-units instead of units is to avoid issues with decimal places, since the Balance type
+/// might not granular enough to represent the price per unit.
+pub trait MutatePricePerGigaUnitPerTickInterface {
     /// The type which represents a price per unit per tick.
-    type PricePerUnitPerTick: NumericalParam;
+    type PricePerGigaUnitPerTick: NumericalParam;
 
     /// Get the price per unit per tick.
-    fn get_price_per_unit_per_tick() -> Self::PricePerUnitPerTick;
+    fn get_price_per_giga_unit_per_tick() -> Self::PricePerGigaUnitPerTick;
 
     /// Update the price per unit per tick..
-    fn set_price_per_unit_per_tick(price_index: Self::PricePerUnitPerTick);
+    fn set_price_per_giga_unit_per_tick(price_index: Self::PricePerGigaUnitPerTick);
 }
 
 /// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof

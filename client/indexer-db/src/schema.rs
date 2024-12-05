@@ -10,6 +10,14 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         onchain_bsp_id -> Varchar,
+        merkle_root -> Bytea,
+    }
+}
+
+diesel::table! {
+    bsp_file (bsp_id, file_id) {
+        bsp_id -> Int4,
+        file_id -> Int4,
     }
 }
 
@@ -23,7 +31,7 @@ diesel::table! {
 diesel::table! {
     bucket (id) {
         id -> Int4,
-        msp_id -> Int4,
+        msp_id -> Nullable<Int4>,
         account -> Varchar,
         onchain_bucket_id -> Varchar,
         name -> Bytea,
@@ -31,6 +39,29 @@ diesel::table! {
         private -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        merkle_root -> Bytea,
+    }
+}
+
+diesel::table! {
+    file (id) {
+        id -> Int4,
+        account -> Varchar,
+        file_key -> Bytea,
+        bucket_id -> Int4,
+        location -> Bytea,
+        fingerprint -> Bytea,
+        size -> Int8,
+        step -> Int4,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    file_peer_id (file_id, peer_id) {
+        file_id -> Int4,
+        peer_id -> Int4,
     }
 }
 
@@ -74,6 +105,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    peer_id (id) {
+        id -> Int4,
+        peer -> Bytea,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     service_state (id) {
         id -> Int4,
         last_processed_block -> Int8,
@@ -82,19 +122,26 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(bsp_file -> file (file_id));
 diesel::joinable!(bsp_multiaddress -> bsp (bsp_id));
 diesel::joinable!(bsp_multiaddress -> multiaddress (multiaddress_id));
 diesel::joinable!(bucket -> msp (msp_id));
+diesel::joinable!(file_peer_id -> file (file_id));
+diesel::joinable!(file_peer_id -> peer_id (peer_id));
 diesel::joinable!(msp_multiaddress -> msp (msp_id));
 diesel::joinable!(msp_multiaddress -> multiaddress (multiaddress_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     bsp,
+    bsp_file,
     bsp_multiaddress,
     bucket,
+    file,
+    file_peer_id,
     msp,
     msp_multiaddress,
     multiaddress,
     paymentstream,
+    peer_id,
     service_state,
 );

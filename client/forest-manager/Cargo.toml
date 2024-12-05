@@ -46,6 +46,8 @@ std = [
 	"sp-core/std",
 	"sp-runtime/std",
 	"sp-state-machine/std",
+	"shp-forest-verifier/std",
+	"shp-traits/std",
 	"sp-trie/std",
 	"shc-common/std",
 ]

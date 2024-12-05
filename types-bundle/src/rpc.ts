@@ -47,7 +47,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
           type: "Option<H256>"
         }
       ],
-      type: "H256"
+      type: "Option<H256>"
     },
     isFileInForest: {
       description: "Check if a file is in the forest.",
@@ -115,8 +115,8 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
           type: "H256"
         },
         {
-          name: "challenged_file_keys",
-          type: "Vec<H256>"
+          name: "checkpoint_challenges",
+          type: "Option<Vec<CheckpointChallenge>>"
         }
       ],
       type: "Vec<u8>"

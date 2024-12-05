@@ -12,7 +12,7 @@ pub struct Bucket {
     /// The ID of the Bucket as stored in the database. For the runtime id, use `onchain_bucket_id`.
     pub id: i32,
     /// The ID of the MSP (column in the database) that the bucket belongs to.
-    pub msp_id: i32,
+    pub msp_id: Option<i32>,
     pub account: String,
     pub onchain_bucket_id: String,
     pub name: Vec<u8>,
@@ -20,17 +20,19 @@ pub struct Bucket {
     pub private: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub merkle_root: Vec<u8>,
 }
 
 impl Bucket {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        msp_id: i32,
+        msp_id: Option<i32>,
         account: String,
         onchain_bucket_id: String,
         name: Vec<u8>,
         collection_id: Option<String>,
         private: bool,
+        merkle_root: Vec<u8>,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = diesel::insert_into(bucket::table)
             .values((
@@ -40,6 +42,7 @@ impl Bucket {
                 bucket::name.eq(name),
                 bucket::collection_id.eq(collection_id),
                 bucket::private.eq(private),
+                bucket::merkle_root.eq(merkle_root),
             ))
             .returning(Bucket::as_select())
             .get_result(conn)
@@ -77,6 +80,41 @@ impl Bucket {
             .set(bucket::msp_id.eq(msp_id))
             .returning(Bucket::as_select())
             .get_result(conn)
+            .await?;
+        Ok(bucket)
+    }
+
+    pub async fn update_merkle_root<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+        merkle_root: Vec<u8>,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(bucket::table)
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .set(bucket::merkle_root.eq(merkle_root))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::delete(bucket::table)
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_by_onchain_bucket_id<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: String,
+    ) -> Result<Self, diesel::result::Error> {
+        let bucket = bucket::table
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .first(conn)
             .await?;
         Ok(bucket)
     }

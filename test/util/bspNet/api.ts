@@ -2,11 +2,15 @@ import "@storagehub/types-bundle";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { EventRecord } from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { assertEventPresent } from "../asserts";
-import { createBucket, sendNewStorageRequest } from "./fileHelpers";
+import {
+  createBucket,
+  createBucketAndSendNewStorageRequest,
+  sendNewStorageRequest
+} from "./fileHelpers";
 import type { BspNetApi } from "./types";
 import { advanceToBlock, sealBlock } from "./block";
 import type { HexString } from "@polkadot/util/types";
@@ -41,14 +45,25 @@ export const createApiObject = async (
         waitForBspProofs?: string[];
       }
     ) =>
-      advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
+      advanceToBlock(baseApi, {
+        ...options,
+        blockNumber
+      }),
 
     sendNewStorageRequest: async (
       source: string,
       location: string,
+      bucketId: H256,
+      owner?: KeyringPair,
+      mspId?: HexString
+    ) => sendNewStorageRequest(baseApi, source, location, bucketId, owner, mspId),
+
+    createBucketAndSendNewStorageRequest: async (
+      source: string,
+      location: string,
       bucketName: string,
       valuePropId?: HexString
-    ) => sendNewStorageRequest(baseApi, source, location, bucketName, valuePropId),
+    ) => createBucketAndSendNewStorageRequest(baseApi, source, location, bucketName, valuePropId),
 
     createBucket: async (bucketName: string, valuePropId?: HexString) =>
       createBucket(baseApi, bucketName, valuePropId),

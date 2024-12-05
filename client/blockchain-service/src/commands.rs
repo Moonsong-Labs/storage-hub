@@ -18,7 +18,7 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
     BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses, ProviderId,
-    RandomnessOutput, StorageProviderId, TickNumber, TrieRemoveMutation,
+    RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber, TrieRemoveMutation,
 };
 use sp_api::ApiError;
 use sp_core::H256;
@@ -180,8 +180,9 @@ pub enum BlockchainServiceCommand {
     },
     QueryMspIdOfBucketId {
         bucket_id: BucketId,
-        callback:
-            tokio::sync::oneshot::Sender<Result<MainStorageProviderId, QueryMspIdOfBucketIdError>>,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError>,
+        >,
     },
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
@@ -358,13 +359,14 @@ pub trait BlockchainServiceInterface {
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
         retry_strategy: RetryStrategy,
-    ) -> Result<()>;
+        with_events: bool,
+    ) -> Result<Option<StorageHubEventsVec>>;
 
     /// Helper function to get the MSP ID of a bucket ID.
     async fn query_msp_id_of_bucket_id(
         &self,
         bucket_id: BucketId,
-    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError>;
+    ) -> Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError>;
 
     /// Helper function to release the forest root write lock.
     async fn release_forest_root_write_lock(
@@ -768,7 +770,8 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
         retry_strategy: RetryStrategy,
-    ) -> Result<()> {
+        with_events: bool,
+    ) -> Result<Option<StorageHubEventsVec>> {
         let call = call.into();
 
         for retry_count in 0..=retry_strategy.max_retries {
@@ -781,34 +784,41 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
                 .await?
                 .with_timeout(retry_strategy.timeout);
 
-            let result = transaction.watch_for_success(&self).await;
+            let result: Result<Option<StorageHubEventsVec>> = if with_events {
+                transaction
+                    .watch_for_success_with_events(&self)
+                    .await
+                    .map(Some)
+            } else {
+                transaction.watch_for_success(&self).await.map(|_| None)
+            };
 
             match result {
-                Ok(_) => {
+                Ok(maybe_events) => {
                     debug!(target: LOG_TARGET, "Transaction succeeded");
-                    return Ok(());
+                    return Ok(maybe_events);
                 }
                 Err(err) => {
                     warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
+
+                    if let Some(ref should_retry) = retry_strategy.should_retry {
+                        if !should_retry().await {
+                            return Err(anyhow::anyhow!("Exhausted retry strategy"));
+                        }
+                    }
+
+                    warn!(target: LOG_TARGET, "Failed to submit transaction, attempt #{}", retry_count + 1);
                 }
             }
-
-            if let Some(ref should_retry) = retry_strategy.should_retry {
-                if !should_retry().await {
-                    return Err(anyhow::anyhow!("Exhausted retry strategy"));
-                }
-            }
-
-            warn!(target: LOG_TARGET, "Failed to submit transaction, attempt #{}", retry_count + 1);
         }
 
-        Ok(())
+        Err(anyhow::anyhow!("Exhausted retry strategy"))
     }
 
     async fn query_msp_id_of_bucket_id(
         &self,
         bucket_id: BucketId,
-    ) -> Result<MainStorageProviderId, QueryMspIdOfBucketIdError> {
+    ) -> Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryMspIdOfBucketId {
             bucket_id,

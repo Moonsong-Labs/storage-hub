@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-//! Function to calculate the percentage amount of tokens from the baseline that
-//! will be transfered to the treasury from the charged payment streams.
+//! Functions to calculate the percentage amount of tokens from the baseline that
+//! will be transferred to the treasury from the charged payment streams.
 
 use core::marker::PhantomData;
 use shp_traits::{NumericalParam, TreasuryCutCalculator};

@@ -1,9 +1,10 @@
-import type { EventRecord } from "@polkadot/types/interfaces";
-import invariant from "tiny-invariant";
 import type { ApiPromise } from "@polkadot/api";
-import type { AugmentedEvent } from "@polkadot/api/types";
-import { sleep } from "./timer";
+import type { EventRecord } from "@polkadot/types/interfaces";
+import type { IsEvent } from "@polkadot/types/metadata/decorate/types";
+import type { AnyTuple, IEvent } from "@polkadot/types/types";
+import invariant from "tiny-invariant";
 import { sealBlock, waitForLog } from "./bspNet";
+import { sleep } from "./timer";
 
 export type AssertExtrinsicOptions = {
   /** The block height to check. If not provided, the latest block will be used. */
@@ -22,8 +23,10 @@ export type AssertExtrinsicOptions = {
   ignoreParamCheck?: boolean;
   /** If provided, asserts that the number of extrinsics found matches this value. */
   assertLength?: number;
-  /**If provided, will not throw until this timeout is reached. */
+  /** If provided, will not throw until this timeout is reached. */
   timeout?: number;
+  /** Provide more logs */
+  verbose?: boolean;
 };
 /**
  * Asserts that a specific extrinsic (module.method) is present in a blockchain block or transaction pool.
@@ -75,9 +78,10 @@ export const assertExtrinsicPresent = async (
             const response = await api.rpc.chain.getBlock(blockHash);
 
             if (!options.blockHeight && !options.blockHash) {
-              console.log(
-                `No block height provided, using latest at ${response.block.header.number.toNumber()}`
-              );
+              options.verbose &&
+                console.log(
+                  `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+                );
             }
             return response.block.extrinsics;
           })()
@@ -173,23 +177,16 @@ export const assertEventMany = (
   return matchingEvents;
 };
 
-type EventData<T extends AugmentedEvent<"promise">> = T extends AugmentedEvent<"promise", infer D>
-  ? D
-  : never;
-
-export const fetchEventData = <T extends AugmentedEvent<"promise">>(
-  matcher: T,
+export const fetchEvent = <T extends AnyTuple, N = unknown>(
+  matcher: IsEvent<T, N>,
   events?: EventRecord[]
-): EventData<T> => {
+): IEvent<T, N> => {
   invariant(events && events.length > 0, "No events emitted in block");
 
   const eventRecord = events.find((e) => matcher.is(e.event));
 
   invariant(eventRecord !== undefined, `No event found for matcher, ${matcher.meta.name}`);
-
-  const event = eventRecord.event;
-
-  return event.data as unknown as EventData<T>;
+  return eventRecord.event as unknown as IEvent<T, N>;
 };
 
 /**
@@ -223,10 +220,9 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
 
   const { events } = await sealBlock(api);
   assertEventPresent(api, "providers", "Slashed", events);
-  const [provider, _amountSlashed] = fetchEventData(
-    api.events.providers.Slashed,
-    await api.query.system.events()
-  );
+  const {
+    data: { providerId: provider }
+  } = fetchEvent(api.events.providers.Slashed, await api.query.system.events());
   invariant(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
 }
 
@@ -243,6 +239,8 @@ export const assertDockerLog = async (
       timeout
     });
   } catch {
-    throw `No matches for ${searchString} in container ${containerName} after ${timeout / 1000} seconds.`;
+    throw `No matches for ${searchString} in container ${containerName} after ${
+      timeout / 1000
+    } seconds.`;
   }
 };
