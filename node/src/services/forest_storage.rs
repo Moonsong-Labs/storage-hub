@@ -323,6 +323,10 @@ where
         let src = format!("{}_{:?}", storage_path, src_key);
         let dest = format!("{}_{:?}", storage_path, dest_key);
 
+        // Read-lock the source Forest Storage.
+        let src_fs = fs_instances.get(src_key)?.read().await;
+
+        // Copy the full source Forest Storage files to the destination Forest Storage.
         let underlying_db = match rocksdb::copy_db(src, dest) {
             Ok(db) => db,
             Err(e) => {
@@ -331,11 +335,13 @@ where
             }
         };
 
+        // Release the lock on the source Forest Storage.
+        drop(src_fs);
+
+        // Create and insert new Forest Storage instance for the destination Forest Storage.
         let forest_storage =
             RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
-
         let forest_storage = Arc::new(RwLock::new(forest_storage));
-
         fs_instances.insert(dest_key.clone(), forest_storage.clone());
 
         Some(forest_storage)
