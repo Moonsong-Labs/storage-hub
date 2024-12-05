@@ -7,7 +7,11 @@ use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
 };
-use std::{io, path::PathBuf, sync::Arc};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use trie_db::{DBValue, Trie, TrieDBMutBuilder};
 
 use crate::{
@@ -26,6 +30,44 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
 }
 
+/// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+pub fn create_db<T>(db_path: String) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>>
+where
+    T: TrieLayout,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    let db = open_or_creating_rocksdb(db_path).map_err(|e| {
+        warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
+        ForestStorageError::FailedToReadStorage
+    })?;
+
+    Ok(StorageDb {
+        db: Arc::new(db),
+        _phantom: Default::default(),
+    })
+}
+
+pub fn copy_db<T>(
+    src: String,
+    dest: String,
+) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>>
+where
+    T: TrieLayout,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    let src_path = Path::new(&src);
+    let dest_path = Path::new(&dest);
+
+    // Copying all the files from the source directory to the destination directory.
+    copy_dir_all(src_path, dest_path).map_err(|e| {
+        warn!(target: LOG_TARGET, "Failed to copy RocksDB: {}", e);
+        ForestStorageError::FailedToCopyRocksDB
+    })?;
+
+    // Opening the directory with the copied files and returning a new instance of [`StorageDb`].
+    create_db(dest)
+}
+
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
     let mut path = PathBuf::new();
@@ -42,6 +84,24 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     let db = kvdb_rocksdb::Database::open(&db_config, &path_str)?;
 
     Ok(db)
+}
+
+fn copy_dir_all(src: &Path, dest: &Path) -> io::Result<()> {
+    if !dest.exists() {
+        fs::create_dir_all(dest)?;
+    }
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+
+        if src_path.is_dir() {
+            copy_dir_all(&src_path, &dest_path)?;
+        } else {
+            fs::copy(&src_path, &dest_path)?;
+        }
+    }
+    Ok(())
 }
 
 /// Storage backend for RocksDB.
@@ -104,6 +164,7 @@ where
     ///
     /// Once all operations are done, the overlay will be committed to the storage by executing [`RocksDBForestStorage::commit`].
     overlay: PrefixedMemoryDB<HashT<T>>,
+    /// Root hash of the forest.
     root: HasherOutT<T>,
 }
 
@@ -162,21 +223,6 @@ where
         };
 
         Ok(rocksdb_forest_storage)
-    }
-
-    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(
-        db_path: String,
-    ) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
-            ForestStorageError::FailedToReadStorage
-        })?;
-
-        Ok(StorageDb {
-            db: Arc::new(db),
-            _phantom: Default::default(),
-        })
     }
 
     /// Commit [`overlay`](`RocksDBForestStorage::overlay`) to [`storage`](`RocksDBForestStorage::storage`)
