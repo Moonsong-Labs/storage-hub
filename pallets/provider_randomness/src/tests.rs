@@ -8,11 +8,8 @@ use sp_core::blake2_256;
 use sp_runtime::testing::H256;
 
 #[test]
-fn set_babe_randomness_is_mandatory() {
-    use frame_support::dispatch::{DispatchClass, GetDispatchInfo};
-
-    let info = crate::Call::<Test>::set_babe_randomness {}.get_dispatch_info();
-    assert_eq!(info.class, DispatchClass::Mandatory);
+fn provider_cycle_is_initialised_correctly() {
+    ExtBuilder::build().execute_with(|| {});
 }
 
 #[test]

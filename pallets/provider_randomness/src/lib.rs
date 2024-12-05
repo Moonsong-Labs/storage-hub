@@ -20,9 +20,11 @@
 use frame_support::pallet;
 pub use pallet::*;
 
+mod queue;
+mod types;
+
 #[cfg(test)]
 mod mock;
-mod queue;
 #[cfg(test)]
 mod tests;
 
@@ -35,7 +37,7 @@ pub trait RandomSeedMixer<Seed> {
 pub trait VerifiableSeed {
     type SeedCommitment;
     /// Verifies if the seed commitment matches the seed
-    fn verify(&self, seed_commitment: Self::SeedCommitment) -> bool;
+    fn verify(&self, seed_commitment: &Self::SeedCommitment) -> bool;
 }
 
 #[pallet]
@@ -43,12 +45,19 @@ pub mod pallet {
     use super::*;
     use codec::FullCodec;
     use frame_support::pallet_prelude::*;
-    use frame_support::traits::Len;
-    use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use frame_system::WeightInfo;
-    use shp_session_keys::{InherentError, INHERENT_IDENTIFIER};
-    use sp_runtime::traits::Saturating;
+    use frame_support::weights::WeightMeter;
+    use frame_system::pallet_prelude::{BlockNumberFor, OriginFor};
+    use frame_system::{ensure_signed, WeightInfo};
+    use pallet_proofs_dealer::types::BalanceFor;
+    use shp_traits::ReadChallengeableProvidersInterface;
+    use sp_runtime::traits::{
+        CheckEqual, CheckedDiv, Convert, Debug, MaybeDisplay, One, Saturating, SimpleBitOps, Zero,
+    };
     use sp_std::{collections::btree_set::BTreeSet, prelude::*};
+    use types::{
+        CommitmentWithSeed, ProviderIdFor, ProvidersPalletFor, SeedCommitmentFor,
+        StakeToBlockNumberFor,
+    };
 
     #[pallet::pallet]
     #[pallet::without_storage_info]
@@ -56,29 +65,76 @@ pub mod pallet {
 
     /// Configuration trait of this pallet.
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_proofs_dealer::Config {
         /// Overarching event type
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        type StorageProviderId: FullCodec + TypeInfo + Ord + Clone;
-
         /// Id of the seed
-        type SeedId: FullCodec + TypeInfo;
+        /// TODO: Probably not needed
+        type SeedId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
 
         /// Commitment of a seed
-        type SeedCommitment: FullCodec + TypeInfo + Clone;
+        type SeedCommitment: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
 
         /// Randomness seed type
         type Seed: VerifiableSeed<SeedCommitment = Self::SeedCommitment>
-            + FullCodec
-            + TypeInfo
-            + Clone;
+            + Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
 
-        /// Get the BABE data from the runtime
+        /// The seed mixer used to get fresh randomness
         type RandomSeedMixer: RandomSeedMixer<<Self as Config>::Seed>;
 
         /// Seed tolerance window
+        #[pallet::constant]
         type MaxSeedTolerance: Get<u32>;
+
+        /// The ratio to convert staked balance to the seed period.
+        /// This is used to determine the period in which a Provider should reveal their previous randomness and commit a new seed, based on
+        /// their stake. The period is calculated as `StakeToSeedPeriod / stake`, saturating at [`Config::MinSeedPeriod`].
+        #[pallet::constant]
+        type StakeToSeedPeriod: Get<BalanceFor<Self>>;
+
+        /// The minimum period in which a Provider can be asked to reveal and commit seeds, regardless of their stake.
+        #[pallet::constant]
+        type MinSeedPeriod: Get<BlockNumberFor<Self>>;
 
         /// Weight info
         type WeightInfo: WeightInfo;
@@ -87,127 +143,371 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Event emitted when a new random seed is available from the relay chain
-        NewRandomnessSeedGenerated { randomness_seed: String },
+        /// Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
+        RandomnessCommitted {
+            previous_randomness_revealed: T::Seed,
+            valid_from_block: BlockNumberFor<T>,
+            new_seed_commitment: T::SeedCommitment,
+            next_deadline_block: BlockNumberFor<T>,
+        },
+
+        /// Event emitted when a Provider submits their first seed commitment.
+        ProviderInitialisedRandomness {
+            new_seed_commitment: T::SeedCommitment,
+            next_deadline_block: BlockNumberFor<T>,
+        },
     }
 
     #[pallet::error]
     pub enum Error<T> {
+        /// Provider ID provided by the caller is not valid
+        ProviderIdNotValid,
+        /// Caller not owner of the Provider ID
+        CallerNotOwner,
         /// Seed provided by the storage provider is not valid
         NotAValidSeed,
         /// We cannot find corresponding end block for provided seed commitment
         NoEndBlockForSeedCommitment,
+        /// Provider is early in submitting the seed commitment
+        EarlySubmissionOfSeed,
         /// Storage provider is late in submitting the seed commitment
         LateSubmissionOfSeed,
+        /// Seed reveal is missing
+        MissingSeedReveal,
         /// We are not able to convert block number to u32 for arithmetic
         UnableToConvertBlockNumberForArithmetic,
         /// We encountered an error while modifying seed queue
         QueueError(queue::QueueError),
     }
 
-    /// End block (where the seed will be in effect) to set of seed commitment
+    // TODO: Remove any unneeded storage items
+    /// A map from each deadline tick to a vector of the Providers that need to reveal their previous seed commitment and commit a new one in that tick
     #[pallet::storage]
-    type EndBlocks<T: Config> =
-        StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
+    type DeadlineBlockToProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, ValueQuery>;
 
+    /// Commitments that are pending to be revealed by the Providers
+    #[pallet::storage]
+    type PendingCommitments<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::SeedCommitment, ProviderIdFor<T>, OptionQuery>;
+
+    /// A map from each deadline tick to the Providers that have revealed their seed commitments for it
     #[pallet::storage]
     type ReceivedCommitments<T: Config> =
-        StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, ValueQuery>;
 
+    /// A map from each tick to the Providers that have to be marked as slashable in that tick. This will be processed by the `on_idle` hook
     #[pallet::storage]
-    type ExpiredCommitments<T: Config> =
-        StorageMap<_, Identity, BlockNumberFor<T>, Vec<T::StorageProviderId>, ValueQuery>;
+    type ProvidersToMarkAsSlashable<T: Config> =
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, OptionQuery>;
 
     /// Seed commitment to end block number (when the seed must be submitted and at which seed must take effect)
     #[pallet::storage]
-    type SeedCommitmentToEndBlockMapping<T: Config> =
-        StorageMap<_, Identity, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
+    type SeedCommitmentToDeadline<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
 
-    /// Commitments that we need to have seed for before next tick
+    /// Uninitialised Providers that have just been registered (and their deadline tick), which shouldn't send a
+    /// reveal next tick, only a seed commitment
     #[pallet::storage]
-    type PendingCommitments<T: Config> =
-        StorageMap<_, Identity, T::SeedCommitment, T::StorageProviderId, OptionQuery>;
+    type UninitialisedProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>, OptionQuery>;
 
-    /// New seed commitments for storage provider ids for whom new tick is not yet started
     #[pallet::storage]
-    type NewCommitments<T: Config> =
-        StorageMap<_, Identity, T::StorageProviderId, T::SeedCommitment, OptionQuery>;
+    pub type TickToCheckForSlashableProviders<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// Internal storage to manage queue elements
     #[pallet::storage]
-    type RandomnessSeedsQueue<T: Config> =
+    pub type RandomnessSeedsQueue<T: Config> =
         StorageValue<_, BoundedVec<T::Seed, T::MaxSeedTolerance>, ValueQuery>;
 
     /// Internal storage to manage current head and tail of queue
     #[pallet::storage]
-    type QueueParameters<T: Config> = StorageValue<_, (u32, u32), ValueQuery>;
+    pub type QueueParameters<T: Config> = StorageValue<_, (u32, u32), ValueQuery>;
 
     /// Bounded Queue which uses two storage value underneath to maintain logical queue.
-    pub type BoundedQueue<T: Config> = queue::BoundedQueue<
+    pub type BoundedQueue<T> = queue::BoundedQueue<
         <T as frame_system::Config>::DbWeight,
-        T::Seed,
-        T::MaxSeedTolerance,
+        <T as crate::Config>::Seed,
+        <T as crate::Config>::MaxSeedTolerance,
         RandomnessSeedsQueue<T>,
         QueueParameters<T>,
     >;
 
-    impl<T: Config> Pallet<T> {
-        fn add_randomness(
-            sp_id: T::StorageProviderId,
-            seed: T::Seed,
-            corresponding_seed_commitment: T::SeedCommitment,
-            new_seed_commitment: T::SeedCommitment,
-        ) -> Result<Weight, Error<T>> {
-            let maybe_end_block_number =
-                SeedCommitmentToEndBlockMapping::<T>::take(&corresponding_seed_commitment);
-            let end_block_number = if let Some(block_number) = maybe_end_block_number {
-                block_number
-            } else {
-                // Storage provider does not have new seed commitment (likely because they were slashed)
-                return Err(Error::<T>::NoEndBlockForSeedCommitment.into());
-            };
-            PendingCommitments::<T>::remove(&corresponding_seed_commitment);
+    // Genesis config:
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub tick_to_start_checking_for_slashable_providers: BlockNumberFor<T>,
+    }
 
-            let is_valid_seed = seed.verify(corresponding_seed_commitment);
-            if !is_valid_seed {
-                return Err(Error::<T>::NotAValidSeed.into());
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            let tick_to_start_checking_for_slashable_providers = Zero::zero();
+
+            TickToCheckForSlashableProviders::<T>::put(
+                tick_to_start_checking_for_slashable_providers,
+            );
+
+            Self {
+                tick_to_start_checking_for_slashable_providers,
             }
-
-            // Storage provider is late
-            if end_block_number <= frame_system::Pallet::<T>::block_number() {
-                return Err(Error::<T>::LateSubmissionOfSeed.into());
-            }
-
-            PendingCommitments::<T>::insert(new_seed_commitment.clone(), sp_id.clone());
-            ReceivedCommitments::<T>::append(end_block_number, sp_id);
-
-            // Calculating new end block for new seed commitment
-            let seed_tolerance = BlockNumberFor::<T>::from(T::MaxSeedTolerance::get());
-            let new_end_block = end_block_number.saturating_add(seed_tolerance);
-            SeedCommitmentToEndBlockMapping::<T>::insert(new_seed_commitment, new_end_block);
-
-            let distance_from_head: u32 = end_block_number
-                .saturating_sub(frame_system::Pallet::<T>::block_number())
-                .try_into()
-                .map_err(|_e| Error::<T>::UnableToConvertBlockNumberForArithmetic.into())?;
-
-            let _ = BoundedQueue::<T>::overwrite_queue(
-                &|element: &mut <T as Config>::Seed| {
-                    *element =
-                        T::RandomSeedMixer::mix_randomness_seed(&element, &seed, None::<T::Seed>);
-                    // TODO: Put better weight
-                    (true, Weight::zero())
-                },
-                distance_from_head,
-            )
-            .map_err(|queue_error| Error::<T>::QueueError(queue_error).into())?;
-
-            // TODO: Measure weight and return it
-            Ok(Weight::zero())
         }
+    }
 
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            TickToCheckForSlashableProviders::<T>::put(
+                self.tick_to_start_checking_for_slashable_providers,
+            );
+        }
+    }
+
+    #[pallet::call]
+    impl<T: Config> Pallet<T> {
+        #[pallet::call_index(0)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn add_randomness(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+            commitment_with_seed_to_reveal: Option<CommitmentWithSeed<T>>,
+            new_seed_commitment: T::SeedCommitment,
+        ) -> DispatchResultWithPostInfo {
+            // Check if the origin is signed and get the signer
+            let who = ensure_signed(origin)?;
+
+            // Check that the received Provider ID belongs to a Provider owned by the signer
+            let owner_account =
+                <ProvidersPalletFor<T> as ReadChallengeableProvidersInterface>::get_owner_account(
+                    provider_id,
+                )
+                .ok_or(Error::<T>::ProviderIdNotValid)?;
+            ensure!(owner_account == who, Error::<T>::CallerNotOwner);
+
+            // Get the deadline block for the seed commitment, either from the uninitialised Providers storage or from the seed commitment to reveal
+            let (deadline, first_time_provider) =
+                match UninitialisedProviders::<T>::take(&provider_id) {
+                    Some(deadline) => (deadline, true),
+                    None => {
+                        let seed_commitment_to_reveal = commitment_with_seed_to_reveal
+                            .as_ref()
+                            .ok_or(Error::<T>::MissingSeedReveal)?
+                            .commitment;
+                        let deadline =
+                            SeedCommitmentToDeadline::<T>::take(&seed_commitment_to_reveal)
+                                .ok_or(Error::<T>::NoEndBlockForSeedCommitment)?;
+                        (deadline, false)
+                    }
+                };
+
+            // Set up the next seed commitment
+            let new_deadline =
+                Self::set_up_next_seed(&provider_id, &deadline, &new_seed_commitment)?;
+
+            // If this is the first time the Provider submits a seed, there is no need to do anything else
+            if first_time_provider {
+                // Emit the ProviderInitialisedRandomness event
+                Self::deposit_event(Event::ProviderInitialisedRandomness {
+                    new_seed_commitment,
+                    next_deadline_block: new_deadline,
+                });
+            } else {
+                // If this is not the first time the Provider submits a seed, the seed commitment to reveal must have been sent
+                let CommitmentWithSeed {
+                    commitment: seed_commitment_to_reveal,
+                    seed: seed_to_reveal,
+                } = commitment_with_seed_to_reveal.ok_or(Error::<T>::MissingSeedReveal)?;
+
+                // Verify that the received seed to be revealed matches the seed commitment
+                ensure!(
+                    seed_to_reveal.verify(&seed_commitment_to_reveal),
+                    Error::<T>::NotAValidSeed
+                );
+
+                // If verification passed, remove the seed commitment from the pending commitments
+                PendingCommitments::<T>::remove(&seed_commitment_to_reveal);
+
+                // Calculate the distance from the head of the queue that the deadline is, to know from where to start mixing the revealed seed
+                // The head of the queue is the current block, and the mixing should start from the deadline block
+                // Since at maximum the distance from the head is the max seed tolerance (which is a u32), we can safely convert it to u32
+                let distance_from_head: u32 = deadline
+                    .saturating_sub(frame_system::Pallet::<T>::block_number())
+                    .try_into()
+                    .map_err(|_e| Error::<T>::UnableToConvertBlockNumberForArithmetic)?;
+
+                // Now, for each element in the queue from the distance from the head up to the tail, mix the seed with the revealed seed
+                BoundedQueue::<T>::overwrite_queue(
+                    &|element: &mut <T as Config>::Seed| {
+                        *element = T::RandomSeedMixer::mix_randomness_seed(
+                            &element,
+                            &seed_to_reveal,
+                            None::<T::Seed>,
+                        );
+                        // TODO: Put better weight
+                        (true, Weight::zero())
+                    },
+                    distance_from_head,
+                )
+                .map_err(|queue_error| Error::<T>::QueueError(queue_error))?;
+
+                // Finally, emit the RandomnessCommitted event
+                Self::deposit_event(Event::RandomnessCommitted {
+                    previous_randomness_revealed: seed_to_reveal,
+                    valid_from_block: deadline,
+                    new_seed_commitment,
+                    next_deadline_block: new_deadline,
+                });
+            }
+
+            // If the extrinsic has succeeded, it shouldn't pay any fee
+            Ok(Pays::No.into())
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
         fn get_head_randomness() -> (T::Seed, Weight) {
             BoundedQueue::<T>::head()
+        }
+
+        fn get_tail_randomness() -> (T::Seed, Weight) {
+            BoundedQueue::<T>::tail()
+        }
+
+        fn get_randomness_at_index(index: u32) -> Result<(T::Seed, Weight), queue::QueueError> {
+            BoundedQueue::<T>::element_at_index(index)
+        }
+
+        pub fn initialise_provider_cycle(provider_id: ProviderIdFor<T>) -> DispatchResult {
+            // Get the current tick
+            let current_tick = frame_system::Pallet::<T>::block_number();
+
+            // Calculate the seed period for the Provider
+            let min_seed_period = T::MinSeedPeriod::get();
+            let stake = <ProvidersPalletFor<T> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .ok_or(Error::<T>::ProviderIdNotValid)?;
+            let seed_period = match T::StakeToSeedPeriod::get().checked_div(&stake) {
+                Some(period) => {
+                    let seed_period = StakeToBlockNumberFor::<T>::convert(period);
+                    min_seed_period.max(seed_period)
+                }
+                None => min_seed_period,
+            };
+
+            // Calculate the deadline block for the seed commitment
+            let seed_submission_tolerance = T::MaxSeedTolerance::get();
+            let deadline = current_tick
+                .saturating_add(seed_period)
+                .saturating_add(seed_submission_tolerance.into());
+
+            // Store the Provider in the uninitialised Providers storage
+            UninitialisedProviders::<T>::insert(provider_id, deadline);
+
+            // Append the Provider to the deadline block to Providers map
+            DeadlineBlockToProviders::<T>::append(deadline, provider_id);
+
+            Ok(())
+        }
+
+        fn set_up_next_seed(
+            provider_id: &ProviderIdFor<T>,
+            deadline: &BlockNumberFor<T>,
+            next_seed_commitment: &SeedCommitmentFor<T>,
+        ) -> Result<BlockNumberFor<T>, DispatchError> {
+            // Get the current tick
+            let current_tick = frame_system::Pallet::<T>::block_number();
+
+            // Calculate the tolerance window start for this deadline
+            let seed_reveal_tolerance = T::MaxSeedTolerance::get();
+            let tolerance_window_start = deadline.saturating_sub(seed_reveal_tolerance.into());
+
+            // If the Provider is trying to send its next seed commitment before the tolerance window starts, they are early
+            ensure!(
+                current_tick >= tolerance_window_start,
+                Error::<T>::EarlySubmissionOfSeed
+            );
+
+            // If the deadline is in the past, the Provider is late in submitting their next seed commitment
+            ensure!(current_tick <= *deadline, Error::<T>::LateSubmissionOfSeed);
+
+            // Add the new seed commitment to the pending commitments storage
+            PendingCommitments::<T>::insert(next_seed_commitment.clone(), provider_id.clone());
+            // And append the Provider as a valid seed revealer for the deadline block
+            ReceivedCommitments::<T>::append(deadline, provider_id);
+
+            // Calculate the Provider's seed period based on their current stake
+            let min_seed_period = T::MinSeedPeriod::get();
+            let stake = <ProvidersPalletFor<T> as ReadChallengeableProvidersInterface>::get_stake(
+                *provider_id,
+            )
+            .ok_or(Error::<T>::ProviderIdNotValid)?;
+            let seed_period = match T::StakeToSeedPeriod::get().checked_div(&stake) {
+                Some(period) => {
+                    let seed_period = StakeToBlockNumberFor::<T>::convert(period);
+                    min_seed_period.max(seed_period)
+                }
+                None => min_seed_period,
+            };
+
+            // Calculate the deadline block for the new seed commitment and store it
+            let new_deadline = deadline.saturating_add(seed_period);
+            SeedCommitmentToDeadline::<T>::insert(next_seed_commitment, new_deadline);
+
+            // Append the Provider to the deadline block to Providers map
+            DeadlineBlockToProviders::<T>::append(new_deadline, provider_id);
+
+            Ok(new_deadline)
+        }
+
+        /// This function holds the logic that processes the Providers that have missed the deadline to reveal their seed commitments,
+        /// marking them as slashable. If, because of weight limitations, it cannot fully process all Providers to mark as slashable in
+        /// the current tick to process, it stores the remaining Providers to process them in the next execution.
+        /// The function returns a boolean indicating if it has successfully processed all Providers to mark as slashable in the current tick.
+        fn process_providers_to_mark_as_slashable(
+            weight_meter: &mut WeightMeter,
+            current_tick_to_process: BlockNumberFor<T>,
+            providers_to_mark: Vec<ProviderIdFor<T>>,
+        ) -> bool {
+            // Iterate over the Providers to mark as slashable
+            let mut current_provider_index = 0;
+            let amount_of_providers_to_process = providers_to_mark.len();
+            for provider_id in &providers_to_mark {
+                // If there's not enough weight to process the next Provider, break
+                if !weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 1)) {
+                    break;
+                }
+
+                // Mark the Provider as slashable
+                Self::mark_provider_as_slashable(&provider_id);
+
+                // Consume the weight used to mark the Provider as slashable
+                weight_meter.consume(T::DbWeight::get().reads_writes(1, 1));
+
+                // Increment the current provider index
+                current_provider_index += 1;
+            }
+
+            // If there are still Providers to mark as slashable, put them back in the storage and return false
+            if current_provider_index < amount_of_providers_to_process {
+                ProvidersToMarkAsSlashable::<T>::insert(
+                    current_tick_to_process,
+                    providers_to_mark[current_provider_index..].to_vec(),
+                );
+
+                false
+            } else {
+                // Otherwise, return true, since all Providers for this tick have been processed
+                true
+            }
+        }
+
+        /// This function marks a Provider as slashable, incrementing the number of accrued slashable events for them
+        fn mark_provider_as_slashable(provider_id: &ProviderIdFor<T>) {
+            // Missing a randomness seed submission has the same penalty as missing a proof submission
+            pallet_proofs_dealer::SlashableProviders::<T>::mutate(provider_id, |accrued_slashes| {
+                *accrued_slashes = Some(accrued_slashes.unwrap_or(0).saturating_add(1));
+            });
         }
     }
 
@@ -217,24 +517,96 @@ pub mod pallet {
         /// let block builders know how much weight to reserve for it
         /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
         fn on_initialize(now: BlockNumberFor<T>) -> Weight {
+            // First shift the queue, advancing one block to the current one
             let queue_shift_weight = BoundedQueue::<T>::shift_queue();
 
+            // Get the current tolerance for seed submission
+            let seed_reveal_tolerance = T::MaxSeedTolerance::get();
+
+            // Then, for the current block, get the Providers that had to reveal their seed commitments
             let block_to_target = now;
-            let storage_provider_ids =
-                BTreeSet::from_iter(EndBlocks::<T>::take(block_to_target).into_iter());
-            let received_commitments =
+            let due_providers_for_current_block = BTreeSet::from_iter(
+                DeadlineBlockToProviders::<T>::take(block_to_target).into_iter(),
+            );
+
+            // And get the ones that actually submitted their seed commitments
+            let providers_that_submitted =
                 BTreeSet::from_iter(ReceivedCommitments::<T>::take(block_to_target).into_iter());
 
-            // Minus the set in order to find storage providers who did not submit
-            let expired_commitments = storage_provider_ids
-                .difference(&received_commitments)
+            // The difference between the sets are the Providers that did not submit their seed commitments
+            let missing_providers: Vec<ProviderIdFor<T>> = due_providers_for_current_block
+                .difference(&providers_that_submitted)
                 .into_iter()
                 .cloned()
                 .collect();
-            // TODO: Expired commitments should have reasonable bound to prevent bloating
-            ExpiredCommitments::<T>::set(block_to_target, expired_commitments);
+
+            // Set the missing Providers to be marked as slashable in a future execution of the `on_idle` hook
+            ProvidersToMarkAsSlashable::<T>::insert(now, missing_providers.clone());
+
+            // Since the idea is for the Providers that are going to be marked as slashable to submit a new seed commitment as soon as possible,
+            // make it so they have to do it before a tolerance period has passed. If they do not, they will keep getting slashed.
+            DeadlineBlockToProviders::<T>::mutate(
+                now.saturating_add(seed_reveal_tolerance.into()),
+                |providers| {
+                    providers.extend(missing_providers);
+                },
+            );
 
             queue_shift_weight
+        }
+
+        fn on_idle(_n: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+            // Initialise the variable that will hold the consumed weight of this hook
+            let mut weight_meter = WeightMeter::with_limit(remaining_weight);
+
+            // If there's not enough weight for the initial reads and writes that initialise
+            // the `on_idle` hook processing, return
+            if !weight_meter.can_consume(T::DbWeight::get().reads_writes(2, 1)) {
+                return weight_meter.consumed();
+            }
+
+            // Get the next tick of this pallet
+            let next_tick = frame_system::Pallet::<T>::block_number().saturating_add(One::one());
+
+            // Get the current tick to process
+            let mut current_tick_to_process = TickToCheckForSlashableProviders::<T>::get();
+
+            // Consume the weight used to initialise the `on_idle` hook processing
+            weight_meter.consume(T::DbWeight::get().reads_writes(2, 1));
+
+            // While there's enough weight to process at least one Provider AND the current tick to process is not greater than or equal to the next tick of this pallet,
+            // process the Providers to mark as slashable
+            while current_tick_to_process < next_tick
+                && weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 1))
+            {
+                // Check how many Providers have to be marked as slashable in this tick
+                let providers_to_mark =
+                    ProvidersToMarkAsSlashable::<T>::take(current_tick_to_process);
+
+                // If there are any, process them, consuming the weight used to do so
+                let should_advance_tick = if providers_to_mark.is_some() {
+                    Self::process_providers_to_mark_as_slashable(
+                        &mut weight_meter,
+                        current_tick_to_process,
+                        providers_to_mark
+                            .expect("This option is some since we checked it before. qed"),
+                    )
+                } else {
+                    true
+                };
+
+                // Calculate the next tick to process
+                if should_advance_tick {
+                    current_tick_to_process = current_tick_to_process.saturating_add(One::one());
+                }
+            }
+
+            // After this, the `current_tick_to_process` variable should hold the tick that has to be processed in the next `on_idle` hook execution
+            // This is going to be either a tick that was left partially processed because of weight limitations, or the next tick of this pallet
+            TickToCheckForSlashableProviders::<T>::put(current_tick_to_process);
+
+            // Return the consumed weight of this hook
+            weight_meter.consumed()
         }
     }
 }

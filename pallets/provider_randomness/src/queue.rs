@@ -86,6 +86,12 @@ where
         (queue[head as usize].clone(), W::get().reads(2))
     }
 
+    pub fn element_at_index(index: u32) -> Result<(ELEMENT, Weight), QueueError> {
+        let actual_index = Self::convert_logical_index_to_actual(index, SIZE::get())?;
+        let queue = Q::get();
+        Ok((queue[actual_index].clone(), W::get().reads(2)))
+    }
+
     pub fn shift_queue() -> Weight {
         let (head, tail) = P::get();
         let size = SIZE::get();
