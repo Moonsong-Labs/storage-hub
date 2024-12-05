@@ -6,7 +6,7 @@ use frame_support::{BoundedVec, StorageValue};
 use scale_info::TypeInfo;
 use sp_core::Get;
 
-#[derive(Encode, Decode, TypeInfo)]
+#[derive(Encode, Decode, TypeInfo, Debug)]
 pub enum QueueError {
     IndexOutOfRange,
 }
@@ -98,9 +98,9 @@ where
         let mut queue = Q::get();
 
         // We need to increment head and tail
-        let new_head = if head + 1 > size { 0 } else { head + 1 };
+        let new_head = if head + 1 >= size { 0 } else { head + 1 };
 
-        let new_tail = if tail + 1 > size { 0 } else { tail + 1 };
+        let new_tail = if tail + 1 >= size { 0 } else { tail + 1 };
 
         queue[new_tail as usize] = queue[tail as usize].clone();
 

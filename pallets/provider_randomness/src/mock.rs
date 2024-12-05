@@ -19,7 +19,7 @@ use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
-    BoundedBTreeSet, BuildStorage, DispatchError, Perbill, SaturatedConversion,
+    BoundedBTreeSet, BoundedVec, BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::convert::{TryFrom, TryInto};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -27,12 +27,12 @@ use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
 pub type AccountId = u64;
-type StorageDataUnit = u64;
+pub type StorageDataUnit = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 const UNITS: Balance = 1_000_000_000_000;
 pub(crate) const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
-pub(crate) const STAKE_TO_SEED_PERIOD: Balance = 10 * UNITS;
+pub(crate) const STAKE_TO_SEED_PERIOD: Balance = 1000 * UNITS;
 
 // Configure a mock runtime to test the pallet.
 #[frame_support::runtime]
@@ -459,15 +459,21 @@ impl Config for Test {
     type SeedCommitment = H256;
     type Seed = H256;
     type RandomSeedMixer = MockRandomSeedMixer;
-    type MaxSeedTolerance = ConstU32<10>;
-    type StakeToSeedPeriod = ConstU128<STAKE_TO_SEED_PERIOD>;
-    type MinSeedPeriod = ConstU64<4>;
+    type MaxSeedTolerance = MaxSeedTolerance;
+    type StakeToSeedPeriod = StakeToSeedPeriod;
+    type MinSeedPeriod = MinSeedPeriod;
+}
+
+parameter_types! {
+    pub const MaxSeedTolerance: u32 = 10;
+    pub const StakeToSeedPeriod: u128 = STAKE_TO_SEED_PERIOD;
+    pub const MinSeedPeriod: u64 = 4;
 }
 
 impl VerifiableSeed for H256 {
     type SeedCommitment = H256;
     fn verify(&self, seed_commitment: &Self::SeedCommitment) -> bool {
-        self == seed_commitment
+        BlakeTwo256::hash(self.as_bytes()) == *seed_commitment
     }
 }
 
@@ -526,6 +532,11 @@ impl ExtBuilder {
 
         crate::GenesisConfig::<Test> {
             tick_to_start_checking_for_slashable_providers: 0,
+            initial_elements_for_randomness: BoundedVec::truncate_from(vec![
+                Default::default();
+                MaxSeedTolerance::get()
+                    as usize
+            ]),
         }
         .assimilate_storage(&mut t)
         .unwrap();

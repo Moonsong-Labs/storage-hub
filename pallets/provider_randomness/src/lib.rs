@@ -183,6 +183,8 @@ pub mod pallet {
         LateSubmissionOfSeed,
         /// Seed reveal is missing
         MissingSeedReveal,
+        /// Seed commitment is already in the list of pending commitments
+        NewCommitmentAlreadyPending,
         /// We are not able to convert block number to u32 for arithmetic
         UnableToConvertBlockNumberForArithmetic,
         /// We encountered an error while modifying seed queue
@@ -247,18 +249,19 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub tick_to_start_checking_for_slashable_providers: BlockNumberFor<T>,
+        pub initial_elements_for_randomness: BoundedVec<T::Seed, T::MaxSeedTolerance>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let tick_to_start_checking_for_slashable_providers = Zero::zero();
-
-            TickToCheckForSlashableProviders::<T>::put(
-                tick_to_start_checking_for_slashable_providers,
-            );
+            let queue_size: usize = T::MaxSeedTolerance::get() as usize; // `MaxSeedTolerance` has to fit into an usize
+            let initial_elements_for_randomness =
+                BoundedVec::truncate_from(vec![Default::default(); queue_size]);
 
             Self {
                 tick_to_start_checking_for_slashable_providers,
+                initial_elements_for_randomness,
             }
         }
     }
@@ -269,6 +272,8 @@ pub mod pallet {
             TickToCheckForSlashableProviders::<T>::put(
                 self.tick_to_start_checking_for_slashable_providers,
             );
+
+            BoundedQueue::<T>::init(self.initial_elements_for_randomness.clone());
         }
     }
 
@@ -292,6 +297,12 @@ pub mod pallet {
                 )
                 .ok_or(Error::<T>::ProviderIdNotValid)?;
             ensure!(owner_account == who, Error::<T>::CallerNotOwner);
+
+            // Check that the new commitment is not on the pending commitments storage
+            ensure!(
+                !PendingCommitments::<T>::contains_key(&new_seed_commitment),
+                Error::<T>::NewCommitmentAlreadyPending
+            );
 
             // Get the deadline block for the seed commitment, either from the first-submitters Providers storage or from the seed commitment to reveal
             let (deadline, first_time_provider) =
