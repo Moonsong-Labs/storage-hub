@@ -28,6 +28,9 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+use crate::types::ProviderIdFor;
+use shp_traits::CommitRevealRandomnessInterface;
+
 pub trait RandomSeedMixer<Seed> {
     /// Mix randomeness seed 1 and seed 2 to generate new seed.
     /// Optionally takes a context seed to further randomize the mixing.
@@ -47,7 +50,7 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_support::weights::WeightMeter;
     use frame_system::pallet_prelude::{BlockNumberFor, OriginFor};
-    use frame_system::{ensure_signed, WeightInfo};
+    use frame_system::{ensure_root, ensure_signed, WeightInfo};
     use pallet_proofs_dealer::types::BalanceFor;
     use shp_traits::ReadChallengeableProvidersInterface;
     use sp_runtime::traits::{
@@ -143,16 +146,22 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
-        RandomnessCommitted {
-            previous_randomness_revealed: T::Seed,
-            valid_from_block: BlockNumberFor<T>,
-            new_seed_commitment: T::SeedCommitment,
-            next_deadline_block: BlockNumberFor<T>,
+        /// Event emitted when a Provider's CR cycle has been initialised. It has the information about its first deadline for a seed commitment.
+        ProviderCycleInitialised {
+            provider_id: ProviderIdFor<T>,
+            first_seed_commitment_deadline_block: BlockNumberFor<T>,
         },
 
         /// Event emitted when a Provider submits their first seed commitment.
         ProviderInitialisedRandomness {
+            first_seed_commitment: T::SeedCommitment,
+            next_deadline_block: BlockNumberFor<T>,
+        },
+
+        /// Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
+        RandomnessCommitted {
+            previous_randomness_revealed: T::Seed,
+            valid_from_block: BlockNumberFor<T>,
             new_seed_commitment: T::SeedCommitment,
             next_deadline_block: BlockNumberFor<T>,
         },
@@ -183,33 +192,33 @@ pub mod pallet {
     // TODO: Remove any unneeded storage items
     /// A map from each deadline tick to a vector of the Providers that need to reveal their previous seed commitment and commit a new one in that tick
     #[pallet::storage]
-    type DeadlineBlockToProviders<T: Config> =
+    pub type DeadlineBlockToProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, ValueQuery>;
 
     /// Commitments that are pending to be revealed by the Providers
     #[pallet::storage]
-    type PendingCommitments<T: Config> =
+    pub type PendingCommitments<T: Config> =
         StorageMap<_, Blake2_128Concat, T::SeedCommitment, ProviderIdFor<T>, OptionQuery>;
 
     /// A map from each deadline tick to the Providers that have revealed their seed commitments for it
     #[pallet::storage]
-    type ReceivedCommitments<T: Config> =
+    pub type ReceivedCommitments<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, ValueQuery>;
 
     /// A map from each tick to the Providers that have to be marked as slashable in that tick. This will be processed by the `on_idle` hook
     #[pallet::storage]
-    type ProvidersToMarkAsSlashable<T: Config> =
+    pub type ProvidersToMarkAsSlashable<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, OptionQuery>;
 
     /// Seed commitment to end block number (when the seed must be submitted and at which seed must take effect)
     #[pallet::storage]
-    type SeedCommitmentToDeadline<T: Config> =
+    pub type SeedCommitmentToDeadline<T: Config> =
         StorageMap<_, Blake2_128Concat, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
 
-    /// Uninitialised Providers that have just been registered (and their deadline tick), which shouldn't send a
+    /// First-submitters Providers that have just been registered (and their deadline tick), which shouldn't send a
     /// reveal next tick, only a seed commitment
     #[pallet::storage]
-    type UninitialisedProviders<T: Config> =
+    pub type FirstSubmittersProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>, OptionQuery>;
 
     #[pallet::storage]
@@ -284,9 +293,9 @@ pub mod pallet {
                 .ok_or(Error::<T>::ProviderIdNotValid)?;
             ensure!(owner_account == who, Error::<T>::CallerNotOwner);
 
-            // Get the deadline block for the seed commitment, either from the uninitialised Providers storage or from the seed commitment to reveal
+            // Get the deadline block for the seed commitment, either from the first-submitters Providers storage or from the seed commitment to reveal
             let (deadline, first_time_provider) =
-                match UninitialisedProviders::<T>::take(&provider_id) {
+                match FirstSubmittersProviders::<T>::take(&provider_id) {
                     Some(deadline) => (deadline, true),
                     None => {
                         let seed_commitment_to_reveal = commitment_with_seed_to_reveal
@@ -308,7 +317,7 @@ pub mod pallet {
             if first_time_provider {
                 // Emit the ProviderInitialisedRandomness event
                 Self::deposit_event(Event::ProviderInitialisedRandomness {
-                    new_seed_commitment,
+                    first_seed_commitment: new_seed_commitment,
                     next_deadline_block: new_deadline,
                 });
             } else {
@@ -362,6 +371,21 @@ pub mod pallet {
             // If the extrinsic has succeeded, it shouldn't pay any fee
             Ok(Pays::No.into())
         }
+
+        #[pallet::call_index(1)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads(1))]
+        pub fn force_initialise_provider_cycle(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+        ) -> DispatchResult {
+            // Check that the origin is the Root
+            ensure_root(origin)?;
+
+            // Initialise the Provider cycle
+            Self::initialise_provider_cycle(&provider_id)?;
+
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -377,14 +401,14 @@ pub mod pallet {
             BoundedQueue::<T>::element_at_index(index)
         }
 
-        pub fn initialise_provider_cycle(provider_id: ProviderIdFor<T>) -> DispatchResult {
+        pub fn initialise_provider_cycle(provider_id: &ProviderIdFor<T>) -> DispatchResult {
             // Get the current tick
             let current_tick = frame_system::Pallet::<T>::block_number();
 
             // Calculate the seed period for the Provider
             let min_seed_period = T::MinSeedPeriod::get();
             let stake = <ProvidersPalletFor<T> as ReadChallengeableProvidersInterface>::get_stake(
-                provider_id,
+                *provider_id,
             )
             .ok_or(Error::<T>::ProviderIdNotValid)?;
             let seed_period = match T::StakeToSeedPeriod::get().checked_div(&stake) {
@@ -401,11 +425,17 @@ pub mod pallet {
                 .saturating_add(seed_period)
                 .saturating_add(seed_submission_tolerance.into());
 
-            // Store the Provider in the uninitialised Providers storage
-            UninitialisedProviders::<T>::insert(provider_id, deadline);
+            // Store the Provider in the first-submitters Providers storage
+            FirstSubmittersProviders::<T>::insert(provider_id, deadline);
 
             // Append the Provider to the deadline block to Providers map
             DeadlineBlockToProviders::<T>::append(deadline, provider_id);
+
+            // Emit the ProviderCycleInitialised event
+            Self::deposit_event(Event::ProviderCycleInitialised {
+                provider_id: provider_id.clone(),
+                first_seed_commitment_deadline_block: deadline,
+            });
 
             Ok(())
         }
@@ -513,10 +543,8 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
-        /// let block builders know how much weight to reserve for it
-        /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
-        fn on_initialize(now: BlockNumberFor<T>) -> Weight {
+        // TODO: Benchmark this and consume the weight correctly
+        fn on_poll(now: BlockNumberFor<T>, weight: &mut WeightMeter) {
             // First shift the queue, advancing one block to the current one
             let queue_shift_weight = BoundedQueue::<T>::shift_queue();
 
@@ -552,7 +580,8 @@ pub mod pallet {
                 },
             );
 
-            queue_shift_weight
+            // Consume the weight used by this hook
+            weight.consume(queue_shift_weight);
         }
 
         fn on_idle(_n: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
@@ -608,5 +637,15 @@ pub mod pallet {
             // Return the consumed weight of this hook
             weight_meter.consumed()
         }
+    }
+}
+
+impl<T: pallet::Config> CommitRevealRandomnessInterface for Pallet<T> {
+    type ProviderId = ProviderIdFor<T>;
+
+    fn initialise_randomness_cycle(
+        who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Self::initialise_provider_cycle(who)
     }
 }

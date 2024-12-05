@@ -26,7 +26,7 @@ use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
-type AccountId = u64;
+pub type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 const UNITS: Balance = 1_000_000_000_000;
@@ -431,7 +431,7 @@ impl VerifiableSeed for H256 {
     }
 }
 
-struct MockRandomSeedMixer;
+pub struct MockRandomSeedMixer;
 impl RandomSeedMixer<H256> for MockRandomSeedMixer {
     fn mix_randomness_seed(seed_1: &H256, seed_2: &H256, context: Option<impl Into<H256>>) -> H256 {
         let mut seed = seed_1.as_fixed_bytes().to_vec();
