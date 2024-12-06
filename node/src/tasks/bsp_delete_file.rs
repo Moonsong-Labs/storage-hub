@@ -43,7 +43,6 @@ where
 
     async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
-        // Check that the new Forest root matches the one on-chain.
         {
             let fs = self
                 .storage_hub_handler
@@ -53,7 +52,7 @@ where
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
             fs.write().await.delete_file_key(file_key).map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                warn!(target: LOG_TARGET, "Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nError: {:?}", e);
                 anyhow!(
                     "Failed to remove file key from Forest storage: {:?}",
                     e
@@ -99,7 +98,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "File {:?} successfuly removed from forest",
+            "File {:?} successfully removed from forest",
             event.file_key,
         );
 
@@ -137,7 +136,7 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "FinalisedBspConfirmStoppedStoring applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.",
+                "FinalisedBspConfirmStoppedStoring applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by this BSP.",
                 event.file_key,
             );
         } else {

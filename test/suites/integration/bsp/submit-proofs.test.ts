@@ -196,7 +196,6 @@ describeBspNet(
     });
 
     it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
-      // TODO: Setup a BSP that has two files which lie under the same NibbledBranch in the forest.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileMetadata.fileKey]
@@ -207,7 +206,7 @@ describeBspNet(
       const cooldown =
         currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
-      // TODO: Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
+      // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
       await userApi.sealBlock(
         bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
           fileMetadata.fileKey,
@@ -220,8 +219,12 @@ describeBspNet(
         "fileSystem",
         "BspConfirmStoppedStoring"
       );
-      // wait for line in docker logs
-      await sleep(2000);
+      // Wait for confiration line in docker logs.
+      await bspThreeApi.assert.log({
+        searchString: "successfully removed from forest",
+        containerName: "sh-bsp-three"
+      });
+
       // Make sure the new root was updated correctly.
       const newRoot = (await bspThreeApi.rpc.storagehubclient.getForestRoot(null)).unwrap();
       assert(userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event));

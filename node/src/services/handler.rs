@@ -293,7 +293,7 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain);
         sp_stop_storing_insolvent_user_event_bus_listener.start();
 
-        // Delete file and update the root.
+        // Task that listen for `BspConfirmStoppedStoring` to delete file and update forest root.
         let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
         let bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
             BspConfirmStoppedStoring,
