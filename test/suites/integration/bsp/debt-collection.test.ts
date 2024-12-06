@@ -8,7 +8,6 @@ import {
   sleep,
   type EnrichedBspApi
 } from "../../../util";
-import invariant from "tiny-invariant";
 import { BN } from "@polkadot/util";
 
 describeBspNet(
@@ -23,7 +22,7 @@ describeBspNet(
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      invariant(
+      assert(
         launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
         "BSPNet failed to initialise with required ports"
       );
