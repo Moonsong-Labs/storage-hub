@@ -17,7 +17,7 @@
 //! from the relay chain state proof
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::pallet;
+use frame_support::{pallet, traits::Randomness};
 pub use pallet::*;
 
 mod queue;
@@ -138,6 +138,9 @@ pub mod pallet {
             first_seed_commitment_deadline_tick: BlockNumberFor<T>,
         },
 
+        /// Event emitted when a Provider's CR cycle has been stopped. It has the information about the Provider ID.
+        ProviderCycleStopped { provider_id: ProviderIdFor<T> },
+
         /// Event emitted when a Provider submits their first seed commitment.
         ProviderInitialisedRandomness {
             first_seed_commitment: T::SeedCommitment,
@@ -177,6 +180,17 @@ pub mod pallet {
         QueueError(queue::QueueError),
     }
 
+    /// A map that holds whether a Provider is active in the randomness system and as such should send seed commitments and reveals and
+    /// can be slashed if they don't. It holds the next seed commitment that the Provider has to answer, if any.
+    #[pallet::storage]
+    pub type ActiveProviders<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        Option<SeedCommitmentFor<T>>,
+        OptionQuery,
+    >;
+
     /// A map from each deadline tick to a vector of the Providers that need to reveal their previous seed commitment and commit a new one in that tick
     #[pallet::storage]
     pub type DeadlineTickToProviders<T: Config> =
@@ -202,10 +216,10 @@ pub mod pallet {
     pub type SeedCommitmentToDeadline<T: Config> =
         StorageMap<_, Blake2_128Concat, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
 
-    /// First-submitters Providers that have just been registered (and their deadline tick), which shouldn't send a
-    /// reveal next tick, only a seed commitment
+    /// A map from Providers which shouldn't send a reveal next tick, only a seed commitment be it because they
+    /// have just registered or because they have been slashed, to their deadline tick
     #[pallet::storage]
-    pub type FirstSubmittersProviders<T: Config> =
+    pub type ProvidersWithoutCommitment<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>, OptionQuery>;
 
     /// The tick from which we should start checking for slashable Providers in the next `on_idle` execution
@@ -284,17 +298,25 @@ pub mod pallet {
                 .ok_or(Error::<T>::ProviderIdNotValid)?;
             ensure!(owner_account == who, Error::<T>::CallerNotOwner);
 
+            // Check that the Provider is active in the system
+            ensure!(
+                ActiveProviders::<T>::contains_key(&provider_id),
+                Error::<T>::ProviderIdNotValid
+            );
+
             // Check that the new commitment is not on the pending commitments storage
             ensure!(
                 !PendingCommitments::<T>::contains_key(&new_seed_commitment),
                 Error::<T>::NewCommitmentAlreadyPending
             );
 
-            // Get the deadline tick for the seed commitment, either from the first-submitters Providers storage or from the seed commitment to reveal
-            let (deadline, first_time_provider) =
-                match FirstSubmittersProviders::<T>::take(&provider_id) {
+            // Get the deadline tick for the seed commitment
+            let (deadline, provider_without_previous_commitment) =
+                match ProvidersWithoutCommitment::<T>::take(&provider_id) {
+                    // If the Provider is a first-time submitter or has been slashed, the deadline is the one stored in the ProvidersWithoutCommitment storage
                     Some(deadline) => (deadline, true),
                     None => {
+                        // If not, the deadline is the one stored in the SeedCommitmentToDeadline storage
                         let seed_commitment_to_reveal = commitment_with_seed_to_reveal
                             .as_ref()
                             .ok_or(Error::<T>::MissingSeedReveal)?
@@ -317,15 +339,15 @@ pub mod pallet {
                 &new_seed_commitment,
             )?;
 
-            // If this is the first time the Provider submits a seed, there is no need to do anything else
-            if first_time_provider {
+            // If this Provider did not have a commitment from before
+            if provider_without_previous_commitment {
                 // Emit the ProviderInitialisedRandomness event
                 Self::deposit_event(Event::ProviderInitialisedRandomness {
                     first_seed_commitment: new_seed_commitment,
                     next_deadline_tick: new_deadline,
                 });
             } else {
-                // If this is not the first time the Provider submits a seed, the seed commitment to reveal must have been sent
+                // If this Provider did have a pending commitment to reveal, the seed to reveal must have been sent
                 let CommitmentWithSeed {
                     commitment: seed_commitment_to_reveal,
                     seed: seed_to_reveal,
@@ -393,21 +415,30 @@ pub mod pallet {
 
             Ok(())
         }
+
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads(1))]
+        pub fn force_stop_provider_cycle(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+        ) -> DispatchResult {
+            // Check that the origin is the Root
+            ensure_root(origin)?;
+
+            // Stop the Provider cycle
+            Self::stop_provider_cycle(&provider_id)?;
+
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
-        fn _get_head_randomness() -> (T::Seed, Weight) {
+        // TODO: this head randomness should be the one used in the Proofs Dealer pallet
+        pub fn get_head_randomness() -> (T::Seed, Weight) {
             BoundedQueue::<T>::head()
         }
 
-        fn _get_tail_randomness() -> (T::Seed, Weight) {
-            BoundedQueue::<T>::tail()
-        }
-
-        fn _get_randomness_at_index(index: u32) -> Result<(T::Seed, Weight), queue::QueueError> {
-            BoundedQueue::<T>::element_at_index(index)
-        }
-
+        /// This function should be called when a new Provider is registered in the system, to initialise their seed commitment cycle
         pub fn initialise_provider_cycle(provider_id: &ProviderIdFor<T>) -> DispatchResult {
             // Get the current tick
             let current_tick = pallet_proofs_dealer::ChallengesTicker::<T>::get();
@@ -432,16 +463,45 @@ pub mod pallet {
                 .saturating_add(seed_period)
                 .saturating_add(seed_submission_tolerance.into());
 
-            // Store the Provider in the first-submitters Providers storage
-            FirstSubmittersProviders::<T>::insert(provider_id, deadline);
+            // Store the Provider in the ProvidersWithoutCommitment storage, since it does not have a commitment to reveal next cycle
+            ProvidersWithoutCommitment::<T>::insert(provider_id, deadline);
 
             // Append the Provider to the deadline tick to Providers map
             DeadlineTickToProviders::<T>::append(deadline, provider_id);
+
+            // Set the Provider as active in the randomness system, but with no seed commitment to answer
+            ActiveProviders::<T>::insert(provider_id, None::<SeedCommitmentFor<T>>);
 
             // Emit the ProviderCycleInitialised event
             Self::deposit_event(Event::ProviderCycleInitialised {
                 provider_id: provider_id.clone(),
                 first_seed_commitment_deadline_tick: deadline,
+            });
+
+            Ok(())
+        }
+
+        pub fn stop_provider_cycle(provider_id: &ProviderIdFor<T>) -> DispatchResult {
+            // Make sure the Provider is currently active in the system
+            ensure!(
+                ActiveProviders::<T>::contains_key(provider_id),
+                Error::<T>::ProviderIdNotValid
+            );
+
+            // Remove it from the ProvidersWithoutCommitment storage if it was there
+            ProvidersWithoutCommitment::<T>::remove(provider_id);
+
+            // Remove its next seed commitment from the seed commitment to deadline storage
+            if let Some(Some(next_seed_commitment)) = ActiveProviders::<T>::get(provider_id) {
+                SeedCommitmentToDeadline::<T>::remove(next_seed_commitment);
+            }
+
+            // Remove the Provider from the map of active Providers
+            ActiveProviders::<T>::remove(provider_id);
+
+            // Emit the ProviderCycleStopped event
+            Self::deposit_event(Event::ProviderCycleStopped {
+                provider_id: provider_id.clone(),
             });
 
             Ok(())
@@ -466,6 +526,8 @@ pub mod pallet {
             // If the deadline is in the past, the Provider is late in submitting their next seed commitment
             ensure!(current_tick < deadline, Error::<T>::LateSubmissionOfSeed);
 
+            // Update the next commitment that this Provider has to answer
+            ActiveProviders::<T>::insert(provider_id, Some(next_seed_commitment));
             // Add the new seed commitment to the pending commitments storage
             PendingCommitments::<T>::insert(next_seed_commitment.clone(), provider_id.clone());
             // And append the Provider as a valid seed revealer for the deadline tick
@@ -507,17 +569,55 @@ pub mod pallet {
             // Iterate over the Providers to mark as slashable
             let mut current_provider_index = 0;
             let amount_of_providers_to_process = providers_to_mark.len();
+            let seed_reveal_tolerance = T::MaxSeedTolerance::get();
             for provider_id in &providers_to_mark {
-                // If there's not enough weight to process the next Provider, break
-                if !weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 1)) {
+                // If there's not enough weight to process the next Provider (in the worst case scenario), break
+                if !weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 5)) {
                     break;
                 }
 
-                // Mark the Provider as slashable
-                Self::mark_provider_as_slashable(&provider_id);
+                // Check if the Provider is active or inactive and modify storage accordingly
+                ActiveProviders::<T>::mutate(
+                    provider_id,
+                    |maybe_active_provider_with_maybe_commitment| {
+                        match maybe_active_provider_with_maybe_commitment {
+                            // If the Provider is active in the system
+                            Some(maybe_seed_commitment) => {
+                                // Mark them as slashable
+                                Self::mark_provider_as_slashable(&provider_id);
 
-                // Consume the weight used to mark the Provider as slashable
-                weight_meter.consume(T::DbWeight::get().reads_writes(1, 1));
+                                // If they have a seed commitment that they had to answer
+                                if let Some(seed_commitment) = maybe_seed_commitment {
+                                    // Remove it from the seed commitment to deadline storage
+                                    SeedCommitmentToDeadline::<T>::remove(seed_commitment);
+
+                                    // And update the Provider to have no seed commitment to answer
+                                    *maybe_seed_commitment = None;
+                                }
+
+                                // Add them to the DeadlineTickToProviders storage, with the seed tolerance as their new deadline
+                                let new_deadline = current_tick_to_process
+                                    .saturating_add(seed_reveal_tolerance.into());
+                                DeadlineTickToProviders::<T>::append(new_deadline, provider_id);
+
+                                // Add them to the ProvidersWithoutCommitment storage, with the seed tolerance as their new deadline
+                                // This is done so they are not required to reveal their seed commitment in the next tick, only commit a new one
+                                ProvidersWithoutCommitment::<T>::insert(provider_id, new_deadline);
+
+                                // Consume the weight used to mark the Provider as slashable and reset it
+                                weight_meter.consume(T::DbWeight::get().reads_writes(1, 5));
+                            }
+                            // If the Provider is not active in the system, delete them
+                            None => {
+                                // Remove it from the ProvidersWithoutCommitment storage if it was there
+                                ProvidersWithoutCommitment::<T>::remove(provider_id);
+
+                                // Consume the weight used to delete the Provider
+                                weight_meter.consume(T::DbWeight::get().reads_writes(1, 2));
+                            }
+                        }
+                    },
+                );
 
                 // Increment the current provider index
                 current_provider_index += 1;
@@ -553,9 +653,6 @@ pub mod pallet {
             // First shift the queue, advancing one tick to the current one
             let queue_shift_weight = BoundedQueue::<T>::shift_queue();
 
-            // Get the current tolerance for seed submission
-            let seed_reveal_tolerance = T::MaxSeedTolerance::get();
-
             // Then, for the current tick, get the Providers that had to reveal their seed commitments
             let tick_to_target = pallet_proofs_dealer::ChallengesTicker::<T>::get();
             let due_providers_for_current_tick =
@@ -572,17 +669,11 @@ pub mod pallet {
                 .cloned()
                 .collect();
 
-            // Set the missing Providers to be marked as slashable in a future execution of the `on_idle` hook
-            ProvidersToMarkAsSlashable::<T>::insert(tick_to_target, missing_providers.clone());
-
-            // Since the idea is for the Providers that are going to be marked as slashable to submit a new seed commitment as soon as possible,
-            // make it so they have to do it before a tolerance period has passed. If they do not, they will keep getting slashed.
-            DeadlineTickToProviders::<T>::mutate(
-                tick_to_target.saturating_add(seed_reveal_tolerance.into()),
-                |providers| {
-                    providers.extend(missing_providers);
-                },
-            );
+            // If there's any Provider that missed their randomness seed submission
+            if !missing_providers.is_empty() {
+                // Set the missing Providers to be marked as slashable in a future execution of the `on_idle` hook
+                ProvidersToMarkAsSlashable::<T>::insert(tick_to_target, missing_providers.clone());
+            }
 
             // Consume the weight used by this hook
             weight.consume(queue_shift_weight);
@@ -594,7 +685,7 @@ pub mod pallet {
 
             // If there's not enough weight for the initial reads and writes that initialise
             // the `on_idle` hook processing, return
-            if !weight_meter.can_consume(T::DbWeight::get().reads_writes(2, 1)) {
+            if !weight_meter.can_consume(T::DbWeight::get().reads_writes(3, 1)) {
                 return weight_meter.consumed();
             }
 
@@ -606,12 +697,12 @@ pub mod pallet {
             let mut current_tick_to_process = TickToCheckForSlashableProviders::<T>::get();
 
             // Consume the weight used to initialise the `on_idle` hook processing
-            weight_meter.consume(T::DbWeight::get().reads_writes(2, 1));
+            weight_meter.consume(T::DbWeight::get().reads_writes(3, 1));
 
             // While there's enough weight to process at least one Provider AND the current tick to process is not greater than or equal to the next tick of this pallet,
             // process the Providers to mark as slashable
             while current_tick_to_process < next_tick
-                && weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 1))
+                && weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 5))
             {
                 // Check how many Providers have to be marked as slashable in this tick
                 let providers_to_mark =
@@ -654,3 +745,29 @@ impl<T: pallet::Config> CommitRevealRandomnessInterface for Pallet<T> {
         Self::initialise_provider_cycle(who)
     }
 }
+
+/* use crate::types::*;
+use frame_system::pallet_prelude::BlockNumberFor;
+pub struct CurrentBlockRandomness<T>(core::marker::PhantomData<T>);
+impl<T: Config> Randomness<SeedFor<T>, BlockNumberFor<T>> for CurrentBlockRandomness<T> {
+    /// Uses the current randomness stored in the head of the circular randomness queue alongside
+    /// with a subject to generate a random seed that can be used for commitments from previous blocks.
+    /// The subject is a byte array that is mixed with the current randomness to provide the final randomness.
+    fn random(subject: &[u8]) -> (SeedFor<T>, BlockNumberFor<T>) {
+        // Get the randomness for the current tick
+        let (randomness, _) = pallet::Pallet::<T>::get_head_randomness();
+
+        // Mix the subject with the current randomness
+        let final_randomness = <T as Config>::RandomSeedMixer::mix_randomness_seed(
+            &randomness,
+            &T::Hashing::hash(subject),
+            None::<T::Seed>,
+        );
+
+        // This randomness is valid for all ticks previous to the current one
+        (
+            final_randomness,
+            pallet_proofs_dealer::ChallengesTicker::<T>::get(),
+        )
+    }
+} */
