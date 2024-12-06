@@ -5,6 +5,7 @@ pub mod bsp_charge_fees;
 pub mod bsp_download_file;
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
+// mod common;
 pub mod mock_bsp_volunteer;
 pub mod mock_sp_react_to_event;
 pub mod msp_charge_fees;
@@ -13,7 +14,7 @@ pub mod msp_upload_file;
 pub mod sp_slash_provider;
 pub mod user_sends_file;
 
-use crate::services::forest_storage::{ForestStorageCaching, ForestStorageSingle, NoKey};
+use crate::services::forest_storage::{ForestStorageCaching, NoKey};
 use crate::services::handler::StorageHubHandler;
 use kvdb::KeyValueDB;
 use sc_tracing::tracing::info;
@@ -36,15 +37,16 @@ impl<DB> FileStorageT for RocksDbFileStorage<StorageProofsMerkleTrieLayout, DB> 
 }
 
 pub trait BspForestStorageHandlerT:
-    ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static
+    ForestStorageHandler<Key = Vec<u8>> + Clone + Send + Sync + 'static
 {
 }
 impl BspForestStorageHandlerT
-    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+    for ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
 {
 }
 impl BspForestStorageHandlerT
-    for ForestStorageSingle<
+    for ForestStorageCaching<
+        Vec<u8>,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
     >
 {

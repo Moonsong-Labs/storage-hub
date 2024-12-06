@@ -16,10 +16,7 @@ use sc_tracing::tracing::{error, info};
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{
-    traits::{Header, Zero},
-    AccountId32, SaturatedConversion,
-};
+use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
@@ -38,7 +35,7 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
-    types::{BlockNumber, ParachainClient, ProviderId},
+    types::{BlockNumber, HasherOutT, ParachainClient, ProviderId, StorageProofsMerkleTrieLayout},
 };
 use shc_common::{
     blockchain_utils::get_events_at_block,
@@ -61,8 +58,8 @@ use crate::{
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BestBlockInfo, NewBlockNotificationKind, StopStoringForInsolventUserRequest,
-        SubmitProofRequest,
+        BestBlockInfo, ForestStorageSnapshotInfo, NewBlockNotificationKind,
+        StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
 };
 use crate::{
@@ -87,7 +84,10 @@ pub struct BlockchainService {
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
     pub(crate) rpc_handlers: Arc<RpcHandlers>,
-    /// The hash and number of the current best block.
+    /// The hash and number of the last best block processed by the BlockchainService.
+    ///
+    /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
+    /// run some initialisation tasks. Also used to detect reorgs.
     pub(crate) best_block: BestBlockInfo,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
@@ -100,16 +100,24 @@ pub struct BlockchainService {
     /// A list of Provider IDs that this node has to pay attention to submit proofs for.
     /// This could be a BSP or a list of buckets that an MSP has.
     pub(crate) provider_ids: BTreeSet<ProviderId>,
+    /// A map of Provider IDs to the current forest root.
+    /// This is used to keep track of the current forest root for each Provider, in the current best block.
+    ///
+    /// A ProviderId can be a BSP or the buckets that an MSP has.
+    pub(crate) current_forest_roots:
+        BTreeMap<ProviderId, HasherOutT<StorageProofsMerkleTrieLayout>>,
+    /// A map of Provider IDs to the Forest Storage snapshots.
+    ///
+    /// A ProviderId can be a BSP or the buckets that an MSP has.
+    ///
+    /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
+    pub(crate) forest_root_snapshots: BTreeMap<ProviderId, BTreeSet<ForestStorageSnapshotInfo>>,
     /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
+    ///
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
     /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    /// The last block number that was processed by the BlockchainService.
-    /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
-    /// run some initialisation tasks.
-    /// TODO: Consider if this should be removed in favour of the BestBlockInfo.
-    pub(crate) last_block_processed: BlockNumber,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
@@ -952,8 +960,9 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
+            current_forest_roots: BTreeMap::new(),
+            forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
-            last_block_processed: Zero::zero(),
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
             notify_period,
@@ -966,6 +975,7 @@ impl BlockchainService {
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
+        let last_block_processed = self.best_block.number;
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
         let BestBlockInfo {
             number: block_number,
@@ -989,7 +999,9 @@ impl BlockchainService {
 
         // If this is the first block import notification, we might need to catch up.
         // Check if we just came out of syncing mode.
-        if block_number - self.last_block_processed < SYNC_MODE_MIN_BLOCKS_BEHIND {
+        // We use saturating_sub because in a reorg, there is a potential scenario where the last
+        // block processed is higher than the current block number.
+        if block_number.saturating_sub(last_block_processed) < SYNC_MODE_MIN_BLOCKS_BEHIND {
             self.handle_initial_sync(notification).await;
         }
 
