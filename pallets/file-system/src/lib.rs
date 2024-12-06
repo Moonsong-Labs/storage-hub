@@ -113,6 +113,11 @@ pub mod pallet {
         >
         + shp_traits::MutatePricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
 
+        /// The trait to initialise a Provider's randomness commit-reveal cycle.
+        type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
+            ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+        >;
+
         type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
             Price = BalanceOf<Self>,
             StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,

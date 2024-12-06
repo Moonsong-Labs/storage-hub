@@ -1303,10 +1303,13 @@ where
         );
 
         if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
-            // This means that this is the first file added to the BSP's Forest.
+            // This means the BSP just started storing files, so its challenge cycle and
+            // randomness cycle should be initialised.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
                 &bsp_id,
             )?;
+
+            <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::initialise_randomness_cycle(&bsp_id)?;
 
             // Emit the corresponding event.
             Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
