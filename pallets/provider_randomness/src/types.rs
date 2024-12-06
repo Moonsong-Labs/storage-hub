@@ -33,9 +33,6 @@ pub type ProviderIdFor<T> = <<T as pallet_proofs_dealer::Config>::ProvidersPalle
 /// The converter from a Balance to a Block Number.
 pub type StakeToBlockNumberFor<T> = <T as pallet_proofs_dealer::Config>::StakeToBlockNumber;
 
-/// The type of the Seed ID for the given configuration.
-pub type SeedIdFor<T> = <T as crate::Config>::SeedId;
-
 /// The type of the Seed for the given configuration.
 pub type SeedFor<T> = <T as crate::Config>::Seed;
 

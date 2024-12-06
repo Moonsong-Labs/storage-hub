@@ -455,7 +455,6 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
-    type SeedId = H256;
     type SeedCommitment = H256;
     type Seed = H256;
     type RandomSeedMixer = MockRandomSeedMixer;
@@ -544,8 +543,8 @@ impl ExtBuilder {
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| {
             System::set_block_number(1);
-            pallet_payment_streams::OnPollTicker::<Test>::set(1);
             pallet_proofs_dealer::ChallengesTicker::<Test>::set(1);
+            crate::TickToCheckForSlashableProviders::<Test>::set(2);
         });
         ext
     }

@@ -72,23 +72,6 @@ pub mod pallet {
         /// Overarching event type
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// Id of the seed
-        /// TODO: Probably not needed
-        type SeedId: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
-
         /// Commitment of a seed
         type SeedCommitment: Parameter
             + Member
@@ -149,21 +132,21 @@ pub mod pallet {
         /// Event emitted when a Provider's CR cycle has been initialised. It has the information about its first deadline for a seed commitment.
         ProviderCycleInitialised {
             provider_id: ProviderIdFor<T>,
-            first_seed_commitment_deadline_block: BlockNumberFor<T>,
+            first_seed_commitment_deadline_tick: BlockNumberFor<T>,
         },
 
         /// Event emitted when a Provider submits their first seed commitment.
         ProviderInitialisedRandomness {
             first_seed_commitment: T::SeedCommitment,
-            next_deadline_block: BlockNumberFor<T>,
+            next_deadline_tick: BlockNumberFor<T>,
         },
 
         /// Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
         RandomnessCommitted {
             previous_randomness_revealed: T::Seed,
-            valid_from_block: BlockNumberFor<T>,
+            valid_from_tick: BlockNumberFor<T>,
             new_seed_commitment: T::SeedCommitment,
-            next_deadline_block: BlockNumberFor<T>,
+            next_deadline_tick: BlockNumberFor<T>,
         },
     }
 
@@ -175,8 +158,8 @@ pub mod pallet {
         CallerNotOwner,
         /// Seed provided by the storage provider is not valid
         NotAValidSeed,
-        /// We cannot find corresponding end block for provided seed commitment
-        NoEndBlockForSeedCommitment,
+        /// We cannot find corresponding end tick for provided seed commitment
+        NoEndTickForSeedCommitment,
         /// Provider is early in submitting the seed commitment
         EarlySubmissionOfSeed,
         /// Storage provider is late in submitting the seed commitment
@@ -185,8 +168,8 @@ pub mod pallet {
         MissingSeedReveal,
         /// Seed commitment is already in the list of pending commitments
         NewCommitmentAlreadyPending,
-        /// We are not able to convert block number to u32 for arithmetic
-        UnableToConvertBlockNumberForArithmetic,
+        /// We are not able to convert tick number to u32 for arithmetic
+        UnableToConvertTickNumberForArithmetic,
         /// We encountered an error while modifying seed queue
         QueueError(queue::QueueError),
     }
@@ -194,7 +177,7 @@ pub mod pallet {
     // TODO: Remove any unneeded storage items
     /// A map from each deadline tick to a vector of the Providers that need to reveal their previous seed commitment and commit a new one in that tick
     #[pallet::storage]
-    pub type DeadlineBlockToProviders<T: Config> =
+    pub type DeadlineTickToProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, ValueQuery>;
 
     /// Commitments that are pending to be revealed by the Providers
@@ -212,7 +195,7 @@ pub mod pallet {
     pub type ProvidersToMarkAsSlashable<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Vec<ProviderIdFor<T>>, OptionQuery>;
 
-    /// Seed commitment to end block number (when the seed must be submitted and at which seed must take effect)
+    /// Seed commitment to its deadline tick
     #[pallet::storage]
     pub type SeedCommitmentToDeadline<T: Config> =
         StorageMap<_, Blake2_128Concat, T::SeedCommitment, BlockNumberFor<T>, OptionQuery>;
@@ -223,6 +206,7 @@ pub mod pallet {
     pub type FirstSubmittersProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>, OptionQuery>;
 
+    /// The tick from which we should start checking for slashable Providers in the next `on_idle` execution
     #[pallet::storage]
     pub type TickToCheckForSlashableProviders<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
@@ -304,7 +288,7 @@ pub mod pallet {
                 Error::<T>::NewCommitmentAlreadyPending
             );
 
-            // Get the deadline block for the seed commitment, either from the first-submitters Providers storage or from the seed commitment to reveal
+            // Get the deadline tick for the seed commitment, either from the first-submitters Providers storage or from the seed commitment to reveal
             let (deadline, first_time_provider) =
                 match FirstSubmittersProviders::<T>::take(&provider_id) {
                     Some(deadline) => (deadline, true),
@@ -315,21 +299,28 @@ pub mod pallet {
                             .commitment;
                         let deadline =
                             SeedCommitmentToDeadline::<T>::take(&seed_commitment_to_reveal)
-                                .ok_or(Error::<T>::NoEndBlockForSeedCommitment)?;
+                                .ok_or(Error::<T>::NoEndTickForSeedCommitment)?;
                         (deadline, false)
                     }
                 };
 
+            // Get the current tick
+            let current_tick = pallet_proofs_dealer::ChallengesTicker::<T>::get();
+
             // Set up the next seed commitment
-            let new_deadline =
-                Self::set_up_next_seed(&provider_id, &deadline, &new_seed_commitment)?;
+            let new_deadline = Self::set_up_next_seed(
+                &provider_id,
+                &deadline,
+                &current_tick,
+                &new_seed_commitment,
+            )?;
 
             // If this is the first time the Provider submits a seed, there is no need to do anything else
             if first_time_provider {
                 // Emit the ProviderInitialisedRandomness event
                 Self::deposit_event(Event::ProviderInitialisedRandomness {
                     first_seed_commitment: new_seed_commitment,
-                    next_deadline_block: new_deadline,
+                    next_deadline_tick: new_deadline,
                 });
             } else {
                 // If this is not the first time the Provider submits a seed, the seed commitment to reveal must have been sent
@@ -348,12 +339,12 @@ pub mod pallet {
                 PendingCommitments::<T>::remove(&seed_commitment_to_reveal);
 
                 // Calculate the distance from the head of the queue that the deadline is, to know from where to start mixing the revealed seed
-                // The head of the queue is the current block, and the mixing should start from the deadline block
+                // The head of the queue is the current tick, and the mixing should start from the deadline tick
                 // Since at maximum the distance from the head is the max seed tolerance (which is a u32), we can safely convert it to u32
                 let distance_from_head: u32 = deadline
-                    .saturating_sub(frame_system::Pallet::<T>::block_number())
+                    .saturating_sub(current_tick)
                     .try_into()
-                    .map_err(|_e| Error::<T>::UnableToConvertBlockNumberForArithmetic)?;
+                    .map_err(|_e| Error::<T>::UnableToConvertTickNumberForArithmetic)?;
 
                 // Now, for each element in the queue from the distance from the head up to the tail, mix the seed with the revealed seed
                 BoundedQueue::<T>::overwrite_queue(
@@ -373,9 +364,9 @@ pub mod pallet {
                 // Finally, emit the RandomnessCommitted event
                 Self::deposit_event(Event::RandomnessCommitted {
                     previous_randomness_revealed: seed_to_reveal,
-                    valid_from_block: deadline,
+                    valid_from_tick: deadline,
                     new_seed_commitment,
-                    next_deadline_block: new_deadline,
+                    next_deadline_tick: new_deadline,
                 });
             }
 
@@ -414,7 +405,7 @@ pub mod pallet {
 
         pub fn initialise_provider_cycle(provider_id: &ProviderIdFor<T>) -> DispatchResult {
             // Get the current tick
-            let current_tick = frame_system::Pallet::<T>::block_number();
+            let current_tick = pallet_proofs_dealer::ChallengesTicker::<T>::get();
 
             // Calculate the seed period for the Provider
             let min_seed_period = T::MinSeedPeriod::get();
@@ -430,7 +421,7 @@ pub mod pallet {
                 None => min_seed_period,
             };
 
-            // Calculate the deadline block for the seed commitment
+            // Calculate the deadline tick for the seed commitment
             let seed_submission_tolerance = T::MaxSeedTolerance::get();
             let deadline = current_tick
                 .saturating_add(seed_period)
@@ -439,13 +430,13 @@ pub mod pallet {
             // Store the Provider in the first-submitters Providers storage
             FirstSubmittersProviders::<T>::insert(provider_id, deadline);
 
-            // Append the Provider to the deadline block to Providers map
-            DeadlineBlockToProviders::<T>::append(deadline, provider_id);
+            // Append the Provider to the deadline tick to Providers map
+            DeadlineTickToProviders::<T>::append(deadline, provider_id);
 
             // Emit the ProviderCycleInitialised event
             Self::deposit_event(Event::ProviderCycleInitialised {
                 provider_id: provider_id.clone(),
-                first_seed_commitment_deadline_block: deadline,
+                first_seed_commitment_deadline_tick: deadline,
             });
 
             Ok(())
@@ -454,27 +445,25 @@ pub mod pallet {
         fn set_up_next_seed(
             provider_id: &ProviderIdFor<T>,
             deadline: &BlockNumberFor<T>,
+            current_tick: &BlockNumberFor<T>,
             next_seed_commitment: &SeedCommitmentFor<T>,
         ) -> Result<BlockNumberFor<T>, DispatchError> {
-            // Get the current tick
-            let current_tick = frame_system::Pallet::<T>::block_number();
-
             // Calculate the tolerance window start for this deadline
             let seed_reveal_tolerance = T::MaxSeedTolerance::get();
             let tolerance_window_start = deadline.saturating_sub(seed_reveal_tolerance.into());
 
             // If the Provider is trying to send its next seed commitment before the tolerance window starts, they are early
             ensure!(
-                current_tick >= tolerance_window_start,
+                *current_tick >= tolerance_window_start,
                 Error::<T>::EarlySubmissionOfSeed
             );
 
             // If the deadline is in the past, the Provider is late in submitting their next seed commitment
-            ensure!(current_tick <= *deadline, Error::<T>::LateSubmissionOfSeed);
+            ensure!(current_tick < deadline, Error::<T>::LateSubmissionOfSeed);
 
             // Add the new seed commitment to the pending commitments storage
             PendingCommitments::<T>::insert(next_seed_commitment.clone(), provider_id.clone());
-            // And append the Provider as a valid seed revealer for the deadline block
+            // And append the Provider as a valid seed revealer for the deadline tick
             ReceivedCommitments::<T>::append(deadline, provider_id);
 
             // Calculate the Provider's seed period based on their current stake
@@ -491,12 +480,12 @@ pub mod pallet {
                 None => min_seed_period,
             };
 
-            // Calculate the deadline block for the new seed commitment and store it
+            // Calculate the deadline tick for the new seed commitment and store it
             let new_deadline = deadline.saturating_add(seed_period);
             SeedCommitmentToDeadline::<T>::insert(next_seed_commitment, new_deadline);
 
-            // Append the Provider to the deadline block to Providers map
-            DeadlineBlockToProviders::<T>::append(new_deadline, provider_id);
+            // Append the Provider to the deadline tick to Providers map
+            DeadlineTickToProviders::<T>::append(new_deadline, provider_id);
 
             Ok(new_deadline)
         }
@@ -555,37 +544,36 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         // TODO: Benchmark this and consume the weight correctly
-        fn on_poll(now: BlockNumberFor<T>, weight: &mut WeightMeter) {
-            // First shift the queue, advancing one block to the current one
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut WeightMeter) {
+            // First shift the queue, advancing one tick to the current one
             let queue_shift_weight = BoundedQueue::<T>::shift_queue();
 
             // Get the current tolerance for seed submission
             let seed_reveal_tolerance = T::MaxSeedTolerance::get();
 
-            // Then, for the current block, get the Providers that had to reveal their seed commitments
-            let block_to_target = now;
-            let due_providers_for_current_block = BTreeSet::from_iter(
-                DeadlineBlockToProviders::<T>::take(block_to_target).into_iter(),
-            );
+            // Then, for the current tick, get the Providers that had to reveal their seed commitments
+            let tick_to_target = pallet_proofs_dealer::ChallengesTicker::<T>::get();
+            let due_providers_for_current_tick =
+                BTreeSet::from_iter(DeadlineTickToProviders::<T>::take(tick_to_target).into_iter());
 
             // And get the ones that actually submitted their seed commitments
             let providers_that_submitted =
-                BTreeSet::from_iter(ReceivedCommitments::<T>::take(block_to_target).into_iter());
+                BTreeSet::from_iter(ReceivedCommitments::<T>::take(tick_to_target).into_iter());
 
             // The difference between the sets are the Providers that did not submit their seed commitments
-            let missing_providers: Vec<ProviderIdFor<T>> = due_providers_for_current_block
+            let missing_providers: Vec<ProviderIdFor<T>> = due_providers_for_current_tick
                 .difference(&providers_that_submitted)
                 .into_iter()
                 .cloned()
                 .collect();
 
             // Set the missing Providers to be marked as slashable in a future execution of the `on_idle` hook
-            ProvidersToMarkAsSlashable::<T>::insert(now, missing_providers.clone());
+            ProvidersToMarkAsSlashable::<T>::insert(tick_to_target, missing_providers.clone());
 
             // Since the idea is for the Providers that are going to be marked as slashable to submit a new seed commitment as soon as possible,
             // make it so they have to do it before a tolerance period has passed. If they do not, they will keep getting slashed.
-            DeadlineBlockToProviders::<T>::mutate(
-                now.saturating_add(seed_reveal_tolerance.into()),
+            DeadlineTickToProviders::<T>::mutate(
+                tick_to_target.saturating_add(seed_reveal_tolerance.into()),
                 |providers| {
                     providers.extend(missing_providers);
                 },
@@ -606,7 +594,8 @@ pub mod pallet {
             }
 
             // Get the next tick of this pallet
-            let next_tick = frame_system::Pallet::<T>::block_number().saturating_add(One::one());
+            let next_tick =
+                pallet_proofs_dealer::ChallengesTicker::<T>::get().saturating_add(One::one());
 
             // Get the current tick to process
             let mut current_tick_to_process = TickToCheckForSlashableProviders::<T>::get();
