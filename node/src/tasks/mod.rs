@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod bsp_charge_fees;
+pub mod bsp_delete_file;
 pub mod bsp_download_file;
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
