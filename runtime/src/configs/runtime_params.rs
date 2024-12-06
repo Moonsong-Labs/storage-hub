@@ -1,4 +1,7 @@
-use crate::{configs::SpMinDeposit, Balance, BlockNumber, Perbill, Runtime, NANOUNIT, UNIT};
+use crate::{
+    configs::{ChallengeTicksTolerance, SpMinDeposit},
+    Balance, BlockNumber, Perbill, Runtime, NANOUNIT, UNIT,
+};
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
 use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 
@@ -29,9 +32,9 @@ pub mod dynamic_params {
         /// The [`CheckpointChallengePeriod`] is set to be equal to the longest possible challenge period
         /// (i.e. the [`StakeToChallengePeriod`] divided by the [`SpMinDeposit`]).
         ///
-        /// 300k UNITs / 100 UNITs = 3k ticks (i.e. 5 hours with 6 seconds per tick)
+        // 300k UNITs / 100 UNITs + 50 + 1 = ~3k ticks (i.e. ~5 hours with 6 seconds per tick)
         pub static CheckpointChallengePeriod: BlockNumber = (StakeToChallengePeriod::get()
-            / SpMinDeposit::get())
+            / SpMinDeposit::get()).saturating_add(ChallengeTicksTolerance::get() as u128).saturating_add(1)
         .try_into()
         .expect(
             "StakeToChallengePeriod / SpMinDeposit should be a number of ticks that can fit in BlockNumber numerical type",

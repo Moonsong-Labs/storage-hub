@@ -24,6 +24,8 @@ use sp_api::ApiError;
 use sp_core::H256;
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
+use crate::types::BestBlockInfo;
+
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
@@ -50,6 +52,9 @@ pub enum BlockchainServiceCommand {
     UnwatchExtrinsic {
         subscription_id: Number,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    GetBestBlockInfo {
+        callback: tokio::sync::oneshot::Sender<BestBlockInfo>,
     },
     WaitForBlock {
         block_number: BlockNumber,
@@ -209,6 +214,9 @@ pub trait BlockchainServiceInterface {
 
     /// Unwatch an extrinsic.
     async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<()>;
+
+    /// Get the latest block number.
+    async fn get_best_block_info(&self) -> BestBlockInfo;
 
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
@@ -417,6 +425,14 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
             subscription_id,
             callback,
         };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn get_best_block_info(&self) -> BestBlockInfo {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::GetBestBlockInfo { callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

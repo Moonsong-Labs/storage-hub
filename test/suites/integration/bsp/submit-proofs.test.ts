@@ -524,11 +524,7 @@ describeBspNet(
       assert(dummyBspChallengePeriodResult.isOk);
       const dummyBspChallengePeriod = dummyBspChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      let dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
-      // If it is exactly equal to the current tick, we take the next challenge tick.
-      if (dummyBspNextChallengeTick === currentTick) {
-        dummyBspNextChallengeTick += dummyBspChallengePeriod;
-      }
+      const dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
 
       // Calculate next challenge tick for BSP-Two.
       // We first get the last tick for which the BSP submitted a proof.
@@ -543,11 +539,7 @@ describeBspNet(
       assert(bspTwoChallengePeriodResult.isOk);
       const bspTwoChallengePeriod = bspTwoChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      let bspTwoNextChallengeTick = bspTwoLastTickBspTwoSubmittedProof + bspTwoChallengePeriod;
-      // If it is exactly equal to the current tick, we take the next challenge tick.
-      if (bspTwoNextChallengeTick === currentTick) {
-        bspTwoNextChallengeTick += bspTwoChallengePeriod;
-      }
+      const bspTwoNextChallengeTick = bspTwoLastTickBspTwoSubmittedProof + bspTwoChallengePeriod;
 
       const firstBspToRespond =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
@@ -568,10 +560,15 @@ describeBspNet(
 
       const areBspsNextChallengeBlockTheSame = firstBlockToAdvance === secondBlockToAdvance;
 
-      // Advance to first next challenge block.
-      await userApi.block.skipTo(firstBlockToAdvance, {
-        waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
-      });
+      // Check if firstBlockToAdvance is equal to the current block.
+      const currentBlock = await userApi.rpc.chain.getBlock();
+      const currentBlockNumber = currentBlock.block.header.number.toNumber();
+      if (firstBlockToAdvance !== currentBlockNumber) {
+        // Advance to first next challenge block.
+        await userApi.block.skipTo(firstBlockToAdvance, {
+          waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+        });
+      }
 
       // Wait for BSP to generate the proof and advance one more block.
       await sleep(500);
@@ -619,10 +616,15 @@ describeBspNet(
 
       // If the BSPs had different next challenge blocks, advance to the second next challenge block.
       if (!areBspsNextChallengeBlockTheSame) {
-        // Advance to second next challenge block.
-        await userApi.block.skipTo(secondBlockToAdvance, {
-          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-        });
+        const currentBlockNumber = (
+          await userApi.rpc.chain.getBlock()
+        ).block.header.number.toNumber();
+        if (secondBlockToAdvance !== currentBlockNumber) {
+          // Advance to second next challenge block.
+          await userApi.block.skipTo(secondBlockToAdvance, {
+            waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+          });
+        }
 
         // Wait for BSP to generate the proof and advance one more block.
         await sleep(500);
