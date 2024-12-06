@@ -37,10 +37,11 @@ pub trait RandomSeedMixer<Seed> {
     fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed;
 }
 
-pub trait VerifiableSeed {
+pub trait SeedVerifier {
+    type Seed;
     type SeedCommitment;
     /// Verifies if the seed commitment matches the seed
-    fn verify(&self, seed_commitment: &Self::SeedCommitment) -> bool;
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool;
 }
 
 #[pallet]
@@ -89,8 +90,7 @@ pub mod pallet {
             + FullCodec;
 
         /// Randomness seed type
-        type Seed: VerifiableSeed<SeedCommitment = Self::SeedCommitment>
-            + Parameter
+        type Seed: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug
@@ -104,6 +104,9 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen
             + FullCodec;
+
+        /// The verifier of seed commitments
+        type SeedVerifier: SeedVerifier<Seed = Self::Seed, SeedCommitment = Self::SeedCommitment>;
 
         /// The seed mixer used to get fresh randomness
         type RandomSeedMixer: RandomSeedMixer<<Self as Config>::Seed>;
@@ -174,7 +177,6 @@ pub mod pallet {
         QueueError(queue::QueueError),
     }
 
-    // TODO: Remove any unneeded storage items
     /// A map from each deadline tick to a vector of the Providers that need to reveal their previous seed commitment and commit a new one in that tick
     #[pallet::storage]
     pub type DeadlineTickToProviders<T: Config> =
@@ -331,7 +333,10 @@ pub mod pallet {
 
                 // Verify that the received seed to be revealed matches the seed commitment
                 ensure!(
-                    seed_to_reveal.verify(&seed_commitment_to_reveal),
+                    <T as Config>::SeedVerifier::verify(
+                        &seed_to_reveal,
+                        &seed_commitment_to_reveal
+                    ),
                     Error::<T>::NotAValidSeed
                 );
 
@@ -391,15 +396,15 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn get_head_randomness() -> (T::Seed, Weight) {
+        fn _get_head_randomness() -> (T::Seed, Weight) {
             BoundedQueue::<T>::head()
         }
 
-        fn get_tail_randomness() -> (T::Seed, Weight) {
+        fn _get_tail_randomness() -> (T::Seed, Weight) {
             BoundedQueue::<T>::tail()
         }
 
-        fn get_randomness_at_index(index: u32) -> Result<(T::Seed, Weight), queue::QueueError> {
+        fn _get_randomness_at_index(index: u32) -> Result<(T::Seed, Weight), queue::QueueError> {
             BoundedQueue::<T>::element_at_index(index)
         }
 

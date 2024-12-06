@@ -1,5 +1,5 @@
 use codec::{Decode, Encode};
-use frame_support::{traits::fungible::Inspect, RuntimeDebugNoBound};
+use frame_support::RuntimeDebugNoBound;
 use scale_info::TypeInfo;
 use shp_traits::ReadChallengeableProvidersInterface;
 
@@ -16,13 +16,6 @@ pub struct CommitmentWithSeed<T: crate::Config> {
 // ****************************************************************************
 // ********************* Syntactic sugar for types ****************************
 // ****************************************************************************
-
-/// The Balances pallet of the runtime.
-pub type BalancesPalletFor<T> = <T as pallet_proofs_dealer::Config>::NativeBalance;
-
-/// BalanceOf is the balance type of the runtime.
-pub type BalanceOf<T> =
-    <BalancesPalletFor<T> as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// The Providers pallet from the Proofs Dealer configuration.
 pub type ProvidersPalletFor<T> = <T as pallet_proofs_dealer::Config>::ProvidersPallet;

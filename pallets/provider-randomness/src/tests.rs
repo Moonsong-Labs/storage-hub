@@ -6,7 +6,7 @@ use crate::{
 use frame_support::{
     assert_ok,
     pallet_prelude::Weight,
-    traits::{OnFinalize, OnIdle, OnInitialize, OnPoll},
+    traits::{fungible::Inspect, OnFinalize, OnIdle, OnInitialize, OnPoll},
     weights::WeightMeter,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -18,6 +18,13 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, Hash},
     BoundedVec,
 };
+
+/// The Balances pallet of the runtime.
+pub type BalancesPalletFor<T> = <T as pallet_proofs_dealer::Config>::NativeBalance;
+
+/// BalanceOf is the balance type of the runtime.
+pub type BalanceOf<T> =
+    <BalancesPalletFor<T> as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 mod queue {
     use super::*;

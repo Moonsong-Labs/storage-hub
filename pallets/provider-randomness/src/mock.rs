@@ -457,6 +457,7 @@ impl Config for Test {
     type WeightInfo = ();
     type SeedCommitment = H256;
     type Seed = H256;
+    type SeedVerifier = MockSeedVerifier;
     type RandomSeedMixer = MockRandomSeedMixer;
     type MaxSeedTolerance = MaxSeedTolerance;
     type StakeToSeedPeriod = StakeToSeedPeriod;
@@ -469,10 +470,12 @@ parameter_types! {
     pub const MinSeedPeriod: u64 = 4;
 }
 
-impl VerifiableSeed for H256 {
+pub struct MockSeedVerifier;
+impl SeedVerifier for MockSeedVerifier {
+    type Seed = H256;
     type SeedCommitment = H256;
-    fn verify(&self, seed_commitment: &Self::SeedCommitment) -> bool {
-        BlakeTwo256::hash(self.as_bytes()) == *seed_commitment
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
+        BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
     }
 }
 

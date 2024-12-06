@@ -7644,6 +7644,7 @@ dependencies = [
  "num-bigint",
  "pallet-balances 39.0.0",
  "pallet-bucket-nfts",
+ "pallet-cr-randomness",
  "pallet-file-system-runtime-api",
  "pallet-nfts",
  "pallet-payment-streams",
