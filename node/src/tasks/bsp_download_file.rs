@@ -51,8 +51,31 @@ where
 
         let chunk_id = event.chunk_id;
         let request_id = event.request_id;
+        let bucket_id = event.bucket_id;
 
         let file_storage_read_lock = self.storage_hub_handler.file_storage.read().await;
+        let file_metadata = file_storage_read_lock
+            .get_metadata(&event.file_key.into())
+            .map_err(|_| anyhow::anyhow!("Failed to get file metadata"))?;
+
+        let file_metadata = if let Some(file_metadata) = file_metadata {
+            file_metadata
+        } else {
+            error!(target: LOG_TARGET, "File not found in file storage");
+            return Err(anyhow::anyhow!("File not found in file storage"));
+        };
+
+        if let Some(bucket_id) = bucket_id {
+            if file_metadata.bucket_id != bucket_id.as_ref().to_vec() {
+                error!(
+                    target: LOG_TARGET,
+                    "File bucket mismatch for file {:?}: expected {:?}, got {:?}",
+                    event.file_key, file_metadata.bucket_id, bucket_id
+                );
+                return Err(anyhow::anyhow!("File bucket mismatch"));
+            }
+        }
+
         let generate_proof_result =
             file_storage_read_lock.generate_proof(&event.file_key.into(), &vec![chunk_id]);
 

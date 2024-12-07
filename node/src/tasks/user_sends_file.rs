@@ -1,15 +1,12 @@
 use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info, warn};
-use sc_network::{Multiaddr, PeerId, RequestFailure};
+use sc_network::{PeerId, RequestFailure};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
-use shc_common::{
-    blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
-    types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout},
-};
+use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
@@ -17,10 +14,10 @@ use sp_runtime::AccountId32;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
-/// Handles the events related to users sending a file to be stored by BSPs
+/// [`UserSendsFileTask`]: Handles the events related to users sending a file to be stored by BSPs
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
-/// it reacts to every `AcceptedBspVolunteer` from the runtime.
+/// it reacts to every [`AcceptedBspVolunteer`] from the runtime.
 pub struct UserSendsFileTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -100,7 +97,7 @@ where
             return Ok(());
         };
 
-        let msp_multiaddresses = self
+        let multiaddress_vec = self
             .storage_hub_handler
             .blockchain
             .query_provider_multiaddresses(msp_id)
@@ -113,11 +110,13 @@ where
                 )
             })?;
 
-        let multiaddress_vec = convert_raw_multiaddresses_to_multiaddr(msp_multiaddresses);
-
         // Adds the multiaddresses of the MSP to the known addresses of the file transfer service.
         // This is required to establish a connection to the MSP.
-        let peer_ids = self.extract_peer_ids(multiaddress_vec).await;
+        let peer_ids = self
+            .storage_hub_handler
+            .file_transfer
+            .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
+            .await;
 
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
@@ -171,7 +170,11 @@ where
 
         // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
         // This is required to establish a connection to the BSP.
-        let peer_ids = self.extract_peer_ids(event.multiaddresses).await;
+        let peer_ids = self
+            .storage_hub_handler
+            .file_transfer
+            .extract_peer_ids_and_register_known_addresses(event.multiaddresses)
+            .await;
 
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
@@ -230,7 +233,7 @@ where
                     let upload_response = self
                         .storage_hub_handler
                         .file_transfer
-                        .upload_request(peer_id, file_key.as_ref().into(), proof.clone())
+                        .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
                         .await;
 
                     match upload_response {
@@ -269,23 +272,5 @@ where
             "Failed to send file {:?} to any of the peers",
             file_metadata.fingerprint
         ))
-    }
-
-    async fn extract_peer_ids(&mut self, multiaddresses: Vec<Multiaddr>) -> Vec<PeerId> {
-        let mut peer_ids = Vec::new();
-        for multiaddress in &multiaddresses {
-            if let Some(peer_id) = PeerId::try_from_multiaddr(&multiaddress) {
-                if let Err(error) = self
-                    .storage_hub_handler
-                    .file_transfer
-                    .add_known_address(peer_id, multiaddress.clone())
-                    .await
-                {
-                    error!(target: LOG_TARGET, "Failed to add known address {:?} for peer {:?} due to {:?}", multiaddress, peer_id, error);
-                }
-                peer_ids.push(peer_id);
-            }
-        }
-        peer_ids
     }
 }
