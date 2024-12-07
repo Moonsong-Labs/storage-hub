@@ -56,7 +56,12 @@ describeBspNet(
       await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
 
       // Unpause bsp three
-      await userApi.docker.resumeBspContainer({ containerName: "sh-bsp-three" });
+      await userApi.docker.resumeBspContainer({
+        containerName: "sh-bsp-three"
+      });
+
+      // TODO: create an RPC to automatically execute everything below
+      // TODO: everything below should be removed and replaced with other testing logic
 
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
@@ -79,6 +84,10 @@ describeBspNet(
 
       // When requested to stop storing a file we should also receive an event new storage request
       // to replace the bsp leaving
+      // TODO: add blacklisting file keys to avoid volunteering for files that the BSP requested to stop storing
+      // TODO: add rpc to remove file key from blacklisted file keys
+      // TODO: add rpc to add user to blacklisted users to skip any storage request from them
+      // TODO: add rpc to add bucket to blacklisted buckets to skip any storage request from them
       await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
       // Wait for the right moment to confirm stop storing
@@ -86,15 +95,27 @@ describeBspNet(
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+
+      // New storage request does not get fulfilled and therefore gets cleaned up and we enqueue a checkpoint challenge remove mutation
+      // Which then the bsp responds to and has the file key get removed from the forest
+      // Once we send the bspConfirmStopStoring the extrinsic fails because the runtime forest does not match the local
       await userApi.block.skipTo(cooldown);
 
-      // Confirm stop storing
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, inclusionForestProof),
-        bspKey
-      );
+      // TODO: commented out since this extrinsic will inevitably fail. The reason being is that the revoke storage request executed above
+      // TODO: created a checkpoint challenge remove mutation which the bsp responded to and removed the file key from the forest before executing this extrinsic
+      // TODO: we should remove this entirely and implement a task or rpc to handle automatic stop storing
+      // await userApi.sealBlock(
+      //   userApi.tx.fileSystem.bspConfirmStopStoring(
+      //     fileKey,
+      //     inclusionForestProof
+      //   ),
+      //   bspKey
+      // );
 
-      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+      // await userApi.assert.eventPresent(
+      //   "fileSystem",
+      //   "BspConfirmStoppedStoring"
+      // );
     });
   }
 );

@@ -323,6 +323,11 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * Maximum number replication target allowed to be set for a storage request to be fulfilled.
+       **/
+      maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A map of blocks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
@@ -425,13 +430,6 @@ declare module "@polkadot/api-base/types/storage" {
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
-      /**
-       * Number of BSPs required to fulfill a storage request
-       *
-       * This is also used as a default value if the BSPs required are not specified when creating a storage request.
-       **/
-      replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
@@ -1490,10 +1488,18 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
-       * Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
-       * slashed for.
+       * Storage providers currently awaited for to top up their deposit (providers whom have been slashed and as
+       * a result have a capacity deficit, i.e. their capacity is below their used capacity).
        *
-       * This is primarily used to lookup providers, restrict certain operations while they are in this state.
+       * This is primarily used to lookup providers and restrict certain operations while they are in this state.
+       *
+       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+       * As a result, their provider account would be cleared from this storage.
+       *
+       * The `on_idle` hook will process every provider in this storage and mark them as insolvent.
+       * If a provider is marked as insolvent, the network (e.g users, other providers) can issue `add_redundancy`
+       * requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their buckets
+       * to another MSP or delete their buckets (as they normally can).
        **/
       awaitingTopUpFromProviders: AugmentedQuery<
         ApiType,
@@ -1556,28 +1562,18 @@ declare module "@polkadot/api-base/types/storage" {
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+       * A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
        *
-       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
-       * As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+       * Providers are marked insolvent by the `on_idle` hook.
        *
-       * The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
-       * marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
-       * `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
-       * buckets to another MSP or delete their buckets (as they normally can).
-       *
-       * The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
-       * top up their deposit.
+       * This stores the block number at which the provider was marked insolvent.
        **/
-      gracePeriodToSlashedProviders: AugmentedQuery<
+      insolventProviders: AugmentedQuery<
         ApiType,
-        (
-          arg1: u32 | AnyNumber | Uint8Array,
-          arg2: H256 | string | Uint8Array
-        ) => Observable<Option<Null>>,
-        [u32, H256]
+        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
+        [H256]
       > &
-        QueryableStorageEntry<ApiType, [u32, H256]>;
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * The double mapping from a MainStorageProviderId to a BucketIds.
        *
@@ -1641,6 +1637,41 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       mspCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the earliest available block to insert a new storage request expiration.
+       *
+       * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+       **/
+      nextAvailableProviderTopUpExpirationBlock: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the starting block to clean up expired storage requests.
+       *
+       * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
+       * attempt to accelerate this block pointer as close to or up to the current block number. This
+       * will execute provided that there is enough remaining weight to do so.
+       **/
+      nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A map of relay chain block numbers to expired provider top up period.
+       *
+       * Processed in the `on_idle` hook.
+       *
+       * Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
+       * Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
+       * If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+       **/
+      providerTopUpExpirations: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
       /**
        * The mapping from an AccountId that requested to sign up to a tuple of the metadata with type of the request, and the block
        * number when the request was made.

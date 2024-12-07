@@ -5,9 +5,13 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
-use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 use scale_info::TypeInfo;
-use sp_runtime::BoundedVec;
+use shp_traits::PaymentStreamsInterface;
+use sp_runtime::{
+    traits::{BlockNumberProvider, CheckedAdd},
+    ArithmeticError, BoundedVec,
+};
+use sp_std::cmp::max;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
 
@@ -15,14 +19,85 @@ pub type ValuePropId<T> = HashId<T>;
 
 /// Top up metadata for a provider tracked in storage.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
-pub struct TopUpMetadata {
+#[scale_info(skip_type_params(T))]
+pub struct TopUpMetadata<T: Config> {
     /// The last block at which the provider will either forcibly top up their deposit or be marked as
     /// insolvent.
     ///
     /// This is the relay chain block number which the parachain is anchored to.
-    pub end_block_grace_period: RelayChainBlockNumber,
+    pub end_block_grace_period: RelayBlockNumber<T>,
 }
 
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum ExpirationItem<T: Config> {
+    ProviderTopUp(ProviderIdFor<T>),
+}
+
+impl<T: Config> ExpirationItem<T> {
+    pub(crate) fn get_ttl(&self) -> BlockNumberFor<T> {
+        match self {
+            ExpirationItem::ProviderTopUp(_) => T::ProviderTopUpTtl::get().into(),
+        }
+    }
+
+    pub(crate) fn get_next_expiration_block(&self) -> Result<BlockNumberFor<T>, DispatchError> {
+        // The expiration block is the maximum between the next available block and the current block number plus the TTL.
+        let relay_chain_block_number: BlockNumberFor<T> =
+            RelayBlockGetter::<T>::current_block_number().into();
+        let current_block_plus_ttl = relay_chain_block_number
+            .checked_add(&self.get_ttl())
+            .ok_or(ArithmeticError::Overflow)?;
+
+        let next_available_block: BlockNumberFor<T> = match self {
+            ExpirationItem::ProviderTopUp(_) => {
+                NextAvailableProviderTopUpExpirationBlock::<T>::get().into()
+            }
+        };
+
+        Ok(max(next_available_block, current_block_plus_ttl))
+    }
+
+    pub(crate) fn try_append(
+        &self,
+        expiration_block: BlockNumberFor<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let mut next_expiration_block = expiration_block;
+        while let Err(_) = match self {
+            ExpirationItem::ProviderTopUp(storage_request) => {
+                let next_expiration_relay_chain_block_number =
+                    Pallet::<T>::convert_block_number_to_relay_block_number(next_expiration_block)?;
+                <ProviderTopUpExpirations<T>>::try_append(
+                    next_expiration_relay_chain_block_number,
+                    *storage_request,
+                )
+            }
+        } {
+            next_expiration_block = next_expiration_block
+                .checked_add(&1u8.into())
+                .ok_or(Error::<T>::MaxBlockNumberReached)?;
+        }
+
+        Ok(next_expiration_block)
+    }
+
+    pub(crate) fn set_next_expiration_block(
+        &self,
+        next_expiration_block: BlockNumberFor<T>,
+    ) -> DispatchResult {
+        match self {
+            ExpirationItem::ProviderTopUp(_) => {
+                let next_expiration_relay_chain_block_number =
+                    Pallet::<T>::convert_block_number_to_relay_block_number(next_expiration_block)?;
+                NextAvailableProviderTopUpExpirationBlock::<T>::set(
+                    next_expiration_relay_chain_block_number,
+                );
+
+                Ok(())
+            }
+        }
+    }
+}
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValuePropositionWithId<T: Config> {
@@ -230,6 +305,17 @@ pub type StartingReputationWeight<T> = <T as crate::Config>::StartingReputationW
 /// Type alias for the `RelayBlockGetter` type used in the Storage Providers pallet.
 pub type RelayBlockGetter<T> = <T as crate::Config>::RelayBlockGetter;
 
+/// Type alias for the `BlockNumber` type used by `RelayBlockGetter`.
+pub type RelayBlockNumber<T> =
+    <<T as crate::Config>::RelayBlockGetter as BlockNumberProvider>::BlockNumber;
+
 /// Type alias for the `StorageDataUnitAndBalanceConvert` type used in the Storage Providers pallet.
 pub type StorageDataUnitAndBalanceConverter<T> =
     <T as crate::Config>::StorageDataUnitAndBalanceConvert;
+
+/// Type alias for the `ProviderTopUpTtl` type used in the Storage Providers pallet.
+pub type ProviderTopUpTtl<T> = <T as crate::Config>::ProviderTopUpTtl;
+
+/// Type alias for the `TickNumber` type used in the Storage Providers pallet.
+pub type TickNumberFor<T> =
+    <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::TickNumber;

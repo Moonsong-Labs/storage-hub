@@ -61,7 +61,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
         userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
         userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+        null
       ),
       shUser
     );
@@ -117,7 +118,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         fingerprint,
         file_size,
         userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+        null
       ),
       shUser
     );
@@ -203,6 +205,11 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
   });
 
   it("bsp volunteers multiple files properly", async () => {
+    // 1 block to maxthreshold (i.e. instant acceptance)
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+    );
+
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
     const bucketName = "something-3";
@@ -230,7 +237,8 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
           fingerprint,
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         )
       );
     }

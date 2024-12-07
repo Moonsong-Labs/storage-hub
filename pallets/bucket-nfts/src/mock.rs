@@ -265,6 +265,7 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget = ConstU32<2>;
 }
 
 pub struct MockUserSolvency;
@@ -418,6 +419,8 @@ impl pallet_storage_providers::Config for Test {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
     type TopUpGracePeriod = ConstU32<5>;
+    type ProviderTopUpTtl = ConstU32<10>;
+    type MaxExpiredItemsInBlock = ConstU32<100u32>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
 }

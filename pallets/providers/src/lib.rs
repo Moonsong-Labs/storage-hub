@@ -33,6 +33,7 @@ pub mod pallet {
     use super::{types::*, weights::WeightInfo};
     use codec::{FullCodec, HasCompact};
     use frame_support::traits::Randomness;
+    use frame_support::weights::WeightMeter;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -277,7 +278,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCommitmentSize: Get<u32>;
 
-        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base  
+        /// 0-size bucket fixed rate payment stream (i.e. the amount charged as a base
         /// fee for a bucket that doesn't have any files yet)
         #[pallet::constant]
         type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
@@ -291,6 +292,14 @@ pub mod pallet {
         /// Trait that has benchmark helpers
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelpers: crate::benchmarking::BenchmarkHelpers<Self>;
+
+        /// Time-to-live for a provider to top up their deposit to cover a capacity deficit.
+        #[pallet::constant]
+        type ProviderTopUpTtl: Get<RelayChainBlockNumber>;
+
+        /// Maximum number of expired items (per type) to clean up in a single block.
+        #[pallet::constant]
+        type MaxExpiredItemsInBlock: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -447,35 +456,61 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+    /// Storage providers currently awaited for to top up their deposit (providers whom have been slashed and as
+    /// a result have a capacity deficit, i.e. their capacity is below their used capacity).
+    ///
+    /// This is primarily used to lookup providers and restrict certain operations while they are in this state.
     ///
     /// Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
-    /// As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
+    /// As a result, their provider account would be cleared from this storage.
     ///
-    /// The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
-    /// marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
-    /// `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
-    /// buckets to another MSP or delete their buckets (as they normally can).
-    ///
-    /// The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
-    /// top up their deposit.
-    #[pallet::storage]
-    pub type GracePeriodToSlashedProviders<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        RelayChainBlockNumber,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        (),
-    >;
-
-    /// Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
-    /// slashed for.
-    ///
-    /// This is primarily used to lookup providers, restrict certain operations while they are in this state.
+    /// The `on_idle` hook will process every provider in this storage and mark them as insolvent.
+    /// If a provider is marked as insolvent, the network (e.g users, other providers) can issue `add_redundancy`
+    /// requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their buckets
+    /// to another MSP or delete their buckets (as they normally can).
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata>;
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata<T>>;
+
+    /// A map of relay chain block numbers to expired provider top up period.
+    ///
+    /// Processed in the `on_idle` hook.
+    ///
+    /// Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
+    /// Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
+    /// If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+    #[pallet::storage]
+    pub type ProviderTopUpExpirations<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        RelayBlockNumber<T>,
+        BoundedVec<ProviderIdFor<T>, T::MaxExpiredItemsInBlock>,
+        ValueQuery,
+    >;
+
+    /// A pointer to the earliest available block to insert a new storage request expiration.
+    ///
+    /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+    #[pallet::storage]
+    pub type NextAvailableProviderTopUpExpirationBlock<T: Config> =
+        StorageValue<_, RelayBlockNumber<T>, ValueQuery>;
+
+    /// A pointer to the starting block to clean up expired storage requests.
+    ///
+    /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
+    /// attempt to accelerate this block pointer as close to or up to the current block number. This
+    /// will execute provided that there is enough remaining weight to do so.
+    #[pallet::storage]
+    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    /// A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
+    ///
+    /// Providers are marked insolvent by the `on_idle` hook.
+    ///
+    /// This stores the block number at which the provider was marked insolvent.
+    #[pallet::storage]
+    pub type InsolventProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TickNumberFor<T>>;
 
     // Events & Errors:
 
@@ -558,7 +593,7 @@ pub mod pallet {
         /// signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
         AwaitingTopUp {
             provider_id: ProviderIdFor<T>,
-            top_up_metadata: TopUpMetadata,
+            top_up_metadata: TopUpMetadata<T>,
         },
 
         /// Event emitted when an SP has topped up its deposit based on slash amount.
@@ -567,6 +602,12 @@ pub mod pallet {
             /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
             amount: BalanceOf<T>,
         },
+
+        /// Event emitted when a provider has been marked as insolvent.
+        ///
+        /// This happens when the provider hasn't topped up their deposit within the grace period after being slashed
+        /// and they have a capacity deficit (i.e. their capacity is below their used capacity).
+        ProviderInsolvent { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when a bucket's root has been changed.
         BucketRootChanged {
@@ -599,6 +640,12 @@ pub mod pallet {
             msp_id: MainStorageProviderId<T>,
             value_prop_id: ValuePropIdFor<T>,
         },
+
+        /// Event emitted when an MSP has been deleted.
+        MspDeleted { provider_id: ProviderIdFor<T> },
+
+        /// Event emitted when a BSP has been deleted.
+        BspDeleted { provider_id: ProviderIdFor<T> },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -649,7 +696,6 @@ pub mod pallet {
         NewUsedCapacityExceedsStorageCapacity,
         /// Deposit too low to determine capacity.
         DepositTooLow,
-
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
         NotRegistered,
@@ -695,6 +741,16 @@ pub mod pallet {
         BucketSizeExceedsLimit,
         /// Error thrown when a bucket has no value proposition.
         BucketHasNoValueProposition,
+        /// Congratulations, you either lived long enough or were born late enough to see this error.
+        MaxBlockNumberReached,
+        /// Failed thrown when trying to convert a type to a block number.
+        BlockNumberConversionFailed,
+        /// Operation not allowed for insolvent provider
+        OperationNotAllowedForInsolventProvider,
+        /// Failed to delete a provider due to conditions not being met.
+        ///
+        /// Call `can_delete_provider` runtime API to check if the provider can be deleted.
+        DeleteProviderConditionsNotMet,
 
         // Payment streams interface errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -1338,6 +1394,8 @@ pub mod pallet {
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         ///
         /// This is a free operation.
+        ///
+        /// This is a free operation.
         #[pallet::call_index(13)]
         #[pallet::weight(T::WeightInfo::slash())]
         pub fn slash(
@@ -1366,6 +1424,45 @@ pub mod pallet {
             Self::do_top_up_deposit(&who)?;
 
             Ok(Pays::No.into())
+        }
+
+        /// Delete a provider from the system.
+        ///
+        /// This can only be done if the following conditions are met:
+        /// - The provider is insolvent.
+        /// - The provider has no active payment streams.
+        ///
+        /// This is a free operation and can be called by anyone with a signed transaction.
+        ///
+        /// You can utilize the runtime API `can_delete_provider` to check if a provider can be deleted
+        /// to automate the process.
+        ///
+        /// Emits `MspDeleted` or `BspDeleted` event when successful.
+        #[pallet::call_index(15)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn delete_provider(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed.
+            ensure_signed(origin)?;
+
+            Self::do_delete_provider(&provider_id)?;
+
+            Ok(Pays::No.into())
+        }
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+    where
+        u32: TryFrom<BlockNumberFor<T>>,
+    {
+        fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+            let mut meter = WeightMeter::with_limit(remaining_weight);
+            Self::do_on_idle(current_block, &mut meter);
+
+            meter.consumed()
         }
     }
 }
