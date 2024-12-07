@@ -744,9 +744,14 @@ impl<T: pallet::Config> CommitRevealRandomnessInterface for Pallet<T> {
     ) -> frame_support::dispatch::DispatchResult {
         Self::initialise_provider_cycle(who)
     }
+
+    // TODO: Use this when signing off Providers to remove them from this pallet
+    fn stop_randomness_cycle(who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Self::stop_provider_cycle(who)
+    }
 }
 
-/* use crate::types::*;
+use crate::types::*;
 use frame_system::pallet_prelude::BlockNumberFor;
 pub struct CurrentBlockRandomness<T>(core::marker::PhantomData<T>);
 impl<T: Config> Randomness<SeedFor<T>, BlockNumberFor<T>> for CurrentBlockRandomness<T> {
@@ -770,4 +775,4 @@ impl<T: Config> Randomness<SeedFor<T>, BlockNumberFor<T>> for CurrentBlockRandom
             pallet_proofs_dealer::ChallengesTicker::<T>::get(),
         )
     }
-} */
+}
