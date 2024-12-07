@@ -21,8 +21,9 @@ use sp_runtime::{
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
+    QueryConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
@@ -97,6 +98,25 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    pub fn is_storage_request_open_to_volunteers(
+        file_key: MerkleHash<T>,
+    ) -> Result<bool, IsStorageRequestOpenToVolunteersError>
+    where
+        T: frame_system::Config,
+    {
+        // Check if the storage request exists.
+        let storage_request = match <StorageRequests<T>>::get(&file_key) {
+            Some(storage_request) => storage_request,
+            None => {
+                return Err(IsStorageRequestOpenToVolunteersError::StorageRequestNotFound);
+            }
+        };
+
+        // Check if the storage request is open to volunteers.
+        // This should always be true since the storage request would be deleted from storage if the `bsps_confirmed` is equal to `bsps_required`.
+        Ok(storage_request.bsps_confirmed < storage_request.bsps_required)
+    }
+
     /// Compute the tick number at which the BSP is eligible to volunteer for a storage request.
     pub fn query_earliest_file_volunteer_tick(
         bsp_id: ProviderIdFor<T>,

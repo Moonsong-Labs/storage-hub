@@ -22,8 +22,8 @@ use sp_runtime::{
 };
 
 use pallet_file_system_runtime_api::{
-    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
@@ -404,6 +404,29 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send earliest block to change capacity: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::IsStorageRequestOpenToVolunteers {
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let is_open = self
+                        .client
+                        .runtime_api()
+                        .is_storage_request_open_to_volunteers(current_block_hash, file_key)
+                        .unwrap_or_else(|_| {
+                            Err(IsStorageRequestOpenToVolunteersError::InternalError)
+                        });
+
+                    match callback.send(is_open) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Storage request open to volunteers result sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send storage request open to volunteers: {:?}", e);
                         }
                     }
                 }

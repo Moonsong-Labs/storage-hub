@@ -704,6 +704,26 @@ where
             .wait_for_tick(earliest_volunteer_tick)
             .await?;
 
+        // TODO: Have this dynamically called at every tick in `wait_for_tick` to exit early without waiting until `earliest_volunteer_tick` in the event the storage request
+        // TODO: is closed mid-way through the process.
+        let can_volulnteer = self
+            .storage_hub_handler
+            .blockchain
+            .is_storage_request_open_to_volunteers(file_key.into())
+            .await
+            .map_err(|e| anyhow!("Failed to query file can volunteer: {:?}", e))?;
+
+        // Skip volunteering if the storage request is no longer open to volunteers.
+        // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
+        // TODO: we catch up to the latest block and if the storage request is still open to volunteers, volunteer then.
+        if !can_volulnteer {
+            let err_msg = "Storage request is no longer open to volunteers. Skipping volunteering.";
+            warn!(
+                target: LOG_TARGET, "{}", err_msg
+            );
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
@@ -740,7 +760,8 @@ where
             });
 
         // Send extrinsic and wait for it to be included in the block.
-        self.storage_hub_handler
+        let result = self
+            .storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
             .await?
@@ -750,7 +771,28 @@ where
                     .extrinsic_retry_timeout,
             ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .await;
+
+        if let Err(e) = result {
+            debug!(
+                target: LOG_TARGET,
+                "Failed to volunteer for file {:?}: {:?}",
+                file_key,
+                e
+            );
+
+            // Delete file metadata from file storage.
+            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+            write_file_storage
+                .delete_file(&file_key.into())
+                .map_err(|e| anyhow!("Failed to delete file from file storage: {:?}", e))?;
+
+            // Unregister the file from the file transfer service.
+            self.storage_hub_handler
+                .file_transfer
+                .unregister_file(file_key.into())
+                .await?;
+        }
 
         Ok(())
     }

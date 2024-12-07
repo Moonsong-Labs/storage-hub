@@ -330,6 +330,10 @@ impl_runtime_apis! {
     }
 
     impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+        fn is_storage_request_open_to_volunteers(file_key: H256) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
+            FileSystem::is_storage_request_open_to_volunteers(file_key)
+        }
+
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
             FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key)
         }

@@ -4,8 +4,8 @@ use log::{debug, warn};
 use serde_json::Number;
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
@@ -64,6 +64,10 @@ pub enum BlockchainServiceCommand {
         tick_number: TickNumber,
         callback:
             tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), ApiError>>>,
+    },
+    IsStorageRequestOpenToVolunteers {
+        file_key: H256,
+        callback: tokio::sync::oneshot::Sender<Result<bool, IsStorageRequestOpenToVolunteersError>>,
     },
     QueryFileEarliestVolunteerTick {
         bsp_id: ProviderId,
@@ -223,6 +227,11 @@ pub trait BlockchainServiceInterface {
 
     /// Wait for a tick number.
     async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError>;
+
+    async fn is_storage_request_open_to_volunteers(
+        &self,
+        file_key: H256,
+    ) -> Result<bool, IsStorageRequestOpenToVolunteersError>;
 
     /// Query the earliest tick number that a file was volunteered for storage.
     async fn query_file_earliest_volunteer_tick(
@@ -460,6 +469,18 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         self.send(message).await;
         let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
         rx.await.expect("Failed to wait for tick")
+    }
+
+    async fn is_storage_request_open_to_volunteers(
+        &self,
+        file_key: H256,
+    ) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message =
+            BlockchainServiceCommand::IsStorageRequestOpenToVolunteers { file_key, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
     async fn query_file_earliest_volunteer_tick(
