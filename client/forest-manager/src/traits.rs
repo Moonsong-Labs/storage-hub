@@ -55,6 +55,17 @@ pub trait ForestStorageHandler {
     /// Remove forest storage instance.
     async fn remove_forest_storage(&mut self, key: &Self::Key);
 
+    /// Create a copy (snapshot) of the forest storage instance.
+    ///
+    /// Returns `Some` with the copied forest storage instance for `key` if it exists,
+    /// otherwise returns `None`.
+    /// The instance returned is the one corresponding to `key`, not the one corresponding to `key_for_copy`.
+    async fn snapshot(
+        &self,
+        src_key: &Self::Key,
+        dest_key: &Self::Key,
+    ) -> Option<Arc<RwLock<Self::FS>>>;
+
     /// Get or create forest storage instance.
     async fn get_or_create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         if let Some(forest_storage) = self.get(key).await {

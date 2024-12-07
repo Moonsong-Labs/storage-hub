@@ -1,6 +1,6 @@
+import assert from "node:assert";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
-import invariant from "tiny-invariant";
 import {
   alice,
   bob,
@@ -51,7 +51,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
       const newBucketEventDataBlob =
         api.events.fileSystem.NewBucket.is(bucketEvent) && bucketEvent.data;
 
-      invariant(newBucketEventDataBlob, "Event doesn't match Type");
+      assert(newBucketEventDataBlob, "Event doesn't match Type");
 
       const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
         "res/cloud.jpg",

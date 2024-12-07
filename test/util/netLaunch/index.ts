@@ -429,7 +429,8 @@ export class NetworkLauncher {
           this.config.capacity || ShConsts.CAPACITY_512,
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           [multiAddressMsp],
-          1,
+          // The MSP will charge 100 UNITS per GigaUnit of data per block.
+          100 * 1024 * 1024,
           "Terms of Service...",
           9999999,
           who

@@ -25,6 +25,15 @@ impl<T: TrieLayout> InMemoryForestStorage<T> {
     }
 }
 
+impl<T: TrieLayout> Clone for InMemoryForestStorage<T> {
+    fn clone(&self) -> Self {
+        Self {
+            root: self.root.clone(),
+            memdb: self.memdb.clone(),
+        }
+    }
+}
+
 impl<T: TrieLayout> ForestStorage<T> for InMemoryForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,

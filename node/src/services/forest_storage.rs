@@ -1,13 +1,18 @@
+use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
+
 use async_trait::async_trait;
+use log::error;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage,
-    rocksdb::RocksDBForestStorage,
+    rocksdb::{self, RocksDBForestStorage},
     traits::{ForestStorage, ForestStorageHandler},
 };
-use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
 
+const LOG_TARGET: &str = "forest-storage-handler";
+
+/// Forest storage handler that manages a single forest storage instance.
 #[derive(Debug)]
 pub struct ForestStorageSingle<FS>
 where
@@ -42,11 +47,8 @@ impl
     ForestStorageSingle<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>
 {
     pub fn new(storage_path: String) -> Self {
-        let fs = RocksDBForestStorage::<
-            StorageProofsMerkleTrieLayout,
-            kvdb_rocksdb::Database,
-        >::rocksdb_storage(storage_path.clone())
-        .expect("Failed to create RocksDB");
+        let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(storage_path.clone())
+            .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
 
@@ -87,6 +89,14 @@ impl ForestStorageHandler
     }
 
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
+
+    async fn snapshot(
+        &self,
+        _key: &Self::Key,
+        _key_for_copy: &Self::Key,
+    ) -> Option<Arc<RwLock<Self::FS>>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -103,10 +113,11 @@ impl ForestStorageHandler
     }
 
     async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        let fs = RocksDBForestStorage::<
-            StorageProofsMerkleTrieLayout,
-            kvdb_rocksdb::Database,
-        >::rocksdb_storage(self.storage_path.clone().expect("Storage path should be set for RocksDB implementation"))
+        let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(
+            self.storage_path
+                .clone()
+                .expect("Storage path should be set for RocksDB implementation"),
+        )
         .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
@@ -117,8 +128,19 @@ impl ForestStorageHandler
     }
 
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
+
+    async fn snapshot(
+        &self,
+        _key: &Self::Key,
+        _key_for_copy: &Self::Key,
+    ) -> Option<Arc<RwLock<Self::FS>>> {
+        None
+    }
 }
 
+/// Forest storage handler that manages multiple forest storage instances.
+///
+/// The name caching comes from the fact that it maintains a list of existing forest storage instances.
 #[derive(Debug)]
 pub struct ForestStorageCaching<K, FS>
 where
@@ -186,22 +208,47 @@ where
     async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
-        // Return potentially existing instance since we waited for the lock
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `insert` at the same time with the same `key`.
         if let Some(fs) = fs_instances.get(key) {
             return fs.clone();
         }
 
-        let fs = InMemoryForestStorage::new();
+        let forest_storage = InMemoryForestStorage::new();
 
-        let fs = Arc::new(RwLock::new(fs));
+        let forest_storage = Arc::new(RwLock::new(forest_storage));
 
-        fs_instances.insert(key.clone(), fs.clone());
+        fs_instances.insert(key.clone(), forest_storage.clone());
 
-        fs
+        forest_storage
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
         self.fs_instances.write().await.remove(key);
+    }
+
+    async fn snapshot(
+        &self,
+        src_key: &Self::Key,
+        dest_key: &Self::Key,
+    ) -> Option<Arc<RwLock<Self::FS>>> {
+        let mut fs_instances = self.fs_instances.write().await;
+
+        // Return potentially existing instance since we waited for the lock
+        // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
+        if let Some(fs) = fs_instances.get(dest_key) {
+            return Some(fs.clone());
+        }
+
+        let forest_storage_src = fs_instances.get(src_key)?;
+
+        // Create a copy of the Forest Storage
+        let forest_storage_dest = forest_storage_src.read().await.clone();
+        let forest_storage_dest = Arc::new(RwLock::new(forest_storage_dest));
+
+        fs_instances.insert(dest_key.clone(), forest_storage_dest.clone());
+
+        Some(forest_storage_dest)
     }
 }
 
@@ -224,27 +271,79 @@ where
     async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
-        // Return potentially existing instance since we waited for the lock
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `insert` at the same time with the same `key`.
         if let Some(fs) = fs_instances.get(key) {
             return fs.clone();
         }
 
-        let fs = RocksDBForestStorage::<
-            StorageProofsMerkleTrieLayout,
-            kvdb_rocksdb::Database,
-        >::rocksdb_storage(self.storage_path.clone().expect("Storage path should be set for RocksDB implementation"))
-        .expect("Failed to create RocksDB");
+        let new_db_storage_path = format!(
+            "{}_{:?}",
+            self.storage_path
+                .clone()
+                .expect("Storage path should be set for RocksDB implementation"),
+            key.clone()
+        );
 
-        let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
+        let underlying_db =
+            rocksdb::create_db::<StorageProofsMerkleTrieLayout>(new_db_storage_path)
+                .expect("Failed to create RocksDB");
 
-        let fs = Arc::new(RwLock::new(fs));
+        let forest_storage =
+            RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
 
-        fs_instances.insert(key.clone(), fs.clone());
+        let forest_storage = Arc::new(RwLock::new(forest_storage));
 
-        fs
+        fs_instances.insert(key.clone(), forest_storage.clone());
+
+        forest_storage
     }
 
     async fn remove_forest_storage(&mut self, key: &Self::Key) {
         self.fs_instances.write().await.remove(key);
+    }
+
+    async fn snapshot(
+        &self,
+        src_key: &Self::Key,
+        dest_key: &Self::Key,
+    ) -> Option<Arc<RwLock<Self::FS>>> {
+        let mut fs_instances = self.fs_instances.write().await;
+
+        // Return potentially existing instance since we waited for the lock.
+        // This is for the case where many threads called `snapshot` at the same time with the same `dest_key`.
+        if let Some(fs) = fs_instances.get(dest_key) {
+            return Some(fs.clone());
+        }
+
+        let storage_path = self
+            .storage_path
+            .clone()
+            .expect("Storage path should be set");
+        let src = format!("{}_{:?}", storage_path, src_key);
+        let dest = format!("{}_{:?}", storage_path, dest_key);
+
+        // Read-lock the source Forest Storage.
+        let src_fs = fs_instances.get(src_key)?.read().await;
+
+        // Copy the full source Forest Storage files to the destination Forest Storage.
+        let underlying_db = match rocksdb::copy_db(src, dest) {
+            Ok(db) => db,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to copy RocksDB: {}", e);
+                return None;
+            }
+        };
+
+        // Release the lock on the source Forest Storage.
+        drop(src_fs);
+
+        // Create and insert new Forest Storage instance for the destination Forest Storage.
+        let forest_storage =
+            RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
+        let forest_storage = Arc::new(RwLock::new(forest_storage));
+        fs_instances.insert(dest_key.clone(), forest_storage.clone());
+
+        Some(forest_storage)
     }
 }

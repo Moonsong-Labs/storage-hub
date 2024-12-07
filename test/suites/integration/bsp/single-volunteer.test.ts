@@ -45,7 +45,6 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
   });
 
   it("issueStorageRequest sent correctly", async () => {
-    // const source = "res/smile.jpg";
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
@@ -53,9 +52,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    assert(newBucketEventDataBlob, "Event doesn't match Type");
 
     await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
@@ -74,9 +71,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
-    if (!dataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    assert(dataBlob, "Event doesn't match Type");
 
     strictEqual(dataBlob.who.toString(), userApi.shConsts.NODE_INFOS.user.AddressId);
     strictEqual(dataBlob.location.toHuman(), destination);
@@ -105,9 +100,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    assert(newBucketEventDataBlob, "Event doesn't match Type");
 
     const { fingerprint, file_size, location } =
       await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -218,9 +211,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    assert(newBucketEventDataBlob, "Event doesn't match Type");
 
     const txs = [];
     for (let i = 0; i < source.length; i++) {

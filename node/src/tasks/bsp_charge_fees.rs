@@ -4,14 +4,13 @@ use pallet_storage_providers::types::StorageProviderId;
 use std::time::Duration;
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
         LastChargeableInfoUpdated, ProcessStopStoringForInsolventUserRequest,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    types::StopStoringForInsolventUserRequest,
+    types::{StopStoringForInsolventUserRequest, Tip},
 };
 use shc_common::types::{MaxUsersToCharge, ProviderId};
 use sp_core::{Get, H256};

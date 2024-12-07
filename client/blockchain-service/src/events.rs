@@ -279,6 +279,37 @@ pub struct MoveBucketExpired {
     pub msp_id: ProviderId,
 }
 impl EventBusMessage for MoveBucketExpired {}
+/// BSP stopped storing a specific file.
+///
+/// This event is emitted when a BSP confirm stop storing a file.
+#[derive(Debug, Clone)]
+pub struct BspConfirmStoppedStoring {
+    pub bsp_id: H256,
+    pub file_key: FileKey,
+    pub new_root: H256,
+}
+impl EventBusMessage for BspConfirmStoppedStoring {}
+
+/// Delete file event in a finalised block.
+///
+/// This event is emitted when a finalised block is received by the Blockchain service,
+/// in which there is a `BspConfirmStoppedStoring` event for one of the providers that this node is tracking.
+#[derive(Debug, Clone)]
+pub struct FinalisedBspConfirmStoppedStoring {
+    pub bsp_id: H256,
+    pub file_key: FileKey,
+    pub new_root: H256,
+}
+
+impl EventBusMessage for FinalisedBspConfirmStoppedStoring {}
+
+/// Notify period event.
+///
+/// This event is emitted when a X amount of block has passed. It is configured at the start of the service.
+#[derive(Debug, Clone)]
+pub struct NotifyPeriod {}
+
+impl EventBusMessage for NotifyPeriod {}
 
 /// The event bus provider for the BlockchainService actor.
 ///
@@ -307,6 +338,9 @@ pub struct BlockchainServiceEventBusProvider {
     move_bucket_accepted_event_bus: EventBus<MoveBucketAccepted>,
     move_bucket_expired_event_bus: EventBus<MoveBucketExpired>,
     move_bucket_requested_for_new_msp_event_bus: EventBus<MoveBucketRequestedForNewMsp>,
+    bsp_stop_storing_event_bus: EventBus<BspConfirmStoppedStoring>,
+    finalised_bsp_stop_storing_event_bus: EventBus<FinalisedBspConfirmStoppedStoring>,
+    notify_period_event_bus: EventBus<NotifyPeriod>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -332,6 +366,9 @@ impl BlockchainServiceEventBusProvider {
             move_bucket_accepted_event_bus: EventBus::new(),
             move_bucket_expired_event_bus: EventBus::new(),
             move_bucket_requested_for_new_msp_event_bus: EventBus::new(),
+            bsp_stop_storing_event_bus: EventBus::new(),
+            finalised_bsp_stop_storing_event_bus: EventBus::new(),
+            notify_period_event_bus: EventBus::new(),
         }
     }
 }
@@ -455,5 +492,23 @@ impl ProvidesEventBus<MoveBucketExpired> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<MoveBucketRequestedForNewMsp> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<MoveBucketRequestedForNewMsp> {
         &self.move_bucket_requested_for_new_msp_event_bus
+    }
+}
+
+impl ProvidesEventBus<BspConfirmStoppedStoring> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<BspConfirmStoppedStoring> {
+        &self.bsp_stop_storing_event_bus
+    }
+}
+
+impl ProvidesEventBus<FinalisedBspConfirmStoppedStoring> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FinalisedBspConfirmStoppedStoring> {
+        &self.finalised_bsp_stop_storing_event_bus
+    }
+}
+
+impl ProvidesEventBus<NotifyPeriod> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<NotifyPeriod> {
+        &self.notify_period_event_bus
     }
 }
