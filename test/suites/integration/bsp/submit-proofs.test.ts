@@ -507,10 +507,6 @@ describeBspNet(
     });
 
     it("BSP that has the file responds with correct proof including the file key, and BSP that doesn't have the file responds with correct proof non-including the file key", async () => {
-      // Check who has a challenge tick coming up first: the BSP that has the file or BSP-Two who doesn't have it.
-      // Whoever has the challenge tick first, we check that they submitted a proof successfully first.
-      const currentTick = (await userApi.call.proofsDealerApi.getCurrentTick()).toNumber();
-
       // Calculate next challenge tick for the BSP that has the file.
       // We first get the last tick for which the BSP submitted a proof.
       const dummyBspLastTickResult =
