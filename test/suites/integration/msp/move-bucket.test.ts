@@ -25,7 +25,7 @@ describeMspNet(
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
     const bucketName = "nothingmuch-3";
     let bucketId: string;
-    let allBucketFiles: string[] = [];
+    const allBucketFiles: string[] = [];
 
     before(async () => {
       userApi = await createUserApi();
