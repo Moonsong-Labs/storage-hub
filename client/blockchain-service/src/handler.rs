@@ -107,7 +107,7 @@ pub struct BlockchainService {
     /// A ProviderId can be a BSP or the buckets that an MSP has.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
-    pub(crate) forest_root_snapshots: BTreeMap<ProviderId, BTreeSet<ForestStorageSnapshotInfo>>,
+    pub(crate) _forest_root_snapshots: BTreeMap<ProviderId, BTreeSet<ForestStorageSnapshotInfo>>,
     /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
     ///
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
