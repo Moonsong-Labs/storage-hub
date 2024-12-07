@@ -549,28 +549,48 @@ impl BlockchainService {
                 Ok(next_challenge_tick) => next_challenge_tick,
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+
+                    // If this is the case, no reason to continue to the next pending proof request.
+                    // We can just break the loop.
                     break;
                 }
             };
 
             // This is to avoid starting a new task if the proof is not the next one to be submitted.
-            if next_challenge_tick == request.tick {
-                // If the proof is still the next one to be submitted, we can process it.
-                next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
-                    ProcessSubmitProofRequestData {
-                        seed: request.seed,
-                        provider_id: request.provider_id,
-                        tick: request.tick,
-                        forest_challenges: request.forest_challenges,
-                        checkpoint_challenges: request.checkpoint_challenges,
-                    },
-                ));
-                break;
-            } else {
+            if next_challenge_tick != request.tick {
                 // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
                 trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
                 self.pending_submit_proof_requests.remove(&request);
+
+                // Continue to the next pending proof request.
+                continue;
             }
+
+            // If the proof is still the next one to be submitted, we can process it.
+            trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
+            let current_forest_root = self.current_forest_roots.get(&provider_id).cloned();
+            if current_forest_root.is_none() {
+                error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Current Forest root for Provider [{:?}] is not set. This should never happen. This is a bug. Please report it to the StorageHub team.", provider_id);
+
+                // If this is the case, no reason to continue to the next pending proof request.
+                // We can just break the loop.
+                break;
+            }
+
+            next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
+                ProcessSubmitProofRequestData {
+                    seed: request.seed,
+                    provider_id: request.provider_id,
+                    tick: request.tick,
+                    forest_challenges: request.forest_challenges,
+                    checkpoint_challenges: request.checkpoint_challenges,
+                    current_forest_root: current_forest_root
+                        .expect("We just checked that it's Some; qed"),
+                },
+            ));
+
+            // Exit the loop since we have found the next proof to be submitted.
+            break;
         }
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.

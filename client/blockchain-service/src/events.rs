@@ -2,8 +2,9 @@ use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
-    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieMutation, TrieRemoveMutation,
+    Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, HasherOutT,
+    KeyProofs, PeerIds, ProviderId, RandomnessOutput, StorageData, StorageProofsMerkleTrieLayout,
+    TrieMutation, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -133,6 +134,7 @@ pub struct ProcessSubmitProofRequestData {
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
     pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+    pub current_forest_root: HasherOutT<StorageProofsMerkleTrieLayout>,
 }
 
 #[derive(Debug, Clone)]
@@ -202,6 +204,7 @@ pub struct FinalisedTrieRemoveMutationsApplied {
     pub provider_id: ProviderId,
     pub mutations: Vec<(ForestRoot, TrieMutation)>,
     pub new_root: H256,
+    pub current_forest_root: HasherOutT<StorageProofsMerkleTrieLayout>,
 }
 
 impl EventBusMessage for FinalisedTrieRemoveMutationsApplied {}

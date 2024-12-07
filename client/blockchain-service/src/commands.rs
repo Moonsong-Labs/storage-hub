@@ -17,8 +17,9 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses, ProviderId,
-    RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber, TrieRemoveMutation,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, HasherOutT, MainStorageProviderId, Multiaddresses,
+    ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
+    StorageProviderId, TickNumber, TrieRemoveMutation,
 };
 use sp_api::ApiError;
 use sp_core::H256;
@@ -187,6 +188,10 @@ pub enum BlockchainServiceCommand {
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    GetCurrentForestRoot {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<HasherOutT<StorageProofsMerkleTrieLayout>>>,
     },
 }
 
@@ -368,11 +373,17 @@ pub trait BlockchainServiceInterface {
         bucket_id: BucketId,
     ) -> Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError>;
 
-    /// Helper function to release the forest root write lock.
+    /// Helper function to release the Forest root write lock.
     async fn release_forest_root_write_lock(
         &self,
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     ) -> Result<()>;
+
+    /// Get the current Forest root for a given Provider.
+    async fn get_current_forest_root(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<HasherOutT<StorageProofsMerkleTrieLayout>>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -835,6 +846,19 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::ReleaseForestRootWriteLock {
             forest_root_write_tx,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn get_current_forest_root(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<HasherOutT<StorageProofsMerkleTrieLayout>> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::GetCurrentForestRoot {
+            provider_id,
             callback,
         };
         self.send(message).await;

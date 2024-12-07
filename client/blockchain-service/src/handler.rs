@@ -1,6 +1,5 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use log::{debug, trace, warn};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
@@ -12,7 +11,7 @@ use sc_client_api::{
 };
 use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
-use sc_tracing::tracing::{error, info};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
@@ -34,12 +33,11 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
-    blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
-    types::{BlockNumber, HasherOutT, ParachainClient, ProviderId, StorageProofsMerkleTrieLayout},
-};
-use shc_common::{
-    blockchain_utils::get_events_at_block,
-    types::{Fingerprint, TickNumber, BCSV_KEY_TYPE},
+    blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
+    types::{
+        BlockNumber, Fingerprint, HasherOutT, ParachainClient, ProviderId,
+        StorageProofsMerkleTrieLayout, TickNumber, BCSV_KEY_TYPE,
+    },
 };
 use shp_file_metadata::FileKey;
 use storage_hub_runtime::RuntimeEvent;
@@ -47,13 +45,14 @@ use storage_hub_runtime::RuntimeEvent;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, FinalisedMspStoppedStoringBucket,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -61,9 +60,6 @@ use crate::{
         BestBlockInfo, ForestStorageSnapshotInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
-};
-use crate::{
-    events::FinalisedMspStoppedStoringBucket, state::OngoingProcessMspRespondStorageRequestCf,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -932,6 +928,29 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::GetCurrentForestRoot {
+                    provider_id,
+                    callback,
+                } => {
+                    let maybe_current_forest_root = self
+                        .current_forest_roots
+                        .get(&provider_id)
+                        .map(|root| root.clone());
+
+                    let current_forest_root = maybe_current_forest_root.ok_or_else(|| {
+                        anyhow!(
+                            "Current Forest Root not found for Provider ID {}",
+                            provider_id
+                        )
+                    });
+
+                    match callback.send(current_forest_root) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send current forest root: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1308,11 +1327,21 @@ impl BlockchainService {
                         ) => {
                             // Check if the provider ID is one of the provider IDs this node is tracking.
                             if self.provider_ids.contains(&provider) {
-                                self.emit(FinalisedTrieRemoveMutationsApplied {
-                                    provider_id: provider,
-                                    mutations: mutations.clone().into(),
-                                    new_root,
-                                })
+                                let current_forest_root = self.current_forest_roots.get(&provider);
+
+                                match current_forest_root {
+                                    Some(current_forest_root) => {
+                                        self.emit(FinalisedTrieRemoveMutationsApplied {
+                                            provider_id: provider,
+                                            mutations: mutations.clone().into(),
+                                            new_root,
+                                            current_forest_root: current_forest_root.clone(),
+                                        })
+                                    }
+                                    None => {
+                                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Current Forest Root not found for Provider ID {} while receiving a finalised {:?} event. This is a critical bug. Please report it to the StorageHub team.", provider, &ev);
+                                    }
+                                }
                             }
                         }
                         RuntimeEvent::FileSystem(

@@ -5,7 +5,6 @@ pub mod bsp_charge_fees;
 pub mod bsp_download_file;
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
-// mod common;
 pub mod mock_bsp_volunteer;
 pub mod mock_sp_react_to_event;
 pub mod msp_charge_fees;
@@ -14,20 +13,20 @@ pub mod msp_upload_file;
 pub mod sp_slash_provider;
 pub mod user_sends_file;
 
-use crate::services::forest_storage::{ForestStorageCaching, NoKey};
-use crate::services::handler::StorageHubHandler;
 use kvdb::KeyValueDB;
 use sc_tracing::tracing::info;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{AcceptedBspVolunteer, NewStorageRequest};
 use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::in_memory::InMemoryFileStorage;
-use shc_file_manager::rocksdb::RocksDbFileStorage;
-use shc_file_manager::traits::FileStorage;
+use shc_file_manager::{
+    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
+};
 use shc_file_transfer_service::events::RemoteUploadRequest;
-use shc_forest_manager::in_memory::InMemoryForestStorage;
-use shc_forest_manager::rocksdb::RocksDBForestStorage;
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::{
+    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorageHandler,
+};
+
+use crate::services::{forest_storage::ForestStorageCaching, handler::StorageHubHandler};
 
 pub trait FileStorageT: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync {}
 impl FileStorageT for InMemoryFileStorage<StorageProofsMerkleTrieLayout> {}

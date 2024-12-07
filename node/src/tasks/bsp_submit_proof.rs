@@ -20,7 +20,7 @@ use shc_common::types::{
 };
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::services::handler::StorageHubHandler;
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
@@ -144,6 +144,8 @@ where
         // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
         Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
 
+        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
+        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -154,11 +156,15 @@ where
             }
         };
 
+        // Get the current Forest root for this Provider.
+        let current_forest_root = event.data.current_forest_root.as_bytes().to_vec();
+
+        // Generate the Forest proof, i.e. the proof that some file keys belong to this Provider's Forest.
         let proven_file_keys = {
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_root)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -291,7 +297,8 @@ where
                     // a proof, it will be against the Forest root with this change applied.
                     // We will remove the file from the File Storage only after finality is reached.
                     // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                    self.remove_file_from_forest(file_key).await?;
+                    self.remove_file_from_forest(file_key, &current_forest_root)
+                        .await?;
                     mutations_applied = true;
                 }
             }
@@ -301,7 +308,8 @@ where
             trace!(target: LOG_TARGET, "Mutations applied successfully");
 
             // Check that the new Forest root matches the one on-chain.
-            self.check_provider_root(event.data.provider_id).await?;
+            self.check_provider_root(event.data.provider_id, &current_forest_root)
+                .await?;
         }
 
         // Release the forest root write "lock" and finish the task.
@@ -349,7 +357,7 @@ where
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&event.current_forest_root.as_bytes().to_vec())
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
             if read_fs.read().await.contains_file_key(&file_key.into())? {
@@ -529,14 +537,18 @@ where
         })
     }
 
-    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
+    async fn remove_file_from_forest(
+        &self,
+        file_key: &H256,
+        current_forest_root: &Vec<u8>,
+    ) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
         {
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(current_forest_root)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -568,7 +580,11 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
+    async fn check_provider_root(
+        &self,
+        provider_id: ProviderId,
+        current_forest_root: &Vec<u8>,
+    ) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler
@@ -589,7 +605,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(current_forest_root)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 

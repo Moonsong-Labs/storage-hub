@@ -32,7 +32,7 @@ use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::services::handler::StorageHubHandler;
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
@@ -263,6 +263,8 @@ where
             event.data.confirm_storing_requests,
         );
 
+        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
+        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -272,12 +274,12 @@ where
             }
         };
 
+        // Get the BSP ID of the Provider running this node and its current Forest root.
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
             .query_storage_provider_id(None)
             .await?;
-
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
@@ -292,6 +294,17 @@ where
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
         };
+        let current_forest_root = self
+            .storage_hub_handler
+            .blockchain
+            .query_provider_forest_root(own_bsp_id)
+            .await
+            .map_err(|e| {
+                let err_msg = format!("CRITICAL❗️❗️ This is a bug! Failed to query Provider Forest root for BSP ID {:?} while processing ConfirmStoringRequest event: {:?}", own_bsp_id, e);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                anyhow!(err_msg)
+            })?;
+        let current_forest_root = current_forest_root.as_bytes().to_vec();
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
@@ -374,7 +387,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_root)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -494,11 +507,43 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        // Get the BSP ID of the Provider running this node and its current Forest root.
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+        let own_bsp_id = match own_provider_id {
+            Some(id) => match id {
+                StorageProviderId::MainStorageProvider(_) => {
+                    let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
+                }
+                StorageProviderId::BackupStorageProvider(id) => id,
+            },
+            None => {
+                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
+                return Err(anyhow!("Failed to get own BSP ID."));
+            }
+        };
+        let current_forest_root = self
+            .storage_hub_handler
+            .blockchain
+            .query_provider_forest_root(own_bsp_id)
+            .await
+            .map_err(|e| {
+                let err_msg = format!("CRITICAL❗️❗️ This is a bug! Failed to query Provider Forest root for BSP ID {:?} while processing ConfirmStoringRequest event: {:?}", own_bsp_id, e);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                anyhow!(err_msg)
+            })?;
+        let current_forest_root = current_forest_root.as_bytes().to_vec();
+
         // Verify if file not already stored
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_root)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
         if fs.read().await.contains_file_key(&event.file_key.into())? {

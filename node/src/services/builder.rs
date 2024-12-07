@@ -57,12 +57,13 @@ pub trait StorageTypes {
 
 impl StorageTypes for (BspProvider, InMemoryStorageLayer) {
     type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
-    type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
+    type FSH = ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
 }
 
 impl StorageTypes for (BspProvider, RocksDbStorageLayer) {
     type FL = RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
-    type FSH = ForestStorageSingle<
+    type FSH = ForestStorageCaching<
+        Vec<u8>,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
     >;
 }
