@@ -980,7 +980,7 @@ impl BlockchainService {
             wait_for_tick_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             current_forest_roots: BTreeMap::new(),
-            forest_root_snapshots: BTreeMap::new(),
+            _forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
