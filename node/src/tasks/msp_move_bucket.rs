@@ -56,7 +56,13 @@ where
 
 /// Handles the [`MoveBucketRequestedForNewMsp`] event.
 ///
-/// TODO DOCS
+/// This event is triggered when an user requests to move a bucket to a new MSP (us).
+/// This means that we need to verify if we are able to download the files from the bucket
+/// (i.e. have a track record of the files and their BSPs, enough size, etc.) and then accept
+/// or reject the request.
+///
+/// If we accept the request, we need to start downloading the files from the bucket and insert
+/// them into our forest storage.
 impl<FL, FSH> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -109,6 +115,12 @@ where
             },
         );
 
+        info!(
+            target: LOG_TARGET,
+            "MSP: accepting move bucket request for bucket {:?}",
+            event.bucket_id,
+        );
+
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
@@ -137,19 +149,47 @@ where
         )
         .await?
         {
+            info!(
+                target: LOG_TARGET,
+                "MSP: downloading file {:?} of bucket {:?}",
+                file.file_key,
+                event.bucket_id,
+            );
+
             let file_metadata = file.to_file_metadata(bucket.clone());
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+
+            self.storage_hub_handler
+                .file_storage
+                .write()
+                .await
+                .insert_file(file_key.clone(), file_metadata.clone())
+                .unwrap();
 
             let chunks_count = file_metadata.chunks_count();
 
             let mut bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
+
+            // Shuffle in order to avoid consecutive requests to the same BSP node.
             bsp_peer_ids.shuffle(&mut rand::thread_rng());
 
+            if bsp_peer_ids.is_empty() {
+                error!(
+                    target: LOG_TARGET,
+                    "No BSP peer IDs found for file {:?} of bucket {:?}",
+                    file_key, event.bucket_id,
+                );
+                continue;
+            }
+
+            // We will cycle through all the BSP peer IDs for each chunk until we successfully
+            // download the file.
             let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
 
             for chunk in 0..chunks_count {
                 for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
                     let peer_id = bsp_peer_ids_iter.next().unwrap();
+
                     let download_request = self
                         .storage_hub_handler
                         .file_transfer
@@ -233,9 +273,19 @@ where
                             "Failed to write chunk {:?} of file {:?} to storage: {:?}",
                             chunk, file_key, error
                         );
+                    } else {
+                        // We successfully downloaded the chunk, so we can break out of the retry loop.
+                        break;
                     }
                 }
             }
+
+            info!(
+                target: LOG_TARGET,
+                "MSP: inserting downloaded file {:?} of bucket {:?} to forest storage",
+                file_key,
+                event.bucket_id,
+            );
 
             if let Err(error) = forest_storage
                 .write()

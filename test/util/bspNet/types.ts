@@ -263,10 +263,16 @@ export type FullNetContext = {
   createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
-   * Creates and returns a connected API instance for a MSP node.
+   * Creates and returns a connected API instance for the first MSP node.
    * @returns A promise that resolves to an enriched api instance for MSP operations.
    */
-  createMspApi: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+  createMsp1Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+
+  /**
+   * Creates and returns a connected API instance for the second MSP node.
+   * @returns A promise that resolves to an enriched api instance for MSP operations.
+   */
+  createMsp2Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
 
   /**
    * Creates and returns a connected API instance for a BSP node.

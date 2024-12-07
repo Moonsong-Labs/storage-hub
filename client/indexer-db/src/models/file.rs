@@ -172,7 +172,7 @@ impl File {
             .filter_map(|multiaddress| {
                 Multiaddr::try_from(multiaddress.address)
                     .ok()
-                    .and_then(|addr| PeerId::try_from_multiaddr(&Multiaddr::from(addr)))
+                    .and_then(|ma| PeerId::try_from_multiaddr(&ma))
             })
             .collect();
 

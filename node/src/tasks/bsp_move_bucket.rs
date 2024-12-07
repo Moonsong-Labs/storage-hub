@@ -15,7 +15,8 @@ const LOG_TARGET: &str = "bsp-move-bucket-task";
 
 const MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS: u64 = 4 * 60 * 60; // 4 hours
 
-/// TODO DOCS
+/// Task that handles the [`MoveBucketRequested`], [`MoveBucketAccepted`], [`MoveBucketRejected`]
+/// and [`MoveBucketExpired`] events from the BSP point of view.
 pub struct BspMoveBucketTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -50,7 +51,8 @@ where
 
 /// Handles the [`MoveBucketRequested`] event.
 ///
-/// TODO DOCS
+/// This event is triggered when an user requests to move a bucket to a new MSP.
+/// As a BSP, we need to allow the new MSP to download the files we have from the bucket.
 impl<FL, FSH> EventHandler<MoveBucketRequested> for BspMoveBucketTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -97,7 +99,10 @@ where
 
 /// Handles the [`MoveBucketAccepted`] event.
 ///
-/// TODO DOCS
+/// This event is triggered when the new MSP accepts the move bucket request.
+/// This does not mean that the move bucket request is complete, but that the new MSP has committed.
+/// For this to be complete, we need to wait for the new MSP to download all the files from the
+/// bucket.
 impl<FL, FSH> EventHandler<MoveBucketAccepted> for BspMoveBucketTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -126,7 +131,8 @@ where
 
 /// Handles the [`MoveBucketRejected`] event.
 ///
-/// TODO DOCS
+/// This event is triggered when the new MSP rejects the move bucket request.
+/// In this case, we need to stop accepting download requests for the bucket.
 impl<FL, FSH> EventHandler<MoveBucketRejected> for BspMoveBucketTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -152,7 +158,8 @@ where
 
 /// Handles the [`MoveBucketExpired`] event.
 ///
-/// TODO DOCS
+/// This event is triggered when the move bucket request expires.
+/// In this case, we need to stop accepting download requests for the bucket.
 impl<FL, FSH> EventHandler<MoveBucketExpired> for BspMoveBucketTask<FL, FSH>
 where
     FL: FileStorageT,

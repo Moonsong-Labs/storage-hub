@@ -2,6 +2,7 @@ use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
 use shc_common::types::StorageProviderId;
+use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -11,7 +12,7 @@ use sp_runtime::traits::Header;
 
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::blockchain_utils::EventsRetrievalError;
+use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
@@ -268,7 +269,7 @@ impl IndexerService {
 
                 File::create(
                     conn,
-                    who.to_string(),
+                    <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
                     file_key.as_ref().to_vec(),
                     bucket.id,
                     location.to_vec(),
@@ -447,9 +448,12 @@ impl IndexerService {
 
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
-                    let multiaddress_str =
-                        String::from_utf8(multiaddress.to_vec()).expect("Invalid multiaddress");
-                    sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
+                    if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
+                        sql_multiaddresses
+                            .push(MultiAddress::create(conn, multiaddr.to_vec()).await?);
+                    } else {
+                        error!(target: LOG_TARGET, "Failed to parse multiaddr");
+                    }
                 }
 
                 Bsp::create(
@@ -505,9 +509,12 @@ impl IndexerService {
             } => {
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
-                    let multiaddress_str =
-                        String::from_utf8(multiaddress.to_vec()).expect("Invalid multiaddress");
-                    sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
+                    if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
+                        sql_multiaddresses
+                            .push(MultiAddress::create(conn, multiaddr.to_vec()).await?);
+                    } else {
+                        error!(target: LOG_TARGET, "Failed to parse multiaddr");
+                    }
                 }
 
                 // TODO: update value prop after properly defined in runtime

@@ -5,13 +5,13 @@ import invariant from "tiny-invariant";
 describeMspNet(
   "Single MSP rejecting storage request",
   { initialised: true },
-  ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
+  ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMspApi();
+      const maybeMspApi = await createMsp1Api();
       if (maybeMspApi) {
         mspApi = maybeMspApi;
       } else {

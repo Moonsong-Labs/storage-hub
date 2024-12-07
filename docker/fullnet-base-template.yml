@@ -62,7 +62,7 @@ services:
       - "9778:9944"
       - "30556:30350"
     volumes:
-      - ./dev-keystores/msp:/keystore:rw
+      - ./dev-keystores/msp-two:/keystore:rw
     command:
       [
         "--dev",
