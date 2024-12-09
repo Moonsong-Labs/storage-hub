@@ -2,9 +2,9 @@ use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, HasherOutT,
-    KeyProofs, PeerIds, ProviderId, RandomnessOutput, StorageData, StorageProofsMerkleTrieLayout,
-    TrieMutation, TrieRemoveMutation,
+    Balance, BlockNumber, BucketId, ChallengeableProviderId, FileKey, FileLocation, Fingerprint,
+    ForestRoot, HasherOutT, KeyProofs, PeerIds, RandomnessOutput, StorageData,
+    StorageProofsMerkleTrieLayout, TrieMutation, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -20,7 +20,7 @@ use crate::types::{ConfirmStoringRequest, RespondStorageRequest};
 /// period of this BSP.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct NewChallengeSeed {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
 }
@@ -36,7 +36,7 @@ impl EventBusMessage for NewChallengeSeed {}
 /// should be responded to last.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct MultipleNewChallengeSeeds {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub seeds: Vec<(BlockNumber, RandomnessOutput)>,
 }
 
@@ -71,7 +71,7 @@ impl EventBusMessage for NewStorageRequest {}
 #[derive(Debug, Clone)]
 pub struct FinalisedMspStoppedStoringBucket {
     /// MSP ID who stopped storing the bucket.
-    pub msp_id: ProviderId,
+    pub msp_id: ChallengeableProviderId,
     /// Account ID owner of the bucket.
     pub owner: AccountId32,
     pub bucket_id: BucketId,
@@ -129,7 +129,7 @@ impl From<ProcessStopStoringForInsolventUserRequestData> for ForestWriteLockTask
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessSubmitProofRequestData {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
@@ -189,7 +189,7 @@ impl EventBusMessage for ProcessStopStoringForInsolventUserRequest {}
 /// This event is emitted when a provider is marked as slashable by the runtime.
 #[derive(Debug, Clone)]
 pub struct SlashableProvider {
-    pub provider: ProviderId,
+    pub provider: ChallengeableProviderId,
     pub next_challenge_deadline: BlockNumber,
 }
 
@@ -201,7 +201,7 @@ impl EventBusMessage for SlashableProvider {}
 /// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
 #[derive(Debug, Clone)]
 pub struct FinalisedTrieRemoveMutationsApplied {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub mutations: Vec<(ForestRoot, TrieMutation)>,
     pub new_root: H256,
     pub current_forest_root: HasherOutT<StorageProofsMerkleTrieLayout>,
@@ -211,7 +211,7 @@ impl EventBusMessage for FinalisedTrieRemoveMutationsApplied {}
 
 #[derive(Debug, Clone)]
 pub struct ProofAccepted {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub proofs: KeyProofs,
 }
 
@@ -219,7 +219,7 @@ impl EventBusMessage for ProofAccepted {}
 
 #[derive(Debug, Clone)]
 pub struct LastChargeableInfoUpdated {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub last_chargeable_tick: BlockNumber,
     pub last_chargeable_price_index: Balance,
 }
@@ -241,7 +241,7 @@ impl EventBusMessage for UserWithoutFunds {}
 /// This event is emitted when a provider has stopped storing a file for an insolvent user.
 #[derive(Debug, Clone)]
 pub struct SpStopStoringInsolventUser {
-    pub sp_id: ProviderId,
+    pub sp_id: ChallengeableProviderId,
     pub file_key: FileKey,
     pub owner: AccountId32,
     pub location: FileLocation,

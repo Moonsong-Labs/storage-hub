@@ -17,9 +17,9 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, HasherOutT, MainStorageProviderId, Multiaddresses,
-    ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
-    StorageProviderId, TickNumber, TrieRemoveMutation,
+    BlockNumber, BucketId, ChallengeableProviderId, ChunkId, ForestLeaf, HasherOutT,
+    MainStorageProviderId, Multiaddresses, RandomnessOutput, StorageHubEventsVec,
+    StorageProofsMerkleTrieLayout, StorageProviderId, TickNumber, TrieRemoveMutation,
 };
 use sp_api::ApiError;
 use sp_core::H256;
@@ -62,13 +62,13 @@ pub enum BlockchainServiceCommand {
             tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), ApiError>>>,
     },
     QueryFileEarliestVolunteerTick {
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         file_key: H256,
         callback:
             tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerTickError>>,
     },
     QueryEarliestChangeCapacityBlock {
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<
             Result<BlockNumber, QueryEarliestChangeCapacityBlockError>,
         >,
@@ -77,21 +77,21 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
     },
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
     },
     QueryMspConfirmChunksToProveForFile {
-        msp_id: ProviderId,
+        msp_id: ChallengeableProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
         >,
     },
     QueryProviderMultiaddresses {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback:
             tokio::sync::oneshot::Sender<Result<Multiaddresses, QueryProviderMultiaddressesError>>,
     },
@@ -113,27 +113,27 @@ pub enum BlockchainServiceCommand {
     },
     QueryChallengesFromSeed {
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         count: u32,
         callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
     QueryForestChallengesFromSeed {
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
     QueryLastTickProviderSubmittedProof {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<
             Result<BlockNumber, GetLastTickProviderSubmittedProofError>,
         >,
     },
     QueryChallengePeriod {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetChallengePeriodError>>,
     },
     QueryNextChallengeTickForProvider {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber>>,
     },
     QueryLastCheckpointChallengeTick {
@@ -146,17 +146,17 @@ pub enum BlockchainServiceCommand {
         >,
     },
     QueryProviderForestRoot {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<Result<H256, GetBspInfoError>>,
     },
     QueryStorageProviderCapacity {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<
             Result<StorageDataUnit, QueryStorageProviderCapacityError>,
         >,
     },
     QueryAvailableStorageCapacity {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<
             Result<StorageDataUnit, QueryAvailableStorageCapacityError>,
         >,
@@ -166,14 +166,14 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<Result<Option<StorageProviderId>>>,
     },
     QueryUsersWithDebt {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         min_debt: Balance,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>,
         >,
     },
     QueryWorstCaseScenarioSlashableAmount {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Option<Balance>>>,
     },
     QuerySlashAmountPerMaxFileSize {
@@ -190,7 +190,7 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
     GetCurrentForestRoot {
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         callback: tokio::sync::oneshot::Sender<Result<HasherOutT<StorageProofsMerkleTrieLayout>>>,
     },
 }
@@ -224,13 +224,13 @@ pub trait BlockchainServiceInterface {
     /// Query the earliest tick number that a file was volunteered for storage.
     async fn query_file_earliest_volunteer_tick(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError>;
 
     async fn query_earliest_change_capacity_block(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
     ) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
 
     /// Get the node's public key.
@@ -239,21 +239,21 @@ pub trait BlockchainServiceInterface {
     /// Query the chunks that a BSP needs to confirm for a file.
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 
     /// Query the chunks that a MSP needs to confirm for a file.
     async fn query_msp_confirm_chunks_to_prove_for_file(
         &self,
-        msp_id: ProviderId,
+        msp_id: ChallengeableProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
 
     /// Query the MSP multiaddresses.
     async fn query_provider_multiaddresses(
         &self,
-        msp_id: ProviderId,
+        msp_id: ChallengeableProviderId,
     ) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
 
     /// Queue a SubmitProofRequest to be processed.
@@ -276,7 +276,7 @@ pub trait BlockchainServiceInterface {
     async fn query_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         count: u32,
     ) -> Result<Vec<ForestLeaf>, ApiError>;
 
@@ -287,25 +287,25 @@ pub trait BlockchainServiceInterface {
     async fn query_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<Vec<ForestLeaf>, ApiError>;
 
     /// Query the last tick that a Provider submitted a proof for.
     async fn query_last_tick_provider_submitted_proof(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
 
     /// Query the challenge period for a given Provider.
     async fn query_challenge_period(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<BlockNumber, GetChallengePeriodError>;
 
     /// Query the next challenge tick for a given Provider.
     async fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<BlockNumber>;
 
     /// Query the last checkpoint tick.
@@ -320,19 +320,19 @@ pub trait BlockchainServiceInterface {
     /// Query the Merkle Patricia Forest root for a given Provider.
     async fn query_provider_forest_root(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<H256, GetBspInfoError>;
 
     /// Query the storage capacity for a Provider.
     async fn query_storage_provider_capacity(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<StorageDataUnit, QueryStorageProviderCapacityError>;
 
     /// Query the available storage capacity for a Provider.
     async fn query_available_storage_capacity(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError>;
 
     /// Query the ProviderId for a given account. If no account is provided, the node's account is
@@ -344,13 +344,13 @@ pub trait BlockchainServiceInterface {
 
     async fn query_users_with_debt(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         min_debt: Balance,
     ) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>;
 
     async fn query_worst_case_scenario_slashable_amount(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<Option<Balance>>;
 
     async fn query_slash_amount_per_max_file_size(&self) -> Result<Balance>;
@@ -382,7 +382,7 @@ pub trait BlockchainServiceInterface {
     /// Get the current Forest root for a given Provider.
     async fn get_current_forest_root(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<HasherOutT<StorageProofsMerkleTrieLayout>>;
 }
 
@@ -459,7 +459,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_file_earliest_volunteer_tick(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -475,7 +475,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_earliest_change_capacity_block(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
     ) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message =
@@ -495,7 +495,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ChallengeableProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -511,7 +511,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_msp_confirm_chunks_to_prove_for_file(
         &self,
-        msp_id: ProviderId,
+        msp_id: ChallengeableProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -527,7 +527,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_provider_multiaddresses(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<Multiaddresses, QueryProviderMultiaddressesError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryProviderMultiaddresses {
@@ -576,7 +576,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         count: u32,
     ) -> Result<Vec<ForestLeaf>, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -594,7 +594,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<Vec<ForestLeaf>, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryForestChallengesFromSeed {
@@ -608,7 +608,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_last_tick_provider_submitted_proof(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastTickProviderSubmittedProof {
@@ -621,7 +621,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_challenge_period(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<BlockNumber, GetChallengePeriodError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryChallengePeriod {
@@ -634,7 +634,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<BlockNumber> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryNextChallengeTickForProvider {
@@ -664,7 +664,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_provider_forest_root(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<H256, GetBspInfoError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryProviderForestRoot {
@@ -690,7 +690,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_storage_provider_capacity(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<StorageDataUnit, QueryStorageProviderCapacityError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryStorageProviderCapacity {
@@ -703,7 +703,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_available_storage_capacity(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryAvailableStorageCapacity {
@@ -716,7 +716,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_users_with_debt(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         min_debt: Balance,
     ) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -731,7 +731,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_worst_case_scenario_slashable_amount(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<Option<Balance>> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryWorstCaseScenarioSlashableAmount {
@@ -854,7 +854,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn get_current_forest_root(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
     ) -> Result<HasherOutT<StorageProofsMerkleTrieLayout>> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::GetCurrentForestRoot {

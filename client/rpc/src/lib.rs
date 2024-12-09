@@ -12,9 +12,9 @@ use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use shc_common::types::{
-    BlockNumber, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof, KeyProofs, Proven, ProviderId,
-    RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, TrieRemoveMutation,
-    BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+    BlockNumber, ChallengeableProviderId, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof,
+    KeyProofs, Proven, RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout,
+    TrieRemoveMutation, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
 };
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -197,7 +197,7 @@ where
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
         Block,
-        ProviderId,
+        ChallengeableProviderId,
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,
@@ -645,7 +645,7 @@ async fn generate_key_proof<FL, C, Block>(
     file_storage: Arc<RwLock<FL>>,
     file_key: H256,
     seed: RandomnessOutput,
-    provider_id: ProviderId,
+    provider_id: ChallengeableProviderId,
     at: Option<Block::Hash>,
 ) -> RpcResult<KeyProof>
 where
@@ -653,7 +653,7 @@ where
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
         Block,
-        ProviderId,
+        ChallengeableProviderId,
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,

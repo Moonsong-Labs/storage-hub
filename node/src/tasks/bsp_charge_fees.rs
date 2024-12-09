@@ -12,7 +12,7 @@ use shc_blockchain_service::{
     },
     types::{StopStoringForInsolventUserRequest, Tip},
 };
-use shc_common::types::{MaxUsersToCharge, ProviderId};
+use shc_common::types::{ChallengeableProviderId, MaxUsersToCharge};
 use shc_forest_manager::traits::ForestStorage;
 use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
@@ -494,7 +494,7 @@ where
 
     async fn check_provider_root(
         &self,
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         current_forest_root: &Vec<u8>,
     ) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.

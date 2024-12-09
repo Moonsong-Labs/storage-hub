@@ -8,7 +8,6 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
 };
-use pallet_storage_providers::types::StorageProviderId;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
@@ -17,7 +16,8 @@ use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{
-        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProviderId, BCSV_KEY_TYPE,
+        BlockNumber, ChallengeableProviderId, MaxBatchMspRespondStorageRequests, ParachainClient,
+        StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 use sp_api::ProvideRuntimeApi;
@@ -161,32 +161,52 @@ impl BlockchainService {
         }
     }
 
-    /// Get all the provider IDs linked to keys in this node's keystore.
+    /// Get the Provider ID linked to the [`BCSV_KEY_TYPE`] key in this node's keystore.
     ///
-    /// The provider IDs found are added to the [`BlockchainService`]'s list of provider IDs.
-    pub(crate) fn get_provider_ids(&mut self, block_hash: &H256) {
+    /// IMPORTANT! If there is more than one [`BCSV_KEY_TYPE`] key in this node's keystore, linked to
+    /// different Provider IDs, this function will panic. In other words, this node doesn't support
+    /// managing multiple Providers at once.
+    pub(crate) fn get_provider_id(&mut self, block_hash: &H256) {
+        let mut provider_ids_found = Vec::new();
         for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
-            self.client
+            let maybe_provider_id = match self
+                .client
                 .runtime_api()
                 .get_storage_provider_id(*block_hash, &key.into())
-                .map(|provider_id| {
-                    if let Some(provider_id) = provider_id {
-                        match provider_id {
-                            StorageProviderId::BackupStorageProvider(bsp_id) => {
-                                self.provider_ids.insert(bsp_id);
-                            }
-                            StorageProviderId::MainStorageProvider(msp_id) => {
-                                self.provider_ids.insert(msp_id);
-                            }
-                        }
-                    } else {
-                        warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", key);
-                    }
-                })
-                .unwrap_or_else(|_| {
-                    warn!(target: LOG_TARGET, "Failed to get provider ID for key: {:?}.", key);
-                });
+            {
+                Ok(provider_id) => provider_id,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Runtime API error while getting Provider ID for key: {:?}. Error: {:?}", key, e);
+                    continue;
+                }
+            };
+
+            match maybe_provider_id {
+                Some(provider_id) => {
+                    provider_ids_found.push(provider_id);
+                }
+                None => {
+                    debug!(target: LOG_TARGET, "There is no Provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no Provider ID.", key);
+                }
+            };
         }
+
+        // Case: There is no Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
+        // This is expected, if this node starts up before the Provider has been registered.
+        if provider_ids_found.is_empty() {
+            warn!(target: LOG_TARGET, "There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
+            return;
+        }
+
+        // Case: There is more than one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
+        // This is unexpected, and should never happen.
+        if provider_ids_found.len() > 1 {
+            panic!("There are more than one BCSV keys linked to Provider IDs in this node's keystore. Managing multiple Providers at once is not supported.");
+        }
+
+        // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
+        let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
+        self.provider_id = Some(provider_id);
     }
 
     /// Send an extrinsic to this node using an RPC call.
@@ -420,7 +440,7 @@ impl BlockchainService {
     pub(crate) fn should_provider_submit_proof(
         &self,
         block_hash: &H256,
-        provider_id: &ProviderId,
+        provider_id: &ChallengeableProviderId,
         current_tick: &BlockNumber,
     ) -> bool {
         // Get the last tick for which the BSP submitted a proof.
@@ -490,8 +510,18 @@ impl BlockchainService {
         (current_tick_minus_last_submission % provider_challenge_period) == 0
     }
 
-    /// Check if there are any pending requests to update the forest root on the runtime, and process them.
-    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest` over `StopStoringForInsolventUserRequest`.
+    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
+    ///
+    /// If this node is managing a BSP, the priority is given by:
+    /// 1. `SubmitProofRequest` over...
+    /// 2. `ConfirmStoringRequest`.
+    ///
+    /// If this node is managing a MSP, the priority is given by:
+    /// 1. `RespondStorageRequest`.
+    ///
+    /// For both BSPs and MSPs, the last priority is given to:
+    /// 1. `StopStoringForInsolventUserRequest`.
+    ///
     /// This function is called every time a new block is imported and after each request is queued.
     pub(crate) fn check_pending_forest_root_writes(&mut self) {
         if let Some(mut rx) = self.forest_root_write_lock.take() {
@@ -501,7 +531,7 @@ impl BlockchainService {
                 Err(TryRecvError::Empty) => {
                     // If we have a task writing to the runtime, we don't want to start another one.
                     self.forest_root_write_lock = Some(rx);
-                    trace!(target: LOG_TARGET, "Waiting for current forest root write task to finish");
+                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
                     return;
                 }
                 Ok(_) => {
@@ -539,119 +569,135 @@ impl BlockchainService {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data = None;
 
-        // If we have a submit proof request, prioritise it.
-        // This is a BSP only operation, since MSPs don't have to submit proofs.
-        while let Some(request) = self.pending_submit_proof_requests.pop_first() {
-            // Check if the proof is still the next one to be submitted.
-            let provider_id = request.provider_id;
-            let next_challenge_tick = match self.get_next_challenge_tick_for_provider(&provider_id)
-            {
-                Ok(next_challenge_tick) => next_challenge_tick,
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+        if self.provider_id.is_none() {
+            // If there's no Provider being managed, there's no point in checking for pending requests.
+            return;
+        }
+
+        if let StorageProviderId::BackupStorageProvider(_) = self
+            .provider_id
+            .expect("Just checked that this node is managing a Provider; qed")
+        {
+            // If we have a submit proof request, prioritise it.
+            // This is a BSP only operation, since MSPs don't have to submit proofs.
+            while let Some(request) = self.pending_submit_proof_requests.pop_first() {
+                // Check if the proof is still the next one to be submitted.
+                let provider_id = request.provider_id;
+                let next_challenge_tick = match self
+                    .get_next_challenge_tick_for_provider(&provider_id)
+                {
+                    Ok(next_challenge_tick) => next_challenge_tick,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+
+                        // If this is the case, no reason to continue to the next pending proof request.
+                        // We can just break the loop.
+                        break;
+                    }
+                };
+
+                // This is to avoid starting a new task if the proof is not the next one to be submitted.
+                if next_challenge_tick != request.tick {
+                    // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
+                    trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
+                    self.pending_submit_proof_requests.remove(&request);
+
+                    // Continue to the next pending proof request.
+                    continue;
+                }
+
+                // If the proof is still the next one to be submitted, we can process it.
+                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
+                let current_forest_root = self.current_forest_roots.get(&provider_id).cloned();
+                if current_forest_root.is_none() {
+                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Current Forest root for Provider [{:?}] is not set. This should never happen. This is a bug. Please report it to the StorageHub team.", provider_id);
 
                     // If this is the case, no reason to continue to the next pending proof request.
                     // We can just break the loop.
                     break;
                 }
-            };
 
-            // This is to avoid starting a new task if the proof is not the next one to be submitted.
-            if next_challenge_tick != request.tick {
-                // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
-                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
-                self.pending_submit_proof_requests.remove(&request);
+                next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
+                    ProcessSubmitProofRequestData {
+                        seed: request.seed,
+                        provider_id: request.provider_id,
+                        tick: request.tick,
+                        forest_challenges: request.forest_challenges,
+                        checkpoint_challenges: request.checkpoint_challenges,
+                        current_forest_root: current_forest_root
+                            .expect("We just checked that it's Some; qed"),
+                    },
+                ));
 
-                // Continue to the next pending proof request.
-                continue;
-            }
-
-            // If the proof is still the next one to be submitted, we can process it.
-            trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
-            let current_forest_root = self.current_forest_roots.get(&provider_id).cloned();
-            if current_forest_root.is_none() {
-                error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Current Forest root for Provider [{:?}] is not set. This should never happen. This is a bug. Please report it to the StorageHub team.", provider_id);
-
-                // If this is the case, no reason to continue to the next pending proof request.
-                // We can just break the loop.
+                // Exit the loop since we have found the next proof to be submitted.
                 break;
             }
 
-            next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
-                ProcessSubmitProofRequestData {
-                    seed: request.seed,
-                    provider_id: request.provider_id,
-                    tick: request.tick,
-                    forest_challenges: request.forest_challenges,
-                    checkpoint_challenges: request.checkpoint_challenges,
-                    current_forest_root: current_forest_root
-                        .expect("We just checked that it's Some; qed"),
-                },
-            ));
-
-            // Exit the loop since we have found the next proof to be submitted.
-            break;
-        }
-
-        // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
-        // This is a BSP only operation, since MSPs don't have to confirm storing.
-        if next_event_data.is_none() {
-            let max_batch_confirm =
+            // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+            // This is a BSP only operation, since MSPs don't have to confirm storing.
+            if next_event_data.is_none() {
+                let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
                     u32,
                 >>::get();
 
-            // Batch multiple confirm file storing taking the runtime maximum.
-            let mut confirm_storing_requests = Vec::new();
-            for _ in 0..max_batch_confirm {
-                if let Some(request) = state_store_context
-                    .pending_confirm_storing_request_deque()
-                    .pop_front()
-                {
-                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
-                    confirm_storing_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 confirm storing request, send the process event.
-            if confirm_storing_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessConfirmStoringRequestData {
-                        confirm_storing_requests,
+                // Batch multiple confirm file storing taking the runtime maximum.
+                let mut confirm_storing_requests = Vec::new();
+                for _ in 0..max_batch_confirm {
+                    if let Some(request) = state_store_context
+                        .pending_confirm_storing_request_deque()
+                        .pop_front()
+                    {
+                        trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
+                        confirm_storing_requests.push(request);
+                    } else {
+                        break;
                     }
-                    .into(),
-                );
+                }
+
+                // If we have at least 1 confirm storing request, send the process event.
+                if confirm_storing_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessConfirmStoringRequestData {
+                            confirm_storing_requests,
+                        }
+                        .into(),
+                    );
+                }
             }
         }
 
-        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
-        // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
-        if next_event_data.is_none() {
-            let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
+        if let StorageProviderId::MainStorageProvider(_) = self
+            .provider_id
+            .expect("Just checked that this node is managing a Provider; qed")
+        {
+            // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
+            // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
+            if next_event_data.is_none() {
+                let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
 
-            // Batch multiple respond storing requests up to the runtime configured maximum.
-            let mut respond_storage_requests = Vec::new();
-            for _ in 0..max_batch_respond {
-                if let Some(request) = state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .pop_front()
-                {
-                    respond_storage_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 respond storing request, send the process event.
-            if respond_storage_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessMspRespondStoringRequestData {
-                        respond_storing_requests: respond_storage_requests,
+                // Batch multiple respond storing requests up to the runtime configured maximum.
+                let mut respond_storage_requests = Vec::new();
+                for _ in 0..max_batch_respond {
+                    if let Some(request) = state_store_context
+                        .pending_msp_respond_storage_request_deque()
+                        .pop_front()
+                    {
+                        respond_storage_requests.push(request);
+                    } else {
+                        break;
                     }
-                    .into(),
-                );
+                }
+
+                // If we have at least 1 respond storing request, send the process event.
+                if respond_storage_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessMspRespondStoringRequestData {
+                            respond_storing_requests: respond_storage_requests,
+                        }
+                        .into(),
+                    );
+                }
             }
         }
 
@@ -747,7 +793,7 @@ impl BlockchainService {
     pub(crate) fn proof_submission_catch_up(
         &self,
         current_block_hash: &H256,
-        provider_id: &ProviderId,
+        provider_id: &ChallengeableProviderId,
     ) {
         // Get the last tick for which the BSP submitted a proof, according to the runtime right now.
         let last_tick_provider_submitted_proof = match self
@@ -865,7 +911,7 @@ impl BlockchainService {
 
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: &ProviderId,
+        provider_id: &ChallengeableProviderId,
     ) -> Result<BlockNumber> {
         // Get the current block hash.
         let current_block_hash = self.client.info().best_hash;

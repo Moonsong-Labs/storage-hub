@@ -35,8 +35,8 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
-        BlockNumber, Fingerprint, HasherOutT, ParachainClient, ProviderId,
-        StorageProofsMerkleTrieLayout, TickNumber, BCSV_KEY_TYPE,
+        BlockNumber, ChallengeableProviderId, Fingerprint, HasherOutT, ParachainClient,
+        StorageProofsMerkleTrieLayout, StorageProviderId, TickNumber, BCSV_KEY_TYPE,
     },
 };
 use shp_file_metadata::FileKey;
@@ -63,7 +63,13 @@ use crate::{
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
-// TODO: Define properly the number of blocks to come out of sync mode
+
+/// The minimum number of blocks behind the current best block to consider the node out of sync.
+///
+/// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
+/// continuing to process incoming events.
+///
+/// TODO: Define properly the number of blocks to come out of sync mode
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// The BlockchainService actor.
@@ -93,21 +99,24 @@ pub struct BlockchainService {
     /// A registry of waiters for a tick number.
     pub(crate) wait_for_tick_request_by_number:
         BTreeMap<TickNumber, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
-    /// A list of Provider IDs that this node has to pay attention to submit proofs for.
-    /// This could be a BSP or a list of buckets that an MSP has.
-    pub(crate) provider_ids: BTreeSet<ProviderId>,
+    /// The Provider ID that this node is managing.
+    ///
+    /// Can be a BSP or an MSP.
+    /// This is initialised when the node is in sync.
+    pub(crate) provider_id: Option<StorageProviderId>,
     /// A map of Provider IDs to the current forest root.
     /// This is used to keep track of the current forest root for each Provider, in the current best block.
     ///
     /// A ProviderId can be a BSP or the buckets that an MSP has.
     pub(crate) current_forest_roots:
-        BTreeMap<ProviderId, HasherOutT<StorageProofsMerkleTrieLayout>>,
+        BTreeMap<ChallengeableProviderId, HasherOutT<StorageProofsMerkleTrieLayout>>,
     /// A map of Provider IDs to the Forest Storage snapshots.
     ///
     /// A ProviderId can be a BSP or the buckets that an MSP has.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
-    pub(crate) _forest_root_snapshots: BTreeMap<ProviderId, BTreeSet<ForestStorageSnapshotInfo>>,
+    pub(crate) _forest_root_snapshots:
+        BTreeMap<ChallengeableProviderId, BTreeSet<ForestStorageSnapshotInfo>>,
     /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
     ///
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
@@ -978,7 +987,7 @@ impl BlockchainService {
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
-            provider_ids: BTreeSet::new(),
+            provider_id: None,
             current_forest_roots: BTreeMap::new(),
             _forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
@@ -1032,8 +1041,8 @@ impl BlockchainService {
         // and update our internal counter if it's smaller than the result.
         self.check_nonce(&block_hash);
 
-        // Get provider IDs linked to keys in this node's keystore.
-        self.get_provider_ids(&block_hash);
+        // Get Provider ID linked to keys in this node's keystore.
+        self.get_provider_id(&block_hash);
     }
 
     /// Handle the first time this node syncs with the chain.
@@ -1101,9 +1110,18 @@ impl BlockchainService {
 
         state_store_context.commit();
 
-        // Catch up to proofs that this node might have missed.
-        for provider_id in self.provider_ids.clone() {
-            self.proof_submission_catch_up(&block_hash, &provider_id);
+        // Initialise the Provider.
+        match self.provider_id {
+            Some(StorageProviderId::BackupStorageProvider(bsp_id)) => {
+                self.proof_submission_catch_up(&block_hash, &bsp_id);
+                // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
+            }
+            Some(StorageProviderId::MainStorageProvider(_msp_id)) => {
+                // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
+            }
+            None => {
+                warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
+            }
         }
     }
 
@@ -1167,7 +1185,16 @@ impl BlockchainService {
                                 if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
                                     // If so, add the Provider ID to the list of Providers that this node is monitoring.
                                     info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
-                                    self.provider_ids.insert(provider_id);
+
+                                    // Managing more than one Provider is not supported, so if this node is already managing a Provider, emit a warning
+                                    // and stop managing it, in favour of the new Provider.
+                                    if self.provider_id.is_some() {
+                                        warn!(target: LOG_TARGET, "This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", self.provider_id.expect("Just checked that this node is managing a Provider"), provider_id);
+                                    }
+
+                                    // Only BSPs can be challenged, therefore this is a BSP.
+                                    self.provider_id =
+                                        Some(StorageProviderId::BackupStorageProvider(provider_id));
                                 }
                             }
                         }
@@ -1178,17 +1205,19 @@ impl BlockchainService {
                                 seed: _,
                             },
                         ) => {
-                            // For each Provider ID this node monitors...
-                            for provider_id in &self.provider_ids {
-                                // ...check if the challenges tick is one that this provider has to submit a proof for.
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
+                                &self.provider_id
+                            {
+                                // Check if the challenges tick is one that this BSP has to submit a proof for.
                                 if self.should_provider_submit_proof(
                                     &block_hash,
-                                    provider_id,
+                                    bsp_id,
                                     &challenges_ticker,
                                 ) {
-                                    self.proof_submission_catch_up(&block_hash, provider_id);
+                                    self.proof_submission_catch_up(&block_hash, bsp_id);
                                 } else {
-                                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
+                                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", bsp_id);
                                 }
                             }
                         }
@@ -1210,12 +1239,20 @@ impl BlockchainService {
                                 last_chargeable_price_index,
                             },
                         ) => {
-                            if self.provider_ids.contains(&provider_id) {
-                                self.emit(LastChargeableInfoUpdated {
-                                    provider_id: provider_id,
-                                    last_chargeable_tick: last_chargeable_tick,
-                                    last_chargeable_price_index: last_chargeable_price_index,
-                                })
+                            if let Some(managed_provider_id) = &self.provider_id {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                // It's irrelevant if the Provider ID is a MSP or a BSP.
+                                let managed_provider_id = match managed_provider_id {
+                                    StorageProviderId::BackupStorageProvider(bsp_id) => bsp_id,
+                                    StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                                };
+                                if provider_id == *managed_provider_id {
+                                    self.emit(LastChargeableInfoUpdated {
+                                        provider_id: provider_id,
+                                        last_chargeable_tick: last_chargeable_tick,
+                                        last_chargeable_price_index: last_chargeable_price_index,
+                                    })
+                                }
                             }
                         }
                         // A user has been flagged as without funds in the runtime
@@ -1234,14 +1271,22 @@ impl BlockchainService {
                                 new_root,
                             },
                         ) => {
-                            if self.provider_ids.contains(&sp_id) {
-                                self.emit(SpStopStoringInsolventUser {
-                                    sp_id,
-                                    file_key: file_key.into(),
-                                    owner,
-                                    location,
-                                    new_root,
-                                })
+                            if let Some(managed_provider_id) = &self.provider_id {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                // It's irrelevant if the Provider ID is a MSP or a BSP.
+                                let managed_provider_id = match managed_provider_id {
+                                    StorageProviderId::BackupStorageProvider(bsp_id) => bsp_id,
+                                    StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                                };
+                                if sp_id == *managed_provider_id {
+                                    self.emit(SpStopStoringInsolventUser {
+                                        sp_id,
+                                        file_key: file_key.into(),
+                                        owner,
+                                        location,
+                                        new_root,
+                                    })
+                                }
                             }
                         }
                         // This event should only be of any use if a node is run by as a user.
@@ -1320,26 +1365,32 @@ impl BlockchainService {
                         // New storage request event coming from pallet-file-system.
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::MutationsApplied {
-                                provider,
+                                provider: provider_id,
                                 mutations,
                                 new_root,
                             },
                         ) => {
-                            // Check if the provider ID is one of the provider IDs this node is tracking.
-                            if self.provider_ids.contains(&provider) {
-                                let current_forest_root = self.current_forest_roots.get(&provider);
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                if provider_id == *managed_bsp_id {
+                                    let current_forest_root =
+                                        self.current_forest_roots.get(&provider_id);
 
-                                match current_forest_root {
-                                    Some(current_forest_root) => {
-                                        self.emit(FinalisedTrieRemoveMutationsApplied {
-                                            provider_id: provider,
-                                            mutations: mutations.clone().into(),
-                                            new_root,
-                                            current_forest_root: current_forest_root.clone(),
-                                        })
-                                    }
-                                    None => {
-                                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Current Forest Root not found for Provider ID {} while receiving a finalised {:?} event. This is a critical bug. Please report it to the StorageHub team.", provider, &ev);
+                                    match current_forest_root {
+                                        Some(current_forest_root) => {
+                                            self.emit(FinalisedTrieRemoveMutationsApplied {
+                                                provider_id,
+                                                mutations: mutations.clone().into(),
+                                                new_root,
+                                                current_forest_root: current_forest_root.clone(),
+                                            })
+                                        }
+                                        None => {
+                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Current Forest Root not found for Provider ID {} while receiving a finalised {:?} event. This is a critical bug. Please report it to the StorageHub team.", provider_id, &ev);
+                                        }
                                     }
                                 }
                             }
@@ -1351,12 +1402,17 @@ impl BlockchainService {
                                 bucket_id,
                             },
                         ) => {
-                            if self.provider_ids.contains(&msp_id) {
-                                self.emit(FinalisedMspStoppedStoringBucket {
-                                    msp_id,
-                                    owner,
-                                    bucket_id,
-                                })
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                if msp_id == *managed_msp_id {
+                                    self.emit(FinalisedMspStoppedStoringBucket {
+                                        msp_id,
+                                        owner,
+                                        bucket_id,
+                                    })
+                                }
                             }
                         }
                         // Ignore all other events.

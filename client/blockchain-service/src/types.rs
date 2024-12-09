@@ -10,8 +10,9 @@ use frame_support::dispatch::DispatchInfo;
 use log::warn;
 use sc_client_api::BlockImportNotification;
 use shc_common::types::{
-    BlockNumber, HasherOutT, ProviderId, RandomnessOutput, RejectedStorageRequestReason,
-    StorageHubEventsVec, StorageProofsMerkleTrieLayout, TrieRemoveMutation,
+    BlockNumber, ChallengeableProviderId, HasherOutT, RandomnessOutput,
+    RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
+    TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::{traits::Header, AccountId32, DispatchError, SaturatedConversion};
@@ -23,7 +24,7 @@ use crate::handler::LOG_TARGET;
 /// This struct is used as an item in the `pending_submit_proof_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct SubmitProofRequest {
-    pub provider_id: ProviderId,
+    pub provider_id: ChallengeableProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
@@ -32,7 +33,7 @@ pub struct SubmitProofRequest {
 
 impl SubmitProofRequest {
     pub fn new(
-        provider_id: ProviderId,
+        provider_id: ChallengeableProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
         forest_challenges: Vec<H256>,
