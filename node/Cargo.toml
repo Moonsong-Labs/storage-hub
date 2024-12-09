@@ -59,6 +59,7 @@ serde = { workspace = true, default-features = true }
 jsonrpsee = { features = ["server"], workspace = true }
 futures = { workspace = true }
 serde_json = { workspace = true }
+rand = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = true }

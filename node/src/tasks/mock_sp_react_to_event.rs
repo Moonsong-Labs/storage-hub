@@ -14,7 +14,7 @@ const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 
 pub type EventToReactTo = MultipleNewChallengeSeeds;
 
-/// SpReactToEventMockTask is a mocked task used specifically for testing events emitted by the
+/// [`SpReactToEventMockTask`] is a mocked task used specifically for testing events emitted by the
 /// BlockchainService, which this tasks reacts to by sending a remark with event transaction.
 ///
 /// This can be used for debugging purposes.

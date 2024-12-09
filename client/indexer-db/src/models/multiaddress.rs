@@ -9,7 +9,7 @@ use crate::{schema::multiaddress, DbConnection};
 #[diesel(table_name = multiaddress)]
 pub struct MultiAddress {
     pub id: i32,
-    pub address: String,
+    pub address: Vec<u8>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -17,7 +17,7 @@ pub struct MultiAddress {
 impl MultiAddress {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        address: impl Into<String>,
+        address: impl Into<Vec<u8>>,
     ) -> Result<Self, diesel::result::Error> {
         let multiaddress = diesel::insert_into(multiaddress::table)
             .values(multiaddress::address.eq(address.into()))
