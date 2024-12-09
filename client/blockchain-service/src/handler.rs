@@ -1115,9 +1115,11 @@ impl BlockchainService {
             Some(StorageProviderId::BackupStorageProvider(bsp_id)) => {
                 self.proof_submission_catch_up(&block_hash, &bsp_id);
                 // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
+                // TODO: Catch up to Forest root writes in the BSP Forest.
             }
             Some(StorageProviderId::MainStorageProvider(_msp_id)) => {
                 // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
+                // TODO: Catch up to Forest root writes in the Bucket's Forests.
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
