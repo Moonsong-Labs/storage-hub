@@ -324,7 +324,7 @@ pub enum NewBlockNotificationKind {
 }
 
 /// The information needed to register a Forest Storage snapshot.
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct ForestStorageSnapshotInfo {
     /// The block number at which the Forest Storage snapshot was taken.
     ///
@@ -341,16 +341,6 @@ pub struct ForestStorageSnapshotInfo {
     /// This is used to identify the Forest Storage snapshot and retrieve it.
     pub forest_root: HasherOutT<StorageProofsMerkleTrieLayout>,
 }
-
-impl PartialEq for ForestStorageSnapshotInfo {
-    fn eq(&self, other: &Self) -> bool {
-        self.block_number == other.block_number
-            && self.block_hash == other.block_hash
-            && self.forest_root == other.forest_root
-    }
-}
-
-impl Eq for ForestStorageSnapshotInfo {}
 
 impl PartialOrd for ForestStorageSnapshotInfo {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
