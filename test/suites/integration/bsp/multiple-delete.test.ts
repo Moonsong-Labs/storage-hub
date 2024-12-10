@@ -63,9 +63,7 @@ describeBspNet("Single BSP Volunteering", { only: true }, ({ before, createBspAp
         const fileKeys = storageRequestEvents.map((event) => {
             const dataBlob =
                 userApi.events.fileSystem.NewStorageRequest.is(event.event) && event.event.data;
-            if (!dataBlob) {
-                throw new Error("Event doesn't match Type");
-            }
+            assert(dataBlob, "Event doesn't match Type");
             return dataBlob.fileKey;
         });
 
@@ -83,13 +81,13 @@ describeBspNet("Single BSP Volunteering", { only: true }, ({ before, createBspAp
         await sleep(500);
         await userApi.wait.bspStored(1);
 
-        console.log(fileKeys.length);
-
+        const stopStroringTxs = [];
         for (let i = 0; i < fileKeys.length; i++) {
             const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
                 fileKeys[i],
             ]);
-            await userApi.sealBlock(
+            console.log(inclusionForestProof.toString());
+            stopStroringTxs.push(
                 userApi.tx.fileSystem.bspRequestStopStoring(
                     fileKeys[i],
                     newBucketEventDataBlob.bucketId,
@@ -99,19 +97,54 @@ describeBspNet("Single BSP Volunteering", { only: true }, ({ before, createBspAp
                     files[i].file_size,
                     false,
                     inclusionForestProof.toString()
-                ),
-                bspKey
+                )
             );
         }
 
-        await sleep(500);
-        const BspRequestedToStopStoringEvents = await userApi.assert.eventMany("fileSystem", "BspRequestedToStopStoring");
+        await userApi.sealBlock(stopStroringTxs, bspKey);
 
-        strictEqual(
-            BspRequestedToStopStoringEvents.length,
-            3,
-            "Should request to stop storing 3 files"
+        await userApi.assert.eventMany("fileSystem", "BspRequestedToStopStoring");
+
+        // Wait enough blocks for the deletion to be allowed.
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        const cooldown =
+            currentBlockNumber + bspApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+        await userApi.block.skipTo(cooldown);
+
+        const confirmStopStoringTxs = [];
+        for (let i = 0; i < fileKeys.length; i++) {
+            const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(
+                null,
+                [fileKeys[i]],
+            );
+            console.log(inclusionForestProof.toString());
+            confirmStopStoringTxs.push(
+                userApi.tx.fileSystem.bspConfirmStopStoring(
+                    fileKeys[i],
+                    inclusionForestProof.toString()
+                )
+            );
+        }
+
+        await userApi.sealBlock(confirmStopStoringTxs, bspKey);
+
+        // Check for the confirm stopped storing event.
+        const confirmStopStoringEvents = await userApi.assert.eventMany(
+            "fileSystem",
+            "BspConfirmStoppedStoring"
         );
+
+        console.log(confirmStopStoringEvents.length);
+        await userApi.block.seal();
+
+        // Check for the confirm stopped storing event.
+        const confirmStopStoringEvents2 = await userApi.assert.eventMany(
+            "fileSystem",
+            "BspConfirmStoppedStoring"
+        );
+        console.log(confirmStopStoringEvents2.length);
+
     });
 
 });
