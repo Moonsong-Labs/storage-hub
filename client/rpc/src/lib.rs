@@ -11,10 +11,13 @@ use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use shc_common::types::{
-    BlockNumber, ChallengeableProviderId, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof,
-    KeyProofs, Proven, RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout,
-    TrieRemoveMutation, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        BlockNumber, ChallengeableProviderId, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof,
+        KeyProofs, Proven, RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout,
+        TrieRemoveMutation, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+    },
 };
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -336,7 +339,10 @@ where
     }
 
     async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         // return None if not found
         let fs = match self.forest_storage_handler.get(&forest_key).await {
