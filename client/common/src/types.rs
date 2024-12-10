@@ -46,7 +46,9 @@ pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
-pub type MainStorageProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type BackupStorageProviderId =
+    pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
+pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
 pub type ChallengeableProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
@@ -74,6 +76,11 @@ pub type StorageHubEventsVec = Vec<
         >,
     >,
 >;
+
+pub enum EitherBucketOrBspId {
+    Bucket(BucketId),
+    Bsp(BackupStorageProviderId),
+}
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;

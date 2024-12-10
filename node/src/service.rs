@@ -285,7 +285,7 @@ where
         .await;
 
     // Call run using the Runnable trait
-    sh_builder.run();
+    sh_builder.run().await;
 
     Ok(())
 }

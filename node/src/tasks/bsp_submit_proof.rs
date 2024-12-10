@@ -14,9 +14,12 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SubmitProofRequest},
     BlockchainService,
 };
-use shc_common::types::{
-    BlockNumber, ChallengeableProviderId, FileKey, KeyProof, KeyProofs, Proven, RandomnessOutput,
-    StorageProof, TrieRemoveMutation,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        BlockNumber, ChallengeableProviderId, FileKey, KeyProof, KeyProofs, Proven,
+        RandomnessOutput, StorageProof, TrieRemoveMutation,
+    },
 };
 use shc_forest_manager::traits::ForestStorage;
 
@@ -156,15 +159,15 @@ where
             }
         };
 
-        // Get the current Forest root for this Provider.
-        let current_forest_root = event.data.current_forest_root.as_bytes().to_vec();
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 
         // Generate the Forest proof, i.e. the proof that some file keys belong to this Provider's Forest.
         let proven_file_keys = {
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&current_forest_root)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -297,8 +300,7 @@ where
                     // a proof, it will be against the Forest root with this change applied.
                     // We will remove the file from the File Storage only after finality is reached.
                     // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                    self.remove_file_from_forest(file_key, &current_forest_root)
-                        .await?;
+                    self.remove_file_from_forest(file_key).await?;
                     mutations_applied = true;
                 }
             }
@@ -308,8 +310,7 @@ where
             trace!(target: LOG_TARGET, "Mutations applied successfully");
 
             // Check that the new Forest root matches the one on-chain.
-            self.check_provider_root(event.data.provider_id, &current_forest_root)
-                .await?;
+            self.check_provider_root(event.data.provider_id).await?;
         }
 
         // Release the forest root write "lock" and finish the task.
@@ -354,10 +355,11 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&event.current_forest_root.as_bytes().to_vec())
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
             if read_fs.read().await.contains_file_key(&file_key.into())? {
@@ -537,18 +539,15 @@ where
         })
     }
 
-    async fn remove_file_from_forest(
-        &self,
-        file_key: &H256,
-        current_forest_root: &Vec<u8>,
-    ) -> anyhow::Result<()> {
+    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
         {
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(current_forest_root)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -583,7 +582,6 @@ where
     async fn check_provider_root(
         &self,
         provider_id: ChallengeableProviderId,
-        current_forest_root: &Vec<u8>,
     ) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
@@ -602,10 +600,11 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(current_forest_root)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 

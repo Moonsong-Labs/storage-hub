@@ -34,9 +34,10 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
+    consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChallengeableProviderId, Fingerprint, HasherOutT, ParachainClient,
-        StorageProofsMerkleTrieLayout, StorageProviderId, TickNumber, BCSV_KEY_TYPE,
+        BlockNumber, ChallengeableProviderId, EitherBucketOrBspId, Fingerprint, ParachainClient,
+        StorageProviderId, TickNumber, BCSV_KEY_TYPE,
     },
 };
 use shp_file_metadata::FileKey;
@@ -104,23 +105,23 @@ pub struct BlockchainService {
     /// Can be a BSP or an MSP.
     /// This is initialised when the node is in sync.
     pub(crate) provider_id: Option<StorageProviderId>,
-    /// A map of Provider IDs to the current forest root.
-    /// This is used to keep track of the current forest root for each Provider, in the current best block.
+    /// A map of [`EitherBucketOrBspId`] to the current Forest keys.
     ///
-    /// A ProviderId can be a BSP or the buckets that an MSP has.
-    pub(crate) current_forest_roots:
-        BTreeMap<ChallengeableProviderId, HasherOutT<StorageProofsMerkleTrieLayout>>,
-    /// A map of Provider IDs to the Forest Storage snapshots.
+    /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
+    /// This is used to keep track of the current Forest key for each Bucket, or THE ONLY Forest key for the BSP, in the current best block.
+    pub(crate) current_forest_keys: BTreeMap<ChallengeableProviderId, Vec<u8>>,
+    /// A map of [`EitherBucketOrBspId`] to the Forest Storage snapshots.
     ///
-    /// A ProviderId can be a BSP or the buckets that an MSP has.
-    ///
+    /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
-    pub(crate) _forest_root_snapshots:
-        BTreeMap<ChallengeableProviderId, BTreeSet<ForestStorageSnapshotInfo>>,
-    /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
+    /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
+    #[allow(dead_code)]
+    pub(crate) forest_root_snapshots:
+        BTreeMap<EitherBucketOrBspId, BTreeSet<ForestStorageSnapshotInfo>>,
+    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
     ///
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
+    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
     /// A persistent state store for the BlockchainService actor.
@@ -937,23 +938,29 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
-                BlockchainServiceCommand::GetCurrentForestRoot {
+                BlockchainServiceCommand::GetCurrentForestKey {
                     provider_id,
                     callback,
                 } => {
-                    let maybe_current_forest_root = self
-                        .current_forest_roots
+                    let maybe_current_forest_key = self
+                        .current_forest_keys
                         .get(&provider_id)
                         .map(|root| root.clone());
 
-                    let current_forest_root = maybe_current_forest_root.ok_or_else(|| {
+                    // TODO: Remove this `allow(unused_variables)` once we have implemented the Forest Storage snapshots.
+                    #[allow(unused_variables)]
+                    let current_forest_key = maybe_current_forest_key.ok_or_else(|| {
                         anyhow!(
                             "Current Forest Root not found for Provider ID {}",
                             provider_id
                         )
                     });
 
-                    match callback.send(current_forest_root) {
+                    // Temporarily returning the default Forest root for this to work with the current setup.
+                    // TODO: Remove this once we have implemented the Forest Storage snapshots.
+                    let current_forest_key = Ok(CURRENT_FOREST_KEY.to_vec());
+
+                    match callback.send(current_forest_key) {
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send current forest root: {:?}", e);
@@ -988,8 +995,8 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
             provider_id: None,
-            current_forest_roots: BTreeMap::new(),
-            _forest_root_snapshots: BTreeMap::new(),
+            current_forest_keys: BTreeMap::new(),
+            forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
@@ -1378,22 +1385,11 @@ impl BlockchainService {
                             {
                                 // We only emit the event if the Provider ID is the one that this node is managing.
                                 if provider_id == *managed_bsp_id {
-                                    let current_forest_root =
-                                        self.current_forest_roots.get(&provider_id);
-
-                                    match current_forest_root {
-                                        Some(current_forest_root) => {
-                                            self.emit(FinalisedTrieRemoveMutationsApplied {
-                                                provider_id,
-                                                mutations: mutations.clone().into(),
-                                                new_root,
-                                                current_forest_root: current_forest_root.clone(),
-                                            })
-                                        }
-                                        None => {
-                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Current Forest Root not found for Provider ID {} while receiving a finalised {:?} event. This is a critical bug. Please report it to the StorageHub team.", provider_id, &ev);
-                                        }
-                                    }
+                                    self.emit(FinalisedTrieRemoveMutationsApplied {
+                                        provider_id,
+                                        mutations: mutations.clone().into(),
+                                        new_root,
+                                    })
                                 }
                             }
                         }

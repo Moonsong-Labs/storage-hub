@@ -12,7 +12,10 @@ use shc_blockchain_service::{
     },
     types::{StopStoringForInsolventUserRequest, Tip},
 };
-use shc_common::types::{ChallengeableProviderId, MaxUsersToCharge};
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{ChallengeableProviderId, MaxUsersToCharge},
+};
 use shc_forest_manager::traits::ForestStorage;
 use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
@@ -142,43 +145,14 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.who;
 
-        // Get the BSP ID of the Provider running this node and its current Forest root.
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-        let own_bsp_id = match own_provider_id {
-            Some(id) => match id {
-                StorageProviderId::MainStorageProvider(_) => {
-                    let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
-                    error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
-                }
-                StorageProviderId::BackupStorageProvider(id) => id,
-            },
-            None => {
-                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
-                return Err(anyhow!("Failed to get own BSP ID."));
-            }
-        };
-        let current_forest_root = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_forest_root(own_bsp_id)
-            .await
-            .map_err(|e| {
-                let err_msg = format!("CRITICAL❗️❗️ This is a bug! Failed to query Provider Forest root for BSP ID {:?} while processing ConfirmStoringRequest event: {:?}", own_bsp_id, e);
-                error!(target: LOG_TARGET, "{}", err_msg);
-                anyhow!(err_msg)
-            })?;
-        let current_forest_root = current_forest_root.as_bytes().to_vec();
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 
         // Check if we are storing any file for this user.
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&current_forest_root)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -218,43 +192,14 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.owner;
 
-        // Get the BSP ID of the Provider running this node and its current Forest root.
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-        let own_bsp_id = match own_provider_id {
-            Some(id) => match id {
-                StorageProviderId::MainStorageProvider(_) => {
-                    let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
-                    error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
-                }
-                StorageProviderId::BackupStorageProvider(id) => id,
-            },
-            None => {
-                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
-                return Err(anyhow!("Failed to get own BSP ID."));
-            }
-        };
-        let current_forest_root = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_forest_root(own_bsp_id)
-            .await
-            .map_err(|e| {
-                let err_msg = format!("CRITICAL❗️❗️ This is a bug! Failed to query Provider Forest root for BSP ID {:?} while processing ConfirmStoringRequest event: {:?}", own_bsp_id, e);
-                error!(target: LOG_TARGET, "{}", err_msg);
-                anyhow!(err_msg)
-            })?;
-        let current_forest_root = current_forest_root.as_bytes().to_vec();
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 
         // Check if we are storing any file for this user.
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&current_forest_root)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -312,43 +257,14 @@ where
             }
         };
 
-        // Get the BSP ID of the Provider running this node and its current Forest root.
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-        let own_bsp_id = match own_provider_id {
-            Some(id) => match id {
-                StorageProviderId::MainStorageProvider(_) => {
-                    let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
-                    error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
-                }
-                StorageProviderId::BackupStorageProvider(id) => id,
-            },
-            None => {
-                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
-                return Err(anyhow!("Failed to get own BSP ID."));
-            }
-        };
-        let current_forest_root = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_forest_root(own_bsp_id)
-            .await
-            .map_err(|e| {
-                let err_msg = format!("CRITICAL❗️❗️ This is a bug! Failed to query Provider Forest root for BSP ID {:?} while processing ConfirmStoringRequest event: {:?}", own_bsp_id, e);
-                error!(target: LOG_TARGET, "{}", err_msg);
-                anyhow!(err_msg)
-            })?;
-        let current_forest_root = current_forest_root.as_bytes().to_vec();
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 
         // Get the forest storage.
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&current_forest_root)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -403,8 +319,7 @@ where
             trace!(target: LOG_TARGET, "Stop storing submitted successfully");
 
             // Remove the file from the forest.
-            self.remove_file_from_forest(&file_key, &current_forest_root)
-                .await?;
+            self.remove_file_from_forest(&file_key).await?;
 
             // Check that the new Forest root matches the one on-chain.
             let own_provider_id = match self
@@ -418,8 +333,7 @@ where
                 | StorageProviderId::BackupStorageProvider(id) => id,
             };
 
-            self.check_provider_root(own_provider_id.into(), &current_forest_root)
-                .await?;
+            self.check_provider_root(own_provider_id.into()).await?;
 
             // If that was the last file of the user then charge the user for the debt they have.
             if user_files.len() == 1 {
@@ -465,18 +379,15 @@ where
         }
     }
 
-    async fn remove_file_from_forest(
-        &self,
-        file_key: &H256,
-        current_forest_root: &Vec<u8>,
-    ) -> anyhow::Result<()> {
+    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
         {
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(current_forest_root)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -495,7 +406,6 @@ where
     async fn check_provider_root(
         &self,
         provider_id: ChallengeableProviderId,
-        current_forest_root: &Vec<u8>,
     ) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
@@ -514,10 +424,11 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&current_forest_root)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 

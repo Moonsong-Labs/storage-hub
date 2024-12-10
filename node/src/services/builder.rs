@@ -1,4 +1,5 @@
 use async_channel::Receiver;
+use async_trait::async_trait;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
@@ -541,39 +542,44 @@ where
 }
 
 /// Abstraction layer to run the [`StorageHubHandler`] built from a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
+#[async_trait]
 pub trait Runnable {
-    fn run(self);
+    async fn run(self);
 }
 
+#[async_trait]
 impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<BspProvider, S>
 where
     (BspProvider, S): StorageTypes,
     <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
 {
-    fn run(self) {
-        let handler = self.build_handler();
+    async fn run(self) {
+        let mut handler = self.build_handler();
+        handler.initialise_bsp().await;
         handler.start_bsp_tasks();
     }
 }
 
+#[async_trait]
 impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<MspProvider, S>
 where
     (MspProvider, S): StorageTypes,
     <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
 {
-    fn run(self) {
+    async fn run(self) {
         let handler = self.build_handler();
-        handler.start_msp_tasks();
+        handler.start_msp_tasks()
     }
 }
 
+#[async_trait]
 impl Runnable for StorageHubBuilder<UserRole, NoStorageLayer>
 where
     (UserRole, NoStorageLayer): StorageTypes,
     <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    fn run(self) {
+    async fn run(self) {
         let handler = self.build_handler();
         handler.start_user_tasks();
     }

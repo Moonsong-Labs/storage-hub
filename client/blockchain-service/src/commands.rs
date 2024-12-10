@@ -17,9 +17,9 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChallengeableProviderId, ChunkId, ForestLeaf, HasherOutT,
-    MainStorageProviderId, Multiaddresses, RandomnessOutput, StorageHubEventsVec,
-    StorageProofsMerkleTrieLayout, StorageProviderId, TickNumber, TrieRemoveMutation,
+    BlockNumber, BucketId, ChallengeableProviderId, ChunkId, ForestLeaf, MainStorageProviderId,
+    Multiaddresses, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
+    TrieRemoveMutation,
 };
 use sp_api::ApiError;
 use sp_core::H256;
@@ -189,9 +189,9 @@ pub enum BlockchainServiceCommand {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
-    GetCurrentForestRoot {
+    GetCurrentForestKey {
         provider_id: ChallengeableProviderId,
-        callback: tokio::sync::oneshot::Sender<Result<HasherOutT<StorageProofsMerkleTrieLayout>>>,
+        callback: tokio::sync::oneshot::Sender<Result<Vec<u8>>>,
     },
 }
 
@@ -380,10 +380,8 @@ pub trait BlockchainServiceInterface {
     ) -> Result<()>;
 
     /// Get the current Forest root for a given Provider.
-    async fn get_current_forest_root(
-        &self,
-        provider_id: ChallengeableProviderId,
-    ) -> Result<HasherOutT<StorageProofsMerkleTrieLayout>>;
+    async fn get_current_forest_key(&self, provider_id: ChallengeableProviderId)
+        -> Result<Vec<u8>>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -852,12 +850,12 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
-    async fn get_current_forest_root(
+    async fn get_current_forest_key(
         &self,
         provider_id: ChallengeableProviderId,
-    ) -> Result<HasherOutT<StorageProofsMerkleTrieLayout>> {
+    ) -> Result<Vec<u8>> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let message = BlockchainServiceCommand::GetCurrentForestRoot {
+        let message = BlockchainServiceCommand::GetCurrentForestKey {
             provider_id,
             callback,
         };
