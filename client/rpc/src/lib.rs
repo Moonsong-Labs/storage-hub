@@ -356,7 +356,10 @@ where
     }
 
     async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         let fs = self
             .forest_storage_handler
@@ -417,7 +420,10 @@ where
         forest_key: Option<H256>,
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         let fs = self
             .forest_storage_handler
@@ -438,7 +444,10 @@ where
         forest_key: Option<H256>,
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         let fs = self
             .forest_storage_handler
