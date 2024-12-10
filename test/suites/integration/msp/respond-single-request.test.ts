@@ -1,6 +1,5 @@
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP accepting storage request",
@@ -12,11 +11,8 @@ describeMspNet(
     before(async () => {
       userApi = await createUserApi();
       const maybeMspApi = await createMspApi();
-      if (maybeMspApi) {
-        mspApi = maybeMspApi;
-      } else {
-        throw new Error("MSP API not available");
-      }
+      assert(maybeMspApi, "MSP API not available");
+      mspApi = maybeMspApi;
     });
 
     it("Network launches and can be queried", async () => {
@@ -36,9 +32,7 @@ describeMspNet(
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
+      assert(newBucketEventDataBlob, "Event doesn't match Type");
 
       const { location, fingerprint, file_size } =
         await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -72,9 +66,10 @@ describeMspNet(
       const newStorageRequestDataBlob =
         userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
-      if (!newStorageRequestDataBlob) {
-        throw new Error("NewStorageRequest event data does not match expected type");
-      }
+      assert(
+        newStorageRequestDataBlob,
+        "NewStorageRequest event data does not match expected type"
+      );
 
       strictEqual(
         newStorageRequestDataBlob.who.toString(),
@@ -97,9 +92,7 @@ describeMspNet(
 
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey);
 
-      if (!result.isFileFound) {
-        throw new Error("File not found in storage");
-      }
+      assert(result.isFileFound, "File not found in storage");
 
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
@@ -139,12 +132,10 @@ describeMspNet(
         acceptedFileKey = storageRequestFulfilledDataBlob.fileKey.toString();
       }
 
-      if (!acceptedFileKey) {
-        throw new Error(
-          "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
-        );
-      }
-
+      assert(
+        acceptedFileKey,
+        "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
+      );
       strictEqual(acceptedFileKey.toString(), event.data.fileKey.toString());
 
       const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
@@ -156,9 +147,10 @@ describeMspNet(
         userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
         bucketRootChangedEvent.data;
 
-      if (!bucketRootChangedDataBlob) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
+      assert(
+        bucketRootChangedDataBlob,
+        "Expected BucketRootChanged event but received event of different type"
+      );
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
@@ -174,7 +166,7 @@ describeMspNet(
         event.data.fileKey.toString()
       );
 
-      invariant(isFileInForest.isTrue, "File is not in forest");
+      assert(isFileInForest.isTrue, "File is not in forest");
     });
   }
 );

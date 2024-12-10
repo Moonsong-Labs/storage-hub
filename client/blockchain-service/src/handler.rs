@@ -46,7 +46,8 @@ use storage_hub_runtime::RuntimeEvent;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, FinalisedMspStoppedStoringBucket,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
+        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -1344,6 +1345,26 @@ impl BlockchainService {
                                 size,
                             })
                         }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(BspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
+                                }
+                            }
+                        }
                         // Ignore all other events.
                         _ => {}
                     }
@@ -1420,6 +1441,26 @@ impl BlockchainService {
                                         owner,
                                         bucket_id,
                                     })
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(FinalisedBspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
                                 }
                             }
                         }
