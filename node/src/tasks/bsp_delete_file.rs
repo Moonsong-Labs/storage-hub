@@ -1,11 +1,14 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::events::{BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring};
+use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_forest_manager::traits::ForestStorage;
 use sp_core::H256;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT, NoKey};
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{BspForestStorageHandlerT, FileStorageT},
+};
 use shc_actors_framework::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "bsp-delete-file-task";
@@ -43,11 +46,12 @@ where
 
     async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         {
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -123,10 +127,11 @@ where
         );
 
         // Check that the file_key is not in the Forest.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let read_fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
         if read_fs
