@@ -416,7 +416,14 @@ where
                     )),
                 true,
             )
-            .await?;
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to confirm file after {} retries: {:?}",
+                    MAX_CONFIRM_STORING_REQUEST_TRY_COUNT,
+                    e
+                )
+            })?;
 
         let maybe_new_root: Option<H256> = events.and_then(|events| {
             events.into_iter().find_map(|event| {

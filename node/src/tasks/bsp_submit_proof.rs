@@ -142,11 +142,6 @@ where
             event.data
         );
 
-        // Check if this proof is the next one to be submitted.
-        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
-        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
-        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
-
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
         // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -158,6 +153,11 @@ where
                 ));
             }
         };
+
+        // Check if this proof is the next one to be submitted.
+        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
+        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
+        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
 
         // Get the current Forest key of the Provider running this node.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
