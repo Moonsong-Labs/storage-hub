@@ -272,8 +272,8 @@ mod runtime {
     pub type PaymentStreams = pallet_payment_streams;
     #[runtime::pallet_index(45)]
     pub type BucketNfts = pallet_bucket_nfts;
-	#[runtime::pallet_index(46)]
-	pub type CrRandomness = pallet_cr_randomness;
+    #[runtime::pallet_index(46)]
+    pub type CrRandomness = pallet_cr_randomness;
 
     // Miscellaneous
     #[runtime::pallet_index(50)]
