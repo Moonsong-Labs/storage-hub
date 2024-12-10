@@ -1258,6 +1258,22 @@ mod slashing {
             assert!(providers_of_next_deadline.contains(&alice_provider_id));
             assert!(providers_of_next_deadline.contains(&bob_provider_id));
 
+            // The events should have been emitted
+            System::assert_has_event(
+                Event::ProviderMarkedAsSlashable {
+                    provider_id: alice_provider_id,
+                    next_deadline: next_deadline,
+                }
+                .into(),
+            );
+            System::assert_has_event(
+                Event::ProviderMarkedAsSlashable {
+                    provider_id: bob_provider_id,
+                    next_deadline: next_deadline,
+                }
+                .into(),
+            );
+
             // And they should be in the ProvidersWithoutCommitment storage
             let alice_next_deadline =
                 ProvidersWithoutCommitment::<Test>::get(alice_provider_id).unwrap();
@@ -1732,7 +1748,6 @@ fn run_to_block(n: BlockNumberFor<Test>) {
 
     while System::block_number() < n {
         AllPalletsWithSystem::on_finalize(System::block_number());
-        System::reset_events();
         System::set_block_number(System::block_number() + 1);
         AllPalletsWithSystem::on_initialize(System::block_number());
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
@@ -1748,7 +1763,6 @@ fn run_to_block_without_on_idle(n: BlockNumberFor<Test>) {
 
     while System::block_number() < n {
         AllPalletsWithSystem::on_finalize(System::block_number());
-        System::reset_events();
         System::set_block_number(System::block_number() + 1);
         AllPalletsWithSystem::on_initialize(System::block_number());
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());

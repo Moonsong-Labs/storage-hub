@@ -156,6 +156,12 @@ pub mod pallet {
             next_deadline_tick: BlockNumberFor<T>,
         },
 
+        /// Event emitted when a Provider gets marked as slashable for not submitting their seed reveal and new commitment in time.
+        ProviderMarkedAsSlashable {
+            provider_id: ProviderIdFor<T>,
+            next_deadline: BlockNumberFor<T>,
+        },
+
         /// Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
         RandomnessCommitted {
             previous_randomness_revealed: T::Seed,
@@ -704,6 +710,12 @@ pub mod pallet {
                                 // Add them to the ProvidersWithoutCommitment storage, with the seed tolerance as their new deadline
                                 // This is done so they are not required to reveal their seed commitment in the next tick, only commit a new one
                                 ProvidersWithoutCommitment::<T>::insert(provider_id, new_deadline);
+
+                                // Emit the ProviderMarkedAsSlashable event
+                                Self::deposit_event(Event::ProviderMarkedAsSlashable {
+                                    provider_id: provider_id.clone(),
+                                    next_deadline: new_deadline,
+                                });
 
                                 // Consume the weight used to mark the Provider as slashable and reset it
                                 weight_meter.consume(T::DbWeight::get().reads_writes(1, 5));
