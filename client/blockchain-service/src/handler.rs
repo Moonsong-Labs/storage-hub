@@ -1036,7 +1036,7 @@ impl BlockchainService {
         // Check if we just came out of syncing mode.
         // We use saturating_sub because in a reorg, there is a potential scenario where the last
         // block processed is higher than the current block number.
-        if block_number.saturating_sub(last_block_processed) < SYNC_MODE_MIN_BLOCKS_BEHIND {
+        if block_number.saturating_sub(last_block_processed) > SYNC_MODE_MIN_BLOCKS_BEHIND {
             self.handle_initial_sync(notification).await;
         }
 
@@ -1195,10 +1195,20 @@ impl BlockchainService {
                                     // If so, add the Provider ID to the list of Providers that this node is monitoring.
                                     info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
 
-                                    // Managing more than one Provider is not supported, so if this node is already managing a Provider, emit a warning
+                                    // Managing more than one Provider is not supported, so if this node is already managing another Provider, emit a warning
                                     // and stop managing it, in favour of the new Provider.
-                                    if self.provider_id.is_some() {
-                                        warn!(target: LOG_TARGET, "This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", self.provider_id.expect("Just checked that this node is managing a Provider"), provider_id);
+                                    if let Some(managed_provider) = &self.provider_id {
+                                        let managed_provider_id = match managed_provider {
+                                            StorageProviderId::BackupStorageProvider(bsp_id) => {
+                                                bsp_id
+                                            }
+                                            StorageProviderId::MainStorageProvider(msp_id) => {
+                                                msp_id
+                                            }
+                                        };
+                                        if managed_provider_id != &provider_id {
+                                            warn!(target: LOG_TARGET, "This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
+                                        }
                                     }
 
                                     // Only BSPs can be challenged, therefore this is a BSP.

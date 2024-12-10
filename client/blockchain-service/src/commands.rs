@@ -804,7 +804,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
             match result {
                 Ok(maybe_events) => {
-                    debug!(target: LOG_TARGET, "Transaction succeeded");
+                    debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", transaction.hash());
                     return Ok(maybe_events);
                 }
                 Err(err) => {
@@ -816,7 +816,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
                         }
                     }
 
-                    warn!(target: LOG_TARGET, "Failed to submit transaction, attempt #{}", retry_count + 1);
+                    warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", transaction.hash(), retry_count + 1);
                 }
             }
         }
