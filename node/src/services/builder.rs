@@ -541,19 +541,19 @@ where
     }
 }
 
-/// Abstraction layer to run the [`StorageHubHandler`] built from a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
+/// Abstraction layer to build the [`StorageHubBuilder`] with a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
 #[async_trait]
-pub trait Runnable {
-    async fn run(self);
+pub trait Buildable {
+    async fn build(self);
 }
 
 #[async_trait]
-impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<BspProvider, S>
+impl<S: StorageLayerSupport> Buildable for StorageHubBuilder<BspProvider, S>
 where
     (BspProvider, S): StorageTypes,
     <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
 {
-    async fn run(self) {
+    async fn build(self) {
         let mut handler = self.build_handler();
         handler.initialise_bsp().await;
         handler.start_bsp_tasks();
@@ -561,25 +561,25 @@ where
 }
 
 #[async_trait]
-impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<MspProvider, S>
+impl<S: StorageLayerSupport> Buildable for StorageHubBuilder<MspProvider, S>
 where
     (MspProvider, S): StorageTypes,
     <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
 {
-    async fn run(self) {
+    async fn build(self) {
         let handler = self.build_handler();
         handler.start_msp_tasks()
     }
 }
 
 #[async_trait]
-impl Runnable for StorageHubBuilder<UserRole, NoStorageLayer>
+impl Buildable for StorageHubBuilder<UserRole, NoStorageLayer>
 where
     (UserRole, NoStorageLayer): StorageTypes,
     <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    async fn run(self) {
+    async fn build(self) {
         let handler = self.build_handler();
         handler.start_user_tasks();
     }
