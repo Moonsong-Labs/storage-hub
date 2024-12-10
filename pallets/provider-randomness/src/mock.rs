@@ -458,6 +458,7 @@ impl Config for Test {
     type SeedCommitment = H256;
     type Seed = H256;
     type SeedVerifier = MockSeedVerifier;
+    type SeedGenerator = MockSeedGenerator;
     type RandomSeedMixer = MockRandomSeedMixer;
     type MaxSeedTolerance = MaxSeedTolerance;
     type StakeToSeedPeriod = StakeToSeedPeriod;
@@ -470,24 +471,35 @@ parameter_types! {
     pub const MinSeedPeriod: u64 = 4;
 }
 
+pub type Seed = H256;
+pub type SeedCommitment = H256;
+
 pub struct MockSeedVerifier;
 impl SeedVerifier for MockSeedVerifier {
-    type Seed = H256;
-    type SeedCommitment = H256;
+    type Seed = Seed;
+    type SeedCommitment = SeedCommitment;
     fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
         BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
     }
 }
 
 pub struct MockRandomSeedMixer;
-impl RandomSeedMixer<H256> for MockRandomSeedMixer {
-    fn mix_randomness_seed(seed_1: &H256, seed_2: &H256, context: Option<impl Into<H256>>) -> H256 {
+impl RandomSeedMixer<Seed> for MockRandomSeedMixer {
+    fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed {
         let mut seed = seed_1.as_fixed_bytes().to_vec();
         seed.extend_from_slice(seed_2.as_fixed_bytes());
         if let Some(context) = context {
             seed.extend_from_slice(context.into().as_fixed_bytes());
         }
-        H256::from_slice(&blake2_256(&seed))
+        Seed::from_slice(&blake2_256(&seed))
+    }
+}
+
+pub struct MockSeedGenerator;
+impl SeedGenerator for MockSeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Seed::from_slice(&blake2_256(generator))
     }
 }
 

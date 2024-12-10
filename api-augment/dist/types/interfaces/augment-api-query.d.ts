@@ -289,6 +289,92 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       [key: string]: QueryableStorageEntry<ApiType>;
     };
+    crRandomness: {
+      /**
+       * A map that holds whether a Provider is active in the randomness system and as such should send seed commitments and reveals and
+       * can be slashed if they don't. It holds the next seed commitment that the Provider has to answer, if any.
+       **/
+      activeProviders: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<Option<H256>>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * A map from each deadline tick to a vector of the Providers that need to reveal their previous seed commitment and commit a new one in that tick
+       **/
+      deadlineTickToProviders: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
+      /**
+       * Commitments that are pending to be revealed by the Providers
+       **/
+      pendingCommitments: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<H256>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * A map from each tick to the Providers that have to be marked as slashable in that tick. This will be processed by the `on_idle` hook
+       **/
+      providersToMarkAsSlashable: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<H256>>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
+      /**
+       * A map from Providers which shouldn't send a reveal next tick, only a seed commitment be it because they
+       * have just registered or because they have been slashed, to their deadline tick
+       **/
+      providersWithoutCommitment: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * Internal storage to manage current head and tail of queue
+       **/
+      queueParameters: AugmentedQuery<ApiType, () => Observable<ITuple<[u32, u32]>>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Internal storage to manage queue elements
+       **/
+      randomnessSeedsQueue: AugmentedQuery<ApiType, () => Observable<Vec<H256>>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A map from each deadline tick to the Providers that have revealed their seed commitments for it
+       **/
+      receivedCommitments: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
+      /**
+       * Seed commitment to its deadline tick
+       **/
+      seedCommitmentToDeadline: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * The tick from which we should start checking for slashable Providers in the next `on_idle` execution
+       **/
+      tickToCheckForSlashableProviders: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Generic query
+       **/
+      [key: string]: QueryableStorageEntry<ApiType>;
+    };
     fileSystem: {
       /**
        * Bookkeeping of the buckets containing open storage requests.

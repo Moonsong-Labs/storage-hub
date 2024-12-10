@@ -137,6 +137,8 @@ impl IndexerService {
                 self.index_providers_event(conn, event, block_hash).await?
             }
             RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
+            // TODO: Should we index events from this pallet? Probably yes since they contain info about deadlines for Providers
+            RuntimeEvent::CrRandomness(_event) => {}
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
             // to ensure the compiler will let us know to treat future events when added.

@@ -51,13 +51,14 @@ use xcm::latest::prelude::BodyId;
 // Local module imports
 use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    Hashing, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
-    PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
-    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, CENTS, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
-    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
+    CrRandomness, Hash, Hashing, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo,
+    ParachainSystem, PaymentStreams, PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session,
+    SessionKeys, Signature, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
+    BLOCK_PROCESSING_VELOCITY, CENTS, DAYS, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT,
+    MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
+    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
 use runtime_params::RuntimeParameters;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -755,6 +756,7 @@ impl pallet_proofs_dealer::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
+    // TODO: Once the client logic to submit randomness seeds is implemented, the randomness provider should be CrRandomness
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod =
         runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
@@ -822,6 +824,7 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type CrRandomness = CrRandomness;
     type UpdateStoragePrice = MostlyStablePriceIndexUpdater<Runtime>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
@@ -931,3 +934,55 @@ impl pallet_bucket_nfts::Config for Runtime {
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
+
+/****** Commit-Reveal Randomness pallet ******/
+pub type Seed = Hash;
+pub type SeedCommitment = Hash;
+
+impl pallet_cr_randomness::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type SeedCommitment = SeedCommitment;
+    type Seed = Seed;
+    type SeedVerifier = SeedVerifier;
+    type SeedGenerator = SeedGenerator;
+    type RandomSeedMixer = RandomSeedMixer;
+    type MaxSeedTolerance = MaxSeedTolerance;
+    type StakeToSeedPeriod = runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod;
+    type MinSeedPeriod = runtime_params::dynamic_params::runtime_config::MinSeedPeriod;
+}
+
+parameter_types! {
+    pub const MaxSeedTolerance: u32 = 10;
+}
+
+// TODO: For reviewers: how should we implement the generator/verifier/mixer? I leave a simple implementation here for now.
+pub struct SeedVerifier;
+impl pallet_cr_randomness::SeedVerifier for SeedVerifier {
+    type Seed = Seed;
+    type SeedCommitment = SeedCommitment;
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
+        BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
+    }
+}
+
+pub struct RandomSeedMixer;
+impl pallet_cr_randomness::RandomSeedMixer<Seed> for RandomSeedMixer {
+    fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed {
+        let mut seed = seed_1.as_fixed_bytes().to_vec();
+        seed.extend_from_slice(seed_2.as_fixed_bytes());
+        if let Some(context) = context {
+            seed.extend_from_slice(context.into().as_fixed_bytes());
+        }
+        Hashing::hash(&seed)
+    }
+}
+
+pub struct SeedGenerator;
+impl pallet_cr_randomness::SeedGenerator for SeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Hashing::hash(&generator)
+    }
+}
+/****** ****** ****** ******/

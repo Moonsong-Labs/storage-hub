@@ -44,6 +44,12 @@ pub trait SeedVerifier {
     fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool;
 }
 
+pub trait SeedGenerator {
+    type Seed;
+    /// Generates a new seed from a slice of u8s.
+    fn generate_seed(generator: &[u8]) -> Self::Seed;
+}
+
 #[pallet]
 pub mod pallet {
     use super::*;
@@ -107,6 +113,9 @@ pub mod pallet {
 
         /// The verifier of seed commitments
         type SeedVerifier: SeedVerifier<Seed = Self::Seed, SeedCommitment = Self::SeedCommitment>;
+
+        /// The generator of seeds
+        type SeedGenerator: SeedGenerator<Seed = Self::Seed>;
 
         /// The seed mixer used to get fresh randomness
         type RandomSeedMixer: RandomSeedMixer<<Self as Config>::Seed>;
@@ -381,7 +390,7 @@ pub mod pallet {
                             &seed_to_reveal,
                             None::<T::Seed>,
                         );
-                        // TODO: Put better weight
+                        // TODO: Put better weight after benchmarking
                         (true, Weight::zero())
                     },
                     distance_from_head,
@@ -433,7 +442,6 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        // TODO: this head randomness should be the one used in the Proofs Dealer pallet
         pub fn get_head_randomness() -> (T::Seed, Weight) {
             BoundedQueue::<T>::head()
         }
@@ -556,96 +564,9 @@ pub mod pallet {
 
             Ok(new_deadline)
         }
-
-        /// This function holds the logic that processes the Providers that have missed the deadline to reveal their seed commitments,
-        /// marking them as slashable. If, because of weight limitations, it cannot fully process all Providers to mark as slashable in
-        /// the current tick to process, it stores the remaining Providers to process them in the next execution.
-        /// The function returns a boolean indicating if it has successfully processed all Providers to mark as slashable in the current tick.
-        fn process_providers_to_mark_as_slashable(
-            weight_meter: &mut WeightMeter,
-            current_tick_to_process: BlockNumberFor<T>,
-            providers_to_mark: Vec<ProviderIdFor<T>>,
-        ) -> bool {
-            // Iterate over the Providers to mark as slashable
-            let mut current_provider_index = 0;
-            let amount_of_providers_to_process = providers_to_mark.len();
-            let seed_reveal_tolerance = T::MaxSeedTolerance::get();
-            for provider_id in &providers_to_mark {
-                // If there's not enough weight to process the next Provider (in the worst case scenario), break
-                if !weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 5)) {
-                    break;
-                }
-
-                // Check if the Provider is active or inactive and modify storage accordingly
-                ActiveProviders::<T>::mutate(
-                    provider_id,
-                    |maybe_active_provider_with_maybe_commitment| {
-                        match maybe_active_provider_with_maybe_commitment {
-                            // If the Provider is active in the system
-                            Some(maybe_seed_commitment) => {
-                                // Mark them as slashable
-                                Self::mark_provider_as_slashable(&provider_id);
-
-                                // If they have a seed commitment that they had to answer
-                                if let Some(seed_commitment) = maybe_seed_commitment {
-                                    // Remove it from the seed commitment to deadline storage
-                                    SeedCommitmentToDeadline::<T>::remove(seed_commitment);
-
-                                    // And update the Provider to have no seed commitment to answer
-                                    *maybe_seed_commitment = None;
-                                }
-
-                                // Add them to the DeadlineTickToProviders storage, with the seed tolerance as their new deadline
-                                let new_deadline = current_tick_to_process
-                                    .saturating_add(seed_reveal_tolerance.into());
-                                DeadlineTickToProviders::<T>::append(new_deadline, provider_id);
-
-                                // Add them to the ProvidersWithoutCommitment storage, with the seed tolerance as their new deadline
-                                // This is done so they are not required to reveal their seed commitment in the next tick, only commit a new one
-                                ProvidersWithoutCommitment::<T>::insert(provider_id, new_deadline);
-
-                                // Consume the weight used to mark the Provider as slashable and reset it
-                                weight_meter.consume(T::DbWeight::get().reads_writes(1, 5));
-                            }
-                            // If the Provider is not active in the system, delete them
-                            None => {
-                                // Remove it from the ProvidersWithoutCommitment storage if it was there
-                                ProvidersWithoutCommitment::<T>::remove(provider_id);
-
-                                // Consume the weight used to delete the Provider
-                                weight_meter.consume(T::DbWeight::get().reads_writes(1, 2));
-                            }
-                        }
-                    },
-                );
-
-                // Increment the current provider index
-                current_provider_index += 1;
-            }
-
-            // If there are still Providers to mark as slashable, put them back in the storage and return false
-            if current_provider_index < amount_of_providers_to_process {
-                ProvidersToMarkAsSlashable::<T>::insert(
-                    current_tick_to_process,
-                    providers_to_mark[current_provider_index..].to_vec(),
-                );
-
-                false
-            } else {
-                // Otherwise, return true, since all Providers for this tick have been processed
-                true
-            }
-        }
-
-        /// This function marks a Provider as slashable, incrementing the number of accrued slashable events for them
-        fn mark_provider_as_slashable(provider_id: &ProviderIdFor<T>) {
-            // Missing a randomness seed submission has the same penalty as missing a proof submission
-            pallet_proofs_dealer::SlashableProviders::<T>::mutate(provider_id, |accrued_slashes| {
-                *accrued_slashes = Some(accrued_slashes.unwrap_or(0).saturating_add(1));
-            });
-        }
     }
 
+    /// Hooks of this pallet.
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         // TODO: Benchmark this and consume the weight correctly
@@ -734,6 +655,97 @@ pub mod pallet {
             weight_meter.consumed()
         }
     }
+
+    /// Implementation of the internal functions of the `on_idle` hook.
+    impl<T: Config> Pallet<T> {
+        /// This function holds the logic that processes the Providers that have missed the deadline to reveal their seed commitments,
+        /// marking them as slashable. If, because of weight limitations, it cannot fully process all Providers to mark as slashable in
+        /// the current tick to process, it stores the remaining Providers to process them in the next execution.
+        /// The function returns a boolean indicating if it has successfully processed all Providers to mark as slashable in the current tick.
+        fn process_providers_to_mark_as_slashable(
+            weight_meter: &mut WeightMeter,
+            current_tick_to_process: BlockNumberFor<T>,
+            providers_to_mark: Vec<ProviderIdFor<T>>,
+        ) -> bool {
+            // Iterate over the Providers to mark as slashable
+            let mut current_provider_index = 0;
+            let amount_of_providers_to_process = providers_to_mark.len();
+            let seed_reveal_tolerance = T::MaxSeedTolerance::get();
+            for provider_id in &providers_to_mark {
+                // If there's not enough weight to process the next Provider (in the worst case scenario), break
+                if !weight_meter.can_consume(T::DbWeight::get().reads_writes(1, 5)) {
+                    break;
+                }
+
+                // Check if the Provider is active or inactive and modify storage accordingly
+                ActiveProviders::<T>::mutate(
+                    provider_id,
+                    |maybe_active_provider_with_maybe_commitment| {
+                        match maybe_active_provider_with_maybe_commitment {
+                            // If the Provider is active in the system
+                            Some(maybe_seed_commitment) => {
+                                // Mark them as slashable
+                                Self::mark_provider_as_slashable(&provider_id);
+
+                                // If they have a seed commitment that they had to answer
+                                if let Some(seed_commitment) = maybe_seed_commitment {
+                                    // Remove it from the seed commitment to deadline storage
+                                    SeedCommitmentToDeadline::<T>::remove(seed_commitment);
+
+                                    // And update the Provider to have no seed commitment to answer
+                                    *maybe_seed_commitment = None;
+                                }
+
+                                // Add them to the DeadlineTickToProviders storage, with the seed tolerance as their new deadline
+                                let new_deadline = current_tick_to_process
+                                    .saturating_add(seed_reveal_tolerance.into());
+                                DeadlineTickToProviders::<T>::append(new_deadline, provider_id);
+
+                                // Add them to the ProvidersWithoutCommitment storage, with the seed tolerance as their new deadline
+                                // This is done so they are not required to reveal their seed commitment in the next tick, only commit a new one
+                                ProvidersWithoutCommitment::<T>::insert(provider_id, new_deadline);
+
+                                // Consume the weight used to mark the Provider as slashable and reset it
+                                weight_meter.consume(T::DbWeight::get().reads_writes(1, 5));
+                            }
+                            // If the Provider is not active in the system, delete them
+                            None => {
+                                // Remove it from the ProvidersWithoutCommitment storage if it was there
+                                ProvidersWithoutCommitment::<T>::remove(provider_id);
+
+                                // Consume the weight used to delete the Provider
+                                weight_meter.consume(T::DbWeight::get().reads_writes(1, 2));
+                            }
+                        }
+                    },
+                );
+
+                // Increment the current provider index
+                current_provider_index += 1;
+            }
+
+            // If there are still Providers to mark as slashable, put them back in the storage and return false
+            if current_provider_index < amount_of_providers_to_process {
+                ProvidersToMarkAsSlashable::<T>::insert(
+                    current_tick_to_process,
+                    providers_to_mark[current_provider_index..].to_vec(),
+                );
+
+                false
+            } else {
+                // Otherwise, return true, since all Providers for this tick have been processed
+                true
+            }
+        }
+
+        /// This function marks a Provider as slashable, incrementing the number of accrued slashable events for them
+        fn mark_provider_as_slashable(provider_id: &ProviderIdFor<T>) {
+            // Missing a randomness seed submission has the same penalty as missing a proof submission
+            pallet_proofs_dealer::SlashableProviders::<T>::mutate(provider_id, |accrued_slashes| {
+                *accrued_slashes = Some(accrued_slashes.unwrap_or(0).saturating_add(1));
+            });
+        }
+    }
 }
 
 impl<T: pallet::Config> CommitRevealRandomnessInterface for Pallet<T> {
@@ -745,7 +757,6 @@ impl<T: pallet::Config> CommitRevealRandomnessInterface for Pallet<T> {
         Self::initialise_provider_cycle(who)
     }
 
-    // TODO: Use this when signing off Providers to remove them from this pallet
     fn stop_randomness_cycle(who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
         Self::stop_provider_cycle(who)
     }
@@ -762,16 +773,31 @@ impl<T: Config> Randomness<SeedFor<T>, BlockNumberFor<T>> for CurrentBlockRandom
         // Get the randomness for the current tick
         let (randomness, _) = pallet::Pallet::<T>::get_head_randomness();
 
+        // Generate a seed from the subject
+        let generated_seed = T::SeedGenerator::generate_seed(subject);
+
         // Mix the subject with the current randomness
         let final_randomness = <T as Config>::RandomSeedMixer::mix_randomness_seed(
             &randomness,
-            &T::Hashing::hash(subject),
+            &generated_seed,
             None::<T::Seed>,
         );
 
         // This randomness is valid for all ticks previous to the current one
         (
             final_randomness,
+            pallet_proofs_dealer::ChallengesTicker::<T>::get(),
+        )
+    }
+
+    /// Returns the current randomness seed, which is the head of the queue.
+    fn random_seed() -> (SeedFor<T>, BlockNumberFor<T>) {
+        // Get the randomness for the current tick
+        let (randomness, _) = pallet::Pallet::<T>::get_head_randomness();
+
+        // This randomness is valid for all ticks previous to the current one
+        (
+            randomness,
             pallet_proofs_dealer::ChallengesTicker::<T>::get(),
         )
     }

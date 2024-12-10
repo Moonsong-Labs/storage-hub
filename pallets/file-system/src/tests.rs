@@ -4801,12 +4801,13 @@ mod bsp_confirm {
 
 				// Assert that the randomness cycle was initialised for this BSP.
                 let maybe_first_randomness_provider_deadline =
-                    pallet_cr_randomness::FirstSubmittersProviders::<Test>::get(&bsp_id);
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
                 assert!(maybe_first_randomness_provider_deadline.is_some());
-                let first_randomness_provider_deadline =
-                    maybe_first_randomness_provider_deadline.unwrap();
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
 
                 // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
                 System::assert_has_event(
                     pallet_cr_randomness::Event::ProviderCycleInitialised {
                         provider_id: bsp_id,
@@ -5077,12 +5078,13 @@ mod bsp_confirm {
 
 				// Assert that the randomness cycle was initialised for this BSP.
                 let maybe_first_randomness_provider_deadline =
-                    pallet_cr_randomness::FirstSubmittersProviders::<Test>::get(&bsp_id);
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
                 assert!(maybe_first_randomness_provider_deadline.is_some());
-                let first_randomness_provider_deadline =
-                    maybe_first_randomness_provider_deadline.unwrap();
-
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+                
                 // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
                 System::assert_has_event(
                     pallet_cr_randomness::Event::ProviderCycleInitialised {
                         provider_id: bsp_id,
@@ -6047,6 +6049,23 @@ mod bsp_stop_storing {
                     })
                 );
 
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+                
+                // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
@@ -6121,6 +6140,20 @@ mod bsp_stop_storing {
 
                 // Assert that the pending stop storing request was removed.
                 assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+
+                // Assert that the used capacity of this BSP is now 0
+                assert_eq!(Providers::get_used_capacity(&bsp_id), 0);
+
+                // Assert that the randomness cycle for this BSP has been stopped
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_none());
+
+                // Assert that the correct event was deposited.
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleStopped {
+                        provider_id: bsp_id,
+                    }
+                    .into(),
+                );
 
                 // Assert that the correct event was deposited.
                 let new_root = Providers::get_root(bsp_id).unwrap();
@@ -8027,12 +8060,13 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the randomness cycle was initialised for this BSP.
                 let maybe_first_randomness_provider_deadline =
-                    pallet_cr_randomness::FirstSubmittersProviders::<Test>::get(&bsp_id);
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
                 assert!(maybe_first_randomness_provider_deadline.is_some());
-                let first_randomness_provider_deadline =
-                    maybe_first_randomness_provider_deadline.unwrap();
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
 
                 // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
                 System::assert_has_event(
                     pallet_cr_randomness::Event::ProviderCycleInitialised {
                         provider_id: bsp_id,
@@ -8376,12 +8410,13 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the randomness cycle was initialised for this BSP.
                 let maybe_first_randomness_provider_deadline =
-                    pallet_cr_randomness::FirstSubmittersProviders::<Test>::get(&bsp_id);
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
                 assert!(maybe_first_randomness_provider_deadline.is_some());
-                let first_randomness_provider_deadline =
-                    maybe_first_randomness_provider_deadline.unwrap();
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
 
                 // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
                 System::assert_has_event(
                     pallet_cr_randomness::Event::ProviderCycleInitialised {
                         provider_id: bsp_id,
@@ -8619,12 +8654,13 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the randomness cycle was initialised for this BSP.
                 let maybe_first_randomness_provider_deadline =
-                    pallet_cr_randomness::FirstSubmittersProviders::<Test>::get(&bsp_id);
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
                 assert!(maybe_first_randomness_provider_deadline.is_some());
-                let first_randomness_provider_deadline =
-                    maybe_first_randomness_provider_deadline.unwrap();
-
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+                
                 // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
                 System::assert_has_event(
                     pallet_cr_randomness::Event::ProviderCycleInitialised {
                         provider_id: bsp_id,
@@ -8829,12 +8865,13 @@ mod stop_storing_for_insolvent_user {
 
                 // Assert that the randomness cycle was initialised for this BSP.
                 let maybe_first_randomness_provider_deadline =
-                    pallet_cr_randomness::FirstSubmittersProviders::<Test>::get(&bsp_id);
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
                 assert!(maybe_first_randomness_provider_deadline.is_some());
-                let first_randomness_provider_deadline =
-                    maybe_first_randomness_provider_deadline.unwrap();
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
 
                 // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
                 System::assert_has_event(
                     pallet_cr_randomness::Event::ProviderCycleInitialised {
                         provider_id: bsp_id,

@@ -161,6 +161,52 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       [key: string]: AugmentedError<ApiType>;
     };
+    crRandomness: {
+      /**
+       * Caller not owner of the Provider ID
+       **/
+      CallerNotOwner: AugmentedError<ApiType>;
+      /**
+       * Provider is early in submitting the seed commitment
+       **/
+      EarlySubmissionOfSeed: AugmentedError<ApiType>;
+      /**
+       * Storage provider is late in submitting the seed commitment
+       **/
+      LateSubmissionOfSeed: AugmentedError<ApiType>;
+      /**
+       * Seed reveal is missing
+       **/
+      MissingSeedReveal: AugmentedError<ApiType>;
+      /**
+       * Seed commitment is already in the list of pending commitments
+       **/
+      NewCommitmentAlreadyPending: AugmentedError<ApiType>;
+      /**
+       * We cannot find corresponding end tick for provided seed commitment
+       **/
+      NoEndTickForSeedCommitment: AugmentedError<ApiType>;
+      /**
+       * Seed provided by the storage provider is not valid
+       **/
+      NotAValidSeed: AugmentedError<ApiType>;
+      /**
+       * Provider ID provided by the caller is not valid
+       **/
+      ProviderIdNotValid: AugmentedError<ApiType>;
+      /**
+       * We encountered an error while modifying seed queue
+       **/
+      QueueError: AugmentedError<ApiType>;
+      /**
+       * We are not able to convert tick number to u32 for arithmetic
+       **/
+      UnableToConvertTickNumberForArithmetic: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
     fileSystem: {
       /**
        * BSP did not succeed threshold check.
