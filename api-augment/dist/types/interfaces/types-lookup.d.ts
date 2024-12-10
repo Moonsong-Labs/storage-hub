@@ -2314,6 +2314,11 @@ declare module "@polkadot/types/lookup" {
       readonly firstSeedCommitment: H256;
       readonly nextDeadlineTick: u32;
     } & Struct;
+    readonly isProviderMarkedAsSlashable: boolean;
+    readonly asProviderMarkedAsSlashable: {
+      readonly providerId: H256;
+      readonly nextDeadline: u32;
+    } & Struct;
     readonly isRandomnessCommitted: boolean;
     readonly asRandomnessCommitted: {
       readonly previousRandomnessRevealed: H256;
@@ -2325,6 +2330,7 @@ declare module "@polkadot/types/lookup" {
       | "ProviderCycleInitialised"
       | "ProviderCycleStopped"
       | "ProviderInitialisedRandomness"
+      | "ProviderMarkedAsSlashable"
       | "RandomnessCommitted";
   }
   /** @name PalletNftsEvent (166) */

@@ -1824,6 +1824,10 @@ declare const _default: {
         firstSeedCommitment: string;
         nextDeadlineTick: string;
       };
+      ProviderMarkedAsSlashable: {
+        providerId: string;
+        nextDeadline: string;
+      };
       RandomnessCommitted: {
         previousRandomnessRevealed: string;
         validFromTick: string;

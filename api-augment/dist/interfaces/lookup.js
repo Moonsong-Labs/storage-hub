@@ -1844,6 +1844,10 @@ export default {
         firstSeedCommitment: "H256",
         nextDeadlineTick: "u32"
       },
+      ProviderMarkedAsSlashable: {
+        providerId: "H256",
+        nextDeadline: "u32"
+      },
       RandomnessCommitted: {
         previousRandomnessRevealed: "H256",
         validFromTick: "u32",

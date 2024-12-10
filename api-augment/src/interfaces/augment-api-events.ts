@@ -373,6 +373,14 @@ declare module "@polkadot/api-base/types/events" {
         { firstSeedCommitment: H256; nextDeadlineTick: u32 }
       >;
       /**
+       * Event emitted when a Provider gets marked as slashable for not submitting their seed reveal and new commitment in time.
+       **/
+      ProviderMarkedAsSlashable: AugmentedEvent<
+        ApiType,
+        [providerId: H256, nextDeadline: u32],
+        { providerId: H256; nextDeadline: u32 }
+      >;
+      /**
        * Event emitted when a Provider correctly reveals their previous randomness seed and commits a new one.
        **/
       RandomnessCommitted: AugmentedEvent<
