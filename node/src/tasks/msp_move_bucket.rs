@@ -108,6 +108,9 @@ where
             return Ok(());
         };
 
+        // TODO: check that we have enough space to accept the bucket and reject if not (+test)
+        // TODO: check that are know all the BSPs for the files in the bucket and reject if not (+test)
+
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_move_bucket_request {
                 bucket_id: event.bucket_id,
@@ -164,7 +167,7 @@ where
                 .write()
                 .await
                 .insert_file(file_key.clone(), file_metadata.clone())
-                .unwrap();
+                .expect("Failed to insert file into file storage");
 
             let chunks_count = file_metadata.chunks_count();
 
