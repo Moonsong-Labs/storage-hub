@@ -200,8 +200,8 @@ pub mod pallet {
     ///
     /// This storage is updated in:
     /// - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which emits a `UserWithoutFunds` event and sets the user's entry in this map
-	/// to that moment's tick number if it does not have enough funds.
-	/// - [clear_insolvent_flag](crate::utils::clear_insolvent_flag), which clears the user's entry in this map if the cooldown period has passed and the user has paid all its outstanding debt.
+    /// to that moment's tick number if it does not have enough funds.
+    /// - [clear_insolvent_flag](crate::utils::clear_insolvent_flag), which clears the user's entry in this map if the cooldown period has passed and the user has paid all its outstanding debt.
     #[pallet::storage]
     pub type UsersWithoutFunds<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BlockNumberFor<T>>;
