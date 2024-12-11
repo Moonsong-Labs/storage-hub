@@ -5,7 +5,7 @@ import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import Docker from "dockerode";
 import * as util from "node:util";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import { sleep } from "../timer.ts";
 import { sealBlock } from "./block.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
@@ -44,8 +44,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     console.log(e);
   }
   console.log(
-    `Error fetching container IP for ${containerName} after ${
-      (maxRetries * sleepTime) / 1000
+    `Error fetching container IP for ${containerName} after ${(maxRetries * sleepTime) / 1000
     } seconds`
   );
   showContainers();
@@ -76,7 +75,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
         body: JSON.stringify(payload)
       });
 
-      invariant(response.ok, `HTTP error! status: ${response.status}`);
+      assert(response.ok, `HTTP error! status: ${response.status}`);
 
       const resp = (await response.json()) as any;
       return resp.result as string;
@@ -155,7 +154,7 @@ export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string)
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-  invariant(newBucketEventDataBlob, "Event doesn't match Type");
+  assert(newBucketEventDataBlob, "Event doesn't match Type");
 
   return newBucketEventDataBlob;
 };

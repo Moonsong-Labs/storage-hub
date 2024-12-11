@@ -2,7 +2,7 @@ import type { ApiPromise } from "@polkadot/api";
 import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import type { Address, H256 } from "@polkadot/types/interfaces";
 
 /**
@@ -34,14 +34,14 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
         timeout: 100
       });
       if (checkQuantity) {
-        invariant(
+        assert(
           matches.length === checkQuantity,
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
         );
       }
       break;
     } catch {
-      invariant(
+      assert(
         i < iterations - 1,
         `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
       );
@@ -83,14 +83,14 @@ export const waitForBspVolunteerWithoutSealing = async (
         timeout: 100
       });
       if (checkQuantity) {
-        invariant(
+        assert(
           matches.length === checkQuantity,
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
         );
       }
       break;
     } catch {
-      invariant(
+      assert(
         i < iterations - 1,
         `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
       );
@@ -122,7 +122,7 @@ export const waitForBspStored = async (
   const delay = 200;
 
   // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
-  invariant(
+  assert(
     !(bspAccount && checkQuantity && checkQuantity > 1),
     "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
   );
@@ -152,7 +152,7 @@ export const waitForBspStored = async (
         timeout: 300
       });
       if (checkQuantity) {
-        invariant(
+        assert(
           matches.length === checkQuantity,
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
         );
@@ -161,7 +161,7 @@ export const waitForBspStored = async (
       assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
       break;
     } catch {
-      invariant(
+      assert(
         i !== iterations,
         `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
       );
@@ -196,7 +196,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
         timeout: 300
       });
       if (checkQuantity) {
-        invariant(
+        assert(
           matches.length === checkQuantity,
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
         );
@@ -204,7 +204,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
       break;
     } catch (e) {
       console.error(e);
-      invariant(
+      assert(
         i !== iterations,
         `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
       );
@@ -233,10 +233,10 @@ export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H2
     try {
       await sleep(delay);
       const fileStorageResult = await api.rpc.storagehubclient.isFileInFileStorage(fileKey);
-      invariant(fileStorageResult.isFileFound, "File not found in file storage");
+      assert(fileStorageResult.isFileFound, "File not found in file storage");
       break;
     } catch {
-      invariant(
+      assert(
         i !== iterations,
         `Failed to detect BSP file in file storage after ${(i * delay) / 1000}s`
       );
@@ -265,10 +265,10 @@ export const waitForBspFileDeletionComplete = async (api: ApiPromise, fileKey: H
     try {
       await sleep(delay);
       const fileDeletionResult = await api.rpc.storagehubclient.isFileInForest(null, fileKey);
-      invariant(fileDeletionResult.isFalse, "File still in forest storage");
+      assert(fileDeletionResult.isFalse, "File still in forest storage");
       break;
     } catch {
-      invariant(
+      assert(
         i !== iterations,
         `Failed to detect BSP file deletion after ${(i * delay) / 1000}s`
       );
@@ -301,13 +301,13 @@ export const waitForBspToCatchUpToChainTip = async (
       await sleep(delay);
       const syncedBestBlock = await syncedApi.rpc.chain.getHeader();
       const bspBehindBestBlock = await bspBehindApi.rpc.chain.getHeader();
-      invariant(
+      assert(
         syncedBestBlock.hash.toString() === bspBehindBestBlock.hash.toString(),
         "BSP did not catch up to the chain tip"
       );
       break;
     } catch {
-      invariant(i !== iterations, `Failed to detect BSP catch up after ${(i * delay) / 1000}s`);
+      assert(i !== iterations, `Failed to detect BSP catch up after ${(i * delay) / 1000}s`);
     }
   }
 };
@@ -339,14 +339,14 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
         checkTxPool: true
       });
       if (checkQuantity) {
-        invariant(
+        assert(
           matches.length === checkQuantity,
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
         );
       }
       break;
     } catch {
-      invariant(
+      assert(
         i < iterations - 1,
         `Failed to detect MSP respond extrinsic in txPool after ${(i * delay) / 1000}s`
       );

@@ -1,5 +1,5 @@
 import type { ApiPromise } from "@polkadot/api";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import type { HexString } from "@polkadot/util/types";
 import { sealBlock } from "./block";
 
@@ -27,7 +27,7 @@ export async function dropTransaction(
         .map((hash) => api.rpc.author.removeExtrinsic([{ Hash: hash }]))
     );
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    invariant(pendingAfter.length === 0, "Not all extrinsics removed from txPool");
+    assert(pendingAfter.length === 0, "Not all extrinsics removed from txPool");
   } else if (typeof extrinsic === "object" && "module" in extrinsic && "method" in extrinsic) {
     // Remove extrinsics matching the specified module and method
     const matches = pendingBefore
@@ -36,20 +36,20 @@ export async function dropTransaction(
       )
       .map(({ hash }) => hash.toHex());
 
-    invariant(
+    assert(
       matches.length > 0,
       `No extrinsics found in txPool matching ${extrinsic.module}:${extrinsic.method}`
     );
     const result = await api.rpc.author.removeExtrinsic(matches.map((hash) => ({ Hash: hash })));
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    invariant(result.length > 0, "No removal confirmation returned by RPC");
-    invariant(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
+    assert(result.length > 0, "No removal confirmation returned by RPC");
+    assert(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
   } else {
     // Remove the extrinsic with the specified hash
     const result = await api.rpc.author.removeExtrinsic([{ Hash: extrinsic }]);
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    invariant(result.length > 0, "No removal confirmation returned by RPC");
-    invariant(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
+    assert(result.length > 0, "No removal confirmation returned by RPC");
+    assert(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
   }
 
   if (sealAfter) {

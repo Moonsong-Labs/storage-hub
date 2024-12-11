@@ -2,9 +2,9 @@ import Docker from "dockerode";
 import { DOCKER_IMAGE } from ".";
 import postgres from "postgres";
 import stripAnsi from "strip-ansi";
+import assert from "node:assert";
 import fs from "node:fs/promises";
 import tmp from "tmp";
-import invariant from "tiny-invariant";
 
 export const printDockerStatus = async (verbose = false) => {
   const docker = new Docker();
@@ -158,5 +158,5 @@ export const cleanupEnvironment = async (verbose = false) => {
       return;
     }
   }
-  invariant(false, `Failed to stop all nodes: ${JSON.stringify(allContainers)}`);
+  assert(false, `Failed to stop all nodes: ${JSON.stringify(allContainers)}`);
 };

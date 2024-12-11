@@ -15,7 +15,6 @@ import { sleep } from "../timer";
 import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
 import * as Assertions from "../asserts";
-import invariant from "tiny-invariant";
 import { waitForLog } from "./docker";
 
 export interface SealedBlock {
@@ -256,7 +255,7 @@ export async function runToNextChallengePeriodBlock(
   strictEqual(
     slashableProviders.unwrap().toNumber(),
     oldFailedSubmissionsCount.unwrapOrDefault().toNumber() +
-      api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
+    api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
   );
 
   return nextChallengeDeadline.toNumber();
@@ -340,7 +339,7 @@ export const advanceToBlock = async (
 
   let blockResult = null;
 
-  invariant(
+  assert(
     options.blockNumber > currentBlockNumber,
     `Block number ${options.blockNumber} is lower than current block number ${currentBlockNumber}`
   );
@@ -419,7 +418,7 @@ export const advanceToBlock = async (
     }
   }
 
-  invariant(blockResult, "Block wasn't sealed");
+  assert(blockResult, "Block wasn't sealed");
 
   return blockResult;
 };
