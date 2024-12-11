@@ -119,7 +119,7 @@ where
     }
 }
 
-/// Handles the `RemoteUploadRequest` event.
+/// Handles the [`RemoteUploadRequest`] event.
 ///
 /// This event is triggered by a user sending a chunk of the file to the MSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
@@ -377,7 +377,7 @@ where
     }
 }
 
-/// Handles the `ProcessMspRespondStoringRequest` event.
+/// Handles the [`ProcessMspRespondStoringRequest`] event.
 ///
 /// Triggered when there are new storage request(s) to respond to. Normally, storage requests are
 /// immediately rejected if the MSP cannot store the file (e.g. not enough capacity). However, this event
@@ -488,20 +488,11 @@ where
         let mut storage_request_msp_response = Vec::new();
 
         for (bucket_id, (accept, reject)) in file_key_responses.iter_mut() {
-            let fs = match self
+            let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&bucket_id.as_ref().to_vec())
-                .await
-            {
-                Some(fs) => fs,
-                None => {
-                    self.storage_hub_handler
-                        .forest_storage_handler
-                        .insert(&bucket_id.as_ref().to_vec())
-                        .await
-                }
-            };
+                .get_or_create(&bucket_id.as_ref().to_vec())
+                .await;
 
             let accept = if !accept.is_empty() {
                 let file_keys: Vec<_> = accept
@@ -695,21 +686,11 @@ where
             .as_ref()
             .try_into()?;
 
-        let fs = match self
+        let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&event.bucket_id.as_ref().to_vec())
-            .await
-        {
-            Some(fs) => fs,
-            None => {
-                self.storage_hub_handler
-                    .forest_storage_handler
-                    .insert(&event.bucket_id.as_ref().to_vec())
-                    .await
-            }
-        };
-
+            .get_or_create(&event.bucket_id.as_ref().to_vec())
+            .await;
         let read_fs = fs.read().await;
 
         // Reject the storage request if file key already exists in the forest storage.

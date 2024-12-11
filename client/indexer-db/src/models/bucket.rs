@@ -14,7 +14,7 @@ pub struct Bucket {
     /// The ID of the MSP (column in the database) that the bucket belongs to.
     pub msp_id: Option<i32>,
     pub account: String,
-    pub onchain_bucket_id: String,
+    pub onchain_bucket_id: Vec<u8>,
     pub name: Vec<u8>,
     pub collection_id: Option<String>,
     pub private: bool,
@@ -28,7 +28,7 @@ impl Bucket {
         conn: &mut DbConnection<'a>,
         msp_id: Option<i32>,
         account: String,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
         name: Vec<u8>,
         collection_id: Option<String>,
         private: bool,
@@ -53,7 +53,7 @@ impl Bucket {
     pub async fn update_privacy<'a>(
         conn: &mut DbConnection<'a>,
         account: String,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
         collection_id: Option<String>,
         private: bool,
     ) -> Result<Self, diesel::result::Error> {
@@ -72,7 +72,7 @@ impl Bucket {
 
     pub async fn update_msp<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
         msp_id: i32,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = diesel::update(bucket::table)
@@ -86,7 +86,7 @@ impl Bucket {
 
     pub async fn update_merkle_root<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
         merkle_root: Vec<u8>,
     ) -> Result<(), diesel::result::Error> {
         diesel::update(bucket::table)
@@ -99,7 +99,7 @@ impl Bucket {
 
     pub async fn delete<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
     ) -> Result<(), diesel::result::Error> {
         diesel::delete(bucket::table)
             .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
@@ -110,7 +110,7 @@ impl Bucket {
 
     pub async fn get_by_onchain_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_bucket_id: String,
+        onchain_bucket_id: Vec<u8>,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = bucket::table
             .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
