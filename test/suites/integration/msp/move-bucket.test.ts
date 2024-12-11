@@ -262,7 +262,7 @@ describeMspNet(
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
       for (let i = 0; i < 5; i++) {
         await sleep(500);
-        let block = await userApi.sealBlock();
+        const block = await userApi.sealBlock();
 
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
