@@ -4763,6 +4763,9 @@ mod decrease_bucket_size {
 
 				// Check that the payment stream was deleted
 				assert!(!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&msp_id, &bucket_owner));
+
+				// Decrease the bucket size again. This should not fail
+				assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, 50));
 			});
         }
 
