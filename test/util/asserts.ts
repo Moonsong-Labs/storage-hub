@@ -75,16 +75,16 @@ export const assertExtrinsicPresent = async (
 
       const extrinsics = !options.checkTxPool
         ? await (async () => {
-          const response = await api.rpc.chain.getBlock(blockHash);
+            const response = await api.rpc.chain.getBlock(blockHash);
 
-          if (!options.blockHeight && !options.blockHash) {
-            options.verbose &&
-              console.log(
-                `No block height provided, using latest at ${response.block.header.number.toNumber()}`
-              );
-          }
-          return response.block.extrinsics;
-        })()
+            if (!options.blockHeight && !options.blockHash) {
+              options.verbose &&
+                console.log(
+                  `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+                );
+            }
+            return response.block.extrinsics;
+          })()
         : await api.rpc.author.pendingExtrinsics();
 
       const transformed = extrinsics.map(({ method: { method, section } }, index) => {
@@ -239,7 +239,8 @@ export const assertDockerLog = async (
       timeout
     });
   } catch {
-    throw `No matches for ${searchString} in container ${containerName} after ${timeout / 1000
+    throw `No matches for ${searchString} in container ${containerName} after ${
+      timeout / 1000
     } seconds.`;
   }
 };

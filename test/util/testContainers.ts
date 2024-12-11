@@ -16,7 +16,7 @@ export class DevTestContext implements AsyncDisposable {
   #disposed = false;
   #initialized = false;
 
-  constructor(public readonly options?: TCTestOptions) { }
+  constructor(public readonly options?: TCTestOptions) {}
 
   public async initialize() {
     const { extendedApi, runningContainer } = await devnodeSetup(this.options);

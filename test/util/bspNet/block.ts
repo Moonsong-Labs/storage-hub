@@ -255,7 +255,7 @@ export async function runToNextChallengePeriodBlock(
   strictEqual(
     slashableProviders.unwrap().toNumber(),
     oldFailedSubmissionsCount.unwrapOrDefault().toNumber() +
-    api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
+      api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
   );
 
   return nextChallengeDeadline.toNumber();

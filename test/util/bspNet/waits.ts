@@ -268,10 +268,7 @@ export const waitForBspFileDeletionComplete = async (api: ApiPromise, fileKey: H
       assert(fileDeletionResult.isFalse, "File still in forest storage");
       break;
     } catch {
-      assert(
-        i !== iterations,
-        `Failed to detect BSP file deletion after ${(i * delay) / 1000}s`
-      );
+      assert(i !== iterations, `Failed to detect BSP file deletion after ${(i * delay) / 1000}s`);
     }
   }
 };

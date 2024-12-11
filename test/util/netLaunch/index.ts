@@ -45,7 +45,7 @@ export class NetworkLauncher {
   constructor(
     private readonly type: NetworkType,
     private readonly config: NetLaunchConfig
-  ) { }
+  ) {}
 
   private loadComposeFile() {
     assert(this.type, "Network type has not been set yet");
@@ -85,10 +85,7 @@ export class NetworkLauncher {
   }
 
   private populateEntities() {
-    assert(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const shServices: ShEntity[] = Object.entries(this.composeYaml.services)
       .filter(([_serviceName, service]: [string, any]) => service.image === "storage-hub:local")
       .map(([serviceName, _service]: [string, any]) => ({
@@ -102,10 +99,7 @@ export class NetworkLauncher {
 
   // TODO: Turn this into a submodule system with separate handlers for each option
   private remapComposeYaml() {
-    assert(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
 
     const composeYaml = this.composeYaml;
 
@@ -350,10 +344,7 @@ export class NetworkLauncher {
   }
 
   private getPort(serviceName: string) {
-    assert(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const service = this.composeYaml.services[serviceName];
     assert(service, `Service ${serviceName} not found in compose file`);
 

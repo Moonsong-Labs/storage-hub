@@ -129,10 +129,7 @@ export const addBspContainer = async (options?: {
 
   const chainName = api.consts.system.version.specName.toString();
 
-  assert(
-    chainName === "storage-hub-runtime",
-    `Error connecting to BSP via api ${containerName}`
-  );
+  assert(chainName === "storage-hub-runtime", `Error connecting to BSP via api ${containerName}`);
 
   await api.disconnect();
 
