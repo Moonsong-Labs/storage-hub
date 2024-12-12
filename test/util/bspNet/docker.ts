@@ -5,7 +5,7 @@ import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import { PassThrough, type Readable } from "node:stream";
 import { sleep } from "../timer";
 
@@ -58,7 +58,7 @@ export const addBspContainer = async (options?: {
 
   const bspNum = existingBsps.length;
 
-  invariant(bspNum > 0, "No existing BSP containers");
+  assert(bspNum > 0, "No existing BSP containers");
 
   const p2pPort = 30350 + bspNum;
   const rpcPort = 9888 + bspNum * 7;
@@ -69,7 +69,7 @@ export const addBspContainer = async (options?: {
 
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
-  invariant(bootNodeArg, "No bootnode found in docker args");
+  assert(bootNodeArg, "No bootnode found in docker args");
 
   let keystorePath: string;
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
@@ -123,16 +123,13 @@ export const addBspContainer = async (options?: {
     }
   }
 
-  invariant(peerId, "Failed to connect after 10s. Exiting...");
+  assert(peerId, "Failed to connect after 10s. Exiting...");
 
   const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
   const chainName = api.consts.system.version.specName.toString();
 
-  invariant(
-    chainName === "storage-hub-runtime",
-    `Error connecting to BSP via api ${containerName}`
-  );
+  assert(chainName === "storage-hub-runtime", `Error connecting to BSP via api ${containerName}`);
 
   await api.disconnect();
 
