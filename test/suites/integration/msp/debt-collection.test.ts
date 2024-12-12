@@ -2,6 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 import type { H256 } from "@polkadot/types/interfaces";
+import type { Option } from "@polkadot/types";
 
 describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -194,18 +195,18 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
         userApi.shConsts.NODE_INFOS.user.AddressId
       )
     ).unwrap();
+    const bucketOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
     const firstFileSize = (
-      await userApi.rpc.storagehubclient.getFileMetadata(bucketId, acceptedFileKey)
+      await mspApi.rpc.storagehubclient.getFileMetadata(bucketOption, acceptedFileKey)
     )
       .unwrap()
       .file_size.toNumber();
     const unitsInGigaUnit = 1024 * 1024 * 1024;
-    let expectedPaymentStreamRate = Math.round(
+    let expectedPaymentStreamRate =
       (valueProps[0].value_prop.price_per_giga_unit_of_data_per_block.toNumber() * firstFileSize) /
         unitsInGigaUnit +
-        zeroSizeBucketFixedRate
-    );
-    strictEqual(paymentStream.rate.toNumber(), expectedPaymentStreamRate);
+      zeroSizeBucketFixedRate;
+    strictEqual(paymentStream.rate.toNumber(), Math.round(expectedPaymentStreamRate));
 
     // Seal block containing the MSP's transaction response to the storage request
     await userApi.wait.mspResponseInTxPool();
@@ -274,12 +275,12 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       )
     ).unwrap();
     const secondFileSize = (
-      await userApi.rpc.storagehubclient.getFileMetadata(bucketId, fileKeys2[0])
+      await mspApi.rpc.storagehubclient.getFileMetadata(bucketOption, fileKeys2[0])
     )
       .unwrap()
       .file_size.toNumber();
     const thirdFileSize = (
-      await userApi.rpc.storagehubclient.getFileMetadata(bucketId, fileKeys2[1])
+      await mspApi.rpc.storagehubclient.getFileMetadata(bucketOption, fileKeys2[1])
     )
       .unwrap()
       .file_size.toNumber();
@@ -307,18 +308,36 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     await userApi.block.seal();
 
     // Verify that the MSP was able to charge the user after the notify period.
-    const firstPaymentStreamChargedEvent = await userApi.assert.eventPresent(
+    // Get all the PaymentStreamCharged events
+    const firstPaymentStreamChargedEvents = await userApi.assert.eventMany(
       "paymentStreams",
       "PaymentStreamCharged"
     );
+
+    // Keep only the ones that belong to the MSP, by checking the Provider ID
+    const firstPaymentStreamChargedEventsFiltered = firstPaymentStreamChargedEvents.filter((e) => {
+      const event = e.event;
+      assert(userApi.events.paymentStreams.PaymentStreamCharged.is(event));
+      return event.data.providerId.eq(DUMMY_MSP_ID);
+    });
+
+    // There should be only one PaymentStreamCharged event for the MSP
     assert(
-      userApi.events.paymentStreams.PaymentStreamCharged.is(firstPaymentStreamChargedEvent.event)
+      firstPaymentStreamChargedEventsFiltered.length === 1,
+      "Expected a single PaymentStreamCharged event"
     );
-    assert(firstPaymentStreamChargedEvent.event.data.providerId.eq(DUMMY_MSP_ID));
+
+    // Get it and check that the user account matches
+    const firstPaymentStreamChargedEvent = firstPaymentStreamChargedEvents[0];
+    assert(
+      userApi.events.paymentStreams.PaymentStreamCharged.is(firstPaymentStreamChargedEvent.event),
+      "Expected PaymentStreamCharged event"
+    );
     assert(
       firstPaymentStreamChargedEvent.event.data.userAccount.eq(
         userApi.shConsts.NODE_INFOS.user.AddressId
-      )
+      ),
+      "User account does not match"
     );
 
     // Advance many MSP charging periods to charge again, but this time with a known number of
