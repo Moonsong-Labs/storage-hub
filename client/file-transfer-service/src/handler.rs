@@ -83,10 +83,8 @@ impl PartialOrd for BucketIdWithExpiration {
 
 impl Ord for BucketIdWithExpiration {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Order by expiration first, then by bucket_id
-        self.expiration
-            .cmp(&other.expiration)
-            .then(self.bucket_id.cmp(&other.bucket_id))
+        // Order by expiration
+        self.expiration.cmp(&other.expiration)
     }
 }
 
@@ -342,7 +340,7 @@ impl Actor for FileTransferService {
                         ),
                     }
                 }
-                FileTransferServiceCommand::UnregisterBucket {
+                FileTransferServiceCommand::ScheduleUnregisterBucket {
                     bucket_id,
                     grace_period_seconds,
                     callback,

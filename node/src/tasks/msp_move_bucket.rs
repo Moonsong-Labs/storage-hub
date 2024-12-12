@@ -83,7 +83,7 @@ where
         } else {
             error!(
                 target: LOG_TARGET,
-                "Indexer is disabled but a move bucket event was received. Please enable indexer or provide a database URL for it to use this feature."
+                "Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."
             );
 
             let call = storage_hub_runtime::RuntimeCall::FileSystem(
@@ -162,6 +162,7 @@ where
             let file_metadata = file.to_file_metadata(bucket.clone());
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
+            // TODO: Check and insert before accepting the bucket move request.
             self.storage_hub_handler
                 .file_storage
                 .write()
@@ -191,6 +192,7 @@ where
 
             for chunk in 0..chunks_count {
                 for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
+                    // This can fail only if the BSP peer IDs are empty - which we already checked.
                     let peer_id = bsp_peer_ids_iter.next().unwrap();
 
                     let download_request = self
@@ -290,6 +292,7 @@ where
                 event.bucket_id,
             );
 
+            // TODO: Check and insert before accepting the bucket move request.
             if let Err(error) = forest_storage
                 .write()
                 .await

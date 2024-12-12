@@ -67,7 +67,7 @@ pub enum FileTransferServiceCommand {
         bucket_id: BucketId,
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
-    UnregisterBucket {
+    ScheduleUnregisterBucket {
         bucket_id: BucketId,
         grace_period_seconds: Option<u64>,
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
@@ -360,7 +360,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         grace_period_seconds: u64,
     ) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let command = FileTransferServiceCommand::UnregisterBucket {
+        let command = FileTransferServiceCommand::ScheduleUnregisterBucket {
             bucket_id,
             grace_period_seconds: Some(grace_period_seconds),
             callback,
@@ -374,7 +374,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// This returns as soon as the message has been dispatched (not processed) to the service.
     async fn unregister_bucket(&self, bucket_id: BucketId) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let command = FileTransferServiceCommand::UnregisterBucket {
+        let command = FileTransferServiceCommand::ScheduleUnregisterBucket {
             bucket_id,
             grace_period_seconds: None,
             callback,
