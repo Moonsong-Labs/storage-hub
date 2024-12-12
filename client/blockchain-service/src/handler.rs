@@ -50,13 +50,15 @@ use storage_hub_runtime::RuntimeEvent;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
+        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -64,9 +66,6 @@ use crate::{
         BestBlockInfo, NewBlockNotificationKind, StopStoringForInsolventUserRequest,
         SubmitProofRequest,
     },
-};
-use crate::{
-    events::FinalisedMspStoppedStoringBucket, state::OngoingProcessMspRespondStorageRequestCf,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -1250,6 +1249,21 @@ impl BlockchainService {
                                 size,
                             })
                         }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&bsp_id) {
+                                self.emit(BspConfirmStoppedStoring {
+                                    bsp_id,
+                                    file_key: file_key.into(),
+                                    new_root,
+                                });
+                            }
+                        }
                         // Ignore all other events.
                         _ => {}
                     }
@@ -1317,6 +1331,21 @@ impl BlockchainService {
                                     owner,
                                     bucket_id,
                                 })
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&bsp_id) {
+                                self.emit(FinalisedBspConfirmStoppedStoring {
+                                    bsp_id,
+                                    file_key: file_key.into(),
+                                    new_root,
+                                });
                             }
                         }
                         // Ignore all other events.

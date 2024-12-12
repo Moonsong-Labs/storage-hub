@@ -58,4 +58,6 @@ pub enum ForestStorageError<H> {
     InvalidProvingScenario,
     #[error("Failed to construct proven leaves")]
     FailedToConstructProvenLeaves,
+    #[error("Failed to copy RocksDB database to another directory")]
+    FailedToCopyRocksDB,
 }
