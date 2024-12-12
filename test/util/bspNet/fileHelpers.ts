@@ -4,7 +4,7 @@ import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
 import * as ShConsts from "./consts";
 import { sealBlock } from "./block";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import type { HexString } from "@polkadot/util/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces";
@@ -53,7 +53,7 @@ export const sendNewStorageRequest = async (
     api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
-  invariant(newStorageRequestEventDataBlob, "Event doesn't match Type");
+  assert(newStorageRequestEventDataBlob, "Event doesn't match Type");
 
   return {
     fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
@@ -101,7 +101,7 @@ export const createBucketAndSendNewStorageRequest = async (
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-  invariant(newBucketEventDataBlob, "Event doesn't match Type");
+  assert(newBucketEventDataBlob, "Event doesn't match Type");
 
   const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
     source,
@@ -134,7 +134,7 @@ export const createBucketAndSendNewStorageRequest = async (
     api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
-  invariant(newStorageRequestEventDataBlob, "Event doesn't match Type");
+  assert(newStorageRequestEventDataBlob, "Event doesn't match Type");
 
   return {
     fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
