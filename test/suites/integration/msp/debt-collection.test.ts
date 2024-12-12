@@ -3,7 +3,7 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 import type { H256 } from "@polkadot/types/interfaces";
 
-describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
+describeMspNet("Single MSP collecting debt", { only: true }, ({ before, createMspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let mspApi: EnrichedBspApi;
   let bucketId: H256;
@@ -228,11 +228,15 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     currentBlockNumber = currentBlock.number.toNumber();
     await userApi.block.skipTo(currentBlockNumber + 10 * MSP_CHARGING_PERIOD);
 
+    console.log(currentBlockNumber);
+
     // Calculate the expected rate of the payment stream and compare it to the actual rate.
     const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
       userApi.shConsts.DUMMY_MSP_ID
     );
     const bucketSize = (await userApi.query.providers.buckets(bucketId)).unwrap().size_.toNumber();
+    console.log(bucketSize);
+
     const pricePerGigaUnitOfDataPerBlock =
       valueProps[0].value_prop.price_per_giga_unit_of_data_per_block.toNumber();
     const unitsInGigaUnit = 1024 * 1024 * 1024;
@@ -246,6 +250,9 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
       )
     ).unwrap();
     const paymentStreamRate = paymentStream.rate.toNumber();
+
+    console.log(paymentStreamRate);
+    console.log(expectedRateOfPaymentStream);
     strictEqual(
       paymentStreamRate,
       expectedRateOfPaymentStream,

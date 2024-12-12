@@ -1,7 +1,7 @@
 import assert, { notEqual, strictEqual } from "node:assert";
 import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
-describeBspNet("Single BSP Volunteering", { only: true }, ({ before, createBspApi, it, createUserApi }) => {
+describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 
@@ -146,8 +146,6 @@ describeBspNet("Single BSP Volunteering", { only: true }, ({ before, createBspAp
     strictEqual(resBspId.toHuman(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
     strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
     strictEqual(resLoc.toHuman(), destination);
-    console.log(fingerprint.toString());
-    console.log(resFinger.toString());
     strictEqual(resFinger.toString(), fingerprint.toString());
     strictEqual(resMulti.length, 1);
     strictEqual(
