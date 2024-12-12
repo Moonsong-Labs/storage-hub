@@ -3,7 +3,7 @@ import fs from "node:fs";
 import tmp from "tmp";
 import * as compose from "docker-compose";
 import yaml from "yaml";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import {
   addBsp,
   BspNetTestApi,
@@ -48,19 +48,19 @@ export class NetworkLauncher {
   ) {}
 
   private loadComposeFile() {
-    invariant(this.type, "Network type has not been set yet");
+    assert(this.type, "Network type has not been set yet");
     const composeFiles = {
       bspnet: "bspnet-base-template.yml",
       fullnet: "fullnet-base-template.yml"
     } as const;
 
     // if (this.config.noisy && this.type === "fullnet") {
-    //   invariant(false, "Noisy fullnet not supported");
+    //   assert(false, "Noisy fullnet not supported");
     // }
 
     const file = this.type === "fullnet" ? composeFiles.fullnet : composeFiles.bspnet;
 
-    invariant(file, `Compose file not found for ${this.type} network`);
+    assert(file, `Compose file not found for ${this.type} network`);
 
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
@@ -71,8 +71,8 @@ export class NetworkLauncher {
   }
 
   public async getPeerId(serviceName: string) {
-    invariant(this.entities, "Entities have not been populated yet, run populateEntities() first");
-    invariant(
+    assert(this.entities, "Entities have not been populated yet, run populateEntities() first");
+    assert(
       Object.values(this.entities)
         .map(({ name }) => name)
         .includes(serviceName),
@@ -80,32 +80,26 @@ export class NetworkLauncher {
     );
 
     const port = this.entities.find((entity) => entity.name === serviceName)?.port;
-    invariant(port, `Port for service ${serviceName} not found in compose file`);
+    assert(port, `Port for service ${serviceName} not found in compose file`);
     return getContainerPeerId(`http://127.0.0.1:${port}`);
   }
 
   private populateEntities() {
-    invariant(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const shServices: ShEntity[] = Object.entries(this.composeYaml.services)
       .filter(([_serviceName, service]: [string, any]) => service.image === "storage-hub:local")
       .map(([serviceName, _service]: [string, any]) => ({
         port: this.getPort(serviceName),
         name: serviceName
       }));
-    invariant(shServices.length > 0, "No storage-hub services found in compose file");
+    assert(shServices.length > 0, "No storage-hub services found in compose file");
     this.entities = shServices;
     return this;
   }
 
   // TODO: Turn this into a submodule system with separate handlers for each option
   private remapComposeYaml() {
-    invariant(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
 
     const composeYaml = this.composeYaml;
 
@@ -252,7 +246,7 @@ export class NetworkLauncher {
             : mspService === "sh-msp-2"
               ? ShConsts.NODE_INFOS.msp2.nodeKey
               : undefined;
-        invariant(
+        assert(
           nodeKey,
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
@@ -263,7 +257,7 @@ export class NetworkLauncher {
             : mspService === "sh-msp-2"
               ? ShConsts.DUMMY_MSP_ID_2
               : undefined;
-        invariant(
+        assert(
           mspId,
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
@@ -313,10 +307,10 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
-    invariant(this.config.indexer, "Indexer must be enabled to run migrations");
+    assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
-    invariant(
+    assert(
       dieselCheck.status === 0,
       "Error running Diesel CLI. Visit https://diesel.rs/guides/getting-started for install instructions."
     );
@@ -350,15 +344,12 @@ export class NetworkLauncher {
   }
 
   private getPort(serviceName: string) {
-    invariant(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const service = this.composeYaml.services[serviceName];
-    invariant(service, `Service ${serviceName} not found in compose file`);
+    assert(service, `Service ${serviceName} not found in compose file`);
 
     const ports = service.ports;
-    invariant(Array.isArray(ports), `Ports for service ${serviceName} is in unexpected format.`);
+    assert(Array.isArray(ports), `Ports for service ${serviceName} is in unexpected format.`);
 
     for (const portMapping of ports) {
       const [external, internal] = portMapping.split(":");
@@ -602,7 +593,7 @@ export class NetworkLauncher {
     console.log(`sh-user Peer ID: ${userPeerId}`);
 
     const bspContainerName = launchedNetwork.composeYaml.services["sh-bsp"].container_name;
-    invariant(bspContainerName, "BSP container name not found in compose file");
+    assert(bspContainerName, "BSP container name not found in compose file");
     const bspIp = await getContainerIp(
       launchedNetwork.config.noisy ? "toxiproxy" : bspContainerName
     );
@@ -629,7 +620,7 @@ export class NetworkLauncher {
       );
       for (const service of mspServices) {
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
-        invariant(mspContainerName, "MSP container name not found in compose file");
+        assert(mspContainerName, "MSP container name not found in compose file");
         const mspIp = await getContainerIp(mspContainerName);
         const mspPeerId = await launchedNetwork.getPeerId(service);
         const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
@@ -641,7 +632,7 @@ export class NetworkLauncher {
             : service === "sh-msp-2"
               ? mspTwoKey.address
               : undefined;
-        invariant(
+        assert(
           mspAddress,
           `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
@@ -652,7 +643,7 @@ export class NetworkLauncher {
             : service === "sh-msp-2"
               ? ShConsts.DUMMY_MSP_ID_2
               : undefined;
-        invariant(
+        assert(
           mspId,
           `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
