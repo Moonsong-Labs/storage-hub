@@ -68,26 +68,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       [key: string]: Codec;
     };
-    crRandomness: {
-      /**
-       * Seed tolerance window
-       **/
-      maxSeedTolerance: u32 & AugmentedConst<ApiType>;
-      /**
-       * The minimum period in which a Provider can be asked to reveal and commit seeds, regardless of their stake.
-       **/
-      minSeedPeriod: u32 & AugmentedConst<ApiType>;
-      /**
-       * The ratio to convert staked balance to the seed period.
-       * This is used to determine the period in which a Provider should reveal their previous randomness and commit a new seed, based on
-       * their stake. The period is calculated as `StakeToSeedPeriod / stake`, saturating at [`Config::MinSeedPeriod`].
-       **/
-      stakeToSeedPeriod: u128 & AugmentedConst<ApiType>;
-      /**
-       * Generic const
-       **/
-      [key: string]: Codec;
-    };
     fileSystem: {
       /**
        * Penalty payed by a BSP when they forcefully stop storing a file.

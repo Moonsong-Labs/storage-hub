@@ -12,7 +12,6 @@ import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
-  PalletCrRandomnessCommitmentWithSeed,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
@@ -479,37 +478,6 @@ declare module "@polkadot/api-base/types/submittable" {
       updateBond: AugmentedSubmittable<
         (newDeposit: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [u128]
-      >;
-      /**
-       * Generic tx
-       **/
-      [key: string]: SubmittableExtrinsicFunction<ApiType>;
-    };
-    crRandomness: {
-      addRandomness: AugmentedSubmittable<
-        (
-          providerId: H256 | string | Uint8Array,
-          commitmentWithSeedToReveal:
-            | Option<PalletCrRandomnessCommitmentWithSeed>
-            | null
-            | Uint8Array
-            | PalletCrRandomnessCommitmentWithSeed
-            | {
-                commitment?: any;
-                seed?: any;
-              }
-            | string,
-          newSeedCommitment: H256 | string | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, Option<PalletCrRandomnessCommitmentWithSeed>, H256]
-      >;
-      forceInitialiseProviderCycle: AugmentedSubmittable<
-        (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
-      >;
-      forceStopProviderCycle: AugmentedSubmittable<
-        (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
       >;
       /**
        * Generic tx

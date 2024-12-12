@@ -54,12 +54,12 @@ use xcm_simulator::XcmExecutor;
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
-    CrRandomness, Hash, Hashing, Nfts, Nonce, PalletInfo, ParachainSystem, PaymentStreams,
-    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
-    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, CENTS, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
+    Hashing, Nfts, Nonce, PalletInfo, ParachainSystem, PaymentStreams, ProofsDealer, Providers,
+    Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
+    RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
+    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, CENTS, DAYS, EXISTENTIAL_DEPOSIT,
+    HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -762,7 +762,9 @@ impl pallet_proofs_dealer::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
-    // TODO: Once the client logic to submit randomness seeds is implemented, the randomness provider should be CrRandomness
+    // TODO: Once the client logic to keep track of CR randomness deadlines and execute their submissions is implemented
+    // AND after the chain has been live for enough time to have enough providers to avoid the commit-reveal randomness being
+    // gameable, the randomness provider should be CrRandomness
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod =
         runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
@@ -852,7 +854,9 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
-    type CrRandomness = CrRandomness;
+    // TODO: Replace the mocked CR randomness with the actual one when it's ready
+    // type CrRandomness = CrRandomness;
+    type CrRandomness = MockCrRandomness;
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
@@ -963,7 +967,7 @@ impl pallet_bucket_nfts::Config for Runtime {
 }
 
 /****** Commit-Reveal Randomness pallet ******/
-pub type Seed = Hash;
+/* pub type Seed = Hash;
 pub type SeedCommitment = Hash;
 
 impl pallet_cr_randomness::Config for Runtime {
@@ -983,13 +987,22 @@ parameter_types! {
     pub const MaxSeedTolerance: u32 = 10;
 }
 
-// TODO: For reviewers: how should we implement the generator/verifier/mixer? I leave a simple implementation here for now.
+// TODO: We should implement seed generation and verification with signatures instead of hashes,
+// so that we can have a more secure and decentralized randomness generation.
 pub struct SeedVerifier;
 impl pallet_cr_randomness::SeedVerifier for SeedVerifier {
     type Seed = Seed;
     type SeedCommitment = SeedCommitment;
     fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
         BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
+    }
+}
+
+pub struct SeedGenerator;
+impl pallet_cr_randomness::SeedGenerator for SeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Hashing::hash(&generator)
     }
 }
 
@@ -1003,13 +1016,22 @@ impl pallet_cr_randomness::RandomSeedMixer<Seed> for RandomSeedMixer {
         }
         Hashing::hash(&seed)
     }
-}
+} */
 
-pub struct SeedGenerator;
-impl pallet_cr_randomness::SeedGenerator for SeedGenerator {
-    type Seed = Seed;
-    fn generate_seed(generator: &[u8]) -> Self::Seed {
-        Hashing::hash(&generator)
+// TODO: Replace this mock with the actual implementation above when it is ready
+// We need this mock since `pallet-file-system` requires something that implements the CommitRevealRandomnessInterface trait
+pub struct MockCrRandomness;
+impl shp_traits::CommitRevealRandomnessInterface for MockCrRandomness {
+    type ProviderId = Hash;
+
+    fn initialise_randomness_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Ok(())
     }
 }
 /****** ****** ****** ******/

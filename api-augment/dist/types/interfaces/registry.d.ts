@@ -63,11 +63,6 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletCollatorSelectionError,
   PalletCollatorSelectionEvent,
-  PalletCrRandomnessCall,
-  PalletCrRandomnessCommitmentWithSeed,
-  PalletCrRandomnessError,
-  PalletCrRandomnessEvent,
-  PalletCrRandomnessQueueQueueError,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
   PalletFileSystemEitherAccountIdOrMspId,
@@ -357,11 +352,6 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionCandidateInfo: PalletCollatorSelectionCandidateInfo;
     PalletCollatorSelectionError: PalletCollatorSelectionError;
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
-    PalletCrRandomnessCall: PalletCrRandomnessCall;
-    PalletCrRandomnessCommitmentWithSeed: PalletCrRandomnessCommitmentWithSeed;
-    PalletCrRandomnessError: PalletCrRandomnessError;
-    PalletCrRandomnessEvent: PalletCrRandomnessEvent;
-    PalletCrRandomnessQueueQueueError: PalletCrRandomnessQueueQueueError;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;

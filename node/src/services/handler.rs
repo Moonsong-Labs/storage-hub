@@ -188,6 +188,10 @@ where
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
 
+        // TODO: When `pallet-cr-randomness` is integrated to the runtime we should also spawn the task that
+        // manages the randomness commit-reveal cycle for BSPs here.
+        // The task that manages this should be added to the `tasks` folder (name suggestion: `bsp_cr_randomness`).
+
         // BspUploadFileTask is triggered by a NewStorageRequest event, to which it responds by
         // volunteering to store the file. Then it waits for RemoteUploadRequest events, which
         // happens when the user, now aware of the BSP volunteering, submits chunks of the file,
