@@ -21,7 +21,7 @@ pub type ValuePropId<T> = HashId<T>;
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct TopUpMetadata<T: Config> {
-    /// The last block at which the provider will either forcibly top up their deposit or be marked as
+    /// The last relay chain block at which the provider will either forcibly top up their deposit or be marked as
     /// insolvent.
     ///
     /// This is the relay chain block number which the parachain is anchored to.

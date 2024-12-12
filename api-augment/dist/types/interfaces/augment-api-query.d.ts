@@ -364,7 +364,7 @@ declare module "@polkadot/api-base/types/storage" {
        * A pointer to the starting block to clean up expired storage requests.
        *
        * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-       * attempt to accelerate this block pointer as close to or up to the current block number. This
+       * attempt to advance this block pointer as close to or up to the current block number. This
        * will execute provided that there is enough remaining weight to do so.
        **/
       nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
@@ -1556,9 +1556,9 @@ declare module "@polkadot/api-base/types/storage" {
        * As a result, their provider account would be cleared from this storage.
        *
        * The `on_idle` hook will process every provider in this storage and mark them as insolvent.
-       * If a provider is marked as insolvent, the network (e.g users, other providers) can issue `add_redundancy`
-       * requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their buckets
-       * to another MSP or delete their buckets (as they normally can).
+       * If a provider is marked as insolvent, the network (e.g users, other providers) can call `issue_storage_request`
+       * with a replication target of 1 to fill a slot with another BSP if the provider who was marked as insolvent is in fact a BSP.
+       * If it was an MSP, the user can decide to move their buckets to another MSP or delete their buckets (as they normally can).
        **/
       awaitingTopUpFromProviders: AugmentedQuery<
         ApiType,
@@ -1625,7 +1625,11 @@ declare module "@polkadot/api-base/types/storage" {
        *
        * Providers are marked insolvent by the `on_idle` hook.
        *
-       * This stores the block number at which the provider was marked insolvent.
+       * This stores the tick at which the provider was marked insolvent.
+       *
+       * The tick used here is queried from the [`Config::PaymentStreams`] trait. This is because the payment
+       * streams implementation is responsible for charging users based on the time non-insolvent providers have
+       * been storing their data.
        **/
       insolventProviders: AugmentedQuery<
         ApiType,
@@ -1697,9 +1701,9 @@ declare module "@polkadot/api-base/types/storage" {
       mspCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the earliest available block to insert a new storage request expiration.
+       * A pointer to the earliest available block to insert a new provider top up expiration item.
        *
-       * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+       * This should always be greater or equal than current block + [`Config::ProviderTopUpTtl`].
        **/
       nextAvailableProviderTopUpExpirationBlock: AugmentedQuery<
         ApiType,
@@ -1711,7 +1715,7 @@ declare module "@polkadot/api-base/types/storage" {
        * A pointer to the starting block to clean up expired storage requests.
        *
        * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-       * attempt to accelerate this block pointer as close to or up to the current block number. This
+       * attempt to advance this block pointer as close to or up to the current block number. This
        * will execute provided that there is enough remaining weight to do so.
        **/
       nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &

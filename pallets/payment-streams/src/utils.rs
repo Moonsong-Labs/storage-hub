@@ -1646,7 +1646,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
             || DynamicRatePaymentStreams::<T>::contains_key(provider_id, user_account)
     }
 
-    fn has_active_payment_streams(provider_id: &Self::ProviderId) -> bool {
+    fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool {
         Self::provider_has_payment_streams(provider_id)
     }
 
@@ -1829,12 +1829,12 @@ where
         let current_tick = Self::get_current_tick();
 
         // Get the block number when the provider became insolvent (if any)
-        let provider_insolvency_block =
-            <T::ProvidersPallet as ReadProvidersInterface>::insolvency_block(*provider_id);
+        let provider_insolvency_tick =
+            <T::ProvidersPallet as ReadProvidersInterface>::insolvency_tick(*provider_id);
 
         // Adjust the last chargeable tick to exclude the time when the provider has been insolvent
-        let adjusted_last_chargeable_tick = match provider_insolvency_block {
-            Some(insolvency_block) => current_tick.min(insolvency_block),
+        let adjusted_last_chargeable_tick = match provider_insolvency_tick {
+            Some(insolvency_tick) => current_tick.min(insolvency_tick),
             None => current_tick,
         };
 

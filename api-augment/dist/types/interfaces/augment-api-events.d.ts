@@ -2343,7 +2343,7 @@ declare module "@polkadot/api-base/types/events" {
        * Event emitted when a provider has been marked as insolvent.
        *
        * This happens when the provider hasn't topped up their deposit within the grace period after being slashed
-       * and they have a capacity deficit (i.e. their capacity is below their used capacity).
+       * and they have a capacity deficit (i.e. their capacity based on their stake is below their used capacity by the files it stores).
        **/
       ProviderInsolvent: AugmentedEvent<
         ApiType,

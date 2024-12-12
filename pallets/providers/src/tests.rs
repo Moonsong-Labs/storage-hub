@@ -6,7 +6,7 @@ use crate::{
         RelayBlockGetter, SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata,
         ValueProposition, ValuePropositionWithId,
     },
-    Error, Event, MainStorageProviders,
+    Error, Event, InsolventProviders, MainStorageProviders,
 };
 
 use frame_support::traits::fungible::MutateHold;
@@ -3255,8 +3255,6 @@ mod change_capacity {
 
         /// This module holds the failure cases for changing the capacity of Main Storage Providers
         mod msp {
-            use crate::InsolventProviders;
-
             use super::*;
 
             #[test]
@@ -3502,8 +3500,6 @@ mod change_capacity {
 
         /// This module holds the failure cases for changing the capacity of Backup Storage Providers
         mod bsp {
-            use crate::InsolventProviders;
-
             use super::*;
 
             #[test]
@@ -4896,8 +4892,6 @@ mod slash_and_top_up {
         use frame_support::traits::tokens::{Fortitude, Precision};
         use sp_core::H256;
 
-        use crate::InsolventProviders;
-
         use super::*;
 
         #[test]
@@ -5533,8 +5527,6 @@ mod multiaddresses {
     use super::*;
 
     mod failure {
-        use crate::InsolventProviders;
-
         use super::*;
 
         #[test]
@@ -5885,8 +5877,6 @@ mod multiaddresses {
 mod add_value_prop {
     use super::*;
     mod failure {
-        use crate::InsolventProviders;
-
         use super::*;
 
         #[test]
@@ -6159,9 +6149,6 @@ mod delete_provider {
     use super::*;
 
     mod failure {
-
-        use crate::InsolventProviders;
-
         use super::*;
 
         #[test]
@@ -6222,8 +6209,6 @@ mod delete_provider {
     }
 
     mod success {
-        use crate::InsolventProviders;
-
         use super::*;
 
         #[test]

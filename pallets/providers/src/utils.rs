@@ -1077,9 +1077,6 @@ where
         )
     }
 
-    /// Delete the provider iff they have no payment streams and they are marked as insolvent.
-    ///
-    /// Anyone can call this.
     pub(crate) fn do_delete_provider(provider_id: &ProviderIdFor<T>) -> Result<(), DispatchError> {
         ensure!(
             Self::can_delete_provider(provider_id),
@@ -1245,7 +1242,7 @@ where
     ) -> Result<(), DispatchError> {
         // If the user in insolvent (inactive in the system), proceed to delete the payment stream if it still exists
         if <T::PaymentStreams as ReadUserSolvencyInterface>::is_user_insolvent(&user_id) {
-            if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(
+            if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
                 &msp_id, &user_id,
             ) {
                 <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
@@ -1510,7 +1507,7 @@ where
     ) -> Result<RelayBlockNumber<T>, DispatchError> {
         let block_number = block_number.into();
         RelayBlockNumber::<T>::try_from(block_number)
-            .map_err(|_| Error::<T>::BlockNumberConversionFailed.into())
+            .map_err(|_| Error::<T>::BlockNumberToRelayBlockNumberConversionFailed.into())
     }
 }
 
@@ -2117,7 +2114,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         InsolventProviders::<T>::get(&who).is_some()
     }
 
-    fn insolvency_block(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
+    fn insolvency_tick(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
         InsolventProviders::<T>::get(&who)
     }
 }
@@ -2257,7 +2254,7 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
 
         // If the user is insolvent, delete the payment stream between the user and the provider if it still exists.
         if <T::PaymentStreams as ReadUserSolvencyInterface>::is_user_insolvent(&owner) {
-            if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(
+            if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
                 &provider_id,
                 &owner,
             ) {
@@ -2411,6 +2408,10 @@ where
         Ok(stake)
     }
 
+    /// Determines if a provider can be deleted based on the following criteria:
+    ///
+    /// - Provider must be marked as insolvent
+    /// - Provider must not have any payment streams
     pub fn can_delete_provider(provider_id: &ProviderIdFor<T>) -> bool {
         // Provider must be insolvent
         if !InsolventProviders::<T>::contains_key(provider_id) {
@@ -2418,7 +2419,7 @@ where
         }
 
         // Provider must not have any payment streams
-        if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_streams(provider_id) {
+        if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(provider_id) {
             return false;
         }
 
@@ -2443,8 +2444,10 @@ where
 mod hooks {
     use crate::{
         pallet,
+        types::RelayBlockGetter,
         utils::{BlockNumberFor, ProviderIdFor},
-        HoldReason, InsolventProviders, NextStartingBlockToCleanUp, Pallet,
+        AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
+        MainStorageProviders, NextStartingBlockToCleanUp, Pallet, ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2458,11 +2461,6 @@ mod hooks {
     use sp_runtime::{
         traits::{BlockNumberProvider, One, Zero},
         Saturating,
-    };
-
-    use super::{
-        types::RelayBlockGetter, AwaitingTopUpFromProviders, BackupStorageProviders, Event,
-        MainStorageProviders, ProviderTopUpExpirations,
     };
 
     impl<T: pallet::Config> Pallet<T> {

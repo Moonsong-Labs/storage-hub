@@ -4385,7 +4385,7 @@ export default {
       "BucketSizeExceedsLimit",
       "BucketHasNoValueProposition",
       "MaxBlockNumberReached",
-      "BlockNumberConversionFailed",
+      "BlockNumberToRelayBlockNumberConversionFailed",
       "OperationNotAllowedForInsolventProvider",
       "DeleteProviderConditionsNotMet",
       "InvalidEncodedFileMetadata",

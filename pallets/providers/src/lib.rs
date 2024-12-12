@@ -32,8 +32,6 @@ use types::{
 pub mod pallet {
     use super::{types::*, weights::WeightInfo};
     use codec::{FullCodec, HasCompact};
-    use frame_support::traits::Randomness;
-    use frame_support::weights::WeightMeter;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -44,6 +42,7 @@ pub mod pallet {
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
+    use frame_support::{traits::Randomness, weights::WeightMeter};
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
@@ -297,6 +296,10 @@ pub mod pallet {
         type BenchmarkHelpers: crate::benchmarking::BenchmarkHelpers<Self>;
 
         /// Time-to-live for a provider to top up their deposit to cover a capacity deficit.
+        ///
+        /// This TTL is used to determine at what point to insert the expiration item in the [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at the time when the relay chain block number has been reached.
+        ///
+        /// This uses the relay chain block number for consistent time tracking based on 6 second timeslots.
         #[pallet::constant]
         type ProviderTopUpTtl: Get<RelayChainBlockNumber>;
 
@@ -468,9 +471,9 @@ pub mod pallet {
     /// As a result, their provider account would be cleared from this storage.
     ///
     /// The `on_idle` hook will process every provider in this storage and mark them as insolvent.
-    /// If a provider is marked as insolvent, the network (e.g users, other providers) can issue `add_redundancy`
-    /// requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their buckets
-    /// to another MSP or delete their buckets (as they normally can).
+    /// If a provider is marked as insolvent, the network (e.g users, other providers) can call `issue_storage_request`
+    /// with a replication target of 1 to fill a slot with another BSP if the provider who was marked as insolvent is in fact a BSP.
+    /// If it was an MSP, the user can decide to move their buckets to another MSP or delete their buckets (as they normally can).
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata<T>>;
@@ -491,9 +494,9 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// A pointer to the earliest available block to insert a new storage request expiration.
+    /// A pointer to the earliest available block to insert a new provider top up expiration item.
     ///
-    /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+    /// This should always be greater or equal than current block + [`Config::ProviderTopUpTtl`].
     #[pallet::storage]
     pub type NextAvailableProviderTopUpExpirationBlock<T: Config> =
         StorageValue<_, RelayBlockNumber<T>, ValueQuery>;
@@ -501,7 +504,7 @@ pub mod pallet {
     /// A pointer to the starting block to clean up expired storage requests.
     ///
     /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to accelerate this block pointer as close to or up to the current block number. This
+    /// attempt to advance this block pointer as close to or up to the current block number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
@@ -510,7 +513,11 @@ pub mod pallet {
     ///
     /// Providers are marked insolvent by the `on_idle` hook.
     ///
-    /// This stores the block number at which the provider was marked insolvent.
+    /// This stores the tick at which the provider was marked insolvent.
+    ///
+    /// The tick used here is queried from the [`Config::PaymentStreams`] trait. This is because the payment
+    /// streams implementation is responsible for charging users based on the time non-insolvent providers have
+    /// been storing their data.
     #[pallet::storage]
     pub type InsolventProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TickNumberFor<T>>;
@@ -609,7 +616,7 @@ pub mod pallet {
         /// Event emitted when a provider has been marked as insolvent.
         ///
         /// This happens when the provider hasn't topped up their deposit within the grace period after being slashed
-        /// and they have a capacity deficit (i.e. their capacity is below their used capacity).
+        /// and they have a capacity deficit (i.e. their capacity based on their stake is below their used capacity by the files it stores).
         ProviderInsolvent { provider_id: ProviderIdFor<T> },
 
         /// Event emitted when a bucket's root has been changed.
@@ -747,7 +754,7 @@ pub mod pallet {
         /// Congratulations, you either lived long enough or were born late enough to see this error.
         MaxBlockNumberReached,
         /// Failed thrown when trying to convert a type to a block number.
-        BlockNumberConversionFailed,
+        BlockNumberToRelayBlockNumberConversionFailed,
         /// Operation not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
         /// Failed to delete a provider due to conditions not being met.
@@ -1396,7 +1403,6 @@ pub mod pallet {
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         ///
-        /// This is a free operation.
         ///
         /// This is a free operation.
         #[pallet::call_index(13)]

@@ -383,7 +383,7 @@ pub mod pallet {
     /// A pointer to the starting block to clean up expired storage requests.
     ///
     /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to accelerate this block pointer as close to or up to the current block number. This
+    /// attempt to advance this block pointer as close to or up to the current block number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;

@@ -622,7 +622,7 @@ pub trait ReadProvidersInterface {
     fn is_provider_insolvent(who: Self::ProviderId) -> bool;
 
     /// Get the block number of the last time the provider was insolvent.
-    fn insolvency_block(who: Self::ProviderId) -> Option<Self::TickNumber>;
+    fn insolvency_tick(who: Self::ProviderId) -> Option<Self::TickNumber>;
 }
 
 /// A trait to mutate the state of a generic Provider, such as updating their root.
@@ -1024,7 +1024,7 @@ pub trait PaymentStreamsInterface {
     ) -> bool;
 
     /// Check if a provider has any active payment streams.
-    fn has_active_payment_streams(provider_id: &Self::ProviderId) -> bool;
+    fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool;
 
     /// Add a priviledge provider to the PriviledgerProvider storage.
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;

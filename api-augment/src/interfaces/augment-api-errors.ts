@@ -1050,7 +1050,7 @@ declare module "@polkadot/api-base/types/errors" {
       /**
        * Failed thrown when trying to convert a type to a block number.
        **/
-      BlockNumberConversionFailed: AugmentedError<ApiType>;
+      BlockNumberToRelayBlockNumberConversionFailed: AugmentedError<ApiType>;
       /**
        * Error thrown when a bucket ID already exists in storage.
        **/

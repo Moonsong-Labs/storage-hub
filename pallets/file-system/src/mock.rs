@@ -158,19 +158,6 @@ parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
     pub const ExistentialDeposit: u128 = 1;
-
-    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
-    pub const SpMinDeposit: Balance = 10 * UNITS;
-    pub const StakeToChallengePeriod: Balance = STAKE_TO_CHALLENGE_PERIOD;
-    pub const ChallengeTicksTolerance: BlockNumberFor<Test> = 10;
-    pub const CheckpointChallengePeriod: u64 = {
-        const STAKE_TO_CHALLENGE_PERIOD: u128 = StakeToChallengePeriod::get();
-        const SP_MIN_DEPOSIT: u128 = SpMinDeposit::get();
-        const CHALLENGE_TICKS_TOLERANCE: u128 = ChallengeTicksTolerance::get() as u128;
-        ((STAKE_TO_CHALLENGE_PERIOD / SP_MIN_DEPOSIT)
-            .saturating_add(CHALLENGE_TICKS_TOLERANCE)
-            .saturating_add(1)) as u64
-    };
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -319,6 +306,11 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
     }
 }
 
+parameter_types! {
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+    pub const SpMinDeposit: Balance = 10 * UNITS;
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
@@ -412,6 +404,19 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
     fn get() -> Perbill {
         Perbill::from_percent(50)
     }
+}
+
+parameter_types! {
+    pub const StakeToChallengePeriod: Balance = STAKE_TO_CHALLENGE_PERIOD;
+    pub const ChallengeTicksTolerance: BlockNumberFor<Test> = 10;
+    pub const CheckpointChallengePeriod: u64 = {
+        const STAKE_TO_CHALLENGE_PERIOD: u128 = StakeToChallengePeriod::get();
+        const SP_MIN_DEPOSIT: u128 = SpMinDeposit::get();
+        const CHALLENGE_TICKS_TOLERANCE: u128 = ChallengeTicksTolerance::get() as u128;
+        ((STAKE_TO_CHALLENGE_PERIOD / SP_MIN_DEPOSIT)
+            .saturating_add(CHALLENGE_TICKS_TOLERANCE)
+            .saturating_add(1)) as u64
+    };
 }
 
 impl pallet_proofs_dealer::Config for Test {
