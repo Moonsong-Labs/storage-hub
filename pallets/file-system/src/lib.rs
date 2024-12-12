@@ -65,6 +65,7 @@ pub mod pallet {
         },
         BoundedVec,
     };
+    use sp_weights::WeightMeter;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -286,6 +287,10 @@ pub mod pallet {
         /// Deposit held from the User when creating a new storage request
         #[pallet::constant]
         type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
+
+        /// Default replication target
+        #[pallet::constant]
+        type DefaultReplicationTarget: Get<ReplicationTargetType<Self>>;
     }
 
     #[pallet::pallet]
@@ -430,11 +435,10 @@ pub mod pallet {
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
-    /// Number of BSPs required to fulfill a storage request
-    ///
-    /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
+    /// Maximum number replication target allowed to be set for a storage request to be fulfilled.
     #[pallet::storage]
-    pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
+    pub type MaxReplicationTarget<T: Config> =
+        StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
     /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
@@ -442,20 +446,21 @@ pub mod pallet {
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
-        pub replication_target: ReplicationTargetType<T>,
+        pub max_replication_target: ReplicationTargetType<T>,
         pub tick_range_to_maximum_threshold: TickNumber<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
-            let replication_target = 1u32.into();
+            // TODO: Find a better default value for this.
+            let max_replication_target = 10u32.into();
             let tick_range_to_maximum_threshold = 10u32.into();
 
-            ReplicationTarget::<T>::put(replication_target);
+            MaxReplicationTarget::<T>::put(max_replication_target);
             TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
 
             Self {
-                replication_target,
+                max_replication_target,
                 tick_range_to_maximum_threshold,
             }
         }
@@ -464,7 +469,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            ReplicationTarget::<T>::put(self.replication_target);
+            MaxReplicationTarget::<T>::put(self.max_replication_target);
             TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
         }
     }
@@ -664,7 +669,9 @@ pub mod pallet {
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
-        BspsRequiredExceedsTarget,
+        ReplicationTargetExceedsMaximum,
+        /// Max replication target cannot be smaller than default replication target.
+        MaxReplicationTargetSmallerThanDefault,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
@@ -792,6 +799,10 @@ pub mod pallet {
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
         RootNotUpdated,
+        /// Privacy update results in no change
+        NoPrivacyChange,
+        /// Operations not allowed for insolvent provider
+        OperationNotAllowedForInsolventProvider,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -961,6 +972,7 @@ pub mod pallet {
             size: StorageData<T>,
             msp_id: Option<ProviderIdFor<T>>,
             peer_ids: PeerIds<T>,
+            replication_target: Option<ReplicationTargetType<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -973,7 +985,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 msp_id,
-                None,
+                replication_target,
                 Some(peer_ids.clone()),
             )?;
 
@@ -1280,19 +1292,24 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn set_global_parameters(
             origin: OriginFor<T>,
-            replication_target: Option<T::ReplicationTargetType>,
+            new_max_replication_target: Option<T::ReplicationTargetType>,
             tick_range_to_maximum_threshold: Option<TickNumber<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
 
-            if let Some(replication_target) = replication_target {
+            if let Some(new_max_replication_target) = new_max_replication_target {
                 ensure!(
-                    replication_target > T::ReplicationTargetType::zero(),
+                    new_max_replication_target > T::ReplicationTargetType::zero(),
                     Error::<T>::ReplicationTargetCannotBeZero
                 );
 
-                ReplicationTarget::<T>::put(replication_target);
+                ensure!(
+                    new_max_replication_target >= T::DefaultReplicationTarget::get(),
+                    Error::<T>::MaxReplicationTargetSmallerThanDefault
+                );
+
+                MaxReplicationTarget::<T>::put(new_max_replication_target);
             }
 
             if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {
@@ -1320,11 +1337,22 @@ pub mod pallet {
         }
 
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
-            let mut remaining_weight = remaining_weight;
+            let mut meter = WeightMeter::with_limit(remaining_weight);
+            Self::do_on_idle(current_block, &mut meter);
 
-            Self::do_on_idle(current_block, &mut remaining_weight);
+            meter.consumed()
+        }
 
-            remaining_weight
+        /// Any code located in this hook is placed in an auto-generated test, and generated as a part
+        /// of crate::construct_runtime's expansion.
+        /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
+        fn integrity_test() {
+            let default_replication_target = T::DefaultReplicationTarget::get();
+
+            assert!(
+                default_replication_target > T::ReplicationTargetType::zero(),
+                "Default replication target cannot be zero."
+            );
         }
     }
 }

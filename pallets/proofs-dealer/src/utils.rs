@@ -234,7 +234,8 @@ where
         // have included proofs for those checkpoint challenges.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         let mut checkpoint_challenges = None;
-        if last_tick_proven <= last_checkpoint_tick && last_checkpoint_tick < challenges_tick {
+
+        if last_tick_proven <= last_checkpoint_tick && last_checkpoint_tick <= challenges_tick {
             // Add challenges from the Checkpoint Challenge block.
             checkpoint_challenges =
                 Some(expect_or_err!(

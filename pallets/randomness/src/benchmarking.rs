@@ -1,7 +1,5 @@
 //! Benchmarking setup for pallet-randomness
 
-#![cfg(feature = "runtime-benchmarks")]
-
 use super::*;
 use frame_benchmarking::v2::*;
 
