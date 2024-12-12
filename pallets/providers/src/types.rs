@@ -158,7 +158,9 @@ pub struct MainStorageProviderSignUpRequest<T: Config> {
 
 /// Enum that represents a Storage Provider ID. It holds either a BackupStorageProviderId or a MainStorageProviderId,
 /// allowing to operate generically with both types.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[derive(
+    Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone, Copy,
+)]
 #[scale_info(skip_type_params(T))]
 pub enum StorageProviderId<T: Config> {
     BackupStorageProvider(BackupStorageProviderId<T>),

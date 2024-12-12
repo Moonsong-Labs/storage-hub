@@ -481,7 +481,7 @@ pub trait ProvidesTypedDbAccess: ProvidesDbContext {
     fn access<'a, CF: TypedCf>(
         &'a self,
         cf: &'a CF,
-    ) -> TypedCfApi<'a, '_, '_, CF, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>> {
+    ) -> TypedCfApi<'a, 'a, 'a, CF, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>> {
         self.db_context().cf(cf)
     }
 }
