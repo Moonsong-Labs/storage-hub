@@ -23,6 +23,8 @@ smallvec = { workspace = true }
 scale-info = { workspace = true }
 
 # Local
+pallet-bucket-nfts = { workspace = true }
+pallet-cr-randomness = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
@@ -30,7 +32,6 @@ pallet-storage-providers-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
-pallet-bucket-nfts = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 
@@ -132,6 +133,7 @@ std = [
 	"pallet-authorship/std",
 	"pallet-balances/std",
 	"pallet-collator-selection/std",
+	"pallet-cr-randomness/std",
 	"pallet-file-system/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
@@ -192,6 +194,7 @@ runtime-benchmarks = [
 	"hex-literal",
 	"pallet-balances/runtime-benchmarks",
 	"pallet-collator-selection/runtime-benchmarks",
+	"pallet-cr-randomness/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-message-queue/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
@@ -226,6 +229,7 @@ try-runtime = [
 	"pallet-authorship/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-collator-selection/try-runtime",
+	"pallet-cr-randomness/try-runtime",
 	"pallet-file-system/try-runtime",
 	"pallet-message-queue/try-runtime",
 	"pallet-nfts/try-runtime",

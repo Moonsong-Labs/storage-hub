@@ -12,6 +12,8 @@ use tokio::sync::{oneshot, Mutex};
 
 use crate::types::{ConfirmStoringRequest, RespondStorageRequest};
 
+// TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
+
 /// New random challenge emitted by the StorageHub runtime.
 ///
 /// This event is emitted when there's a new random challenge seed that affects this

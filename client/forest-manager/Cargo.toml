@@ -50,4 +50,5 @@ std = [
 	"shp-traits/std",
 	"sp-trie/std",
 	"shc-common/std",
+	"trie-db/std",
 ]
