@@ -5,7 +5,6 @@ import { sealBlock } from "./block";
 import assert from "node:assert";
 import type { Address, H256 } from "@polkadot/types/interfaces";
 import type { WaitForTxOptions } from "./test-api";
-import invariant from "tiny-invariant";
 
 /**
  * Generic function to wait for a transaction in the pool
@@ -33,7 +32,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
         timeout
       });
       if (checkQuantity) {
-        invariant(
+        assert(
           matches.length === checkQuantity,
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
         );
