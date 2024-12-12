@@ -1,7 +1,7 @@
 import "@polkadot/api-augment/kusama";
 import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import { sleep } from "./timer";
 
 export type ZombieClients = Promise<{
@@ -56,7 +56,7 @@ export const waitForChain = async (
       await sleep(1000);
     }
 
-    invariant(
+    assert(
       performance.now() - startTime < (options?.timeoutMs || 60_000),
       "Timeout waiting for chain to be ready"
     );
@@ -80,7 +80,7 @@ export const waitForRandomness = async (api: ApiPromise, timeoutMs = 60_000) => 
           reject(new Error("Randomness value is undefined"));
         }
         if (valueCount === 2) {
-          invariant(data, "Randomness value is undefined");
+          assert(data, "Randomness value is undefined");
           clearTimeout(timeout);
           unsub();
           resolve(data);

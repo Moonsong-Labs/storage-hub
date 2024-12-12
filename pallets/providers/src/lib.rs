@@ -46,7 +46,10 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface};
+    use shp_traits::{
+        FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+        ReadUserSolvencyInterface,
+    };
     use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv, ConvertBack, Hash};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -63,11 +66,11 @@ pub mod pallet {
 
         /// Trait that allows the pallet to update payment streams of its Providers and Users
         type PaymentStreams: PaymentStreamsInterface<
-            Balance = Self::NativeBalance,
-            AccountId = Self::AccountId,
-            ProviderId = ProviderIdFor<Self>,
-            Units = Self::StorageDataUnit,
-        >;
+                Balance = Self::NativeBalance,
+                AccountId = Self::AccountId,
+                ProviderId = ProviderIdFor<Self>,
+                Units = Self::StorageDataUnit,
+            > + ReadUserSolvencyInterface<AccountId = Self::AccountId>;
 
         /// Trait that allows the pallet to manage generic file metadatas
         type FileMetadataManager: FileMetadataInterface<

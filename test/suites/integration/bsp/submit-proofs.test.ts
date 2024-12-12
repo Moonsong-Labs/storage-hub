@@ -1,5 +1,4 @@
 import assert, { strictEqual } from "node:assert";
-import invariant from "tiny-invariant";
 import {
   ShConsts,
   bspThreeKey,
@@ -25,7 +24,7 @@ describeBspNet(
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      invariant(
+      assert(
         launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
         "BSPNet failed to initialise with required ports"
       );

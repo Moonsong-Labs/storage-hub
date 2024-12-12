@@ -4629,7 +4629,7 @@ mod decrease_bucket_size {
         use super::*;
 
         #[test]
-        fn increase_bucket_size_works() {
+        fn increase_and_decrease_bucket_size_works() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -4736,6 +4736,37 @@ mod decrease_bucket_size {
                     assert_eq!(actual_rate, expected_rate);
                 }
             });
+        }
+
+        #[test]
+        fn decrease_bucket_size_deletes_payment_stream_if_user_is_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+				let alice = accounts::ALICE.0;
+				let storage_amount: StorageDataUnit<Test> = 100;
+				let (_deposit_amount, _alice_msp, value_prop_id) = register_account_as_msp(alice, storage_amount, Some(10), Some(100));
+				let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+				let bucket_owner = accounts::BOB.0;
+				let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+				let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(&bucket_owner, bucket_name);
+
+				// Add a bucket for Alice
+				assert_ok!(StorageProviders::add_bucket(Some(msp_id), bucket_owner, bucket_id, false, None, Some(value_prop_id)));
+
+				// Check that a payment stream between Alice and Bob exists now
+				assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&msp_id, &bucket_owner));
+
+				// Make Bob insolvent
+				pallet_payment_streams::UsersWithoutFunds::<Test>::insert(&bucket_owner, System::block_number());
+
+				// Decrease the bucket size. This should also delete the payment stream
+				assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, 50));
+
+				// Check that the payment stream was deleted
+				assert!(!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&msp_id, &bucket_owner));
+
+				// Decrease the bucket size again. This should not fail
+				assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, 50));
+			});
         }
 
         #[test]

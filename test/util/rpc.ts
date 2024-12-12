@@ -1,5 +1,5 @@
 import { sleep } from "@zombienet/utils";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 
 export const sendCustomRpc = async (url: string, method: string, params = [], verbose = false) => {
   const maxRetries = 50;
@@ -24,7 +24,7 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
         body: JSON.stringify(payload)
       });
 
-      invariant(response.ok, `HTTP error! status: ${response.status}`);
+      assert(response.ok, `HTTP error! status: ${response.status}`);
 
       const resp = (await response.json()) as any;
       return resp.result as string;
