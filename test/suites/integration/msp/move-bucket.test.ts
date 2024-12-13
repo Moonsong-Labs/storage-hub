@@ -1,4 +1,5 @@
-import { strictEqual, assert } from "node:assert";
+import { strictEqual } from "node:assert";
+import assert from "node:assert";
 import {
   waitFor,
   assertEventPresent,
