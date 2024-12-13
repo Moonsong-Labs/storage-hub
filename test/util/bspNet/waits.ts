@@ -309,6 +309,22 @@ export const waitForBspToCatchUpToChainTip = async (
   }
 };
 
+export const waitForBlockImported = async (api: ApiPromise, blockHash: string) => {
+  // To allow time for BSP to catch up to the tip of the chain (10s)
+  const iterations = 100;
+  const delay = 100;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const block = await api.rpc.chain.getBlock(blockHash);
+      assert(block.block.header.number.toNumber() > 0, "Block not imported");
+      break;
+    } catch {
+      assert(i !== iterations, `Failed to detect block imported after ${(i * delay) / 1000}s`);
+    }
+  }
+};
+
 /**
  * Waits for a MSP to respond to storage requests.
  *
