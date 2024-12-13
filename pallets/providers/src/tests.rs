@@ -3311,7 +3311,10 @@ mod change_capacity {
                     let alice_msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
                     // Simulate insolvent provider
-                    InsolventProviders::<Test>::insert(&alice_msp_id, System::block_number());
+                    InsolventProviders::<Test>::insert(
+                        StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                        System::block_number(),
+                    );
 
                     // Try to change the capacity of Alice before enough time has passed
                     assert_noop!(
@@ -3568,7 +3571,10 @@ mod change_capacity {
                     let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
 
                     // Simulate insolvent provider
-                    InsolventProviders::<Test>::insert(&alice_bsp_id, System::block_number());
+                    InsolventProviders::<Test>::insert(
+                        StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
+                        System::block_number(),
+                    );
 
                     // Check the total capacity of the network (BSPs)
                     assert_eq!(
@@ -4994,7 +5000,10 @@ mod slash_and_top_up {
                     crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 // Simulate insolvent provider
-                InsolventProviders::<Test>::insert(&alice_msp_id, 1);
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                    1,
+                );
 
                 // Try to top up a provider that does not have enough balance to cover the held deposit
                 assert_noop!(
@@ -5010,7 +5019,10 @@ mod slash_and_top_up {
                     crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
 
                 // Simulate insolvent provider
-                InsolventProviders::<Test>::insert(&bob_bsp_id, 1);
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::BackupStorageProvider(bob_bsp_id),
+                    1,
+                );
 
                 // Try to top up a provider that does not have enough balance to cover the held deposit
                 assert_noop!(
@@ -5218,7 +5230,10 @@ mod slash_and_top_up {
                     );
 
                     // Check that the storage has been cleared
-                    assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+                    assert!(AwaitingTopUpFromProviders::<Test>::get(
+                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
+                    )
+                    .is_none());
 
                     // Check that the provider's capacity is equal to used capacity
                     assert_eq!(
@@ -5249,8 +5264,10 @@ mod slash_and_top_up {
                     assert_eq!(NativeBalance::free_balance(self.account), pre_state_balance);
 
                     // Check that the AwaitingTopUpFromProviders storage has been updated
-                    let top_up_metadata =
-                        AwaitingTopUpFromProviders::<Test>::get(self.provider_id).unwrap();
+                    let top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                    )
+                    .unwrap();
                     assert_eq!(
                         top_up_metadata.end_block_grace_period,
                         end_block_grace_period
@@ -5260,7 +5277,10 @@ mod slash_and_top_up {
                     assert!(
                         ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
                             .iter()
-                            .any(|provider_id| *provider_id == self.provider_id)
+                            .any(|provider_id| *provider_id
+                                == StorageProviderId::<Test>::MainStorageProvider(
+                                    self.provider_id
+                                ))
                     );
 
                     // Check that the provider's capacity was reduced by the converted slash amount (storage data units)
@@ -5352,10 +5372,14 @@ mod slash_and_top_up {
                 assert!(
                     ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
                         .iter()
-                        .any(|provider_id| *provider_id == self.provider_id)
+                        .any(|provider_id| *provider_id
+                            == StorageProviderId::<Test>::MainStorageProvider(self.provider_id))
                 );
                 // Check that the storage has been cleared
-                assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+                assert!(AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
+                )
+                .is_none());
             }
 
             fn wait_for_top_up_expiration(&self) {
@@ -5378,13 +5402,19 @@ mod slash_and_top_up {
                 assert!(
                     ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
                         .iter()
-                        .all(|provider_id| *provider_id != self.provider_id)
+                        .all(|provider_id| *provider_id
+                            != StorageProviderId::<Test>::MainStorageProvider(self.provider_id))
                 );
                 // Storage should be cleared
-                assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+                assert!(AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
+                )
+                .is_none());
 
                 // Held deposit was slashed
-                if let Some(block) = InsolventProviders::<Test>::get(&self.provider_id) {
+                if let Some(block) = InsolventProviders::<Test>::get(
+                    &StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                ) {
                     // Block stored should be the current local block number
                     assert_eq!(block, <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::current_tick());
 
@@ -5498,7 +5528,10 @@ mod slash_and_top_up {
                 alice_test_setup.wait_for_top_up_expiration();
 
                 // Check that the provider is marked as insolvent
-                assert!(InsolventProviders::<Test>::get(alice_test_setup.provider_id).is_some());
+                assert!(InsolventProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id)
+                )
+                .is_some());
             });
         }
 
@@ -5517,7 +5550,10 @@ mod slash_and_top_up {
                 alice_test_setup.wait_for_top_up_expiration();
 
                 // Check that the provider was not marked as insolvent
-                assert!(InsolventProviders::<Test>::get(alice_test_setup.provider_id).is_none());
+                assert!(InsolventProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id)
+                )
+                .is_none());
             });
         }
     }
@@ -5602,7 +5638,10 @@ mod multiaddresses {
                     crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 // Simulate insolvent provider
-                InsolventProviders::<Test>::insert(alice_msp_id, 1);
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                    1,
+                );
 
                 assert_noop!(
                     StorageProviders::add_multiaddress(
@@ -5627,7 +5666,10 @@ mod multiaddresses {
                     crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
 
                 // Simulate insolvent provider
-                InsolventProviders::<Test>::insert(bob_bsp_id, 1);
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::BackupStorageProvider(bob_bsp_id),
+                    1,
+                );
 
                 assert_noop!(
                     StorageProviders::add_multiaddress(
@@ -5939,7 +5981,10 @@ mod add_value_prop {
 
                 let alice_msp_id = StorageProviders::get_provider_id(alice).unwrap();
                 // Simulate insolvent provider
-                InsolventProviders::<Test>::insert(alice_msp_id, 1);
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                    1,
+                );
 
                 assert_noop!(
                     StorageProviders::add_value_prop(
@@ -6196,7 +6241,7 @@ mod delete_provider {
                 ));
 
                 InsolventProviders::<Test>::insert(
-                    msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -6222,7 +6267,7 @@ mod delete_provider {
                 let msp_id = StorageProviders::get_provider_id(alice).unwrap();
 
                 InsolventProviders::<Test>::insert(
-                    msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 

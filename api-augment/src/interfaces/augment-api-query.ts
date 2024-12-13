@@ -63,6 +63,7 @@ import type {
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
   PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
@@ -1505,11 +1506,16 @@ declare module "@polkadot/api-base/types/storage" {
       awaitingTopUpFromProviders: AugmentedQuery<
         ApiType,
         (
-          arg: H256 | string | Uint8Array
+          arg:
+            | PalletStorageProvidersStorageProviderId
+            | { BackupStorageProvider: any }
+            | { MainStorageProvider: any }
+            | string
+            | Uint8Array
         ) => Observable<Option<PalletStorageProvidersTopUpMetadata>>,
-        [H256]
+        [PalletStorageProvidersStorageProviderId]
       > &
-        QueryableStorageEntry<ApiType, [H256]>;
+        QueryableStorageEntry<ApiType, [PalletStorageProvidersStorageProviderId]>;
       /**
        * The mapping from a BackupStorageProviderId to a BackupStorageProvider.
        *
@@ -1575,10 +1581,17 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       insolventProviders: AugmentedQuery<
         ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
-        [H256]
+        (
+          arg:
+            | PalletStorageProvidersStorageProviderId
+            | { BackupStorageProvider: any }
+            | { MainStorageProvider: any }
+            | string
+            | Uint8Array
+        ) => Observable<Option<u32>>,
+        [PalletStorageProvidersStorageProviderId]
       > &
-        QueryableStorageEntry<ApiType, [H256]>;
+        QueryableStorageEntry<ApiType, [PalletStorageProvidersStorageProviderId]>;
       /**
        * The double mapping from a MainStorageProviderId to a BucketIds.
        *
@@ -1673,7 +1686,9 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       providerTopUpExpirations: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
+        (
+          arg: u32 | AnyNumber | Uint8Array
+        ) => Observable<Vec<PalletStorageProvidersStorageProviderId>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;

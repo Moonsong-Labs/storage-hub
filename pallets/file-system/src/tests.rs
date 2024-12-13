@@ -24,7 +24,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
-use pallet_storage_providers::types::{Bucket, ValueProposition};
+use pallet_storage_providers::types::{Bucket, StorageProviderId, ValueProposition};
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
@@ -105,7 +105,7 @@ mod create_bucket_tests {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -437,7 +437,7 @@ mod delete_bucket_tests {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -1019,7 +1019,7 @@ mod request_move_bucket {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    msp_dave_id,
+                    StorageProviderId::<Test>::MainStorageProvider(msp_dave_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -1969,7 +1969,7 @@ mod request_storage {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &msp_id,
+                    &StorageProviderId::<Test>::MainStorageProvider(msp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -3697,7 +3697,7 @@ mod msp_respond_storage_request {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -4271,7 +4271,7 @@ mod bsp_volunteer {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(bsp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
@@ -5200,7 +5200,7 @@ mod bsp_confirm {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(bsp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 

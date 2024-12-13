@@ -474,9 +474,10 @@ pub mod pallet {
     /// If a provider is marked as insolvent, the network (e.g users, other providers) can call `issue_storage_request`
     /// with a replication target of 1 to fill a slot with another BSP if the provider who was marked as insolvent is in fact a BSP.
     /// If it was an MSP, the user can decide to move their buckets to another MSP or delete their buckets (as they normally can).
+    // TODO: use enum for ProviderIdFor
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TopUpMetadata<T>>;
+        StorageMap<_, Blake2_128Concat, StorageProviderId<T>, TopUpMetadata<T>>;
 
     /// A map of relay chain block numbers to expired provider top up period.
     ///
@@ -485,12 +486,13 @@ pub mod pallet {
     /// Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
     /// Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
     /// If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+    // TODO: use enum for ProviderIdFor
     #[pallet::storage]
     pub type ProviderTopUpExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         RelayBlockNumber<T>,
-        BoundedVec<ProviderIdFor<T>, T::MaxExpiredItemsInBlock>,
+        BoundedVec<StorageProviderId<T>, T::MaxExpiredItemsInBlock>,
         ValueQuery,
     >;
 
@@ -520,7 +522,7 @@ pub mod pallet {
     /// been storing their data.
     #[pallet::storage]
     pub type InsolventProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, TickNumberFor<T>>;
+        StorageMap<_, Blake2_128Concat, StorageProviderId<T>, TickNumberFor<T>>;
 
     // Events & Errors:
 

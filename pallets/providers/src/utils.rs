@@ -520,7 +520,8 @@ where
         let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             // Check if provider is insolvent
             ensure!(
-                InsolventProviders::<T>::get(&msp_id).is_none(),
+                InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                    .is_none(),
                 Error::<T>::OperationNotAllowedForInsolventProvider
             );
 
@@ -531,7 +532,8 @@ where
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             // Check if provider is insolvent
             ensure!(
-                InsolventProviders::<T>::get(&bsp_id).is_none(),
+                InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(bsp_id))
+                    .is_none(),
                 Error::<T>::OperationNotAllowedForInsolventProvider
             );
 
@@ -720,7 +722,8 @@ where
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             // Check if provider is insolvent
             ensure!(
-                InsolventProviders::<T>::get(&msp_id).is_none(),
+                InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                    .is_none(),
                 Error::<T>::OperationNotAllowedForInsolventProvider
             );
 
@@ -740,7 +743,8 @@ where
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             // Check if provider is insolvent
             ensure!(
-                InsolventProviders::<T>::get(&bsp_id).is_none(),
+                InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(bsp_id))
+                    .is_none(),
                 Error::<T>::OperationNotAllowedForInsolventProvider
             );
 
@@ -833,9 +837,15 @@ where
     /// - `AwaitingTopUp`: Emitted if there is a capacity deficit (i.e. the provider's capacity is falls below the used capacity) and therefore are required to top up their held deposit.
     /// This can be done manually by executing the `top_up_deposit` extrinsic.
     pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResult {
+        let typed_provider_id = if MainStorageProviders::<T>::get(provider_id).is_some() {
+            StorageProviderId::MainStorageProvider(*provider_id)
+        } else {
+            StorageProviderId::BackupStorageProvider(*provider_id)
+        };
+
         // Check if the provider is insolvent
         ensure!(
-            InsolventProviders::<T>::get(provider_id).is_none(),
+            InsolventProviders::<T>::get(&typed_provider_id).is_none(),
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
@@ -908,7 +918,7 @@ where
 
             // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
             // they will not be slashed
-            AwaitingTopUpFromProviders::<T>::remove(provider_id);
+            AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
 
             Self::deposit_event(Event::<T>::TopUpFulfilled {
                 provider_id: *provider_id,
@@ -918,8 +928,9 @@ where
             // Cannot hold enough balance, start tracking grace period and awaited top up
 
             // Queue provider top up expiration
-            let block_number_expiry =
-                Self::enqueue_expiration_item(ExpirationItem::ProviderTopUp(*provider_id))?;
+            let block_number_expiry = Self::enqueue_expiration_item(
+                ExpirationItem::ProviderTopUp(typed_provider_id.clone()),
+            )?;
 
             let top_up_metadata = TopUpMetadata {
                 end_block_grace_period: Self::convert_block_number_to_relay_block_number(
@@ -927,7 +938,10 @@ where
                 )?,
             };
 
-            AwaitingTopUpFromProviders::<T>::insert(provider_id, top_up_metadata.clone());
+            AwaitingTopUpFromProviders::<T>::insert(
+                typed_provider_id.clone(),
+                top_up_metadata.clone(),
+            );
 
             // Signal to the provider that they need to top up their held deposit to match the current used capacity
             Self::deposit_event(Event::<T>::AwaitingTopUp {
@@ -937,12 +951,19 @@ where
         }
 
         // Update the provider's capacity
-        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
-            provider.capacity = final_capacity;
-            MainStorageProviders::<T>::set(provider_id, Some(provider));
-        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
-            provider.capacity = final_capacity;
-            BackupStorageProviders::<T>::set(provider_id, Some(provider));
+        match &typed_provider_id {
+            StorageProviderId::MainStorageProvider(provider_id) => {
+                let mut provider =
+                    MainStorageProviders::<T>::get(provider_id).ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = final_capacity;
+                MainStorageProviders::<T>::insert(provider_id, provider);
+            }
+            StorageProviderId::BackupStorageProvider(provider_id) => {
+                let mut provider = BackupStorageProviders::<T>::get(provider_id)
+                    .ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = final_capacity;
+                BackupStorageProviders::<T>::insert(provider_id.clone(), provider);
+            }
         }
 
         Ok(())
@@ -959,9 +980,15 @@ where
             .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
             .ok_or(Error::<T>::NotRegistered)?;
 
+        let typed_provider_id = if MainStorageProviders::<T>::get(&provider_id).is_some() {
+            StorageProviderId::MainStorageProvider(provider_id)
+        } else {
+            StorageProviderId::BackupStorageProvider(provider_id)
+        };
+
         // Check if the provider is insolvent
         ensure!(
-            InsolventProviders::<T>::get(&provider_id).is_none(),
+            InsolventProviders::<T>::get(&typed_provider_id).is_none(),
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
@@ -1003,17 +1030,24 @@ where
         )?;
 
         // Update the provider's capacity in storage
-        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
-            provider.capacity = needed_capacity;
-            MainStorageProviders::<T>::set(provider_id, Some(provider));
-        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
-            provider.capacity = needed_capacity;
-            BackupStorageProviders::<T>::set(provider_id, Some(provider));
+        match typed_provider_id {
+            StorageProviderId::MainStorageProvider(provider_id) => {
+                let mut provider =
+                    MainStorageProviders::<T>::get(provider_id).ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = needed_capacity;
+                MainStorageProviders::<T>::insert(provider_id, provider);
+            }
+            StorageProviderId::BackupStorageProvider(provider_id) => {
+                let mut provider = BackupStorageProviders::<T>::get(provider_id)
+                    .ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = needed_capacity;
+                BackupStorageProviders::<T>::insert(provider_id, provider);
+            }
         }
 
         // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
         // they will not be slashed
-        AwaitingTopUpFromProviders::<T>::remove(provider_id);
+        AwaitingTopUpFromProviders::<T>::remove(typed_provider_id);
 
         // Signal that the slashed amount has been topped up
         Self::deposit_event(Event::<T>::TopUpFulfilled {
@@ -1035,7 +1069,8 @@ where
 
         // Check if provider is insolvent
         ensure!(
-            InsolventProviders::<T>::get(&msp_id).is_none(),
+            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                .is_none(),
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
@@ -1083,10 +1118,11 @@ where
             Error::<T>::DeleteProviderConditionsNotMet
         );
 
-        InsolventProviders::<T>::remove(provider_id);
-
         // Delete provider data
         if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+            InsolventProviders::<T>::remove(StorageProviderId::<T>::MainStorageProvider(
+                *provider_id,
+            ));
             MainStorageProviders::<T>::remove(&provider_id);
             AccountIdToMainStorageProviderId::<T>::remove(msp.owner_account);
             MspCount::<T>::mutate(|n| {
@@ -1106,6 +1142,9 @@ where
                 provider_id: *provider_id,
             });
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
+            InsolventProviders::<T>::remove(StorageProviderId::<T>::BackupStorageProvider(
+                *provider_id,
+            ));
             BackupStorageProviders::<T>::remove(&provider_id);
             AccountIdToBackupStorageProviderId::<T>::remove(bsp.owner_account);
             BspCount::<T>::mutate(|n| {
@@ -2111,11 +2150,23 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     }
 
     fn is_provider_insolvent(who: Self::ProviderId) -> bool {
-        InsolventProviders::<T>::get(&who).is_some()
+        InsolventProviders::<T>::get(&StorageProviderId::<T>::MainStorageProvider(who)).is_some()
+            || InsolventProviders::<T>::get(&StorageProviderId::<T>::BackupStorageProvider(who))
+                .is_some()
     }
 
     fn insolvency_tick(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
-        InsolventProviders::<T>::get(&who)
+        if let Some(tick) =
+            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(who))
+        {
+            Some(tick)
+        } else if let Some(tick) =
+            InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(who))
+        {
+            Some(tick)
+        } else {
+            None
+        }
     }
 }
 
@@ -2414,7 +2465,11 @@ where
     /// - Provider must not have any payment streams
     pub fn can_delete_provider(provider_id: &ProviderIdFor<T>) -> bool {
         // Provider must be insolvent
-        if !InsolventProviders::<T>::contains_key(provider_id) {
+        if !InsolventProviders::<T>::contains_key(StorageProviderId::<T>::MainStorageProvider(
+            *provider_id,
+        )) && !InsolventProviders::<T>::contains_key(
+            StorageProviderId::<T>::BackupStorageProvider(*provider_id),
+        ) {
             return false;
         }
 
@@ -2445,7 +2500,7 @@ mod hooks {
     use crate::{
         pallet,
         types::RelayBlockGetter,
-        utils::{BlockNumberFor, ProviderIdFor},
+        utils::{BlockNumberFor, StorageProviderId},
         AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
         MainStorageProviders, NextStartingBlockToCleanUp, Pallet, ProviderTopUpExpirations,
     };
@@ -2510,8 +2565,8 @@ mod hooks {
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
             // TODO: process all the expired move bucket requests. If not, we should return early.
-            while let Some(provider_id) = provider_top_up_expirations.pop() {
-                Self::process_expired_provider_top_up_period(provider_id, meter);
+            while let Some(typed_provider_id) = provider_top_up_expirations.pop() {
+                Self::process_expired_provider_top_up_period(typed_provider_id, meter);
             }
 
             // If there are remaining items which were not processed, put them back in storage
@@ -2525,7 +2580,7 @@ mod hooks {
         }
 
         fn process_expired_provider_top_up_period(
-            provider_id: ProviderIdFor<T>,
+            typed_provider_id: StorageProviderId<T>,
             meter: &mut WeightMeter,
         ) {
             let db_weight = T::DbWeight::get();
@@ -2536,7 +2591,7 @@ mod hooks {
             }
 
             // Clear awaiting top up storage
-            let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&provider_id);
+            let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
 
             // Mark the provider as insolvent if it was awaiting a top up
             // If the provider was not awaiting a top up, it means they already topped up either via an
@@ -2544,19 +2599,24 @@ mod hooks {
             let current_tick =
                 <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::current_tick();
             if maybe_awaiting_top_up.is_some() {
-                InsolventProviders::<T>::insert(provider_id, current_tick);
+                InsolventProviders::<T>::insert(typed_provider_id.clone(), current_tick);
 
-                Self::deposit_event(Event::ProviderInsolvent { provider_id });
+                Self::deposit_event(Event::ProviderInsolvent {
+                    provider_id: *typed_provider_id.inner(),
+                });
 
-                let account_id = if let Some(bsp) = BackupStorageProviders::<T>::get(&provider_id) {
+                let account_id = if let Some(bsp) =
+                    BackupStorageProviders::<T>::get(&typed_provider_id.inner())
+                {
                     bsp.owner_account
-                } else if let Some(msp) = MainStorageProviders::<T>::get(&provider_id) {
+                } else if let Some(msp) = MainStorageProviders::<T>::get(&typed_provider_id.inner())
+                {
                     msp.owner_account
                 } else {
                     log::warn!(
                         target: "runtime::providers",
                         "Could not slash any potentially remaining deposit for provider {:?} as it does not exist.",
-                        provider_id
+                        typed_provider_id
                     );
                     return;
                 };
@@ -2580,7 +2640,7 @@ mod hooks {
                         log::warn!(
                             target: "runtime::providers",
                             "Could not slash remaining deposit for provider {:?} due to error: {:?}",
-                            provider_id,
+                            typed_provider_id,
                             e
                         );
                     }

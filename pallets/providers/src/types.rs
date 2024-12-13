@@ -31,7 +31,7 @@ pub struct TopUpMetadata<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub enum ExpirationItem<T: Config> {
-    ProviderTopUp(ProviderIdFor<T>),
+    ProviderTopUp(StorageProviderId<T>),
 }
 
 impl<T: Config> ExpirationItem<T> {
@@ -64,12 +64,12 @@ impl<T: Config> ExpirationItem<T> {
     ) -> Result<BlockNumberFor<T>, DispatchError> {
         let mut next_expiration_block = expiration_block;
         while let Err(_) = match self {
-            ExpirationItem::ProviderTopUp(storage_request) => {
+            ExpirationItem::ProviderTopUp(provider_id) => {
                 let next_expiration_relay_chain_block_number =
                     Pallet::<T>::convert_block_number_to_relay_block_number(next_expiration_block)?;
                 <ProviderTopUpExpirations<T>>::try_append(
                     next_expiration_relay_chain_block_number,
-                    *storage_request,
+                    provider_id.clone(),
                 )
             }
         } {
@@ -238,6 +238,16 @@ pub struct MainStorageProviderSignUpRequest<T: Config> {
 pub enum StorageProviderId<T: Config> {
     BackupStorageProvider(BackupStorageProviderId<T>),
     MainStorageProvider(MainStorageProviderId<T>),
+}
+
+impl<T: Config> StorageProviderId<T> {
+    /// Returns the inner value of the enum variant.
+    pub fn inner(&self) -> &ProviderIdFor<T> {
+        match self {
+            StorageProviderId::BackupStorageProvider(id) => id,
+            StorageProviderId::MainStorageProvider(id) => id,
+        }
+    }
 }
 
 /// The delta applied to a fixed rate payment stream via [`Pallet::compute_new_rate_delta`].

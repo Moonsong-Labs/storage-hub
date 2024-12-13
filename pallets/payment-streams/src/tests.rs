@@ -15,6 +15,7 @@ use frame_support::{
     weights::WeightMeter,
     BoundedVec,
 };
+use pallet_storage_providers::types::StorageProviderId;
 use shp_constants::GIGAUNIT;
 use shp_traits::{PaymentStreamsInterface, ReadProvidersInterface};
 use sp_core::H256;
@@ -128,7 +129,7 @@ mod fixed_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     System::block_number(),
                 );
 
@@ -482,7 +483,7 @@ mod fixed_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     System::block_number(),
                 );
 
@@ -876,7 +877,7 @@ mod fixed_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     System::block_number(),
                 );
 
@@ -1068,7 +1069,7 @@ mod fixed_rate_streams {
                 // Simulate insolvent provider 5 blocks before the last chargeable tick
                 run_to_block(System::block_number() + 5);
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     System::block_number(),
                 );
 
@@ -1242,7 +1243,7 @@ mod fixed_rate_streams {
                 // Simulate insolvent provider
                 run_to_block(System::block_number() + 5);
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     System::block_number(),
                 );
 
@@ -1325,7 +1326,7 @@ mod fixed_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_msp_id,
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     System::block_number(),
                 );
 
@@ -2856,7 +2857,7 @@ mod dynamic_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     System::block_number(),
                 );
 
@@ -3279,7 +3280,7 @@ mod dynamic_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     System::block_number(),
                 );
 
@@ -3728,7 +3729,7 @@ mod dynamic_rate_streams {
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     System::block_number(),
                 );
 
@@ -3951,7 +3952,7 @@ mod dynamic_rate_streams {
                 // Simulate insolvent provider
                 run_to_block(System::block_number() + 5);
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     System::block_number(),
                 );
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
@@ -4146,7 +4147,7 @@ mod dynamic_rate_streams {
                 // Simulate insolvent provider
                 run_to_block(System::block_number() + 5);
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    &alice_bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     System::block_number(),
                 );
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
@@ -4981,7 +4982,7 @@ mod dynamic_rate_streams {
 
                 // Simulate alice being insolvent
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
-                    alice_bsp_id,
+                    StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     frame_system::Pallet::<Test>::block_number(),
                 );
 
