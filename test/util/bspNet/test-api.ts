@@ -260,7 +260,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when a BSP has caught up to the tip of the chain
        */
       bspCatchUpToChainTip: (bspBehindApi: ApiPromise) =>
-        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi)
+        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi),
+
+      /**
+       * Waits for a node to have imported a block.
+       * @param blockHash - The hash of the block to wait for.
+       * @returns A promise that resolves when the block is imported.
+       */
+      blockImported: (blockHash: string) => Waits.waitForBlockImported(this._api, blockHash)
     };
 
     /**
@@ -407,14 +414,30 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
+       * Finalises a block (and therefore all of its predecessors) in the blockchain.
+       *
+       * @param api - The ApiPromise instance.
+       * @param hashToFinalise - The hash of the block to finalise.
+       * @returns A Promise that resolves when the chain reorganization is complete.
+       */
+      finaliseBlock: (hasshToFinalise: string) =>
+        BspNetBlock.finaliseBlock(this._api, hasshToFinalise),
+      /**
        * Causes a chain re-org by creating a finalised block on top of the last finalised block.
        * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       *
+       * IMPORTANT! Finality is not a network-wide synced state. Each node will have its
+       * own finalised head, as far as it knows. So for this reorg to happen in all nodes,
+       * all nodes must be made aware of the new finalised head.
+       *
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
       /**
        * Causes a chain re-org by creating a longer forked chain.
        * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       *
+       * @param startingBlockHash - Optional. The hash of the block to start the fork from.
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithLongerChain: (startingBlockHash?: string) =>
