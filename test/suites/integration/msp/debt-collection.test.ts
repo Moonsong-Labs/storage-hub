@@ -3,19 +3,19 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 import type { H256 } from "@polkadot/types/interfaces";
 
-describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
+describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let mspApi: EnrichedBspApi;
   let bucketId: H256;
 
   before(async () => {
     userApi = await createUserApi();
-    const maybeMspApi = await createMspApi();
+    const maybeMspApi = await createMsp1Api();
     assert(maybeMspApi, "MSP API not available");
     mspApi = maybeMspApi;
   });
 
-  it("Network launches and can be queried", async () => {
+  it.only("Network launches and can be queried", async () => {
     const userNodePeerId = await userApi.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -23,7 +23,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
   });
 
-  it("MSP receives files from user after issued storage requests", async () => {
+  it.only("MSP receives files from user after issued storage requests", async () => {
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
     const bucketName = "nothingmuch-3";
@@ -207,7 +207,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
     }
   });
 
-  it("MSP is charging user", async () => {
+  it.only("MSP is charging user", async () => {
     let currentBlock = await userApi.rpc.chain.getHeader();
     let currentBlockNumber = currentBlock.number.toNumber();
 

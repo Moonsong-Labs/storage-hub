@@ -25,3 +25,7 @@ diesel = { workspace = true }
 diesel-async = { workspace = true }
 thiserror = { workspace = true }
 bigdecimal = { workspace = true }
+
+sc-network = { workspace = true }
+
+shc-common = { workspace = true }

@@ -136,7 +136,8 @@ export async function describeMspNet<
     describeFunc(`FullNet: ${title} (${fullNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
       let userApiPromise: Promise<EnrichedBspApi>;
       let bspApiPromise: Promise<EnrichedBspApi>;
-      let mspApiPromise: Promise<EnrichedBspApi>;
+      let msp1ApiPromise: Promise<EnrichedBspApi>;
+      let msp2ApiPromise: Promise<EnrichedBspApi>;
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
@@ -154,12 +155,18 @@ export async function describeMspNet<
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
-        mspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
+        msp1ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
+        msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
       });
 
       after(async () => {
         await cleardownTest({
-          api: [await userApiPromise, await bspApiPromise, await mspApiPromise],
+          api: [
+            await userApiPromise,
+            await bspApiPromise,
+            await msp1ApiPromise,
+            await msp2ApiPromise
+          ],
           keepNetworkAlive: options?.keepAlive
         });
 
@@ -181,7 +188,8 @@ export async function describeMspNet<
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
-        createMspApi: () => mspApiPromise,
+        createMsp1Api: () => msp1ApiPromise,
+        createMsp2Api: () => msp2ApiPromise,
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
         createSqlClient: () => createSqlClient(),
         bspNetConfig: fullNetConfig,
