@@ -1,4 +1,4 @@
-import { strictEqual } from "node:assert";
+import { strictEqual, assert } from "node:assert";
 import {
   waitFor,
   assertEventPresent,
@@ -12,7 +12,6 @@ import {
   sleep,
   type EnrichedBspApi
 } from "../../../util";
-import invariant from "tiny-invariant";
 
 describeMspNet(
   "MSP moves bucket to another MSP",
@@ -204,7 +203,7 @@ describeMspNet(
           acceptedFileKeys.push(mspAcceptedStorageRequestDataBlob.fileKey.toString());
         }
       }
-      invariant(
+      assert(
         acceptedFileKeys.length === 1,
         "Expected 1 file key accepted in first block after storage requests"
       );
@@ -249,13 +248,13 @@ describeMspNet(
       }
 
       // Now for sure, the total number of accepted files should be `source.length`.
-      invariant(acceptedFileKeys.length === source.length, `Expected ${source.length} file keys`);
+      assert(acceptedFileKeys.length === source.length, `Expected ${source.length} file keys`);
 
       // And they should be in the Forest storage of the MSP, in the Forest corresponding
       // to the bucket ID.
       for (const fileKey of acceptedFileKeys) {
         const isFileInForest = await msp1Api.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
-        invariant(isFileInForest.isTrue, "File is not in forest");
+        assert(isFileInForest.isTrue, "File is not in forest");
         allBucketFiles.push(fileKey);
       }
 
