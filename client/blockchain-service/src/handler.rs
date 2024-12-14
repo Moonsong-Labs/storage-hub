@@ -1136,7 +1136,7 @@ impl BlockchainService {
     }
 
     async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
-        info!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
+        trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Notify all tasks waiting for this block number (or lower).
         self.notify_import_block_number(&block_number);
