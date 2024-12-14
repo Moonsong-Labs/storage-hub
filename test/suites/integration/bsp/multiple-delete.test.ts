@@ -113,7 +113,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     // Wait enough blocks for the deletion to be allowed.
     const currentBlock = await userApi.rpc.chain.getBlock();
     const currentBlockNumber = currentBlock.block.header.number.toNumber();
-    const cooldown = currentBlockNumber + bspApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+    const cooldown =
+      currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
     await userApi.block.skipTo(cooldown);
 
     for (let i = 0; i < fileKeys.length; i++) {
@@ -127,6 +128,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
       // Check for the confirm stopped storing event.
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+      // Wait for BSP to update its local Forest root as a consequence of the confirmed stop storing extrinsic.
+      await sleep(2000);
     }
   });
 
@@ -199,6 +203,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       await sleep(500);
       await userApi.wait.bspStored(1);
 
+      // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
+      await sleep(2000);
+
       const stopStroringTxs = [];
       for (let i = 0; i < fileKeys.length; i++) {
         const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
@@ -219,14 +226,17 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       }
 
       await userApi.sealBlock(stopStroringTxs, bspKey);
-
-      await userApi.assert.eventMany("fileSystem", "BspRequestedToStopStoring");
+      const stopStoringEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "BspRequestedToStopStoring"
+      );
+      strictEqual(stopStoringEvents.length, fileKeys.length);
 
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
-        currentBlockNumber + bspApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+        currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
 
       // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsinc 2 and 3
@@ -238,6 +248,12 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         confirmStopStoringTxs.push(
           userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
         );
+
+        // Check for the confirm stopped storing event.
+        await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+        // Wait for BSP to update its local Forest root as a consequence of the confirmed stop storing extrinsic.
+        await sleep(2000);
       }
 
       await userApi.sealBlock(confirmStopStoringTxs, bspKey);
