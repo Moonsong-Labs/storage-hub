@@ -81,6 +81,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     await sleep(500);
     await userApi.wait.bspStored(1);
 
+    // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
+    await sleep(2000);
+
     const stopStroringTxs = [];
     for (let i = 0; i < fileKeys.length; i++) {
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
@@ -101,8 +104,11 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     }
 
     await userApi.sealBlock(stopStroringTxs, bspKey);
-
-    await userApi.assert.eventMany("fileSystem", "BspRequestedToStopStoring");
+    const stopStoringEvents = await userApi.assert.eventMany(
+      "fileSystem",
+      "BspRequestedToStopStoring"
+    );
+    strictEqual(stopStoringEvents.length, fileKeys.length);
 
     // Wait enough blocks for the deletion to be allowed.
     const currentBlock = await userApi.rpc.chain.getBlock();
