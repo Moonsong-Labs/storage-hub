@@ -14,7 +14,7 @@ const LOG_TARGET: &str = "slash-provider-task";
 
 /// Slash provider task.
 ///
-/// This task is responsible for slashing a provider. It listens for the `SlashableProvider` event and sends an extrinsic
+/// This task is responsible for slashing a provider. It listens for the [`SlashableProvider`] event and sends an extrinsic
 /// to StorageHub runtime to slash the provider.
 pub struct SlashProviderTask<FL, FSH>
 where
@@ -48,7 +48,7 @@ where
     }
 }
 
-/// Handles the `SlashaProvider` event.
+/// Handles the [`SlashableProvider`] event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
 impl<FL, FSH> EventHandler<SlashableProvider> for SlashProviderTask<FL, FSH>

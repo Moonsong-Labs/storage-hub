@@ -52,8 +52,9 @@ use crate::{
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
         FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
-        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
+        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -504,7 +505,8 @@ impl Actor for BlockchainService {
                         .unwrap_or_else(|_| {
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
-                        });
+                        })
+                        .map(convert_raw_multiaddresses_to_multiaddr);
 
                     match callback.send(multiaddresses) {
                         Ok(_) => {
@@ -1247,6 +1249,39 @@ impl BlockchainService {
                                 owner,
                                 size,
                             })
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequested {
+                                who: _,
+                                bucket_id,
+                                new_msp_id,
+                            },
+                        ) => {
+                            self.emit(MoveBucketRequested {
+                                bucket_id,
+                                new_msp_id,
+                            });
+                            if self.provider_ids.contains(&new_msp_id) {
+                                self.emit(MoveBucketRequestedForNewMsp { bucket_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
+                        ) => {
+                            self.emit(MoveBucketRejected { bucket_id, msp_id });
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted { bucket_id, msp_id },
+                        ) => {
+                            self.emit(MoveBucketAccepted { bucket_id, msp_id });
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequestExpired {
+                                bucket_id,
+                                msp_id,
+                            },
+                        ) => {
+                            self.emit(MoveBucketExpired { bucket_id, msp_id });
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmStoppedStoring {

@@ -20,6 +20,28 @@ import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 
 /**
+ * Options for the waitForTxInPool method.
+ * @param module - The module name of the event.
+ * @param method - The method name of the event.
+ * @param checkQuantity - Optional. The number of expected extrinsics.
+ * @param shouldSeal - Optional. Whether to seal a block after waiting for the transaction.
+ * @param expectedEvent - Optional. The expected event to wait for.
+ * @param iterations - Optional. The number of iterations to wait for the transaction.
+ * @param delay - Optional. The delay between iterations.
+ * @param timeout - Optional. The timeout for the wait.
+ */
+export interface WaitForTxOptions {
+  module: string;
+  method: string;
+  checkQuantity?: number;
+  shouldSeal?: boolean;
+  expectedEvent?: string;
+  iterations?: number;
+  delay?: number;
+  timeout?: number;
+}
+
+/**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
 export class BspNetTestApi implements AsyncDisposable {
@@ -221,6 +243,13 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       bspStored: (expectedExts?: number, bspAccount?: Address) =>
         Waits.waitForBspStored(this._api, expectedExts, bspAccount),
+
+      /**
+       * A generic utility to wait for a transaction to be in the tx pool.
+       * @param options - Options for the wait.
+       * @returns A promise that resolves when the transaction is in the tx pool.
+       */
+      waitForTxInPool: (options: WaitForTxOptions) => Waits.waitForTxInPool(this._api, options),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.

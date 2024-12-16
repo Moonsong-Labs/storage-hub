@@ -246,6 +246,39 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+#[derive(Debug, Clone)]
+pub struct MoveBucketRequested {
+    pub bucket_id: BucketId,
+    pub new_msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketRequested {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketRequestedForNewMsp {
+    pub bucket_id: BucketId,
+}
+impl EventBusMessage for MoveBucketRequestedForNewMsp {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketRejected {
+    pub bucket_id: BucketId,
+    pub msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketRejected {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketAccepted {
+    pub bucket_id: BucketId,
+    pub msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketAccepted {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketExpired {
+    pub bucket_id: BucketId,
+    pub msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketExpired {}
 /// BSP stopped storing a specific file.
 ///
 /// This event is emitted when a BSP confirm stop storing a file.
@@ -300,6 +333,11 @@ pub struct BlockchainServiceEventBusProvider {
     user_without_funds_event_bus: EventBus<UserWithoutFunds>,
     sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
     finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
+    move_bucket_requested_event_bus: EventBus<MoveBucketRequested>,
+    move_bucket_rejected_event_bus: EventBus<MoveBucketRejected>,
+    move_bucket_accepted_event_bus: EventBus<MoveBucketAccepted>,
+    move_bucket_expired_event_bus: EventBus<MoveBucketExpired>,
+    move_bucket_requested_for_new_msp_event_bus: EventBus<MoveBucketRequestedForNewMsp>,
     bsp_stop_storing_event_bus: EventBus<BspConfirmStoppedStoring>,
     finalised_bsp_stop_storing_event_bus: EventBus<FinalisedBspConfirmStoppedStoring>,
     notify_period_event_bus: EventBus<NotifyPeriod>,
@@ -323,6 +361,11 @@ impl BlockchainServiceEventBusProvider {
             user_without_funds_event_bus: EventBus::new(),
             sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
             finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
+            move_bucket_requested_event_bus: EventBus::new(),
+            move_bucket_rejected_event_bus: EventBus::new(),
+            move_bucket_accepted_event_bus: EventBus::new(),
+            move_bucket_expired_event_bus: EventBus::new(),
+            move_bucket_requested_for_new_msp_event_bus: EventBus::new(),
             bsp_stop_storing_event_bus: EventBus::new(),
             finalised_bsp_stop_storing_event_bus: EventBus::new(),
             notify_period_event_bus: EventBus::new(),
@@ -419,6 +462,36 @@ impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusP
 impl ProvidesEventBus<FinalisedMspStoppedStoringBucket> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<FinalisedMspStoppedStoringBucket> {
         &self.finalised_msp_stopped_storing_bucket_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketRequested> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRequested> {
+        &self.move_bucket_requested_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketRejected> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRejected> {
+        &self.move_bucket_rejected_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketAccepted> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketAccepted> {
+        &self.move_bucket_accepted_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketExpired> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketExpired> {
+        &self.move_bucket_expired_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketRequestedForNewMsp> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRequestedForNewMsp> {
+        &self.move_bucket_requested_for_new_msp_event_bus
     }
 }
 

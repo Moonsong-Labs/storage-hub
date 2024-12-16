@@ -1,7 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
+use sc_network::Multiaddr;
 use serde_json::Number;
+use sp_api::ApiError;
+use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
@@ -17,11 +20,9 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses, ProviderId,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProviderId,
     RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber, TrieRemoveMutation,
 };
-use sp_api::ApiError;
-use sp_core::H256;
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use super::{
@@ -92,7 +93,7 @@ pub enum BlockchainServiceCommand {
     QueryProviderMultiaddresses {
         provider_id: ProviderId,
         callback:
-            tokio::sync::oneshot::Sender<Result<Multiaddresses, QueryProviderMultiaddressesError>>,
+            tokio::sync::oneshot::Sender<Result<Vec<Multiaddr>, QueryProviderMultiaddressesError>>,
     },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
@@ -248,8 +249,8 @@ pub trait BlockchainServiceInterface {
     /// Query the MSP multiaddresses.
     async fn query_provider_multiaddresses(
         &self,
-        msp_id: ProviderId,
-    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
+        provider_id: ProviderId,
+    ) -> Result<Vec<Multiaddr>, QueryProviderMultiaddressesError>;
 
     /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
@@ -517,7 +518,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_provider_multiaddresses(
         &self,
         provider_id: ProviderId,
-    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError> {
+    ) -> Result<Vec<Multiaddr>, QueryProviderMultiaddressesError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryProviderMultiaddresses {
             provider_id,

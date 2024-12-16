@@ -33,7 +33,7 @@ diesel::table! {
         id -> Int4,
         msp_id -> Nullable<Int4>,
         account -> Varchar,
-        onchain_bucket_id -> Varchar,
+        onchain_bucket_id -> Bytea,
         name -> Bytea,
         collection_id -> Nullable<Varchar>,
         private -> Bool,
@@ -46,7 +46,7 @@ diesel::table! {
 diesel::table! {
     file (id) {
         id -> Int4,
-        account -> Varchar,
+        account -> Bytea,
         file_key -> Bytea,
         bucket_id -> Int4,
         location -> Bytea,
@@ -87,7 +87,7 @@ diesel::table! {
 diesel::table! {
     multiaddress (id) {
         id -> Int4,
-        address -> Varchar,
+        address -> Bytea,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }
