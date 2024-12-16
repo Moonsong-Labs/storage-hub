@@ -5,7 +5,7 @@ use sp_runtime::traits::One;
 #[benchmarks(where
     T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
     T: pallet_storage_providers::Config<
-        ProviderId = <T as frame_system::Config>::Hash, 
+        ProviderId = <T as frame_system::Config>::Hash,
         StorageDataUnit = u64
     >,
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
@@ -95,7 +95,9 @@ mod benchmarks {
         account: T::AccountId,
         amount: u128,
     ) -> Result<(), BenchmarkError> {
-        let user_balance = amount.try_into().map_err(|_| BenchmarkError::Stop("Balance conversion failed."))?;
+        let user_balance = amount
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("Balance conversion failed."))?;
         assert_ok!(<T as crate::Config>::Currency::mint_into(
             &account,
             user_balance,
@@ -105,15 +107,17 @@ mod benchmarks {
 
     fn add_msp_to_provider_storage<T>(msp: &T::AccountId) -> (ProviderIdFor<T>, ValuePropId<T>)
     where
-    T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
-    T: pallet_storage_providers::Config<
-        ProviderId = <T as frame_system::Config>::Hash, 
-        StorageDataUnit = u64
-    >,
-    <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
-        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
-    // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers
-    <T as crate::Config>::Providers: shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
+        T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
+        T: pallet_storage_providers::Config<
+            ProviderId = <T as frame_system::Config>::Hash,
+            StorageDataUnit = u64,
+        >,
+        <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
+            + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
+        // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers
+        <T as crate::Config>::Providers: shp_traits::MutateBucketsInterface<
+            ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId,
+        >,
     {
         let msp_hash = T::Hashing::hash_of(&msp);
 
@@ -131,7 +135,10 @@ mod benchmarks {
         };
 
         pallet_storage_providers::MainStorageProviders::<T>::insert(msp_hash, msp_info);
-        pallet_storage_providers::AccountIdToMainStorageProviderId::<T>::insert(msp.clone(), msp_hash);
+        pallet_storage_providers::AccountIdToMainStorageProviderId::<T>::insert(
+            msp.clone(),
+            msp_hash,
+        );
 
         let commitment = vec![
             1;
