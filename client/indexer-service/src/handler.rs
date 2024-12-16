@@ -138,6 +138,9 @@ impl IndexerService {
                 self.index_providers_event(conn, event, block_hash).await?
             }
             RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
+            // TODO: We have to index the events from the CrRandomness pallet when we integrate it to the runtime,
+            // since they contain the information about the commit-reveal deadlines for Providers.
+            // RuntimeEvent::CrRandomness(event) => self.index_cr_randomness_event(conn, event).await?,
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
             // to ensure the compiler will let us know to treat future events when added.

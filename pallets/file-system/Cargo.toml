@@ -42,6 +42,7 @@ shp-traits = { workspace = true }
 [dev-dependencies]
 serde = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
+pallet-cr-randomness = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-payment-streams = { workspace = true }
@@ -63,6 +64,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-bucket-nfts/std",
+	"pallet-cr-randomness/std",
 	"pallet-file-system-runtime-api/std",
 	"pallet-nfts/std",
 	"pallet-payment-streams/std",
@@ -83,6 +85,7 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-cr-randomness/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"pallet-bucket-nfts/runtime-benchmarks",

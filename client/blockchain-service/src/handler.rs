@@ -1095,6 +1095,7 @@ impl BlockchainService {
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
+        // TODO: Handle the `pallet-cr-randomness` events here.
         match get_events_at_block(&self.client, block_hash) {
             Ok(block_events) => {
                 // Process the events.
