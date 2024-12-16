@@ -13,12 +13,13 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, StorageHubTickGetter, TrieMutation,
+    TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BoundedBTreeSet, BoundedVec, BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::convert::{TryFrom, TryInto};
@@ -143,7 +144,7 @@ impl pallet_storage_providers::Config for Test {
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = MockStorageHubTickGetter;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
@@ -166,6 +167,8 @@ impl pallet_storage_providers::Config for Test {
     type TopUpGracePeriod = ConstU32<5>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
+    type ProviderTopUpTtl = ConstU32<10>;
+    type MaxExpiredItemsInBlock = ConstU32<10>;
 }
 
 // Mock the Randomness trait to use a simple randomness function when testing the pallet
@@ -266,16 +269,11 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
+pub struct MockStorageHubTickGetter;
+impl StorageHubTickGetter for MockStorageHubTickGetter {
+    type TickNumber = BlockNumberFor<Test>;
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
     }
 }
 
@@ -309,6 +307,20 @@ impl pallet_payment_streams::Config for Test {
     type BaseDeposit = ConstU128<10>;
 }
 
+parameter_types! {
+    pub const StakeToChallengePeriod: Balance = STAKE_TO_CHALLENGE_PERIOD;
+    pub const ChallengeTicksTolerance: BlockNumberFor<Test> = 10;
+    pub const SpMinDeposit: Balance = 10 * UNITS;
+    pub const CheckpointChallengePeriod: u64 = {
+        const STAKE_TO_CHALLENGE_PERIOD: u128 = StakeToChallengePeriod::get();
+        const SP_MIN_DEPOSIT: u128 = SpMinDeposit::get();
+        const CHALLENGE_TICKS_TOLERANCE: u128 = ChallengeTicksTolerance::get() as u128;
+        ((STAKE_TO_CHALLENGE_PERIOD / SP_MIN_DEPOSIT)
+            .saturating_add(CHALLENGE_TICKS_TOLERANCE)
+            .saturating_add(1)) as u64
+    };
+}
+
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -326,13 +338,13 @@ impl pallet_proofs_dealer::Config for Test {
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
-    type CheckpointChallengePeriod = ConstU64<20>;
+    type CheckpointChallengePeriod = CheckpointChallengePeriod;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
-    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
-    type ChallengeTicksTolerance = ConstU64<10>;
+    type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
