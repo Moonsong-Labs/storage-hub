@@ -778,6 +778,12 @@ pub trait ProofsDealerInterface {
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
 
+    /// Stop a Provider's challenge cycle.
+    ///
+    /// If the provider doesn't have any files left we remove it teh challenge cycle. It shouldn't
+    /// submit proof.
+    fn stop_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult;
+
     /// Initialise a Provider's challenge cycle.
     ///
     /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
