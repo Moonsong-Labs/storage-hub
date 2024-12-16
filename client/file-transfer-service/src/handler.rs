@@ -667,16 +667,30 @@ impl FileTransferService {
 
     fn handle_expired_buckets(&mut self) {
         let now = chrono::Utc::now();
-        while let Some(bucket) = self.bucket_allow_list_grace_period_time.pop_first() {
-            if bucket.expiration < now {
-                let _ = self.unregister_bucket(bucket.bucket_id).map_err(|e| {
-                    error!(target: LOG_TARGET, "Failed to unregister expired bucket {:?}: {:?}", bucket.bucket_id, e);
-                });
-            } else {
-                // Re-insert the bucket back into the set since it hasn't expired yet.
-                self.bucket_allow_list_grace_period_time.insert(bucket);
-                break;
+        // Return early if there are no buckets to unregister.
+        if self.bucket_allow_list_grace_period_time.is_empty() {
+            return;
+        }
+
+        // Get the current time.
+        let now = chrono::Utc::now();
+
+        // At this point we know there must be at least one bucket in the allow list.
+        let mut bucket_to_check = self.bucket_allow_list_grace_period_time.first();
+        while bucket_to_check.map_or(false, |bucket| bucket.expiration < now) {
+            // Remove the bucket from the allow list.
+            let bucket_to_remove = self
+                .bucket_allow_list_grace_period_time
+                .pop_first()
+                .expect("Bucket allow list is not empty; qed");
+
+            // Try to unregister the bucket.
+            if let Err(e) = self.unregister_bucket(bucket_to_remove.bucket_id) {
+                error!(target: LOG_TARGET, "Failed to unregister expired bucket {:?}: {:?}", bucket_to_remove.bucket_id, e);
             }
+
+            // Update the expiration to check.
+            bucket_to_check = self.bucket_allow_list_grace_period_time.first();
         }
     }
 }
