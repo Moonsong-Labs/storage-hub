@@ -1,10 +1,17 @@
 use super::{types::*, *};
 use frame_benchmarking::v2::*;
+use sp_runtime::traits::One;
 
 #[benchmarks(where
-	T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
-    T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
+    T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
+    T: pallet_storage_providers::Config<
+        ProviderId = <T as frame_system::Config>::Hash, 
+        StorageDataUnit = u64
+    >,
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
+        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
+    // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers:
+    <T as crate::Config>::Providers: shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
 )]
 mod benchmarks {
     use super::*;
@@ -15,40 +22,26 @@ mod benchmarks {
     };
     use frame_system::RawOrigin;
     use pallet_storage_providers::types::ValueProposition;
-    use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
+    use shp_traits::ReadBucketsInterface;
     use sp_core::Hasher;
     use sp_runtime::traits::Hash;
     use sp_std::vec;
 
     #[benchmark]
     fn create_bucket() -> Result<(), BenchmarkError> {
-        // Setup user account
         let user: T::AccountId = account("Alice", 0, 0);
         let signed_origin = RawOrigin::Signed(user.clone());
         mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
 
-        // Setup parameters
         let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
-        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
-            &user,
-            name.clone(),
-        );
-        let location: FileLocation<T> = vec![1; MaxFilePathSize::<T>::get().try_into().unwrap()]
-            .try_into()
-            .unwrap();
-        let fingerprint = <T as frame_system::Config>::Hashing::hash_of(b"tes");
-        let size: StorageData<T> = 100;
-        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-        let peer_ids: PeerIds<T> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
         // Register MSP with value proposition
         let msp: T::AccountId = account("MSP", 0, 0);
-        mint_into_account::<T>(msp, 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+        mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
 
-        // Benchmark create_bucket extrinsic
         #[extrinsic_call]
         _(
             signed_origin.clone(),
@@ -63,12 +56,10 @@ mod benchmarks {
 
     #[benchmark]
     fn issue_storage_request() -> Result<(), BenchmarkError> {
-        // Setup user account
         let user: T::AccountId = account("Alice", 0, 0);
         let signed_origin = RawOrigin::Signed(user.clone());
         mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
 
-        // Setup parameters
         let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -84,10 +75,8 @@ mod benchmarks {
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
         let peer_ids: PeerIds<T> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-        // Create required bucket for issuing storage request.
         Pallet::<T>::create_bucket(signed_origin.clone().into(), None, name, true, None)?;
 
-        // Benchmark issue_storage_request extrinsic
         #[extrinsic_call]
         _(
             signed_origin,
@@ -106,27 +95,27 @@ mod benchmarks {
         account: T::AccountId,
         amount: u128,
     ) -> Result<(), BenchmarkError> {
-        let user_balance = match amount.try_into() {
-            Ok(balance) => balance,
-            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
-        };
+        let user_balance = amount.try_into().map_err(|_| BenchmarkError::Stop("Balance conversion failed."))?;
         assert_ok!(<T as crate::Config>::Currency::mint_into(
             &account,
             user_balance,
         ));
-
         Ok(())
     }
 
     fn add_msp_to_provider_storage<T>(msp: &T::AccountId) -> (ProviderIdFor<T>, ValuePropId<T>)
     where
-        T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
-        T: pallet_storage_providers::Config<ProviderId = <T as frame_system::Config>::Hash>,
-        <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
-            + ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
-        T: pallet_storage_providers::Config<StorageDataUnit = u64>,
+    T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
+    T: pallet_storage_providers::Config<
+        ProviderId = <T as frame_system::Config>::Hash, 
+        StorageDataUnit = u64
+    >,
+    <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
+        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
+    // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers
+    <T as crate::Config>::Providers: shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
     {
-        let msp_hash = <<T as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
+        let msp_hash = T::Hashing::hash_of(&msp);
 
         let capacity: StorageData<T> = 1024 * 1024 * 1024;
         let capacity_used: StorageData<T> = 0;
@@ -142,10 +131,7 @@ mod benchmarks {
         };
 
         pallet_storage_providers::MainStorageProviders::<T>::insert(msp_hash, msp_info);
-        pallet_storage_providers::AccountIdToMainStorageProviderId::<T>::insert(
-            msp.clone(),
-            msp_hash,
-        );
+        pallet_storage_providers::AccountIdToMainStorageProviderId::<T>::insert(msp.clone(), msp_hash);
 
         let commitment = vec![
             1;
@@ -155,8 +141,10 @@ mod benchmarks {
         ]
         .try_into()
         .unwrap();
+
         let value_prop_storage: StorageData<T> = 1000;
-        let value_prop = ValueProposition::<T>::new(1, commitment, value_prop_storage);
+        // Use One::one() or a conversion that matches the expected balance type:
+        let value_prop = ValueProposition::<T>::new(One::one(), commitment, value_prop_storage);
         let value_prop_id = value_prop.derive_id();
 
         pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<T>::insert(
