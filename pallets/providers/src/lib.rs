@@ -288,7 +288,8 @@ pub mod pallet {
 
         /// Period of time for a provider to top up their deposit after being slashed.
         ///
-        /// If the provider does not top up their deposit within this period, they will be marked as insolvent.
+        /// If the provider does not top up their deposit within this period, they will
+        /// be marked as insolvent.
         #[pallet::constant]
         type TopUpGracePeriod: Get<u32>;
 
@@ -298,9 +299,12 @@ pub mod pallet {
 
         /// Time-to-live for a provider to top up their deposit to cover a capacity deficit.
         ///
-        /// This TTL is used to determine at what point to insert the expiration item in the [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at the time when the relay chain block number has been reached.
+        /// This TTL is used to determine at what point to insert the expiration item in the
+        /// [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at
+        /// the time when the relay chain block number has been reached.
         ///
-        /// This uses the relay chain block number for consistent time tracking based on 6 second timeslots.
+        /// This uses the relay chain block number for consistent time tracking based on 6
+        /// second timeslots.
         #[pallet::constant]
         type ProviderTopUpTtl: Get<RelayChainBlockNumber>;
 
@@ -485,8 +489,8 @@ pub mod pallet {
     /// Processed in the `on_idle` hook.
     ///
     /// Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
-    /// Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
-    /// If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+    /// Providers are removed from [`AwaitingTopUpFromProviders`] storage when they have successfully topped up their deposit.
+    /// If they are still part of the [`AwaitingTopUpFromProviders`] storage after the expiration period, they are marked as insolvent.
     // TODO: use enum for ProviderIdFor
     #[pallet::storage]
     pub type ProviderTopUpExpirations<T: Config> = StorageMap<
@@ -499,7 +503,7 @@ pub mod pallet {
 
     /// A pointer to the earliest available block to insert a new provider top up expiration item.
     ///
-    /// This should always be greater or equal than current block + [`Config::ProviderTopUpTtl`].
+    /// This should always be greater or equal than `current_block` + [`Config::ProviderTopUpTtl`].
     #[pallet::storage]
     pub type NextAvailableProviderTopUpExpirationBlock<T: Config> =
         StorageValue<_, StorageHubTickNumber<T>, ValueQuery>;
@@ -709,6 +713,7 @@ pub mod pallet {
         NewUsedCapacityExceedsStorageCapacity,
         /// Deposit too low to determine capacity.
         DepositTooLow,
+
         // General errors:
         /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
         NotRegistered,
@@ -1405,7 +1410,6 @@ pub mod pallet {
         ///
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
-        ///
         ///
         /// This is a free operation.
         #[pallet::call_index(13)]
