@@ -334,7 +334,7 @@ impl pallet_storage_providers::Config for Test {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = ProofsDealer;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;

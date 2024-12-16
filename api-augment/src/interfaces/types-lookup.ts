@@ -1954,6 +1954,7 @@ declare module "@polkadot/types/lookup" {
 
   /** @name PalletStorageProvidersTopUpMetadata (132) */
   interface PalletStorageProvidersTopUpMetadata extends Struct {
+    readonly startedAt: u32;
     readonly endBlockGracePeriod: u32;
   }
 

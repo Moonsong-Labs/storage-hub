@@ -13,7 +13,7 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
-    ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieMutation,
+    ProofsDealerInterface, ReadChallengeableProvidersInterface, StorageHubTickGetter, TrieMutation,
     TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
@@ -936,6 +936,14 @@ where
 
         // Return the next tick to delete
         tick.saturating_add(One::one())
+    }
+}
+
+impl<T: pallet::Config> StorageHubTickGetter for Pallet<T> {
+    type TickNumber = <Pallet<T> as ProofsDealerInterface>::TickNumber;
+
+    fn get_current_tick() -> Self::TickNumber {
+        <Pallet<T> as ProofsDealerInterface>::get_current_tick()
     }
 }
 

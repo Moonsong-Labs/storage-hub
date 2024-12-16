@@ -48,9 +48,9 @@ pub mod pallet {
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface,
-        ReadUserSolvencyInterface,
+        ReadUserSolvencyInterface, StorageHubTickGetter,
     };
-    use sp_runtime::traits::{BlockNumberProvider, Bounded, CheckedDiv, ConvertBack, Hash};
+    use sp_runtime::traits::{Bounded, CheckedDiv, ConvertBack, Hash};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -70,6 +70,7 @@ pub mod pallet {
                 AccountId = Self::AccountId,
                 ProviderId = ProviderIdFor<Self>,
                 Units = Self::StorageDataUnit,
+                TickNumber = BlockNumberFor<Self>,
             > + ReadUserSolvencyInterface<AccountId = Self::AccountId>;
 
         /// Trait that allows the pallet to manage generic file metadatas
@@ -202,7 +203,7 @@ pub mod pallet {
             + Bounded;
 
         /// Interface to get the relay chain block number which was used as an anchor for the last block in the parachain.
-        type RelayBlockGetter: BlockNumberProvider<BlockNumber = RelayChainBlockNumber>;
+        type StorageHubTickGetter: StorageHubTickGetter<TickNumber = BlockNumberFor<Self>>;
 
         /// The Treasury AccountId.
         /// The account to which:
@@ -491,7 +492,7 @@ pub mod pallet {
     pub type ProviderTopUpExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        RelayBlockNumber<T>,
+        StorageHubTickNumber<T>,
         BoundedVec<StorageProviderId<T>, T::MaxExpiredItemsInBlock>,
         ValueQuery,
     >;
@@ -501,7 +502,7 @@ pub mod pallet {
     /// This should always be greater or equal than current block + [`Config::ProviderTopUpTtl`].
     #[pallet::storage]
     pub type NextAvailableProviderTopUpExpirationBlock<T: Config> =
-        StorageValue<_, RelayBlockNumber<T>, ValueQuery>;
+        StorageValue<_, StorageHubTickNumber<T>, ValueQuery>;
 
     /// A pointer to the starting block to clean up expired storage requests.
     ///

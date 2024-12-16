@@ -527,7 +527,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type StorageHubTickGetter = ProofsDealer;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;

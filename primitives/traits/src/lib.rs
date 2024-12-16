@@ -32,6 +32,13 @@ impl<T> MaybeDebug for T {}
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
+/// Storage Hub global tick which should be relied upon for time-sensitive operations.
+pub trait StorageHubTickGetter {
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    fn get_current_tick() -> Self::TickNumber;
+}
+
 pub trait NumericalParam:
     Parameter
     + Member
@@ -621,8 +628,9 @@ pub trait ReadProvidersInterface {
     /// Check if the provider is insolvent.
     fn is_provider_insolvent(who: Self::ProviderId) -> bool;
 
-    /// Get the block number of the last time the provider was insolvent.
-    fn insolvency_tick(who: Self::ProviderId) -> Option<Self::TickNumber>;
+    /// Potentially non-chargeable tick for a provider. From this tick onwards, the provider cannot charge for
+    /// the storage services.
+    fn starting_non_chargeable_tick(who: Self::ProviderId) -> Option<Self::TickNumber>;
 }
 
 /// A trait to mutate the state of a generic Provider, such as updating their root.

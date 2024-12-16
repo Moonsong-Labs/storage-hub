@@ -1066,11 +1066,14 @@ mod fixed_rate_streams {
                     - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
-                // Simulate insolvent provider 5 blocks before the last chargeable tick
+                // Simulate awaited top up from provider 5 blocks before the last chargeable tick
                 run_to_block(System::block_number() + 5);
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                pallet_storage_providers::AwaitingTopUpFromProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    System::block_number(),
+                    pallet_storage_providers::types::TopUpMetadata {
+                        started_at: System::block_number(),
+                        end_block_grace_period: System::block_number() + 10,
+                    },
                 );
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 5 blocks ahead
@@ -1210,7 +1213,7 @@ mod fixed_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_with_insolvent_provider_works() {
+        fn charge_payment_streams_with_awaited_top_up_from_provider_works() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -1240,11 +1243,14 @@ mod fixed_rate_streams {
                     - base_deposit;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
-                // Simulate insolvent provider
+                // Simulate awaited top up from provider 5 blocks before the last chargeable tick
                 run_to_block(System::block_number() + 5);
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                pallet_storage_providers::AwaitingTopUpFromProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    System::block_number(),
+                    pallet_storage_providers::types::TopUpMetadata {
+                        started_at: System::block_number(),
+                        end_block_grace_period: System::block_number() + 10,
+                    },
                 );
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 5 blocks ahead
@@ -1342,23 +1348,9 @@ mod fixed_rate_streams {
                 );
 
                 // Charge the payment stream from Bob to Alice
-                assert_ok!(PaymentStreams::charge_payment_streams(
-                    RuntimeOrigin::signed(alice),
-                    bob
-                ));
-
-                // Check that Bob should not have been charged since the insolvent provider was marked at the beginning of the of the payment stream's creation
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
-
-                // Get the payment stream information
-                let payment_stream_info =
-                    PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
-                        .unwrap();
-
-                // The payment stream should be updated with the correct last charged proof
-                assert_eq!(
-                    payment_stream_info.last_charged_tick,
-                    System::block_number() - 10
+                assert_noop!(
+                    PaymentStreams::charge_payment_streams(RuntimeOrigin::signed(alice), bob),
+                    Error::<Test>::ProviderInsolvent
                 );
             });
         }
@@ -3955,20 +3947,9 @@ mod dynamic_rate_streams {
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     System::block_number(),
                 );
-                let current_price_index = AccumulatedPriceIndex::<Test>::get();
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 5 blocks ahead
                 run_to_block(System::block_number() + 5);
-                let amount_to_pay_for_storage =
-                    5 * current_price * (amount_provided as u128) / GIGAUNIT_BALANCE;
-                let last_chargeable_tick = System::block_number();
-                LastChargeableInfo::<Test>::insert(
-                    &alice_bsp_id,
-                    ProviderLastChargeableInfo {
-                        last_chargeable_tick,
-                        price_index: current_price_index,
-                    },
-                );
 
                 // Delete the payment stream from Bob to Alice
                 assert_ok!(
@@ -3978,20 +3959,10 @@ mod dynamic_rate_streams {
                     )
                 );
 
-                // Check that Bob was returned his deposit AND charged 5 blocks at the current price considering the amount provided before the payment stream was deleted
+                // Check that Bob was returned his deposit AND was not charged while the provider is insolvent.
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
-                    bob_new_balance + deposit_amount - amount_to_pay_for_storage
-                );
-                System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
-                        user_account: bob,
-                        provider_id: alice_bsp_id,
-                        amount: amount_to_pay_for_storage,
-                        last_tick_charged: last_chargeable_tick - 5,
-                        charged_at_tick: System::block_number(),
-                    }
-                    .into(),
+                    bob_new_balance + deposit_amount
                 );
 
                 // The payment stream should be deleted
@@ -4003,11 +3974,8 @@ mod dynamic_rate_streams {
                 // Bob should have 0 payment streams open
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
 
-                // Bob should have his deposit back (but not the charged amount)
-                assert_eq!(
-                    NativeBalance::free_balance(&bob),
-                    bob_initial_balance - amount_to_pay_for_storage
-                );
+                // Bob should have his deposit back
+                assert_eq!(NativeBalance::free_balance(&bob), bob_initial_balance);
             });
         }
     }
@@ -4105,7 +4073,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_with_insolvent_provider_works() {
+        fn charge_payment_streams_with_awaited_top_up_from_provider_works() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -4144,11 +4112,14 @@ mod dynamic_rate_streams {
                 let bob_new_balance = bob_initial_balance - deposit_amount;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
-                // Simulate insolvent provider
+                // Simulate awaited top up from provider 5 blocks before the last chargeable tick
                 run_to_block(System::block_number() + 5);
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                pallet_storage_providers::AwaitingTopUpFromProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    System::block_number(),
+                    pallet_storage_providers::types::TopUpMetadata {
+                        started_at: System::block_number(),
+                        end_block_grace_period: System::block_number() + 10,
+                    },
                 );
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
 
@@ -4953,7 +4924,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn update_last_chargeable_price_index_skips_insolvent_providers() {
+        fn update_last_chargeable_price_index_works_with_awaited_top_up_provider() {
             ExtBuilder::build().execute_with(|| {
                 let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
@@ -4980,10 +4951,18 @@ mod dynamic_rate_streams {
                     )
                 );
 
-                // Simulate alice being insolvent
-                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                // Set the last chargeable price index of the payment stream from Bob to Alice to block 123
+                let blocks_to_advance = alice_on_poll - System::block_number();
+                let price_index_increment = current_price * (blocks_to_advance - 1) as u128; // We substract one since price index is updated after the chargeable info (since this one is for the previous block)
+                let current_price_index =
+                    AccumulatedPriceIndex::<Test>::get() + price_index_increment;
+
+                pallet_storage_providers::AwaitingTopUpFromProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    pallet_storage_providers::types::TopUpMetadata {
+                        started_at: System::block_number(),
+                        end_block_grace_period: System::block_number() + 1,
+                    },
                 );
 
                 run_to_block(alice_on_poll);
@@ -4992,7 +4971,51 @@ mod dynamic_rate_streams {
                 let alice_last_chargeable_info =
                     PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
-                // The payment stream should not have been updated since the provider is insolvent
+                // The payment stream should be updated with the correct last chargeable price index
+                assert_eq!(alice_last_chargeable_info.price_index, current_price_index);
+            });
+        }
+
+        #[test]
+        fn update_last_chargeable_price_index_does_not_update_with_insolvent_provider() {
+            ExtBuilder::build().execute_with(|| {
+                let alice_on_poll: AccountId = 123;
+                let bob: AccountId = 1;
+                let amount_provided = 100;
+                let current_price = 10 * GIGAUNIT_BALANCE;
+                let initial_price_index = 10000 * GIGAUNIT_BALANCE;
+
+                // Update the current price and current price index
+                CurrentPricePerGigaUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(initial_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID
+                register_account_as_bsp(alice_on_poll, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
+                        .unwrap();
+
+                // Create a payment stream from Bob to Alice of 100 units per block
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                pallet_storage_providers::InsolventProviders::<Test>::insert(
+                    StorageProviderId::BackupStorageProvider(alice_bsp_id),
+                    System::block_number(),
+                );
+
+                run_to_block(alice_on_poll);
+
+                // Get Alice's last chargeable info
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
+
+                // The payment stream should not have been updated for insolvent provider
                 assert_eq!(alice_last_chargeable_info.price_index, 0);
             });
         }

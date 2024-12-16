@@ -6,11 +6,8 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
-use shp_traits::PaymentStreamsInterface;
-use sp_runtime::{
-    traits::{BlockNumberProvider, CheckedAdd},
-    ArithmeticError, BoundedVec,
-};
+use shp_traits::{PaymentStreamsInterface, StorageHubTickGetter};
+use sp_runtime::{traits::CheckedAdd, ArithmeticError, BoundedVec};
 use sp_std::cmp::max;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
@@ -21,11 +18,11 @@ pub type ValuePropId<T> = HashId<T>;
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct TopUpMetadata<T: Config> {
-    /// The last relay chain block at which the provider will either forcibly top up their deposit or be marked as
+    /// The Storage Hub tick number at which the provider started awaiting for a top up.
+    pub started_at: StorageHubTickNumber<T>,
+    /// The Storage Hub tick number at which the provider will either forcibly top up their deposit or be marked as
     /// insolvent.
-    ///
-    /// This is the relay chain block number which the parachain is anchored to.
-    pub end_block_grace_period: RelayBlockNumber<T>,
+    pub end_block_grace_period: StorageHubTickNumber<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -43,19 +40,17 @@ impl<T: Config> ExpirationItem<T> {
 
     pub(crate) fn get_next_expiration_block(&self) -> Result<BlockNumberFor<T>, DispatchError> {
         // The expiration block is the maximum between the next available block and the current block number plus the TTL.
-        let relay_chain_block_number: BlockNumberFor<T> =
-            RelayBlockGetter::<T>::current_block_number().into();
-        let current_block_plus_ttl = relay_chain_block_number
+        let current_global_tick_with_ttl = ShTickGetter::<T>::get_current_tick()
             .checked_add(&self.get_ttl())
             .ok_or(ArithmeticError::Overflow)?;
 
         let next_available_block: BlockNumberFor<T> = match self {
             ExpirationItem::ProviderTopUp(_) => {
-                NextAvailableProviderTopUpExpirationBlock::<T>::get().into()
+                NextAvailableProviderTopUpExpirationBlock::<T>::get()
             }
         };
 
-        Ok(max(next_available_block, current_block_plus_ttl))
+        Ok(max(next_available_block, current_global_tick_with_ttl))
     }
 
     pub(crate) fn try_append(
@@ -65,10 +60,8 @@ impl<T: Config> ExpirationItem<T> {
         let mut next_expiration_block = expiration_block;
         while let Err(_) = match self {
             ExpirationItem::ProviderTopUp(provider_id) => {
-                let next_expiration_relay_chain_block_number =
-                    Pallet::<T>::convert_block_number_to_relay_block_number(next_expiration_block)?;
                 <ProviderTopUpExpirations<T>>::try_append(
-                    next_expiration_relay_chain_block_number,
+                    next_expiration_block,
                     provider_id.clone(),
                 )
             }
@@ -87,11 +80,7 @@ impl<T: Config> ExpirationItem<T> {
     ) -> DispatchResult {
         match self {
             ExpirationItem::ProviderTopUp(_) => {
-                let next_expiration_relay_chain_block_number =
-                    Pallet::<T>::convert_block_number_to_relay_block_number(next_expiration_block)?;
-                NextAvailableProviderTopUpExpirationBlock::<T>::set(
-                    next_expiration_relay_chain_block_number,
-                );
+                NextAvailableProviderTopUpExpirationBlock::<T>::set(next_expiration_block);
 
                 Ok(())
             }
@@ -312,12 +301,12 @@ pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;
 /// Type alias for the `StartingReputationWeight` type used in the Storage Providers pallet.
 pub type StartingReputationWeight<T> = <T as crate::Config>::StartingReputationWeight;
 
-/// Type alias for the `RelayBlockGetter` type used in the Storage Providers pallet.
-pub type RelayBlockGetter<T> = <T as crate::Config>::RelayBlockGetter;
+/// Type alias for the `StorageHubTickGetter` type used in the Storage Providers pallet.
+pub type ShTickGetter<T> = <T as crate::Config>::StorageHubTickGetter;
 
-/// Type alias for the `BlockNumber` type used by `RelayBlockGetter`.
-pub type RelayBlockNumber<T> =
-    <<T as crate::Config>::RelayBlockGetter as BlockNumberProvider>::BlockNumber;
+/// Type alias for the `BlockNumber` type used by `StorageHubTickGetter`.
+pub type StorageHubTickNumber<T> =
+    <<T as crate::Config>::StorageHubTickGetter as shp_traits::StorageHubTickGetter>::TickNumber;
 
 /// Type alias for the `StorageDataUnitAndBalanceConvert` type used in the Storage Providers pallet.
 pub type StorageDataUnitAndBalanceConverter<T> =

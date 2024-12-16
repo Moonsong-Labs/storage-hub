@@ -11,8 +11,8 @@ use pallet_nfts::PalletFeatures;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
-    ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface, TrieMutation,
-    TrieRemoveMutation,
+    ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface,
+    StorageHubTickGetter, TrieMutation, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -375,6 +375,14 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
     }
 }
 
+pub struct MockStorageHubTickGetter;
+impl StorageHubTickGetter for MockStorageHubTickGetter {
+    type TickNumber = BlockNumberFor<Test>;
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
@@ -398,7 +406,7 @@ impl pallet_storage_providers::Config for Test {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = MockStorageHubTickGetter;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<10>;

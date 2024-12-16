@@ -1441,6 +1441,7 @@ declare const _default: {
    * Lookup132: pallet_storage_providers::types::TopUpMetadata<T>
    **/
   PalletStorageProvidersTopUpMetadata: {
+    startedAt: string;
     endBlockGracePeriod: string;
   };
   /**

@@ -2,9 +2,9 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
-        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, ProviderTopUpTtl,
-        RelayBlockGetter, SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata,
-        ValueProposition, ValuePropositionWithId,
+        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, ProviderTopUpTtl, ShTickGetter,
+        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
+        ValuePropositionWithId,
     },
     Error, Event, InsolventProviders, MainStorageProviders,
 };
@@ -22,11 +22,10 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
-    ReadBucketsInterface, ReadProvidersInterface,
+    ReadBucketsInterface, ReadProvidersInterface, StorageHubTickGetter,
 };
 use sp_arithmetic::{MultiplyRational, Rounding};
 use sp_runtime::bounded_vec;
-use sp_runtime::traits::BlockNumberProvider;
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -5039,10 +5038,7 @@ mod slash_and_top_up {
         use frame_support::traits::fungible::Inspect;
         use sp_runtime::traits::ConvertBack;
 
-        use crate::{
-            types::RelayBlockNumber, AwaitingTopUpFromProviders, InsolventProviders,
-            ProviderTopUpExpirations,
-        };
+        use crate::{AwaitingTopUpFromProviders, InsolventProviders, ProviderTopUpExpirations};
 
         use super::*;
 
@@ -5184,7 +5180,7 @@ mod slash_and_top_up {
 
                 let grace_period: u32 = TopUpGracePeriod::get();
                 let end_block_grace_period =
-                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period as u64;
 
                 // Verify post state based on the test setup
                 if self.automatic_top_up {
@@ -5241,12 +5237,15 @@ mod slash_and_top_up {
                         post_state_provider.capacity
                     );
                 } else if deposit_needed_for_capacity_used_fn() > 0 {
+                    let top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                    )
+                    .unwrap();
+
                     System::assert_has_event(
                         Event::<Test>::AwaitingTopUp {
                             provider_id: self.provider_id,
-                            top_up_metadata: TopUpMetadata {
-                                end_block_grace_period,
-                            },
+                            top_up_metadata: top_up_metadata.clone(),
                         }
                         .into(),
                     );
@@ -5263,11 +5262,6 @@ mod slash_and_top_up {
                     // Check that the provider's free balance hasn't been reduced since there was not enough to top up
                     assert_eq!(NativeBalance::free_balance(self.account), pre_state_balance);
 
-                    // Check that the AwaitingTopUpFromProviders storage has been updated
-                    let top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
-                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
-                    )
-                    .unwrap();
                     assert_eq!(
                         top_up_metadata.end_block_grace_period,
                         end_block_grace_period
@@ -5304,7 +5298,7 @@ mod slash_and_top_up {
             fn manual_top_up(&self) {
                 let grace_period: u32 = TopUpGracePeriod::get();
                 let end_block_grace_period =
-                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period as u64;
 
                 let pre_state_provider =
                     MainStorageProviders::<Test>::get(self.provider_id).unwrap();
@@ -5391,9 +5385,9 @@ mod slash_and_top_up {
                 let pre_state_treasury_balance =
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
-                let grace_period: RelayBlockNumber<Test> = ProviderTopUpTtl::<Test>::get();
+                let grace_period: u32 = ProviderTopUpTtl::<Test>::get();
                 let end_block_grace_period =
-                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period as u64;
 
                 // Wait for the grace period to expire
                 run_to_block((end_block_grace_period + 1).into());

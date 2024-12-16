@@ -326,6 +326,15 @@ parameter_types! {
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
 
+pub struct MockStorageHubTickGetter;
+impl shp_traits::StorageHubTickGetter for MockStorageHubTickGetter {
+    type TickNumber = BlockNumberFor<Test>;
+
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+}
+
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -347,7 +356,7 @@ impl crate::Config for Test {
     type PaymentStreams = PaymentStreams;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = MockStorageHubTickGetter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;

@@ -25,14 +25,14 @@ use shp_traits::{
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
-    SystemMetricsInterface,
+    StorageHubTickGetter, SystemMetricsInterface,
 };
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
-    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, RelayBlockNumber,
+    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, ShTickGetter,
     SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TickNumberFor,
     TopUpMetadata, ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
@@ -933,9 +933,8 @@ where
             )?;
 
             let top_up_metadata = TopUpMetadata {
-                end_block_grace_period: Self::convert_block_number_to_relay_block_number(
-                    block_number_expiry,
-                )?,
+                started_at: ShTickGetter::<T>::get_current_tick(),
+                end_block_grace_period: block_number_expiry,
             };
 
             AwaitingTopUpFromProviders::<T>::insert(
@@ -1538,15 +1537,6 @@ where
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
-    }
-
-    /// Convert `BlockNumberFor` to `RelayBlockNumber`.
-    pub(crate) fn convert_block_number_to_relay_block_number(
-        block_number: BlockNumberFor<T>,
-    ) -> Result<RelayBlockNumber<T>, DispatchError> {
-        let block_number = block_number.into();
-        RelayBlockNumber::<T>::try_from(block_number)
-            .map_err(|_| Error::<T>::BlockNumberToRelayBlockNumberConversionFailed.into())
     }
 }
 
@@ -2155,15 +2145,16 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
                 .is_some()
     }
 
-    fn insolvency_tick(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
-        if let Some(tick) =
-            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(who))
+    fn starting_non_chargeable_tick(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
+        // Providers cannot charge for the time they are in the state of being awaited for to top up their deposit.
+        if let Some(top_up_metadata) =
+            AwaitingTopUpFromProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(who))
         {
-            Some(tick)
-        } else if let Some(tick) =
-            InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(who))
+            Some(top_up_metadata.started_at)
+        } else if let Some(top_up_metadata) =
+            AwaitingTopUpFromProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(who))
         {
-            Some(tick)
+            Some(top_up_metadata.started_at)
         } else {
             None
         }
@@ -2499,7 +2490,7 @@ where
 mod hooks {
     use crate::{
         pallet,
-        types::RelayBlockGetter,
+        types::ShTickGetter,
         utils::{BlockNumberFor, StorageProviderId},
         AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
         MainStorageProviders, NextStartingBlockToCleanUp, Pallet, ProviderTopUpExpirations,
@@ -2513,8 +2504,9 @@ mod hooks {
         },
         weights::WeightMeter,
     };
+    use shp_traits::StorageHubTickGetter;
     use sp_runtime::{
-        traits::{BlockNumberProvider, One, Zero},
+        traits::{One, Zero},
         Saturating,
     };
 
@@ -2554,13 +2546,12 @@ mod hooks {
                 return;
             }
 
-            // Provider top up expirations expire based on the relay chain block number, not the local block number.
+            // Provider top up expirations expire based on the global tick.
             // TODO: use next starting block to clean up instead of current block number here
-            let relay_chain_block_number = RelayBlockGetter::<T>::current_block_number();
+            let global_tick = ShTickGetter::<T>::get_current_tick();
 
             // Remove expired move bucket requests if any existed and process them.
-            let mut provider_top_up_expirations =
-                ProviderTopUpExpirations::<T>::take(&relay_chain_block_number);
+            let mut provider_top_up_expirations = ProviderTopUpExpirations::<T>::take(&global_tick);
             meter.consume(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
@@ -2571,10 +2562,7 @@ mod hooks {
 
             // If there are remaining items which were not processed, put them back in storage
             if !provider_top_up_expirations.is_empty() {
-                ProviderTopUpExpirations::<T>::insert(
-                    &relay_chain_block_number,
-                    provider_top_up_expirations,
-                );
+                ProviderTopUpExpirations::<T>::insert(&global_tick, provider_top_up_expirations);
                 meter.consume(db_weight.writes(1));
             }
         }
@@ -2645,6 +2633,8 @@ mod hooks {
                         );
                     }
                 }
+
+                // TODO: stop challenge cycle of provider for proofs dealer
             }
 
             meter.consume(potential_weight);
