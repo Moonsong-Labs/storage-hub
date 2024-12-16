@@ -59,6 +59,19 @@ pub mod dynamic_params {
         #[allow(non_upper_case_globals)]
         /// The maximum treasury cut that can be taken from the amount charged from a payment stream.
         pub static MaximumTreasuryCut: Perbill = Perbill::from_percent(5);
+
+        #[codec(index = 17)]
+        #[allow(non_upper_case_globals)]
+        /// 20 ticks, or 2 minutes with 6 seconds per tick.
+        pub static MinSeedPeriod: BlockNumber = 20;
+
+        #[codec(index = 18)]
+        #[allow(non_upper_case_globals)]
+        /// 10k UNITs * [`MinSeedPeriod`] = 10k UNITs * 20 = 200k UNITs
+        ///
+        ///  This can be interpreted as "a Provider with 10k UNITs of stake would get the minimum seed period".
+        pub static StakeToSeedPeriod: Balance =
+            10_000 * UNIT * Into::<u128>::into(MinSeedPeriod::get());
     }
 }
 

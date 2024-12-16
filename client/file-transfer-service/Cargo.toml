@@ -25,6 +25,7 @@ async-trait = { workspace = true }
 array-bytes = { workspace = true }
 futures = { workspace = true }
 codec = { workspace = true }
+chrono = { workspace = true }
 
 # Substrate
 sc-client-api = { workspace = true }

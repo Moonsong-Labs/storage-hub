@@ -4539,50 +4539,6 @@ mod increase_bucket_size {
                 );
             });
         }
-
-        #[test]
-        fn bucket_must_have_msp_for_operation() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount, None, None);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &bucket_owner,
-                    bucket_name,
-                );
-
-                // Add a bucket for Alice
-                assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
-                    bucket_owner,
-                    bucket_id,
-                    false,
-                    None,
-                    Some(value_prop_id)
-                ));
-
-                // Remove the MSP from the bucket
-                assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
-                        &bucket_id
-                    )
-                );
-
-                // Try to increase the size of a bucket that does not have an MSP
-                assert_noop!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
-                        &bucket_id, 100
-                    ),
-                    Error::<Test>::BucketMustHaveMspForOperation
-                );
-            });
-        }
     }
 
     mod success {
@@ -4667,6 +4623,49 @@ mod increase_bucket_size {
 
                     assert_eq!(actual_rate, expected_rate);
                 }
+            });
+        }
+
+        #[test]
+        fn increase_bucket_size_without_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                // Remove the MSP from the bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
+                );
+
+                // Try to increase the size of a bucket that does not have an MSP
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id, 100
+                    )
+                );
             });
         }
     }

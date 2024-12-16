@@ -1157,3 +1157,38 @@ pub trait TreasuryCutCalculator {
         amount_to_charge: Self::Balance,
     ) -> Self::Balance;
 }
+
+/// The interface for the Commit-Reveal Randomness pallet.
+pub trait CommitRevealRandomnessInterface {
+    /// The type which represents a Provider's ID.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// Initialise a Provider's randomness commit-reveal cycle.
+    ///
+    /// Sets the Provider as a ProviderWithoutCommitment (that is, a Provider that has
+    /// not submitted a seed commitment previously) and the sets its deadline to submit
+    /// the initial seed commitment to the current tick + the Provider's period
+    /// (based on its stake) + the randomness tick tolerance.
+    fn initialise_randomness_cycle(who: &Self::ProviderId) -> DispatchResult;
+
+    /// Stop a Provider's randomness commit-reveal cycle.
+    ///
+    /// This cleans up the Provider's used storage and allows the Provider
+    /// to not be penalized for not submitting more randomness seeds.
+    /// This makes it so this function should only be called when a Provider
+    /// is being signed off from the network.
+    fn stop_randomness_cycle(who: &Self::ProviderId) -> DispatchResult;
+}

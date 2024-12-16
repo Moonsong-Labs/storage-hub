@@ -28,9 +28,9 @@ use pallet_file_system_runtime_api::{
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
-    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
+    PaymentStreamsInterface, ReadBucketsInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::{
@@ -1367,10 +1367,13 @@ where
         );
 
         if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
-            // This means that this is the first file added to the BSP's Forest.
+            // This means the BSP just started storing files, so its challenge cycle and
+            // randomness cycle should be initialised.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
                 &bsp_id,
             )?;
+
+            <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::initialise_randomness_cycle(&bsp_id)?;
 
             // Emit the corresponding event.
             Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
@@ -1693,10 +1696,16 @@ where
         file_key: MerkleHash<T>,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
-        // Get the BSP ID of the sender
+        // Get the SP ID of the sender
         let bsp_id =
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+                .ok_or(Error::<T>::NotASp)?;
+
+        // Ensure the ID belongs to a BSP, not a MSP
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
+            Error::<T>::NotABsp
+        );
 
         // Get the block when the pending stop storing request of the BSP for the file key was opened.
         let (block_when_opened, file_size) =
@@ -1739,6 +1748,13 @@ where
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
             &bsp_id, file_size,
         )?;
+
+        // If the new capacity used for this BSP is 0, stop its randomness cycle.
+        if <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id)
+            == Zero::zero()
+        {
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
+        }
 
         // Remove the pending stop storing request from storage.
         <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
@@ -1896,6 +1912,14 @@ where
 
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
+
+        // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
+        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
+            && <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
+                == Zero::zero()
+        {
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&sp_id)?;
+        }
 
         Ok((sp_id, new_root))
     }

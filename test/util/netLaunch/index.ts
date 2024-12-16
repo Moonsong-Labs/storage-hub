@@ -154,6 +154,14 @@ export class NetworkLauncher {
       composeYaml.services["sh-user"].command.push(
         "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
       );
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
+        composeYaml.services["sh-msp-2"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
+      }
     }
 
     const cwd = path.resolve(process.cwd(), "..", "docker");

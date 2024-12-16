@@ -1866,27 +1866,25 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // First, try to update the fixed rate payment stream with the new rate, since
+            // this function uses the current bucket size to calculate it
+            if let Some(msp_id) = bucket.msp_id {
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::Increase(delta),
+                )?;
+            }
+
+            // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_add(delta);
 
-            Ok::<_, DispatchError>((
-                bucket
-                    .msp_id
-                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
-                bucket.user_id.clone(),
-            ))
-        })?;
-
-        Self::apply_delta_fixed_rate_payment_stream(
-            &msp_id,
-            bucket_id,
-            &user_id,
-            RateDeltaParam::Increase(delta),
-        )?;
-
-        Ok(())
+            Ok(())
+        })
     }
 
     fn decrease_bucket_size(
@@ -1896,8 +1894,8 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            bucket.size = bucket.size.saturating_sub(delta);
-
+            // First, try to update the fixed rate payment stream with the new rate, since
+            // this function uses the current bucket size to calculate it
             if let Some(msp_id) = bucket.msp_id {
                 Self::apply_delta_fixed_rate_payment_stream(
                     &msp_id,
@@ -1906,6 +1904,9 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                     RateDeltaParam::Decrease(delta),
                 )?;
             }
+
+            // Then, if that was successful, update the bucket size
+            bucket.size = bucket.size.saturating_sub(delta);
 
             Ok(())
         })

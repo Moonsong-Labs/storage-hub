@@ -3,28 +3,52 @@ use async_trait::async_trait;
 use prost::Message;
 use thiserror::Error;
 
-use sc_network::{config::OutgoingResponse, Multiaddr, PeerId, ProtocolName, RequestFailure};
-
 use codec::Encode;
+use sc_network::{config::OutgoingResponse, Multiaddr, PeerId, ProtocolName, RequestFailure};
+use sc_tracing::tracing::error;
+
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{ChunkId, DownloadRequestId, FileKey, FileKeyProof};
+use shc_common::types::{BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof};
 
 use super::{schema, FileTransferService};
+
+const LOG_TARGET: &str = "file-transfer-service";
 
 /// Messages understood by the FileTransfer service actor
 pub enum FileTransferServiceCommand {
     UploadRequest {
+        /// Peer ID to upload the file to. This Peer ID must be registered as a known address
+        /// before the upload request can be made.
         peer_id: PeerId,
+        /// File key of the file we are uploading.
         file_key: FileKey,
+        /// File key proof of the file we are uploading. This contains 1 or more chunks of the file
+        /// and the Merkle proof of them.
         file_key_proof: FileKeyProof,
+        /// Bucket ID is only required for Bucket operations.
+        /// Since the FileTransferService is not aware of which files are in which buckets,
+        /// it needs to be provided by the caller to pass the allow list check.
+        /// Note: The task that handles the event is responsible for checking if the file is
+        /// part of the specified bucket.
+        bucket_id: Option<BucketId>,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
         >,
     },
     DownloadRequest {
+        /// Peer ID to download the file from. This Peer ID must be registered as a known address
+        /// before the download request can be made.
         peer_id: PeerId,
+        /// File key of the file to download.
         file_key: FileKey,
+        /// Chunk ID of the chunk to download.
         chunk_id: ChunkId,
+        /// Bucket ID is only required for Bucket operations.
+        /// Since the FileTransferService is not aware of which files are in which buckets,
+        /// it needs to be provided by the caller to pass the allow list check.
+        /// Note: The task that handles the event is responsible for checking if the file is
+        /// part of the specified bucket.
+        bucket_id: Option<BucketId>,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
         >,
@@ -46,6 +70,16 @@ pub enum FileTransferServiceCommand {
     },
     UnregisterFile {
         file_key: FileKey,
+        callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
+    },
+    RegisterNewBucketPeer {
+        peer_id: PeerId,
+        bucket_id: BucketId,
+        callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
+    },
+    ScheduleUnregisterBucket {
+        bucket_id: BucketId,
+        grace_period_seconds: Option<u64>,
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
 }
@@ -73,6 +107,12 @@ pub enum RequestError {
     /// Failed to return response from Download request
     #[error("Failed to return download response: {0:?}")]
     DownloadResponseFailure(OutgoingResponse),
+    /// Bucket already registered for peer
+    #[error("Bucket already registered for peer")]
+    BucketAlreadyRegisteredForPeer,
+    /// Bucket not registered for peer
+    #[error("Bucket not registered for peer")]
+    BucketNotRegisteredForPeer,
 }
 
 /// Allows our ActorHandle to implement
@@ -84,6 +124,7 @@ pub trait FileTransferServiceInterface {
         peer_id: PeerId,
         file_key: FileKey,
         file_key_proof: FileKeyProof,
+        bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError>;
 
     async fn download_request(
@@ -91,6 +132,7 @@ pub trait FileTransferServiceInterface {
         peer_id: PeerId,
         file_key: FileKey,
         chunk_id: ChunkId,
+        bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
 
     async fn download_response(
@@ -112,6 +154,25 @@ pub trait FileTransferServiceInterface {
     ) -> Result<(), RequestError>;
 
     async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError>;
+
+    async fn register_new_bucket_peer(
+        &self,
+        peer_id: PeerId,
+        bucket_id: BucketId,
+    ) -> Result<(), RequestError>;
+
+    async fn unregister_bucket(&self, bucket_id: BucketId) -> Result<(), RequestError>;
+
+    async fn unregister_bucket_with_grace_period(
+        &self,
+        bucket_id: BucketId,
+        grace_period_seconds: u64,
+    ) -> Result<(), RequestError>;
+
+    async fn extract_peer_ids_and_register_known_addresses(
+        &mut self,
+        multiaddresses: Vec<Multiaddr>,
+    ) -> Vec<PeerId>;
 }
 
 #[async_trait]
@@ -123,12 +184,14 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         peer_id: PeerId,
         file_key: FileKey,
         file_key_proof: FileKeyProof,
+        bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::UploadRequest {
             peer_id,
             file_key,
             file_key_proof,
+            bucket_id,
             callback,
         };
         self.send(command).await;
@@ -168,12 +231,14 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         peer_id: PeerId,
         file_key: FileKey,
         chunk_id: ChunkId,
+        bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::DownloadRequest {
             peer_id,
             file_key,
             chunk_id,
+            bucket_id,
             callback,
         };
         self.send(command).await;
@@ -206,7 +271,8 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         }
     }
 
-    /// Responds a download request of a file chunk with a [`FileKeyProof`]
+    /// Respond to a download request of a file chunk with a [`FileKeyProof`].
+    /// This returns after the message has been processed by the service.
     async fn download_response(
         &self,
         file_key_proof: FileKeyProof,
@@ -236,8 +302,8 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         }
     }
 
-    /// Tell the FileTransferService to register a multiaddress as known for a specified PeerId.
-    /// This returns as soon as the message has been dispatched (not processed) to the service.
+    /// Tell the FileTransferService to register a multiaddress as known for a specified [`PeerId`].
+    /// This returns after the message has been processed by the service.
     async fn add_known_address(
         &self,
         peer_id: PeerId,
@@ -253,9 +319,9 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to add known multiaddress to peer")
     }
 
-    /// Tell the FileTransferService to start listening for new upload requests from peer_id
-    /// on file file_key.
-    /// This returns as soon as the message has been dispatched (not processed) to the service.
+    /// Tell the FileTransferService to start listening for new upload requests from [`peer_id`]
+    /// on file [`file_key`].
+    /// This returns after the message has been processed by the service.
     async fn register_new_file_peer(
         &self,
         peer_id: PeerId,
@@ -271,13 +337,86 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to register new file")
     }
 
-    /// Tell the FileTransferService to no longer listen for upload requests from peer_id on file
-    /// file_key.
+    /// Tell the FileTransferService to no longer listen for upload requests from [`peer_id`] on
+    /// file [`file_key`].
     /// This returns as soon as the message has been dispatched (not processed) to the service.
     async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::UnregisterFile { file_key, callback };
         self.send(command).await;
         rx.await.expect("Failed to unregister file")
+    }
+
+    /// Tell the FileTransferService to start listening for new upload requests from [`peer_id`]
+    /// on Bucket [`bucket_id`].
+    /// This returns after the message has been processed by the service.
+    async fn register_new_bucket_peer(
+        &self,
+        peer_id: PeerId,
+        bucket_id: BucketId,
+    ) -> Result<(), RequestError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let command = FileTransferServiceCommand::RegisterNewBucketPeer {
+            peer_id,
+            bucket_id,
+            callback,
+        };
+        self.send(command).await;
+        rx.await.expect("Failed to register new bucket peer")
+    }
+
+    /// Same as [`unregister_bucket`] but the unregistering is delayed for a specified amount of
+    /// time.
+    /// This returns after the message has been processed by the service.
+    async fn unregister_bucket_with_grace_period(
+        &self,
+        bucket_id: BucketId,
+        grace_period_seconds: u64,
+    ) -> Result<(), RequestError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let command = FileTransferServiceCommand::ScheduleUnregisterBucket {
+            bucket_id,
+            grace_period_seconds: Some(grace_period_seconds),
+            callback,
+        };
+        self.send(command).await;
+        rx.await.expect("Failed to unregister bucket")
+    }
+
+    /// Tell the FileTransferService to no longer listen for upload requests from [`peer_id`]
+    /// on Bucket [`bucket_id`].
+    /// This returns after the message has been processed by the service.
+    async fn unregister_bucket(&self, bucket_id: BucketId) -> Result<(), RequestError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let command = FileTransferServiceCommand::ScheduleUnregisterBucket {
+            bucket_id,
+            grace_period_seconds: None,
+            callback,
+        };
+        self.send(command).await;
+        rx.await.expect("Failed to unregister bucket")
+    }
+
+    /// Helper function to register known addresses and extract their peer ids.
+    async fn extract_peer_ids_and_register_known_addresses(
+        &mut self,
+        multiaddresses: Vec<Multiaddr>,
+    ) -> Vec<PeerId> {
+        let mut peer_ids = Vec::new();
+        for multiaddress in &multiaddresses {
+            if let Some(peer_id) = PeerId::try_from_multiaddr(&multiaddress) {
+                if let Err(error) = self.add_known_address(peer_id, multiaddress.clone()).await {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to add known address {:?} for peer {:?} due to {:?}",
+                        multiaddress,
+                        peer_id,
+                        error
+                    );
+                }
+                peer_ids.push(peer_id);
+            }
+        }
+        peer_ids
     }
 }

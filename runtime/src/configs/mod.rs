@@ -32,7 +32,6 @@ use shp_data_price_updater::{MostlyStablePriceIndexUpdater, MostlyStablePriceInd
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
@@ -40,11 +39,10 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify, Zero},
-    AccountId32, DispatchError, Perbill, SaturatedConversion,
+    AccountId32, Perbill, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
-use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
+use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
@@ -67,6 +65,20 @@ pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
 /// Type representing the storage data units in StorageHub.
 pub type StorageDataUnit = u64;
 
+// TODO: remove this and replace with pallet treasury
+pub struct TreasuryAccount;
+impl Get<AccountId32> for TreasuryAccount {
+    fn get() -> AccountId32 {
+        AccountId32::from([0; 32])
+    }
+}
+
+parameter_types! {
+    /// Relay Chain `TransactionByteFee` / 10
+    pub const TransactionByteFee: Balance = 10 * MICROUNIT;
+}
+
+/****** FRAME System ******/
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
 
@@ -126,19 +138,45 @@ impl frame_system::Config for Runtime {
     type SS58Prefix = SS58Prefix;
     /// The action to take on a Runtime Upgrade
     type OnSetCode = cumulus_pallet_parachain_system::ParachainSetCode<Self>;
-    type MaxConsumers = frame_support::traits::ConstU32<16>;
+    type MaxConsumers = ConstU32<16>;
 }
+/****** ****** ****** ******/
+
+/****** Miscellaneous parachain pallets ******/
+parameter_types! {
+    pub const RelayOrigin: AggregateMessageOrigin = AggregateMessageOrigin::Parent;
+    pub const ReservedDmpWeight: Weight = MAXIMUM_BLOCK_WEIGHT.saturating_div(4);
+    pub const ReservedXcmpWeight: Weight = MAXIMUM_BLOCK_WEIGHT.saturating_div(4);
+}
+
+impl cumulus_pallet_parachain_system::Config for Runtime {
+    type WeightInfo = ();
+    type RuntimeEvent = RuntimeEvent;
+    type OnSystemEvent = ();
+    type SelfParaId = parachain_info::Pallet<Runtime>;
+    type OutboundXcmpMessageSource = XcmpQueue;
+    type DmpQueue = frame_support::traits::EnqueueWithOrigin<MessageQueue, RelayOrigin>;
+    type ReservedDmpWeight = ReservedDmpWeight;
+    type XcmpMessageHandler = XcmpQueue;
+    type ReservedXcmpWeight = ReservedXcmpWeight;
+    type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
+    type ConsensusHook = ConsensusHook;
+}
+
+pub(crate) type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
+    Runtime,
+    RELAY_CHAIN_SLOT_DURATION_MILLIS,
+    BLOCK_PROCESSING_VELOCITY,
+    UNINCLUDED_SEGMENT_CAPACITY,
+>;
+
+impl parachain_info::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {
     type Moment = u64;
     type OnTimestampSet = Aura;
     type MinimumPeriod = ConstU64<0>;
     type WeightInfo = ();
-}
-
-impl pallet_authorship::Config for Runtime {
-    type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
-    type EventHandler = (CollatorSelection,);
 }
 
 parameter_types! {
@@ -163,11 +201,6 @@ impl pallet_balances::Config for Runtime {
     type MaxFreezes = ConstU32<0>;
 }
 
-parameter_types! {
-    /// Relay Chain `TransactionByteFee` / 10
-    pub const TransactionByteFee: Balance = 10 * MICROUNIT;
-}
-
 impl pallet_transaction_payment::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type OnChargeTransaction = pallet_transaction_payment::FungibleAdapter<Balances, ()>;
@@ -182,35 +215,9 @@ impl pallet_sudo::Config for Runtime {
     type RuntimeCall = RuntimeCall;
     type WeightInfo = ();
 }
+/****** ****** ****** ******/
 
-parameter_types! {
-    pub const ReservedXcmpWeight: Weight = MAXIMUM_BLOCK_WEIGHT.saturating_div(4);
-    pub const ReservedDmpWeight: Weight = MAXIMUM_BLOCK_WEIGHT.saturating_div(4);
-    pub const RelayOrigin: AggregateMessageOrigin = AggregateMessageOrigin::Parent;
-}
-
-impl cumulus_pallet_parachain_system::Config for Runtime {
-    type WeightInfo = ();
-    type RuntimeEvent = RuntimeEvent;
-    type OnSystemEvent = ();
-    type SelfParaId = parachain_info::Pallet<Runtime>;
-    type OutboundXcmpMessageSource = XcmpQueue;
-    type DmpQueue = frame_support::traits::EnqueueWithOrigin<MessageQueue, RelayOrigin>;
-    type ReservedDmpWeight = ReservedDmpWeight;
-    type XcmpMessageHandler = XcmpQueue;
-    type ReservedXcmpWeight = ReservedXcmpWeight;
-    type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
-    type ConsensusHook = ConsensusHook;
-}
-pub(crate) type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
-    Runtime,
-    RELAY_CHAIN_SLOT_DURATION_MILLIS,
-    BLOCK_PROCESSING_VELOCITY,
-    UNINCLUDED_SEGMENT_CAPACITY,
->;
-
-impl parachain_info::Config for Runtime {}
-
+/****** XCM-related pallets ******/
 parameter_types! {
     pub MessageQueueServiceWeight: Weight = Perbill::from_percent(35) * RuntimeBlockWeights::get().max_block;
     // TODO: Set appropriate weight limit
@@ -241,21 +248,12 @@ impl pallet_message_queue::Config for Runtime {
     type IdleMaxServiceWeight = (); // TODO: Set appropriate weight limit
 }
 
-impl cumulus_pallet_aura_ext::Config for Runtime {}
-
 parameter_types! {
     /// The asset ID for the asset that we use to pay for message delivery fees.
     pub FeeAssetId: AssetId = AssetId(xcm_config::RelayLocation::get());
     /// The base fee for the message delivery fees.
     pub const ToSiblingBaseDeliveryFee: u128 = CENTS.saturating_mul(3);
 }
-
-pub type PriceForSiblingParachainDelivery = polkadot_runtime_common::xcm_sender::ExponentialPrice<
-    FeeAssetId,
-    ToSiblingBaseDeliveryFee,
-    TransactionByteFee,
-    XcmpQueue,
->;
 
 impl cumulus_pallet_xcmp_queue::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -272,10 +270,21 @@ impl cumulus_pallet_xcmp_queue::Config for Runtime {
     type PriceForSiblingDelivery = PriceForSiblingParachainDelivery;
 }
 
-parameter_types! {
-    pub const Period: BlockNumber = 6 * HOURS;
-    pub const Offset: BlockNumber = 0;
+pub type PriceForSiblingParachainDelivery = polkadot_runtime_common::xcm_sender::ExponentialPrice<
+    FeeAssetId,
+    ToSiblingBaseDeliveryFee,
+    TransactionByteFee,
+    XcmpQueue,
+>;
+/****** ****** ****** ******/
+
+/****** Collation-related pallets ******/
+impl pallet_authorship::Config for Runtime {
+    type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
+    type EventHandler = (CollatorSelection,);
 }
+
+impl cumulus_pallet_aura_ext::Config for Runtime {}
 
 impl pallet_session::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -306,11 +315,10 @@ parameter_types! {
     pub const StakingAdminBodyId: BodyId = BodyId::Defense;
 }
 
-/// We allow root and the StakingAdmin to execute privileged collator selection operations.
-pub type CollatorSelectionUpdateOrigin = EitherOfDiverse<
-    EnsureRoot<AccountId>,
-    EnsureXcm<IsVoiceOfBody<RelayLocation, StakingAdminBodyId>>,
->;
+parameter_types! {
+    pub const Period: BlockNumber = 6 * HOURS;
+    pub const Offset: BlockNumber = 0;
+}
 
 impl pallet_collator_selection::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -328,17 +336,25 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
+/// We allow root and the StakingAdmin to execute privileged collator selection operations.
+pub type CollatorSelectionUpdateOrigin = EitherOfDiverse<
+    EnsureRoot<AccountId>,
+    EnsureXcm<IsVoiceOfBody<RelayLocation, StakingAdminBodyId>>,
+>;
+/****** ****** ****** ******/
+
+/****** NFTs pallet ******/
 parameter_types! {
-    pub Features: PalletFeatures = PalletFeatures::all_enabled();
-    pub const MaxAttributesPerCall: u32 = 10;
     pub const CollectionDeposit: Balance = 100 * UNIT;
     pub const ItemDeposit: Balance = 1 * UNIT;
+    pub const MetadataDepositBase: Balance = 10 * UNIT;
+    pub const MetadataDepositPerByte: Balance = 1 * UNIT;
     pub const ApprovalsLimit: u32 = 20;
     pub const ItemAttributesApprovalsLimit: u32 = 20;
     pub const MaxTips: u32 = 10;
     pub const MaxDeadlineDuration: BlockNumber = 12 * 30 * DAYS;
-    pub const MetadataDepositBase: Balance = 10 * UNIT;
-    pub const MetadataDepositPerByte: Balance = 1 * UNIT;
+    pub const MaxAttributesPerCall: u32 = 10;
+    pub Features: PalletFeatures = PalletFeatures::all_enabled();
 }
 
 impl pallet_nfts::Config for Runtime {
@@ -369,11 +385,22 @@ impl pallet_nfts::Config for Runtime {
     type Helper = ();
     type Locker = ();
 }
+/****** ****** ****** ******/
 
+/****** Parameters pallet ******/
 impl pallet_parameters::Config for Runtime {
     type AdminOrigin = EnsureRoot<AccountId>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeParameters = RuntimeParameters;
+    type WeightInfo = ();
+}
+/****** ****** ****** ******/
+
+/****** Relay Randomness pallet ******/
+impl pallet_randomness::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
     type WeightInfo = ();
 }
 
@@ -442,65 +469,16 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
             .expect("expected to be able to read parent randomness from relay chain state proof")
     }
 }
+/****** ****** ****** ******/
 
-parameter_types! {
-    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
-}
-
-// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-/* parameter_types! {
-    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
-} */
-
-/// Configure the randomness pallet
-impl pallet_randomness::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
-    type WeightInfo = ();
-}
-
+/****** Storage Providers pallet ******/
 parameter_types! {
     pub const SpMinDeposit: Balance = 100 * UNIT;
     pub const BucketDeposit: Balance = 100 * UNIT;
     pub const BspSignUpLockPeriod: BlockNumber = 90 * DAYS; // ~3 months
-}
-
-pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
-pub struct DefaultMerkleRoot<T>(PhantomData<T>);
-impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
-    fn get() -> HasherOutT<T> {
-        sp_trie::empty_trie_root::<T>()
-    }
-}
-
-pub struct StorageDataUnitAndBalanceConverter;
-impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
-    fn convert(data_unit: StorageDataUnit) -> Balance {
-        data_unit.saturated_into()
-    }
-}
-impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
-    fn convert_back(balance: Balance) -> StorageDataUnit {
-        balance.saturated_into()
-    }
-}
-
-// Benchmark helpers for the Providers pallet
-#[cfg(feature = "runtime-benchmarks")]
-pub struct ProvidersBenchmarkHelpers;
-#[cfg(feature = "runtime-benchmarks")]
-impl pallet_storage_providers::benchmarking::BenchmarkHelpers<Runtime>
-    for ProvidersBenchmarkHelpers
-{
-    type ProviderId = <Runtime as pallet_storage_providers::Config>::ProviderId;
-    fn set_accrued_failed_proofs(provider_id: Self::ProviderId, value: u32) {
-        pallet_proofs_dealer::SlashableProviders::<Runtime>::insert(provider_id, value);
-    }
-
-    fn get_accrued_failed_proofs(provider_id: Self::ProviderId) -> u32 {
-        pallet_proofs_dealer::SlashableProviders::<Runtime>::get(provider_id).unwrap_or(0)
-    }
+    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
+    // TODO: If the next line is uncommented (which should be eventually, replacing the line above), compilation breaks (most likely because of mismatched dependency issues)
+    // pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
 }
 
 impl pallet_storage_providers::Config for Runtime {
@@ -555,9 +533,65 @@ impl pallet_storage_providers::Config for Runtime {
     type BenchmarkHelpers = ProvidersBenchmarkHelpers;
 }
 
+pub struct StorageDataUnitAndBalanceConverter;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.saturated_into()
+    }
+}
+impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
+    fn convert_back(balance: Balance) -> StorageDataUnit {
+        balance.saturated_into()
+    }
+}
+
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
+
+// Benchmark helpers for the Providers pallet
+#[cfg(feature = "runtime-benchmarks")]
+pub struct ProvidersBenchmarkHelpers;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_storage_providers::benchmarking::BenchmarkHelpers<Runtime>
+    for ProvidersBenchmarkHelpers
+{
+    type ProviderId = <Runtime as pallet_storage_providers::Config>::ProviderId;
+    fn set_accrued_failed_proofs(provider_id: Self::ProviderId, value: u32) {
+        pallet_proofs_dealer::SlashableProviders::<Runtime>::insert(provider_id, value);
+    }
+
+    fn get_accrued_failed_proofs(provider_id: Self::ProviderId) -> u32 {
+        pallet_proofs_dealer::SlashableProviders::<Runtime>::get(provider_id).unwrap_or(0)
+    }
+}
+/****** ****** ****** ******/
+
+/****** Payment Streams pallet ******/
 parameter_types! {
     pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
     pub const UserWithoutFundsCooldown: BlockNumber = 100;
+}
+
+impl pallet_payment_streams::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_payment_streams::weights::SubstrateWeight<Runtime>;
+    type NativeBalance = Balances;
+    type ProvidersPallet = Providers;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type UserWithoutFundsCooldown = UserWithoutFundsCooldown; // Amount of blocks that a user will have to wait before being able to clear the out of funds flag
+    type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
+    type Units = StorageDataUnit; // Storage unit
+    type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = ProofsDealer;
+    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perbill>;
+    type TreasuryAccount = TreasuryAccount;
+    type MaxUsersToCharge = ConstU32<10>;
+    type BaseDeposit = ConstU128<10>;
 }
 
 // Converter from the BlockNumber type to the Balance type for math
@@ -578,47 +612,76 @@ impl LinearThenPowerOfTwoTreasuryCutCalculatorConfig<Perbill> for Runtime {
     type MinimumCut = runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut;
     type MaximumCut = runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut;
 }
+/****** ****** ****** ******/
 
-impl pallet_payment_streams::Config for Runtime {
+/****** Proofs Dealer pallet ******/
+const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
+const MAX_CUSTOM_CHALLENGES_PER_BLOCK: u32 = 10;
+const TOTAL_MAX_CHALLENGES_PER_BLOCK: u32 =
+    RANDOM_CHALLENGES_PER_BLOCK + MAX_CUSTOM_CHALLENGES_PER_BLOCK;
+
+parameter_types! {
+    pub const RandomChallengesPerBlock: u32 = RANDOM_CHALLENGES_PER_BLOCK;
+    pub const MaxCustomChallengesPerBlock: u32 = MAX_CUSTOM_CHALLENGES_PER_BLOCK;
+    pub const TotalMaxChallengesPerBlock: u32 = TOTAL_MAX_CHALLENGES_PER_BLOCK;
+    pub const TargetTicksStorageOfSubmitters: u32 = 3;
+    pub const ChallengeHistoryLength: BlockNumber = 100;
+    pub const ChallengesQueueLength: u32 = 100;
+    pub const ChallengesFee: Balance = 1 * UNIT;
+    pub const ChallengeTicksTolerance: u32 = 50;
+}
+
+impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type WeightInfo = pallet_payment_streams::weights::SubstrateWeight<Runtime>;
-    type NativeBalance = Balances;
+    type WeightInfo = pallet_proofs_dealer::weights::SubstrateWeight<Runtime>;
     type ProvidersPallet = Providers;
-    type RuntimeHoldReason = RuntimeHoldReason;
-    type UserWithoutFundsCooldown = UserWithoutFundsCooldown; // Amount of blocks that a user will have to wait before being able to clear the out of funds flag
-    type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
-    type Units = StorageDataUnit; // Storage unit
-    type BlockNumberToBalance = BlockNumberToBalance;
-    type ProvidersProofSubmitters = ProofsDealer;
-    type TreasuryCutCalculator = LinearThenPowerOfTwoTreasuryCutCalculator<Runtime, Perbill>;
-    type TreasuryAccount = TreasuryAccount;
-    type MaxUsersToCharge = ConstU32<10>;
-    type BaseDeposit = ConstU128<10>;
+    type NativeBalance = Balances;
+    type MerkleTrieHash = Hash;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = ForestVerifier<StorageProofsMerkleTrieLayout, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = FileKeyVerifier<
+        StorageProofsMerkleTrieLayout,
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    #[cfg(feature = "runtime-benchmarks")]
+    type RandomChallengesPerBlock = ConstU32<0>;
+    #[cfg(not(feature = "runtime-benchmarks"))]
+    type RandomChallengesPerBlock = RandomChallengesPerBlock;
+    #[cfg(feature = "runtime-benchmarks")]
+    type MaxCustomChallengesPerBlock = TotalMaxChallengesPerBlock;
+    #[cfg(not(feature = "runtime-benchmarks"))]
+    type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
+    type MaxSubmittersPerTick = MaxSubmittersPerTick;
+    type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
+    type ChallengeHistoryLength = ChallengeHistoryLength;
+    type ChallengesQueueLength = ChallengesQueueLength;
+    type CheckpointChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
+    type ChallengesFee = ChallengesFee;
+    type Treasury = TreasuryAccount;
+    // TODO: Once the client logic to keep track of CR randomness deadlines and execute their submissions is implemented
+    // AND after the chain has been live for enough time to have enough providers to avoid the commit-reveal randomness being
+    // gameable, the randomness provider should be CrRandomness
+    type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
+    type StakeToChallengePeriod =
+        runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
+    type MinChallengePeriod = runtime_params::dynamic_params::runtime_config::MinChallengePeriod;
+    type ChallengeTicksTolerance = ChallengeTicksTolerance;
+    type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
+    type BlockFullnessHeadroom = BlockFullnessHeadroom;
+    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
+    type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
 }
 
-// TODO: remove this and replace with pallet treasury
-pub struct TreasuryAccount;
-impl Get<AccountId32> for TreasuryAccount {
-    fn get() -> AccountId32 {
-        AccountId32::from([0; 32])
-    }
-}
-
-pub struct BlockFullnessHeadroom;
-impl Get<Weight> for BlockFullnessHeadroom {
-    fn get() -> Weight {
-        // The block headroom is set to be the maximum benchmarked weight that a `submit_proof` extrinsic can have.
-        // That is, when the proof includes two file key proofs for every single random challenge, and for the maximum
-        // number of checkpoint challenges as well.
-        <pallet_proofs_dealer::weights::SubstrateWeight<Runtime> as pallet_proofs_dealer::weights::WeightInfo>::submit_proof_with_checkpoint_challenges_key_proofs(TOTAL_MAX_CHALLENGES_PER_BLOCK * 2)
-    }
-}
-
-pub struct MinNotFullBlocksRatio;
-impl Get<Perbill> for MinNotFullBlocksRatio {
-    fn get() -> Perbill {
-        // This means that we tolerate at most 50% of misbehaving collators.
-        Perbill::from_percent(50)
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Runtime> {
+        block_number.saturated_into()
     }
 }
 
@@ -667,6 +730,24 @@ impl Get<u32> for MaxSubmittersPerTick {
     }
 }
 
+pub struct BlockFullnessHeadroom;
+impl Get<Weight> for BlockFullnessHeadroom {
+    fn get() -> Weight {
+        // The block headroom is set to be the maximum benchmarked weight that a `submit_proof` extrinsic can have.
+        // That is, when the proof includes two file key proofs for every single random challenge, and for the maximum
+        // number of checkpoint challenges as well.
+        <pallet_proofs_dealer::weights::SubstrateWeight<Runtime> as pallet_proofs_dealer::weights::WeightInfo>::submit_proof_with_checkpoint_challenges_key_proofs(TOTAL_MAX_CHALLENGES_PER_BLOCK * 2)
+    }
+}
+
+pub struct MinNotFullBlocksRatio;
+impl Get<Perbill> for MinNotFullBlocksRatio {
+    fn get() -> Perbill {
+        // This means that we tolerate at most 50% of misbehaving collators.
+        Perbill::from_percent(50)
+    }
+}
+
 pub struct MaxSlashableProvidersPerTick;
 impl Get<u32> for MaxSlashableProvidersPerTick {
     fn get() -> u32 {
@@ -710,92 +791,9 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
         max_slashable_providers_per_tick
     }
 }
+/****** ****** ****** ******/
 
-const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
-const MAX_CUSTOM_CHALLENGES_PER_BLOCK: u32 = 10;
-const TOTAL_MAX_CHALLENGES_PER_BLOCK: u32 =
-    RANDOM_CHALLENGES_PER_BLOCK + MAX_CUSTOM_CHALLENGES_PER_BLOCK;
-parameter_types! {
-    pub const RandomChallengesPerBlock: u32 = RANDOM_CHALLENGES_PER_BLOCK;
-    pub const MaxCustomChallengesPerBlock: u32 = MAX_CUSTOM_CHALLENGES_PER_BLOCK;
-    pub const TotalMaxChallengesPerBlock: u32 = TOTAL_MAX_CHALLENGES_PER_BLOCK;
-    pub const TargetTicksStorageOfSubmitters: u32 = 3;
-    pub const ChallengeHistoryLength: BlockNumber = 100;
-    pub const ChallengesQueueLength: u32 = 100;
-    pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const ChallengeTicksTolerance: u32 = 50;
-}
-
-impl pallet_proofs_dealer::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type WeightInfo = pallet_proofs_dealer::weights::SubstrateWeight<Runtime>;
-    type ProvidersPallet = Providers;
-    type NativeBalance = Balances;
-    type MerkleTrieHash = Hash;
-    type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = ForestVerifier<StorageProofsMerkleTrieLayout, { BlakeTwo256::LENGTH }>;
-    type KeyVerifier = FileKeyVerifier<
-        StorageProofsMerkleTrieLayout,
-        { shp_constants::H_LENGTH },
-        { shp_constants::FILE_CHUNK_SIZE },
-        { shp_constants::FILE_SIZE_TO_CHALLENGES },
-    >;
-    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
-    #[cfg(feature = "runtime-benchmarks")]
-    type RandomChallengesPerBlock = ConstU32<0>;
-    #[cfg(not(feature = "runtime-benchmarks"))]
-    type RandomChallengesPerBlock = RandomChallengesPerBlock;
-    #[cfg(feature = "runtime-benchmarks")]
-    type MaxCustomChallengesPerBlock = TotalMaxChallengesPerBlock;
-    #[cfg(not(feature = "runtime-benchmarks"))]
-    type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
-    type MaxSubmittersPerTick = MaxSubmittersPerTick;
-    type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
-    type ChallengeHistoryLength = ChallengeHistoryLength;
-    type ChallengesQueueLength = ChallengesQueueLength;
-    type CheckpointChallengePeriod =
-        runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
-    type ChallengesFee = ChallengesFee;
-    type Treasury = TreasuryAccount;
-    type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
-    type StakeToChallengePeriod =
-        runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
-    type MinChallengePeriod = runtime_params::dynamic_params::runtime_config::MinChallengePeriod;
-    type ChallengeTicksTolerance = ChallengeTicksTolerance;
-    type BlockFullnessPeriod = ChallengeTicksTolerance; // We purposely set this to `ChallengeTicksTolerance` so that spamming of the chain is evaluated for the same blocks as the tolerance BSPs are given.
-    type BlockFullnessHeadroom = BlockFullnessHeadroom;
-    type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
-    type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
-}
-
-/// Structure to mock a verifier that returns `true` when `proof` is not empty
-/// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
-}
-
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
-where
-    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
-{
-    type Proof = CompactProof;
-    type Commitment = H256;
-    type Challenge = C;
-
-    fn verify_proof(
-        _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
-        proof: &CompactProof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.iter().cloned().collect())
-        } else {
-            Err("Proof is empty".into())
-        }
-    }
-}
-
+/****** File System pallet ******/
 type ThresholdType = u32;
 
 parameter_types! {
@@ -804,26 +802,14 @@ parameter_types! {
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
-impl MostlyStablePriceIndexUpdaterConfig for Runtime {
-    type Price = Balance;
-    type StorageDataUnit = StorageDataUnit;
-    type LowerThreshold =
-        runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage;
-    type UpperThreshold =
-        runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage;
-    type MostlyStablePrice = runtime_params::dynamic_params::runtime_config::MostlyStablePrice;
-    type MaxPrice = runtime_params::dynamic_params::runtime_config::MaxPrice;
-    type MinPrice = runtime_params::dynamic_params::runtime_config::MinPrice;
-    type UpperExponentFactor = runtime_params::dynamic_params::runtime_config::UpperExponentFactor;
-    type LowerExponentFactor = runtime_params::dynamic_params::runtime_config::LowerExponentFactor;
-}
-
-/// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    // TODO: Replace the mocked CR randomness with the actual one when it's ready
+    // type CrRandomness = CrRandomness;
+    type CrRandomness = MockCrRandomness;
     type UpdateStoragePrice = MostlyStablePriceIndexUpdater<Runtime>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
@@ -858,14 +844,18 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
 }
 
-// Converter from the Balance type to the BlockNumber type for math.
-// It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct SaturatingBalanceToBlockNumber;
-
-impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumber {
-    fn convert(block_number: Balance) -> BlockNumberFor<Runtime> {
-        block_number.saturated_into()
-    }
+impl MostlyStablePriceIndexUpdaterConfig for Runtime {
+    type Price = Balance;
+    type StorageDataUnit = StorageDataUnit;
+    type LowerThreshold =
+        runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage;
+    type UpperThreshold =
+        runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage;
+    type MostlyStablePrice = runtime_params::dynamic_params::runtime_config::MostlyStablePrice;
+    type MaxPrice = runtime_params::dynamic_params::runtime_config::MaxPrice;
+    type MinPrice = runtime_params::dynamic_params::runtime_config::MinPrice;
+    type UpperExponentFactor = runtime_params::dynamic_params::runtime_config::UpperExponentFactor;
+    type LowerExponentFactor = runtime_params::dynamic_params::runtime_config::LowerExponentFactor;
 }
 
 // Converter from the ThresholdType to the BlockNumber type and vice versa.
@@ -928,10 +918,83 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
         H256::from_slice(&bytes)
     }
 }
+/****** ****** ****** ******/
 
+/****** Bucket NFTs pallet ******/
 impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
+/****** ****** ****** ******/
+
+/****** Commit-Reveal Randomness pallet ******/
+/* pub type Seed = Hash;
+pub type SeedCommitment = Hash;
+
+impl pallet_cr_randomness::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type SeedCommitment = SeedCommitment;
+    type Seed = Seed;
+    type SeedVerifier = SeedVerifier;
+    type SeedGenerator = SeedGenerator;
+    type RandomSeedMixer = RandomSeedMixer;
+    type MaxSeedTolerance = MaxSeedTolerance;
+    type StakeToSeedPeriod = runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod;
+    type MinSeedPeriod = runtime_params::dynamic_params::runtime_config::MinSeedPeriod;
+}
+
+parameter_types! {
+    pub const MaxSeedTolerance: u32 = 10;
+}
+
+// TODO: We should implement seed generation and verification with signatures instead of hashes,
+// so that we can have a more secure and decentralized randomness generation.
+pub struct SeedVerifier;
+impl pallet_cr_randomness::SeedVerifier for SeedVerifier {
+    type Seed = Seed;
+    type SeedCommitment = SeedCommitment;
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
+        BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
+    }
+}
+
+pub struct SeedGenerator;
+impl pallet_cr_randomness::SeedGenerator for SeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Hashing::hash(&generator)
+    }
+}
+
+pub struct RandomSeedMixer;
+impl pallet_cr_randomness::RandomSeedMixer<Seed> for RandomSeedMixer {
+    fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed {
+        let mut seed = seed_1.as_fixed_bytes().to_vec();
+        seed.extend_from_slice(seed_2.as_fixed_bytes());
+        if let Some(context) = context {
+            seed.extend_from_slice(context.into().as_fixed_bytes());
+        }
+        Hashing::hash(&seed)
+    }
+} */
+
+// TODO: Replace this mock with the actual implementation above when it is ready
+// We need this mock since `pallet-file-system` requires something that implements the CommitRevealRandomnessInterface trait
+pub struct MockCrRandomness;
+impl shp_traits::CommitRevealRandomnessInterface for MockCrRandomness {
+    type ProviderId = Hash;
+
+    fn initialise_randomness_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+}
+/****** ****** ****** ******/

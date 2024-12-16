@@ -11,8 +11,8 @@ use pallet_nfts::PalletFeatures;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
-    ProofSubmittersInterface, ProofsDealerInterface, ReadUserSolvencyInterface,
-    StorageHubTickGetter, TrieMutation, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, ProofSubmittersInterface, ProofsDealerInterface,
+    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -236,6 +236,7 @@ impl pallet_file_system::Config for Test {
     type Providers = Providers;
     type ProofDealer = MockProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type CrRandomness = MockCommitRevealRandomness;
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
@@ -548,5 +549,20 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
         }
 
         H256::from_slice(&bytes)
+    }
+}
+
+pub struct MockCommitRevealRandomness;
+impl CommitRevealRandomnessInterface for MockCommitRevealRandomness {
+    type ProviderId = <Test as pallet_storage_providers::Config>::ProviderId;
+
+    fn initialise_randomness_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Ok(())
     }
 }
