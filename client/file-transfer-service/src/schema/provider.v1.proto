@@ -26,6 +26,8 @@ message RemoteUploadDataRequest {
 	bytes file_key = 1;
 	// Data to store.
 	bytes file_key_proof = 2;
+	// Bucket ID is only required to pass the allow list check for Bucket operations.
+	optional bytes bucket_id = 3;
 }
 
 // Remote data upload response.
@@ -38,7 +40,10 @@ message RemoteUploadDataResponse {
 message RemoteDownloadDataRequest {
 	// Data locations to read from.
 	bytes file_key = 1;
+	// File chunk ID to be sent.
 	uint64 file_chunk_id = 2;
+	// Bucket ID is only required to pass the allow list check for Bucket operations.
+	optional bytes bucket_id = 3;
 }
 
 // Remote data download response.

@@ -96,7 +96,7 @@ where
     }
 }
 
-/// Handles the `NewStorageRequest` event.
+/// Handles the [`NewStorageRequest`] event.
 ///
 /// This event is triggered by an on-chain event of a user submitting a storage request to StorageHub.
 /// It responds by sending a volunteer transaction and registering the interest of this BSP in
@@ -127,7 +127,7 @@ where
     }
 }
 
-/// Handles the `RemoteUploadRequest` event.
+/// Handles the [`RemoteUploadRequest`] event.
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
@@ -250,7 +250,7 @@ where
     }
 }
 
-/// Handles the `ProcessConfirmStoringRequest` event.
+/// Handles the [`ProcessConfirmStoringRequest`] event.
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).

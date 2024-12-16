@@ -20,6 +20,28 @@ import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 
 /**
+ * Options for the waitForTxInPool method.
+ * @param module - The module name of the event.
+ * @param method - The method name of the event.
+ * @param checkQuantity - Optional. The number of expected extrinsics.
+ * @param shouldSeal - Optional. Whether to seal a block after waiting for the transaction.
+ * @param expectedEvent - Optional. The expected event to wait for.
+ * @param iterations - Optional. The number of iterations to wait for the transaction.
+ * @param delay - Optional. The delay between iterations.
+ * @param timeout - Optional. The timeout for the wait.
+ */
+export interface WaitForTxOptions {
+  module: string;
+  method: string;
+  checkQuantity?: number;
+  shouldSeal?: boolean;
+  expectedEvent?: string;
+  iterations?: number;
+  delay?: number;
+  timeout?: number;
+}
+
+/**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
 export class BspNetTestApi implements AsyncDisposable {
@@ -223,12 +245,11 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**
-       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
+       * A generic utility to wait for a transaction to be in the tx pool.
+       * @param options - Options for the wait.
+       * @returns A promise that resolves when the transaction is in the tx pool.
        */
-      mspResponseInTxPool: (expectedExts?: number) =>
-        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
+      waitForTxInPool: (options: WaitForTxOptions) => Waits.waitForTxInPool(this._api, options),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -267,7 +288,24 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param blockHash - The hash of the block to wait for.
        * @returns A promise that resolves when the block is imported.
        */
-      blockImported: (blockHash: string) => Waits.waitForBlockImported(this._api, blockHash)
+      blockImported: (blockHash: string) => Waits.waitForBlockImported(this._api, blockHash),
+
+      // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
+      /**
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
+       */
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
+
+      /**
+       * Waits for a MSP to complete storing a file key.
+       * @param fileKey - Param to specify the file key to wait for.
+       * @returns A promise that resolves when the MSP has completed to store a file.
+       */
+      mspFileStorageComplete: (fileKey: H256 | string) =>
+        Waits.waitForBspFileStorageComplete(this._api, fileKey)
     };
 
     /**
