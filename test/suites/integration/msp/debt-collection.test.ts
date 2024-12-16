@@ -108,14 +108,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, create
 
       assert(newStorageRequestDataBlob, "Event doesn't match NewStorageRequest type");
 
-      const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(
-        newStorageRequestDataBlob.fileKey
-      );
-
-      assert(
-        result.isFileFound,
-        `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-      );
+      await mspApi.wait.mspFileStorageComplete(newStorageRequestDataBlob.fileKey);
 
       issuedFileKeys.push(newStorageRequestDataBlob.fileKey);
     }
