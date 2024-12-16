@@ -57,21 +57,25 @@ pub fn get_events_at_block(
 pub fn convert_raw_multiaddresses_to_multiaddr(multiaddresses: Multiaddresses) -> Vec<Multiaddr> {
     let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
     for raw_multiaddr in multiaddresses.into_iter() {
-        let multiaddress = match std::str::from_utf8(&raw_multiaddr) {
-            Ok(s) => match Multiaddr::from_str(s) {
-                Ok(multiaddr) => multiaddr,
-                Err(e) => {
-                    error!("Failed to parse Multiaddress from string: {:?}", e);
-                    continue;
-                }
-            },
-            Err(e) => {
-                error!("Failed to parse Multiaddress from bytes: {:?}", e);
-                continue;
-            }
-        };
-
-        multiaddress_vec.push(multiaddress);
+        if let Some(multiaddress) = convert_raw_multiaddress_to_multiaddr(&raw_multiaddr) {
+            multiaddress_vec.push(multiaddress);
+        }
     }
     multiaddress_vec
+}
+
+pub fn convert_raw_multiaddress_to_multiaddr(raw_multiaddr: &[u8]) -> Option<Multiaddr> {
+    match std::str::from_utf8(raw_multiaddr) {
+        Ok(s) => match Multiaddr::from_str(s) {
+            Ok(multiaddr) => Some(multiaddr),
+            Err(e) => {
+                error!("Failed to parse Multiaddress from string: {:?}", e);
+                None
+            }
+        },
+        Err(e) => {
+            error!("Failed to parse Multiaddress from bytes: {:?}", e);
+            None
+        }
+    }
 }

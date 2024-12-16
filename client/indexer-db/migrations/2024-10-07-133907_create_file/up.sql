@@ -1,6 +1,6 @@
 CREATE TABLE file (
     id SERIAL PRIMARY KEY,
-    account VARCHAR NOT NULL,
+    account BYTEA NOT NULL,
     file_key BYTEA NOT NULL,
     bucket_id INTEGER NOT NULL,
     location BYTEA NOT NULL,

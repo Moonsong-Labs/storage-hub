@@ -10,7 +10,7 @@ const LOG_TARGET: &str = "msp-stopped-storing-task";
 
 const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
 
-/// MSP Delete Bucket Task: Handles the event of the MSP stopping storing a bucket.
+/// [`MspStoppedStoringTask`]: Handles the event of the MSP stopping storing a bucket.
 ///
 /// - [`FinalisedMspStoppedStoringBucket`]: Handles the event of the MSP stopping storing a bucket.
 /// This should only be triggered when the anchor relay chain block is finalized to avoid
@@ -47,7 +47,7 @@ where
     }
 }
 
-/// Handles the [`MspStoppedStoringBucket`] event.
+/// Handles the [`FinalisedMspStoppedStoringBucket`] event.
 ///
 /// This event is triggered by an on-chain event which is part of a finalized anchored relay block.
 ///

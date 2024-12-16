@@ -424,14 +424,25 @@ export const advanceToBlock = async (
 };
 
 /**
- * Performs a chain reorganization by creating a finalized block on top of the parent block.
+ * Finalises a block (and therefore all of its predecessors) in the blockchain.
+ *
+ * @param api - The ApiPromise instance.
+ * @param hashToFinalise - The hash of the block to finalise.
+ * @returns A Promise that resolves when the chain reorganization is complete.
+ */
+export async function finaliseBlock(api: ApiPromise, hashToFinalise: string): Promise<void> {
+  await api.rpc.engine.finalizeBlock(hashToFinalise);
+}
+
+/**
+ * Performs a chain reorganisation by creating a finalised block on top of the parent block.
  *
  * This function is used to simulate network forks and test the system's ability to handle
  * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
  * in face of potential consensus issues.
  *
  * @param api - The ApiPromise instance.
- * @throws Will throw an error if the head block is already finalized.
+ * @throws Will throw an error if the head block is already finalised.
  * @returns A Promise that resolves when the chain reorganization is complete.
  */
 export async function reOrgWithFinality(api: ApiPromise): Promise<void> {
@@ -449,7 +460,7 @@ export async function reOrgWithFinality(api: ApiPromise): Promise<void> {
 }
 
 /**
- * Performs a chain reorganization by creating a longer forked chain.
+ * Performs a chain reorganisation by creating a longer forked chain.
  * If no parent starting block is provided, the chain will start the fork from the last
  * finalised block.
  *
