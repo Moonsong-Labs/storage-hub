@@ -17,11 +17,11 @@
 // --pallet
 // pallet-file-system
 // --extrinsic
-// create_bucket
+// 
 // --output
 // pallets/file-system/src/weights.rs
 // --template
-// ../polkadot-sdk/substrate/.maintain/frame-weight-template.hbs
+// ./frame-weight-template.hbs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
@@ -34,6 +34,7 @@ use core::marker::PhantomData;
 /// Weight functions needed for `pallet_file_system`.
 pub trait WeightInfo {
 	fn create_bucket() -> Weight;
+	fn issue_storage_request() -> Weight;
 }
 
 /// Weights for `pallet_file_system` using the Substrate node and recommended hardware.
@@ -77,10 +78,39 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `1568`
 		//  Estimated: `4588`
-		// Minimum execution time: 131_000_000 picoseconds.
-		Weight::from_parts(134_000_000, 4588)
+		// Minimum execution time: 127_000_000 picoseconds.
+		Weight::from_parts(136_000_000, 4588)
 			.saturating_add(T::DbWeight::get().reads(13_u64))
 			.saturating_add(T::DbWeight::get().writes(11_u64))
+	}
+	/// Storage: `Providers::Buckets` (r:1 w:0)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(192), added: 2667, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::PendingBucketsToMove` (r:1 w:0)
+	/// Proof: `FileSystem::PendingBucketsToMove` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::ReplicationTarget` (r:1 w:0)
+	/// Proof: `FileSystem::ReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
+	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1227), added: 3702, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::NextAvailableStorageRequestExpirationBlock` (r:1 w:1)
+	/// Proof: `FileSystem::NextAvailableStorageRequestExpirationBlock` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
+	/// Proof: `FileSystem::StorageRequestExpirations` (`max_values`: None, `max_size`: Some(3222), added: 5697, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
+	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	fn issue_storage_request() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `601`
+		//  Estimated: `6687`
+		// Minimum execution time: 62_000_000 picoseconds.
+		Weight::from_parts(64_000_000, 6687)
+			.saturating_add(T::DbWeight::get().reads(9_u64))
+			.saturating_add(T::DbWeight::get().writes(6_u64))
 	}
 }
 
@@ -124,9 +154,38 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `1568`
 		//  Estimated: `4588`
-		// Minimum execution time: 131_000_000 picoseconds.
-		Weight::from_parts(134_000_000, 4588)
+		// Minimum execution time: 127_000_000 picoseconds.
+		Weight::from_parts(136_000_000, 4588)
 			.saturating_add(RocksDbWeight::get().reads(13_u64))
 			.saturating_add(RocksDbWeight::get().writes(11_u64))
+	}
+	/// Storage: `Providers::Buckets` (r:1 w:0)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(192), added: 2667, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::PendingBucketsToMove` (r:1 w:0)
+	/// Proof: `FileSystem::PendingBucketsToMove` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::ReplicationTarget` (r:1 w:0)
+	/// Proof: `FileSystem::ReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
+	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1227), added: 3702, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::NextAvailableStorageRequestExpirationBlock` (r:1 w:1)
+	/// Proof: `FileSystem::NextAvailableStorageRequestExpirationBlock` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
+	/// Proof: `FileSystem::StorageRequestExpirations` (`max_values`: None, `max_size`: Some(3222), added: 5697, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
+	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	fn issue_storage_request() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `601`
+		//  Estimated: `6687`
+		// Minimum execution time: 62_000_000 picoseconds.
+		Weight::from_parts(64_000_000, 6687)
+			.saturating_add(RocksDbWeight::get().reads(9_u64))
+			.saturating_add(RocksDbWeight::get().writes(6_u64))
 	}
 }
