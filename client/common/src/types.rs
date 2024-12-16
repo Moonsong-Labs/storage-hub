@@ -49,6 +49,7 @@ pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<
 pub type BackupStorageProviderId =
     pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
 pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
+pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
 pub type MultiAddress = pallet_storage_providers::types::MultiAddress<Runtime>;

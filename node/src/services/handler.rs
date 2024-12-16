@@ -211,7 +211,7 @@ where
         // A BSP is expected to always have at least one empty Forest Storage instance.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         self.forest_storage_handler
-            .insert(&current_forest_key)
+            .create(&current_forest_key)
             .await;
     }
 

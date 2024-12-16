@@ -2,8 +2,8 @@ use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    Balance, BlockNumber, BucketId, ProofsDealerProviderId, FileKey, FileLocation, Fingerprint,
-    ForestRoot, KeyProofs, PeerIds, RandomnessOutput, StorageData, TrieMutation,
+    Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
+    PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageData, TrieMutation,
     TrieRemoveMutation,
 };
 use sp_core::H256;

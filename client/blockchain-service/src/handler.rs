@@ -1277,42 +1277,6 @@ impl BlockchainService {
                                 }
                             }
                         }
-                        // This event should only be of any use if a node is run by as a user.
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::AcceptedBspVolunteer {
-                                bsp_id,
-                                bucket_id,
-                                location,
-                                fingerprint,
-                                multiaddresses,
-                                owner,
-                                size,
-                            },
-                        ) if owner
-                            == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
-                        {
-                            log::info!(
-                                target: LOG_TARGET,
-                                "AcceptedBspVolunteer event for BSP ID: {:?}",
-                                bsp_id
-                            );
-
-                            // We try to convert the types coming from the runtime into our expected types.
-                            let fingerprint: Fingerprint = fingerprint.as_bytes().into();
-
-                            let multiaddress_vec: Vec<Multiaddr> =
-                                convert_raw_multiaddresses_to_multiaddr(multiaddresses);
-
-                            self.emit(AcceptedBspVolunteer {
-                                bsp_id,
-                                bucket_id,
-                                location,
-                                fingerprint,
-                                multiaddresses: multiaddress_vec,
-                                owner,
-                                size,
-                            })
-                        }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketRequested {
                                 who: _,
@@ -1320,23 +1284,43 @@ impl BlockchainService {
                                 new_msp_id,
                             },
                         ) => {
-                            self.emit(MoveBucketRequested {
-                                bucket_id,
-                                new_msp_id,
-                            });
-                            if self.provider_ids.contains(&new_msp_id) {
-                                self.emit(MoveBucketRequestedForNewMsp { bucket_id });
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketRequested {
+                                        bucket_id,
+                                        new_msp_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the event only if this node is the new MSP.
+                                Some(StorageProviderId::MainStorageProvider(msp_id))
+                                    if msp_id == new_msp_id =>
+                                {
+                                    self.emit(MoveBucketRequestedForNewMsp { bucket_id });
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
                             }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
                         ) => {
-                            self.emit(MoveBucketRejected { bucket_id, msp_id });
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketRejected { bucket_id, msp_id });
+                            }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketAccepted { bucket_id, msp_id },
                         ) => {
-                            self.emit(MoveBucketAccepted { bucket_id, msp_id });
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketAccepted { bucket_id, msp_id });
+                            }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketRequestExpired {
@@ -1344,7 +1328,12 @@ impl BlockchainService {
                                 msp_id,
                             },
                         ) => {
-                            self.emit(MoveBucketExpired { bucket_id, msp_id });
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketExpired { bucket_id, msp_id });
+                            }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmStoppedStoring {
@@ -1364,6 +1353,44 @@ impl BlockchainService {
                                         new_root,
                                     });
                                 }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::AcceptedBspVolunteer {
+                                bsp_id,
+                                bucket_id,
+                                location,
+                                fingerprint,
+                                multiaddresses,
+                                owner,
+                                size,
+                            },
+                        ) if owner
+                            == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
+                        {
+                            // This event should only be of any use if a node is run by as a user.
+                            if self.provider_id.is_none() {
+                                log::info!(
+                                    target: LOG_TARGET,
+                                    "AcceptedBspVolunteer event for BSP ID: {:?}",
+                                    bsp_id
+                                );
+
+                                // We try to convert the types coming from the runtime into our expected types.
+                                let fingerprint: Fingerprint = fingerprint.as_bytes().into();
+
+                                let multiaddress_vec: Vec<Multiaddr> =
+                                    convert_raw_multiaddresses_to_multiaddr(multiaddresses);
+
+                                self.emit(AcceptedBspVolunteer {
+                                    bsp_id,
+                                    bucket_id,
+                                    location,
+                                    fingerprint,
+                                    multiaddresses: multiaddress_vec,
+                                    owner,
+                                    size,
+                                })
                             }
                         }
                         // Ignore all other events.
