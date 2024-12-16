@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use codec::Encode;
 use cumulus_primitives_core::BlockT;
-use log::{debug, error, info, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
@@ -11,6 +10,7 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
