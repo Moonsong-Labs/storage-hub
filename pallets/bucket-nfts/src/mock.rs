@@ -220,6 +220,12 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(H256::default())
     }
 
+    fn stop_challenge_cycle(
+        _provider_id: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
     fn initialise_challenge_cycle(
         _who: &Self::ProviderId,
     ) -> frame_support::dispatch::DispatchResult {
