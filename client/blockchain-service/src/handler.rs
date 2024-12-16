@@ -109,6 +109,7 @@ pub struct BlockchainService {
     ///
     /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
+    /// Each BSP or Bucket can have multiple Forest Storage snapshots.
     /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
     #[allow(dead_code)]
     pub(crate) forest_root_snapshots:
