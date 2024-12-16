@@ -1735,25 +1735,21 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            // Get the MSP ID and the user owner of the bucket
-            let msp_id = bucket
-                .msp_id
-                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
-            let user_id = bucket.user_id.clone();
-
             // First, try to update the fixed rate payment stream with the new rate, since
             // this function uses the current bucket size to calculate it
-            Self::apply_delta_fixed_rate_payment_stream(
-                &msp_id,
-                bucket_id,
-                &user_id,
-                RateDeltaParam::Increase(delta),
-            )?;
+            if let Some(msp_id) = bucket.msp_id {
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::Increase(delta),
+                )?;
+            }
 
             // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_add(delta);
 
-            Ok::<_, DispatchError>(())
+            Ok(())
         })
     }
 
