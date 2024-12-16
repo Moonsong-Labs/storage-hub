@@ -238,7 +238,7 @@ describeBspNet(
     });
 
     it("BSP three is not challenged any more", async () => {
-      let result = await userApi.call.proofsDealerApi.getNextDeadlineTick(ShConsts.BSP_THREE_ID);
+      const result = await userApi.call.proofsDealerApi.getNextDeadlineTick(ShConsts.BSP_THREE_ID);
 
       assert(result.isErr, "BSP three doesn't have files so it it shouldnt have deadline");
     });
