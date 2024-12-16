@@ -60,8 +60,8 @@ use crate::{
     cli::{self, IndexerConfigurations, ProviderType, StorageLayer},
     command::ProviderOptions,
     services::builder::{
-        BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
-        RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable,
+        BspProvider, Buildable, InMemoryStorageLayer, MspProvider, NoStorageLayer,
+        RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder,
         StorageHubBuilder, StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
     },
 };
@@ -274,7 +274,7 @@ where
     StorageHubBuilder<R, S>: RequiredStorageProviderSetup
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-        + Runnable,
+        + Buildable,
 {
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
@@ -287,7 +287,7 @@ where
         .await;
 
     // Call run using the Runnable trait
-    sh_builder.run();
+    sh_builder.build().await;
 
     Ok(())
 }
@@ -308,7 +308,7 @@ where
     StorageHubBuilder<R, S>: RequiredStorageProviderSetup
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-        + Runnable,
+        + Buildable,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -710,7 +710,7 @@ where
     StorageHubBuilder<R, S>: RequiredStorageProviderSetup
         + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-        + Runnable,
+        + Buildable,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);

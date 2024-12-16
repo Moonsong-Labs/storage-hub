@@ -19,8 +19,11 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, Tip},
 };
-use shc_common::types::{
-    Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+    },
 };
 use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
@@ -32,7 +35,7 @@ use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::services::handler::StorageHubHandler;
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
@@ -263,6 +266,8 @@ where
             event.data.confirm_storing_requests,
         );
 
+        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
+        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -272,12 +277,12 @@ where
             }
         };
 
+        // Get the BSP ID of the Provider running this node and its current Forest root.
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
             .query_storage_provider_id(None)
             .await?;
-
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
@@ -292,6 +297,7 @@ where
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
         };
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
@@ -374,7 +380,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -410,7 +416,14 @@ where
                     )),
                 true,
             )
-            .await?;
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to confirm file after {} retries: {:?}",
+                    MAX_CONFIRM_STORING_REQUEST_TRY_COUNT,
+                    e
+                )
+            })?;
 
         let maybe_new_root: Option<H256> = events.and_then(|events| {
             events.into_iter().find_map(|event| {
@@ -494,11 +507,14 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
         // Verify if file not already stored
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
         if fs.read().await.contains_file_key(&event.file_key.into())? {

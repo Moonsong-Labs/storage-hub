@@ -14,13 +14,16 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SubmitProofRequest},
     BlockchainService,
 };
-use shc_common::types::{
-    BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
-    TrieRemoveMutation,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        BlockNumber, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
+        RandomnessOutput, StorageProof, TrieRemoveMutation,
+    },
 };
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::services::handler::StorageHubHandler;
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
@@ -139,11 +142,8 @@ where
             event.data
         );
 
-        // Check if this proof is the next one to be submitted.
-        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
-        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
-        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
-
+        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
+        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -154,11 +154,20 @@ where
             }
         };
 
+        // Check if this proof is the next one to be submitted.
+        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
+        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
+        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
+
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
+        // Generate the Forest proof, i.e. the proof that some file keys belong to this Provider's Forest.
         let proven_file_keys = {
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -346,10 +355,11 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
             if read_fs.read().await.contains_file_key(&file_key.into())? {
@@ -376,7 +386,7 @@ where
 {
     async fn queue_submit_proof_request(
         &self,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
     ) -> anyhow::Result<()> {
@@ -410,7 +420,7 @@ where
     async fn derive_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<Vec<H256>> {
         Ok(self
             .storage_hub_handler
@@ -421,7 +431,7 @@ where
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
         let last_tick_provided_submitted_proof = self
@@ -486,7 +496,7 @@ where
         &self,
         file_key: H256,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<KeyProof> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -533,10 +543,11 @@ where
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
         {
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -568,7 +579,7 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
+    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler
@@ -586,10 +597,11 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 

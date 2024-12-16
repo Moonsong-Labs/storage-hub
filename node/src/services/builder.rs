@@ -1,4 +1,5 @@
 use async_channel::Receiver;
+use async_trait::async_trait;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
@@ -58,12 +59,13 @@ pub trait StorageTypes {
 
 impl StorageTypes for (BspProvider, InMemoryStorageLayer) {
     type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
-    type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
+    type FSH = ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
 }
 
 impl StorageTypes for (BspProvider, RocksDbStorageLayer) {
     type FL = RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
-    type FSH = ForestStorageSingle<
+    type FSH = ForestStorageCaching<
+        Vec<u8>,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
     >;
 }
@@ -550,40 +552,45 @@ where
     }
 }
 
-/// Abstraction layer to run the [`StorageHubHandler`] built from a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
-pub trait Runnable {
-    fn run(self);
+/// Abstraction layer to build the [`StorageHubBuilder`] with a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
+#[async_trait]
+pub trait Buildable {
+    async fn build(self);
 }
 
-impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<BspProvider, S>
+#[async_trait]
+impl<S: StorageLayerSupport> Buildable for StorageHubBuilder<BspProvider, S>
 where
     (BspProvider, S): StorageTypes,
     <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
 {
-    fn run(self) {
-        let handler = self.build_handler();
+    async fn build(self) {
+        let mut handler = self.build_handler();
+        handler.initialise_bsp().await;
         handler.start_bsp_tasks();
     }
 }
 
-impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<MspProvider, S>
+#[async_trait]
+impl<S: StorageLayerSupport> Buildable for StorageHubBuilder<MspProvider, S>
 where
     (MspProvider, S): StorageTypes,
     <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
 {
-    fn run(self) {
+    async fn build(self) {
         let handler = self.build_handler();
-        handler.start_msp_tasks();
+        handler.start_msp_tasks()
     }
 }
 
-impl Runnable for StorageHubBuilder<UserRole, NoStorageLayer>
+#[async_trait]
+impl Buildable for StorageHubBuilder<UserRole, NoStorageLayer>
 where
     (UserRole, NoStorageLayer): StorageTypes,
     <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    fn run(self) {
+    async fn build(self) {
         let handler = self.build_handler();
         handler.start_user_tasks();
     }
