@@ -34,10 +34,9 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TickNumber, BCSV_KEY_TYPE,
+        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
+        TickNumber, BCSV_KEY_TYPE,
     },
 };
 use shp_file_metadata::FileKey;
@@ -106,11 +105,6 @@ pub struct BlockchainService {
     /// Can be a BSP or an MSP.
     /// This is initialised when the node is in sync.
     pub(crate) provider_id: Option<StorageProviderId>,
-    /// A map of [`EitherBucketOrBspId`] to the current Forest keys.
-    ///
-    /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
-    /// This is used to keep track of the current Forest key for each Bucket, or THE ONLY Forest key for the BSP, in the current best block.
-    pub(crate) current_forest_keys: BTreeMap<ProofsDealerProviderId, Vec<u8>>,
     /// A map of [`EitherBucketOrBspId`] to the Forest Storage snapshots.
     ///
     /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
@@ -939,35 +933,6 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
-                BlockchainServiceCommand::GetCurrentForestKey {
-                    provider_id,
-                    callback,
-                } => {
-                    let maybe_current_forest_key = self
-                        .current_forest_keys
-                        .get(&provider_id)
-                        .map(|root| root.clone());
-
-                    // TODO: Remove this `allow(unused_variables)` once we have implemented the Forest Storage snapshots.
-                    #[allow(unused_variables)]
-                    let current_forest_key = maybe_current_forest_key.ok_or_else(|| {
-                        anyhow!(
-                            "Current Forest Root not found for Provider ID {}",
-                            provider_id
-                        )
-                    });
-
-                    // Temporarily returning the default Forest root for this to work with the current setup.
-                    // TODO: Remove this once we have implemented the Forest Storage snapshots.
-                    let current_forest_key = Ok(CURRENT_FOREST_KEY.to_vec());
-
-                    match callback.send(current_forest_key) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send current forest root: {:?}", e);
-                        }
-                    }
-                }
             }
         }
     }
@@ -996,7 +961,6 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
             provider_id: None,
-            current_forest_keys: BTreeMap::new(),
             forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),

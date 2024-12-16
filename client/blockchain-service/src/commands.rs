@@ -17,8 +17,8 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ProofsDealerProviderId, ChunkId, ForestLeaf, MainStorageProviderId,
-    Multiaddresses, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses,
+    ProofsDealerProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
     TrieRemoveMutation,
 };
 use sp_api::ApiError;
@@ -188,10 +188,6 @@ pub enum BlockchainServiceCommand {
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
-    },
-    GetCurrentForestKey {
-        provider_id: ProofsDealerProviderId,
-        callback: tokio::sync::oneshot::Sender<Result<Vec<u8>>>,
     },
 }
 
@@ -378,10 +374,6 @@ pub trait BlockchainServiceInterface {
         &self,
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     ) -> Result<()>;
-
-    /// Get the current Forest root for a given Provider.
-    async fn get_current_forest_key(&self, provider_id: ProofsDealerProviderId)
-        -> Result<Vec<u8>>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -844,19 +836,6 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::ReleaseForestRootWriteLock {
             forest_root_write_tx,
-            callback,
-        };
-        self.send(message).await;
-        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
-    }
-
-    async fn get_current_forest_key(
-        &self,
-        provider_id: ProofsDealerProviderId,
-    ) -> Result<Vec<u8>> {
-        let (callback, rx) = tokio::sync::oneshot::channel();
-        let message = BlockchainServiceCommand::GetCurrentForestKey {
-            provider_id,
             callback,
         };
         self.send(message).await;
