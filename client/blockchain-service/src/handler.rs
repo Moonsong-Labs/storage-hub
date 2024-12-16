@@ -36,7 +36,7 @@ use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChallengeableProviderId, EitherBucketOrBspId, Fingerprint, ParachainClient,
+        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, ProofsDealerProviderId,
         StorageProviderId, TickNumber, BCSV_KEY_TYPE,
     },
 };
@@ -110,7 +110,7 @@ pub struct BlockchainService {
     ///
     /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
     /// This is used to keep track of the current Forest key for each Bucket, or THE ONLY Forest key for the BSP, in the current best block.
-    pub(crate) current_forest_keys: BTreeMap<ChallengeableProviderId, Vec<u8>>,
+    pub(crate) current_forest_keys: BTreeMap<ProofsDealerProviderId, Vec<u8>>,
     /// A map of [`EitherBucketOrBspId`] to the Forest Storage snapshots.
     ///
     /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.

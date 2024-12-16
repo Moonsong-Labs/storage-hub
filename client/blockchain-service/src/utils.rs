@@ -16,7 +16,7 @@ use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{
-        BlockNumber, ChallengeableProviderId, MaxBatchMspRespondStorageRequests, ParachainClient,
+        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProofsDealerProviderId,
         StorageProviderId, BCSV_KEY_TYPE,
     },
 };
@@ -440,7 +440,7 @@ impl BlockchainService {
     pub(crate) fn should_provider_submit_proof(
         &self,
         block_hash: &H256,
-        provider_id: &ChallengeableProviderId,
+        provider_id: &ProofsDealerProviderId,
         current_tick: &BlockNumber,
     ) -> bool {
         // Get the last tick for which the BSP submitted a proof.
@@ -782,7 +782,7 @@ impl BlockchainService {
     pub(crate) fn proof_submission_catch_up(
         &self,
         current_block_hash: &H256,
-        provider_id: &ChallengeableProviderId,
+        provider_id: &ProofsDealerProviderId,
     ) {
         // Get the last tick for which the BSP submitted a proof, according to the runtime right now.
         let last_tick_provider_submitted_proof = match self
@@ -900,7 +900,7 @@ impl BlockchainService {
 
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: &ChallengeableProviderId,
+        provider_id: &ProofsDealerProviderId,
     ) -> Result<BlockNumber> {
         // Get the current block hash.
         let current_block_hash = self.client.info().best_hash;

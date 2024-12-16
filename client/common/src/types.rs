@@ -49,7 +49,7 @@ pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<
 pub type BackupStorageProviderId =
     pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
 pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
-pub type ChallengeableProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;

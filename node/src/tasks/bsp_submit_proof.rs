@@ -17,7 +17,7 @@ use shc_blockchain_service::{
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChallengeableProviderId, FileKey, KeyProof, KeyProofs, Proven,
+        BlockNumber, ProofsDealerProviderId, FileKey, KeyProof, KeyProofs, Proven,
         RandomnessOutput, StorageProof, TrieRemoveMutation,
     },
 };
@@ -386,7 +386,7 @@ where
 {
     async fn queue_submit_proof_request(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
     ) -> anyhow::Result<()> {
@@ -420,7 +420,7 @@ where
     async fn derive_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<Vec<H256>> {
         Ok(self
             .storage_hub_handler
@@ -431,7 +431,7 @@ where
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
         let last_tick_provided_submitted_proof = self
@@ -496,7 +496,7 @@ where
         &self,
         file_key: H256,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<KeyProof> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -581,7 +581,7 @@ where
 
     async fn check_provider_root(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
