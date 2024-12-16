@@ -10,7 +10,7 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{blockchain::TreeRoute, BlockBackend, BlockImportNotification, HeaderBackend};
+use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
@@ -903,14 +903,6 @@ impl BlockchainService {
                 seeds: challenge_seeds,
             });
         }
-    }
-
-    pub(crate) fn forest_root_changes_catch_up<Block>(&self, blocks_route: &TreeRoute<Block>)
-    where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
-    {
-        // TODO: Implement this method.
-        todo!("Implement this method.");
     }
 
     pub(crate) fn get_next_challenge_tick_for_provider(
