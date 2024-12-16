@@ -1,5 +1,5 @@
-use shc_indexer_db::DbPool;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
@@ -21,8 +21,8 @@ use shc_file_transfer_service::{
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_indexer_db::DbPool;
 use storage_hub_runtime::StorageDataUnit;
-use tokio::sync::RwLock;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,

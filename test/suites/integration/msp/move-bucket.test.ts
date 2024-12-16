@@ -274,7 +274,7 @@ describeMspNet(
         shUser
       );
 
-      await assertEventPresent(
+      assertEventPresent(
         userApi,
         "fileSystem",
         "MoveBucketRequested",
@@ -288,7 +288,7 @@ describeMspNet(
 
       const { events } = await userApi.sealBlock();
 
-      await assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
+      assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
 
       // Wait for all files to be in the Forest of the second MSP.
       await waitFor({

@@ -3,21 +3,27 @@ use async_trait::async_trait;
 use prost::Message;
 use thiserror::Error;
 
+use codec::Encode;
 use sc_network::{config::OutgoingResponse, Multiaddr, PeerId, ProtocolName, RequestFailure};
 use sc_tracing::tracing::error;
 
-use super::{schema, FileTransferService};
-use codec::Encode;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof};
+
+use super::{schema, FileTransferService};
 
 const LOG_TARGET: &str = "file-transfer-service";
 
 /// Messages understood by the FileTransfer service actor
 pub enum FileTransferServiceCommand {
     UploadRequest {
+        /// Peer ID to upload the file to. This Peer ID must be registered as a known address
+        /// before the upload request can be made.
         peer_id: PeerId,
+        /// File key of the file we are uploading.
         file_key: FileKey,
+        /// File key proof of the file we are uploading. This contains 1 or more chunks of the file
+        /// and the Merkle proof of them.
         file_key_proof: FileKeyProof,
         /// Bucket ID is only required for Bucket operations.
         /// Since the FileTransferService is not aware of which files are in which buckets,
@@ -30,8 +36,12 @@ pub enum FileTransferServiceCommand {
         >,
     },
     DownloadRequest {
+        /// Peer ID to download the file from. This Peer ID must be registered as a known address
+        /// before the download request can be made.
         peer_id: PeerId,
+        /// File key of the file to download.
         file_key: FileKey,
+        /// Chunk ID of the chunk to download.
         chunk_id: ChunkId,
         /// Bucket ID is only required for Bucket operations.
         /// Since the FileTransferService is not aware of which files are in which buckets,
@@ -261,7 +271,8 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         }
     }
 
-    /// Responds a download request of a file chunk with a [`FileKeyProof`]
+    /// Respond to a download request of a file chunk with a [`FileKeyProof`].
+    /// This returns after the message has been processed by the service.
     async fn download_response(
         &self,
         file_key_proof: FileKeyProof,
@@ -291,8 +302,8 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         }
     }
 
-    /// Tell the FileTransferService to register a multiaddress as known for a specified PeerId.
-    /// This returns as soon as the message has been dispatched (not processed) to the service.
+    /// Tell the FileTransferService to register a multiaddress as known for a specified [`PeerId`].
+    /// This returns after the message has been processed by the service.
     async fn add_known_address(
         &self,
         peer_id: PeerId,
@@ -308,9 +319,9 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to add known multiaddress to peer")
     }
 
-    /// Tell the FileTransferService to start listening for new upload requests from peer_id
-    /// on file file_key.
-    /// This returns as soon as the message has been dispatched (not processed) to the service.
+    /// Tell the FileTransferService to start listening for new upload requests from [`peer_id`]
+    /// on file [`file_key`].
+    /// This returns after the message has been processed by the service.
     async fn register_new_file_peer(
         &self,
         peer_id: PeerId,
@@ -326,8 +337,8 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to register new file")
     }
 
-    /// Tell the FileTransferService to no longer listen for upload requests from peer_id on file
-    /// file_key.
+    /// Tell the FileTransferService to no longer listen for upload requests from [`peer_id`] on
+    /// file [`file_key`].
     /// This returns as soon as the message has been dispatched (not processed) to the service.
     async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -336,9 +347,9 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to unregister file")
     }
 
-    /// Tell the FileTransferService to start listening for new upload requests from peer_id
-    /// on bucket bucket_id.
-    /// This returns as soon as the message has been dispatched (not processed) to the service.
+    /// Tell the FileTransferService to start listening for new upload requests from [`peer_id`]
+    /// on Bucket [`bucket_id`].
+    /// This returns after the message has been processed by the service.
     async fn register_new_bucket_peer(
         &self,
         peer_id: PeerId,
@@ -354,6 +365,9 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to register new bucket peer")
     }
 
+    /// Same as [`unregister_bucket`] but the unregistering is delayed for a specified amount of
+    /// time.
+    /// This returns after the message has been processed by the service.
     async fn unregister_bucket_with_grace_period(
         &self,
         bucket_id: BucketId,
@@ -369,9 +383,9 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         rx.await.expect("Failed to unregister bucket")
     }
 
-    /// Tell the FileTransferService to no longer listen for upload requests from peer_id
-    /// on bucket bucket_id.
-    /// This returns as soon as the message has been dispatched (not processed) to the service.
+    /// Tell the FileTransferService to no longer listen for upload requests from [`peer_id`]
+    /// on Bucket [`bucket_id`].
+    /// This returns after the message has been processed by the service.
     async fn unregister_bucket(&self, bucket_id: BucketId) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::ScheduleUnregisterBucket {

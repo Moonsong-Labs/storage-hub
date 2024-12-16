@@ -41,6 +41,10 @@ where
     }
 }
 
+/// Handles a remote download request.
+///
+/// This will generate a proof for the chunk and send it back to the requester.
+/// If there is a bucket ID provided, this will also check that it matches the local file's bucket.
 impl<FL, FSH> EventHandler<RemoteDownloadRequest> for BspDownloadFileTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -49,15 +53,20 @@ where
     async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
-        let chunk_id = event.chunk_id;
-        let request_id = event.request_id;
-        let bucket_id = event.bucket_id;
+        let RemoteDownloadRequest {
+            chunk_id,
+            request_id,
+            bucket_id,
+            ..
+        } = event;
 
+        // Get the file metadata from the file storage.
         let file_storage_read_lock = self.storage_hub_handler.file_storage.read().await;
         let file_metadata = file_storage_read_lock
             .get_metadata(&event.file_key.into())
             .map_err(|_| anyhow::anyhow!("Failed to get file metadata"))?;
 
+        // If the file metadata is not found, return an error.
         let file_metadata = if let Some(file_metadata) = file_metadata {
             file_metadata
         } else {
@@ -65,6 +74,8 @@ where
             return Err(anyhow::anyhow!("File not found in file storage"));
         };
 
+        // If we have a bucket ID in the request, check if the file bucket matches the bucket ID in
+        // the request.
         if let Some(bucket_id) = bucket_id {
             if file_metadata.bucket_id != bucket_id.as_ref().to_vec() {
                 error!(
@@ -76,11 +87,13 @@ where
             }
         }
 
+        // Generate the proof for the chunk (which also contains the chunk data itself).
         let generate_proof_result =
             file_storage_read_lock.generate_proof(&event.file_key.into(), &vec![chunk_id]);
 
         match generate_proof_result {
             Ok(file_key_proof) => {
+                // Send the chunk data and proof back to the requester.
                 self.storage_hub_handler
                     .file_transfer
                     .download_response(file_key_proof, request_id)

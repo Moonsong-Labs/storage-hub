@@ -1,7 +1,10 @@
+use rand::seq::SliceRandom;
 use std::time::Duration;
 
-use pallet_file_system::types::BucketMoveRequestResponse;
+use codec::Decode;
 use sc_tracing::tracing::*;
+
+use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{
@@ -12,10 +15,10 @@ use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
 use shp_file_metadata::ChunkId;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{FileStorageT, MspForestStorageHandlerT};
-use codec::Decode;
-use rand::seq::SliceRandom;
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{FileStorageT, MspForestStorageHandlerT},
+};
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
 
@@ -86,6 +89,7 @@ where
                 "Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."
             );
 
+            // Since we can't continue, we need to reject the request.
             let call = storage_hub_runtime::RuntimeCall::FileSystem(
                 pallet_file_system::Call::msp_respond_move_bucket_request {
                     bucket_id: event.bucket_id,
@@ -146,6 +150,7 @@ where
             .get_or_create(&event.bucket_id.as_ref().to_vec())
             .await;
 
+        // TODO(improvement): Parallelize this.
         for file in shc_indexer_db::models::File::get_by_onchain_bucket_id(
             &mut indexer_connection,
             bucket.clone(),
