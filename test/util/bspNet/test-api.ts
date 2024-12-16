@@ -223,14 +223,6 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**
-       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
-       */
-      mspResponseInTxPool: (expectedExts?: number) =>
-        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
-
-      /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
@@ -260,7 +252,24 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when a BSP has caught up to the tip of the chain
        */
       bspCatchUpToChainTip: (bspBehindApi: ApiPromise) =>
-        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi)
+        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi),
+
+      // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
+      /**
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
+       */
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
+
+      /**
+       * Waits for a MSP to complete storing a file key.
+       * @param fileKey - Param to specify the file key to wait for.
+       * @returns A promise that resolves when the MSP has completed to store a file.
+       */
+      mspFileStorageComplete: (fileKey: H256 | string) =>
+        Waits.waitForBspFileStorageComplete(this._api, fileKey)
     };
 
     /**

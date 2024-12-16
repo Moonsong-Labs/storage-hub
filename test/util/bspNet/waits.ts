@@ -309,6 +309,7 @@ export const waitForBspToCatchUpToChainTip = async (
   }
 };
 
+// TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
 /**
  * Waits for a MSP to respond to storage requests.
  *
@@ -346,6 +347,38 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
       assert(
         i < iterations - 1,
         `Failed to detect MSP respond extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+/**
+ * Waits for a MSP to complete storing a file in its file storage.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a longer period to allow for local file transfer.
+ * 2. Checks for the FileFound return from the isFileInFileStorage RPC method.
+ *
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for in the file storage.
+ * @returns A Promise that resolves when the MSP has correctly stored a file in its file storage.
+ *
+ * @throws Will throw an error if the file is not complete in the file storage after a timeout.
+ */
+export const waitForMspFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
+  // To allow time for local file transfer to complete (10s)
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const fileStorageResult = await api.rpc.storagehubclient.isFileInFileStorage(fileKey);
+      assert(fileStorageResult.isFileFound, "File not found in file storage");
+      break;
+    } catch {
+      assert(
+        i !== iterations,
+        `Failed to detect MSP file in file storage after ${(i * delay) / 1000}s`
       );
     }
   }
