@@ -14,7 +14,7 @@ use sc_consensus_manual_seal::{
 };
 use sc_transaction_pool_api::TransactionPool;
 use shc_common::types::{
-    BlockNumber, ProofsDealerProviderId, ForestLeaf, RandomnessOutput, TrieRemoveMutation,
+    BlockNumber, ForestLeaf, ProofsDealerProviderId, RandomnessOutput, TrieRemoveMutation,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};

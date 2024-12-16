@@ -17,7 +17,7 @@ use shc_blockchain_service::{
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ProofsDealerProviderId, FileKey, KeyProof, KeyProofs, Proven,
+        BlockNumber, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
         RandomnessOutput, StorageProof, TrieRemoveMutation,
     },
 };
@@ -579,10 +579,7 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(
-        &self,
-        provider_id: ProofsDealerProviderId,
-    ) -> anyhow::Result<()> {
+    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler

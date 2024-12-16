@@ -10,7 +10,7 @@ use frame_support::dispatch::DispatchInfo;
 use log::warn;
 use sc_client_api::BlockImportNotification;
 use shc_common::types::{
-    BlockNumber, ProofsDealerProviderId, HasherOutT, RandomnessOutput,
+    BlockNumber, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
     RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
     TrieRemoveMutation,
 };
