@@ -666,7 +666,6 @@ impl FileTransferService {
     }
 
     fn handle_expired_buckets(&mut self) {
-        let now = chrono::Utc::now();
         // Return early if there are no buckets to unregister.
         if self.bucket_allow_list_grace_period_time.is_empty() {
             return;
