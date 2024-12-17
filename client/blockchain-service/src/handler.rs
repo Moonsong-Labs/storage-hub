@@ -1368,11 +1368,6 @@ impl BlockchainService {
                         ) if owner
                             == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
                         {
-                            log::trace!(
-                                target: LOG_TARGET,
-                                "AcceptedBspVolunteer event for BSP ID: {:?}",
-                                bsp_id
-                            );
                             // This event should only be of any use if a node is run by as a user.
                             if self.provider_id.is_none() {
                                 log::info!(
