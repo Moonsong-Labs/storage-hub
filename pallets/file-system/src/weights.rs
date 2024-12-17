@@ -80,8 +80,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         // Proof Size summary in bytes:
         //  Measured:  `1568`
         //  Estimated: `4588`
-        // Minimum execution time: 138_000_000 picoseconds.
-        Weight::from_parts(140_000_000, 4588)
+        // Minimum execution time: 131_000_000 picoseconds.
+        Weight::from_parts(133_000_000, 4588)
             .saturating_add(T::DbWeight::get().reads(13_u64))
             .saturating_add(T::DbWeight::get().writes(11_u64))
     }
@@ -111,8 +111,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
         // Proof Size summary in bytes:
         //  Measured:  `865`
         //  Estimated: `6687`
-        // Minimum execution time: 73_000_000 picoseconds.
-        Weight::from_parts(75_000_000, 6687)
+        // Minimum execution time: 74_000_000 picoseconds.
+        Weight::from_parts(76_000_000, 6687)
             .saturating_add(T::DbWeight::get().reads(10_u64))
             .saturating_add(T::DbWeight::get().writes(6_u64))
     }
@@ -158,8 +158,8 @@ impl WeightInfo for () {
         // Proof Size summary in bytes:
         //  Measured:  `1568`
         //  Estimated: `4588`
-        // Minimum execution time: 138_000_000 picoseconds.
-        Weight::from_parts(140_000_000, 4588)
+        // Minimum execution time: 131_000_000 picoseconds.
+        Weight::from_parts(133_000_000, 4588)
             .saturating_add(RocksDbWeight::get().reads(13_u64))
             .saturating_add(RocksDbWeight::get().writes(11_u64))
     }
@@ -189,8 +189,8 @@ impl WeightInfo for () {
         // Proof Size summary in bytes:
         //  Measured:  `865`
         //  Estimated: `6687`
-        // Minimum execution time: 73_000_000 picoseconds.
-        Weight::from_parts(75_000_000, 6687)
+        // Minimum execution time: 74_000_000 picoseconds.
+        Weight::from_parts(76_000_000, 6687)
             .saturating_add(RocksDbWeight::get().reads(10_u64))
             .saturating_add(RocksDbWeight::get().writes(6_u64))
     }

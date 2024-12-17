@@ -73,8 +73,13 @@ mod benchmarks {
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
         let size: StorageData<T> = 100;
-        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-        let peer_ids: PeerIds<T> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let peer_ids: PeerIds<T> =
+            vec![peer_id; MaxNumberOfPeerIds::<T>::get().try_into().unwrap()]
+                .try_into()
+                .unwrap();
 
         // Register MSP with value proposition
         let msp: T::AccountId = account("MSP", 0, 0);
