@@ -463,9 +463,12 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * Time-to-live for a provider to top up their deposit to cover a capacity deficit.
        *
-       * This TTL is used to determine at what point to insert the expiration item in the [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at the time when the relay chain block number has been reached.
+       * This TTL is used to determine at what point to insert the expiration item in the
+       * [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at
+       * the time when the relay chain block number has been reached.
        *
-       * This uses the relay chain block number for consistent time tracking based on 6 second timeslots.
+       * This uses the relay chain block number for consistent time tracking based on 6
+       * second timeslots.
        **/
       providerTopUpTtl: u32 & AugmentedConst<ApiType>;
       /**
@@ -487,7 +490,8 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * Period of time for a provider to top up their deposit after being slashed.
        *
-       * If the provider does not top up their deposit within this period, they will be marked as insolvent.
+       * If the provider does not top up their deposit within this period, they will
+       * be marked as insolvent.
        **/
       topUpGracePeriod: u32 & AugmentedConst<ApiType>;
       /**

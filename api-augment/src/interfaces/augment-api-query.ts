@@ -1658,7 +1658,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * A pointer to the earliest available block to insert a new provider top up expiration item.
        *
-       * This should always be greater or equal than current block + [`Config::ProviderTopUpTtl`].
+       * This should always be greater or equal than `current_block` + [`Config::ProviderTopUpTtl`].
        **/
       nextAvailableProviderTopUpExpirationBlock: AugmentedQuery<
         ApiType,
@@ -1681,8 +1681,8 @@ declare module "@polkadot/api-base/types/storage" {
        * Processed in the `on_idle` hook.
        *
        * Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
-       * Providers are removed from `AwaitingTopUpFromProviders` storage when they have successfully topped up their deposit.
-       * If they are still part of the `AwaitingTopUpFromProviders` storage after the expiration period, they are marked as insolvent.
+       * Providers are removed from [`AwaitingTopUpFromProviders`] storage when they have successfully topped up their deposit.
+       * If they are still part of the [`AwaitingTopUpFromProviders`] storage after the expiration period, they are marked as insolvent.
        **/
       providerTopUpExpirations: AugmentedQuery<
         ApiType,
