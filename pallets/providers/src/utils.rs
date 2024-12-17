@@ -32,9 +32,9 @@ use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
-    MultiAddress, Multiaddresses, PaymentStreamsTickNumber, ProviderIdFor, RateDeltaParam,
-    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
-    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
+    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, SignUpRequestSpParams,
+    StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropIdFor,
+    ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -2061,7 +2061,6 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
     type ProviderId = ProviderIdFor<T>;
-    type TickNumber = PaymentStreamsTickNumber<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -2141,24 +2140,25 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     }
 
     fn is_provider_insolvent(who: Self::ProviderId) -> bool {
-        InsolventProviders::<T>::get(&StorageProviderId::<T>::MainStorageProvider(who)).is_some()
-            || InsolventProviders::<T>::get(&StorageProviderId::<T>::BackupStorageProvider(who))
+        let is_provider_insolvent =
+            InsolventProviders::<T>::get(&StorageProviderId::<T>::MainStorageProvider(who))
                 .is_some()
-    }
+                || InsolventProviders::<T>::get(&StorageProviderId::<T>::BackupStorageProvider(
+                    who,
+                ))
+                .is_some();
 
-    fn starting_non_chargeable_tick(who: Self::ProviderId) -> Option<Self::TickNumber> {
-        // Providers cannot charge for the time they are in the state of being awaited for to top up their deposit.
-        if let Some(top_up_metadata) =
-            AwaitingTopUpFromProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(who))
-        {
-            Some(top_up_metadata.started_at)
-        } else if let Some(top_up_metadata) =
-            AwaitingTopUpFromProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(who))
-        {
-            Some(top_up_metadata.started_at)
-        } else {
-            None
-        }
+        // While provider is being awaited for top up, it is still considered insolvent, it's just that
+        // it can get out of this state.
+        let is_provider_awaiting_topup =
+            AwaitingTopUpFromProviders::<T>::get(&StorageProviderId::<T>::MainStorageProvider(who))
+                .is_some()
+                || AwaitingTopUpFromProviders::<T>::get(
+                    &StorageProviderId::<T>::BackupStorageProvider(who),
+                )
+                .is_some();
+
+        is_provider_insolvent || is_provider_awaiting_topup
     }
 }
 

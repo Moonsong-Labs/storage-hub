@@ -599,11 +599,6 @@ pub trait ReadProvidersInterface {
         + MaxEncodedLen
         + FullCodec;
 
-    /// The type which represents ticks.
-    ///
-    /// Used to keep track of the system time.
-    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-
     /// The Balance type of the runtime, which should correspond to the type of
     /// the staking balance of a registered Provider.
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
@@ -633,10 +628,6 @@ pub trait ReadProvidersInterface {
 
     /// Check if the provider is insolvent.
     fn is_provider_insolvent(who: Self::ProviderId) -> bool;
-
-    /// Potentially non-chargeable tick for a provider. From this tick onwards, the provider cannot charge for
-    /// the storage services.
-    fn starting_non_chargeable_tick(who: Self::ProviderId) -> Option<Self::TickNumber>;
 }
 
 /// A trait to mutate the state of a generic Provider, such as updating their root.

@@ -21,8 +21,6 @@ pub struct TopUpMetadata<T: Config> {
     ///
     /// This is used for payment streams to determine when the provider should not be able to charge the user anymore starting
     /// from this tick number.
-    ///
-    /// It is referenced in the [`starting_non_chargeable_tick`](shp_traits::ReadProvidersInterface::starting_non_chargeable_tick) trait implementation.
     pub started_at: PaymentStreamsTickNumber<T>,
     /// The Storage Hub tick number at which the provider will be marked as insolvent.
     ///

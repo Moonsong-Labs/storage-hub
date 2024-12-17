@@ -56,7 +56,7 @@ pub mod pallet {
             + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
         /// The trait for reading provider data.
-        type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId, TickNumber = BlockNumberFor<Self>>
+        type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId>
             + SystemMetricsInterface<ProvidedUnit = Self::Units>;
 
         /// The trait exposing data of which providers submitted valid proofs in which ticks
