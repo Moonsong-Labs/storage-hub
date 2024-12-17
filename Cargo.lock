@@ -7615,6 +7615,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-cr-randomness"
+version = "0.1.0"
+dependencies = [
+ "frame-support 38.0.0",
+ "frame-system 38.0.0",
+ "log",
+ "pallet-balances 39.0.0",
+ "pallet-payment-streams",
+ "pallet-proofs-dealer",
+ "pallet-storage-providers",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "shp-constants",
+ "shp-file-metadata",
+ "shp-session-keys",
+ "shp-traits",
+ "shp-treasury-funding",
+ "sp-core 34.0.0",
+ "sp-io 38.0.0",
+ "sp-runtime 39.0.1",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409)",
+ "sp-trie 29.0.0",
+]
+
+[[package]]
 name = "pallet-delegated-staking"
 version = "5.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409#72d463fb00d7524fd0b7a0ba66f8bc03257bd95c"
@@ -7787,6 +7813,7 @@ dependencies = [
  "num-bigint",
  "pallet-balances 39.0.0",
  "pallet-bucket-nfts",
+ "pallet-cr-randomness",
  "pallet-file-system-runtime-api",
  "pallet-nfts",
  "pallet-payment-streams",
@@ -13480,6 +13507,7 @@ dependencies = [
  "pallet-balances 39.0.0",
  "pallet-bucket-nfts",
  "pallet-collator-selection",
+ "pallet-cr-randomness",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-message-queue 41.0.2",
@@ -13761,6 +13789,7 @@ dependencies = [
  "array-bytes",
  "async-channel 1.9.0",
  "async-trait",
+ "chrono",
  "futures",
  "parity-scale-codec",
  "prost 0.12.6",
@@ -13815,8 +13844,10 @@ dependencies = [
  "diesel-async",
  "futures",
  "log",
+ "sc-network",
  "serde",
  "serde_json",
+ "shc-common",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -16159,6 +16190,7 @@ dependencies = [
  "polkadot-cli",
  "polkadot-primitives 16.0.0",
  "polkadot-runtime-common 17.0.0",
+ "rand",
  "sc-basic-authorship",
  "sc-chain-spec",
  "sc-cli",
@@ -16244,6 +16276,7 @@ dependencies = [
  "pallet-balances 39.0.0",
  "pallet-bucket-nfts",
  "pallet-collator-selection",
+ "pallet-cr-randomness",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-message-queue 41.0.2",

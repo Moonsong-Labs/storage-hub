@@ -3,6 +3,7 @@
 // std
 use futures::{Stream, StreamExt};
 use log::info;
+use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, env, path::PathBuf, sync::Arc, time::Duration};
 
@@ -56,17 +57,13 @@ use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
-    cli::StorageLayer,
-    command::IndexerOptions,
+    cli::{self, IndexerConfigurations, ProviderType, StorageLayer},
+    command::ProviderOptions,
     services::builder::{
         BspProvider, Buildable, InMemoryStorageLayer, MspProvider, NoStorageLayer,
         RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder,
         StorageHubBuilder, StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
     },
-};
-use crate::{
-    cli::{self, ProviderType},
-    command::ProviderOptions,
 };
 
 //* These type definitions were moved from this file to the common crate to be used by'
@@ -197,6 +194,7 @@ async fn init_sh_builder<R, S>(
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
+    maybe_db_pool: Option<DbPool>,
 ) -> Option<(
     StorageHubBuilder<R, S>,
     StorageHubClientRpcConfig<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
@@ -250,6 +248,10 @@ where
                 *extrinsic_retry_timeout,
             );
 
+            if let Some(indexer_db_pool) = maybe_db_pool {
+                storage_hub_builder.with_indexer_db_pool(indexer_db_pool);
+            }
+
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 
             Some((storage_hub_builder, rpc_config))
@@ -294,7 +296,7 @@ where
 async fn start_dev_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
-    indexer_options: Option<IndexerOptions>,
+    indexer_config: IndexerConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -323,12 +325,12 @@ where
         other: (_, mut telemetry, _),
     } = new_partial(&config, true)?;
 
-    let maybe_db_pool = if let Some(ref indexer_options) = indexer_options {
-        let database_url = indexer_options
-            .database_url
-            .clone()
-            .unwrap_or_else(|| env::var("DATABASE_URL").expect("DATABASE_URL is not set"));
+    let maybe_database_url = indexer_config
+        .database_url
+        .clone()
+        .or(env::var("DATABASE_URL").ok());
 
+    let maybe_db_pool = if let Some(database_url) = maybe_database_url {
         Some(
             shc_indexer_db::setup_db_pool(database_url)
                 .await
@@ -338,9 +340,16 @@ where
         None
     };
 
-    if indexer_options.is_some() {
+    if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(&task_spawner, client.clone(), maybe_db_pool.unwrap()).await;
+        spawn_indexer_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
     }
 
     let signing_dev_key = config
@@ -467,6 +476,7 @@ where
         file_transfer_request_protocol,
         network.clone(),
         keystore.clone(),
+        maybe_db_pool,
     )
     .await
     {
@@ -689,7 +699,7 @@ async fn start_node_impl<R, S, Network>(
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
-    indexer_options: Option<IndexerOptions>,
+    indexer_config: IndexerConfigurations,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
@@ -720,12 +730,12 @@ where
     let mut task_manager = params.task_manager;
     let keystore = params.keystore_container.keystore();
 
-    let maybe_db_pool = if let Some(ref indexer_options) = indexer_options {
-        let database_url = indexer_options
-            .database_url
-            .clone()
-            .unwrap_or_else(|| env::var("DATABASE_URL").expect("DATABASE_URL is not set"));
+    let maybe_database_url = indexer_config
+        .database_url
+        .clone()
+        .or(env::var("DATABASE_URL").ok());
 
+    let maybe_db_pool = if let Some(database_url) = maybe_database_url {
         Some(
             shc_indexer_db::setup_db_pool(database_url)
                 .await
@@ -735,9 +745,16 @@ where
         None
     };
 
-    if indexer_options.is_some() {
+    if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(&task_spawner, client.clone(), maybe_db_pool.unwrap()).await;
+        spawn_indexer_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
     }
 
     // If we are a provider we update the network configuration with the file transfer protocol.
@@ -810,6 +827,7 @@ where
         file_transfer_request_protocol,
         network.clone(),
         keystore.clone(),
+        maybe_db_pool,
     )
     .await
     {
@@ -1041,7 +1059,7 @@ fn start_consensus(
 pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
-    indexer_options: Option<IndexerOptions>,
+    indexer_options: IndexerConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -1126,7 +1144,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
-    indexer_options: Option<IndexerOptions>,
+    indexer_config: IndexerConfigurations,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -1141,7 +1159,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
-                    indexer_options,
+                    indexer_config,
                     para_id,
                     hwbench,
                 )
@@ -1153,7 +1171,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
-                    indexer_options,
+                    indexer_config,
                     para_id,
                     hwbench,
                 )
@@ -1165,7 +1183,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
-                    indexer_options,
+                    indexer_config,
                     para_id,
                     hwbench,
                 )
@@ -1177,7 +1195,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
-                    indexer_options,
+                    indexer_config,
                     para_id,
                     hwbench,
                 )
@@ -1189,7 +1207,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     polkadot_config,
                     collator_options,
                     Some(provider_options),
-                    indexer_options,
+                    indexer_config,
                     para_id,
                     hwbench,
                 )
@@ -1203,7 +1221,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
             polkadot_config,
             collator_options,
             None,
-            indexer_options,
+            indexer_config,
             para_id,
             hwbench,
         )

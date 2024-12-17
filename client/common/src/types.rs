@@ -49,8 +49,10 @@ pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<
 pub type BackupStorageProviderId =
     pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
 pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
-pub type ChallengeableProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
+pub type MultiAddress = pallet_storage_providers::types::MultiAddress<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
@@ -64,6 +66,8 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
+pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
+
 /// Type alias for the events vector.
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events

@@ -34,10 +34,9 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChallengeableProviderId, EitherBucketOrBspId, Fingerprint, ParachainClient,
-        StorageProviderId, TickNumber, BCSV_KEY_TYPE,
+        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
+        TickNumber, BCSV_KEY_TYPE,
     },
 };
 use shp_file_metadata::FileKey;
@@ -48,8 +47,9 @@ use crate::{
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
         FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
-        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
+        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -106,15 +106,11 @@ pub struct BlockchainService {
     /// Can be a BSP or an MSP.
     /// This is initialised when the node is in sync.
     pub(crate) provider_id: Option<StorageProviderId>,
-    /// A map of [`EitherBucketOrBspId`] to the current Forest keys.
-    ///
-    /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
-    /// This is used to keep track of the current Forest key for each Bucket, or THE ONLY Forest key for the BSP, in the current best block.
-    pub(crate) current_forest_keys: BTreeMap<ChallengeableProviderId, Vec<u8>>,
     /// A map of [`EitherBucketOrBspId`] to the Forest Storage snapshots.
     ///
     /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
+    /// Each BSP or Bucket can have multiple Forest Storage snapshots.
     /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
     #[allow(dead_code)]
     pub(crate) forest_root_snapshots:
@@ -520,7 +516,8 @@ impl Actor for BlockchainService {
                         .unwrap_or_else(|_| {
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
-                        });
+                        })
+                        .map(convert_raw_multiaddresses_to_multiaddr);
 
                     match callback.send(multiaddresses) {
                         Ok(_) => {
@@ -996,7 +993,6 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
             provider_id: None,
-            current_forest_keys: BTreeMap::new(),
             forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
@@ -1153,6 +1149,7 @@ impl BlockchainService {
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
+        // TODO: Handle the `pallet-cr-randomness` events here.
         match get_events_at_block(&self.client, block_hash) {
             Ok(block_events) => {
                 // Process the events.
@@ -1309,41 +1306,63 @@ impl BlockchainService {
                                 }
                             }
                         }
-                        // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::AcceptedBspVolunteer {
-                                bsp_id,
+                            pallet_file_system::Event::MoveBucketRequested {
+                                who: _,
                                 bucket_id,
-                                location,
-                                fingerprint,
-                                multiaddresses,
-                                owner,
-                                size,
+                                new_msp_id,
                             },
-                        ) if owner
-                            == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
-                        {
-                            log::trace!(
-                                target: LOG_TARGET,
-                                "AcceptedBspVolunteer event for BSP ID: {:?}",
-                                bsp_id
-                            );
-
-                            // We try to convert the types coming from the runtime into our expected types.
-                            let fingerprint: Fingerprint = fingerprint.as_bytes().into();
-
-                            let multiaddress_vec: Vec<Multiaddr> =
-                                convert_raw_multiaddresses_to_multiaddr(multiaddresses);
-
-                            self.emit(AcceptedBspVolunteer {
-                                bsp_id,
+                        ) => {
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketRequested {
+                                        bucket_id,
+                                        new_msp_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the event only if this node is the new MSP.
+                                Some(StorageProviderId::MainStorageProvider(msp_id))
+                                    if msp_id == new_msp_id =>
+                                {
+                                    self.emit(MoveBucketRequestedForNewMsp { bucket_id });
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketRejected { bucket_id, msp_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted { bucket_id, msp_id },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketAccepted { bucket_id, msp_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequestExpired {
                                 bucket_id,
-                                location,
-                                fingerprint,
-                                multiaddresses: multiaddress_vec,
-                                owner,
-                                size,
-                            })
+                                msp_id,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketExpired { bucket_id, msp_id });
+                            }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmStoppedStoring {
@@ -1363,6 +1382,49 @@ impl BlockchainService {
                                         new_root,
                                     });
                                 }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::AcceptedBspVolunteer {
+                                bsp_id,
+                                bucket_id,
+                                location,
+                                fingerprint,
+                                multiaddresses,
+                                owner,
+                                size,
+                            },
+                        ) if owner
+                            == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
+                        {
+                            log::trace!(
+                                target: LOG_TARGET,
+                                "AcceptedBspVolunteer event for BSP ID: {:?}",
+                                bsp_id
+                            );
+                            // This event should only be of any use if a node is run by as a user.
+                            if self.provider_id.is_none() {
+                                log::info!(
+                                    target: LOG_TARGET,
+                                    "AcceptedBspVolunteer event for BSP ID: {:?}",
+                                    bsp_id
+                                );
+
+                                // We try to convert the types coming from the runtime into our expected types.
+                                let fingerprint: Fingerprint = fingerprint.as_bytes().into();
+
+                                let multiaddress_vec: Vec<Multiaddr> =
+                                    convert_raw_multiaddresses_to_multiaddr(multiaddresses);
+
+                                self.emit(AcceptedBspVolunteer {
+                                    bsp_id,
+                                    bucket_id,
+                                    location,
+                                    fingerprint,
+                                    multiaddresses: multiaddress_vec,
+                                    owner,
+                                    size,
+                                })
                             }
                         }
                         // Ignore all other events.

@@ -42,6 +42,7 @@ type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
+const STAKE_TO_SEED_PERIOD: Balance = 1000 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -152,6 +153,8 @@ mod test_runtime {
     pub type BucketNfts = pallet_bucket_nfts;
     #[runtime::pallet_index(7)]
     pub type Nfts = pallet_nfts;
+    #[runtime::pallet_index(8)]
+    pub type CrRandomness = pallet_cr_randomness;
 }
 
 parameter_types! {
@@ -237,6 +240,59 @@ impl pallet_nfts::Config for Test {
         type Helper = ();
     }
 }
+
+/****** Commit-Reveal Randomness pallet ******/
+impl pallet_cr_randomness::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type SeedCommitment = H256;
+    type Seed = H256;
+    type SeedVerifier = MockSeedVerifier;
+    type SeedGenerator = MockSeedGenerator;
+    type RandomSeedMixer = MockRandomSeedMixer;
+    type MaxSeedTolerance = MaxSeedTolerance;
+    type StakeToSeedPeriod = StakeToSeedPeriod;
+    type MinSeedPeriod = MinSeedPeriod;
+}
+
+parameter_types! {
+    pub const MaxSeedTolerance: u32 = 10;
+    pub const StakeToSeedPeriod: u128 = STAKE_TO_SEED_PERIOD;
+    pub const MinSeedPeriod: u64 = 4;
+}
+
+pub type Seed = H256;
+pub type SeedCommitment = H256;
+
+pub struct MockSeedVerifier;
+impl pallet_cr_randomness::SeedVerifier for MockSeedVerifier {
+    type Seed = Seed;
+    type SeedCommitment = SeedCommitment;
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
+        BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
+    }
+}
+
+pub struct MockRandomSeedMixer;
+impl pallet_cr_randomness::RandomSeedMixer<Seed> for MockRandomSeedMixer {
+    fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed {
+        let mut seed = seed_1.as_fixed_bytes().to_vec();
+        seed.extend_from_slice(seed_2.as_fixed_bytes());
+        if let Some(context) = context {
+            seed.extend_from_slice(context.into().as_fixed_bytes());
+        }
+        Seed::from_slice(&blake2_256(&seed))
+    }
+}
+
+pub struct MockSeedGenerator;
+impl pallet_cr_randomness::SeedGenerator for MockSeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Seed::from_slice(&blake2_256(generator))
+    }
+}
+/****** ****** ****** ******/
 
 // Payment streams pallet:
 parameter_types! {
@@ -509,9 +565,11 @@ parameter_types! {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type CrRandomness = CrRandomness;
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;

@@ -3,7 +3,7 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 
 describeMspNet(
   "Single MSP accepting multiple storage requests",
-  ({ before, createMspApi, it, createUserApi }) => {
+  ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
@@ -13,7 +13,7 @@ describeMspNet(
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMspApi();
+      const maybeMspApi = await createMsp1Api();
       assert(maybeMspApi, "MSP API not available");
       mspApi = maybeMspApi;
     });

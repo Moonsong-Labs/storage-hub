@@ -80,7 +80,7 @@ impl ForestStorageHandler
         Some(self.fs_instance.clone())
     }
 
-    async fn insert(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let fs: InMemoryForestStorage<sp_trie::LayoutV1<polkadot_primitives::BlakeTwo256>> =
             InMemoryForestStorage::new();
 
@@ -113,7 +113,7 @@ impl ForestStorageHandler
         Some(self.fs_instance.clone())
     }
 
-    async fn insert(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(
             self.storage_path
                 .clone()
@@ -206,7 +206,7 @@ where
         self.fs_instances.read().await.get(key).cloned()
     }
 
-    async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
         // Return potentially existing instance since we waited for the lock.
@@ -269,7 +269,7 @@ where
         self.fs_instances.read().await.get(key).cloned()
     }
 
-    async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
         // Return potentially existing instance since we waited for the lock.

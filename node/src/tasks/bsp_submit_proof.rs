@@ -17,7 +17,7 @@ use shc_blockchain_service::{
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChallengeableProviderId, FileKey, KeyProof, KeyProofs, Proven,
+        BlockNumber, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
         RandomnessOutput, StorageProof, TrieRemoveMutation,
     },
 };
@@ -32,14 +32,14 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 /// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
 /// The flow includes the following steps:
-/// - **MultipleNewChallengeSeeds Event:**
+/// - **[`MultipleNewChallengeSeeds`] Event:**
 ///   - Triggered by the on-chain generation of a new challenge seed.
 ///   - For each seed:
 ///     - Derives forest challenges from the seed.
 ///     - Checks for any checkpoint challenges and adds them to the forest challenges.
 ///     - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
 ///
-/// - **ProcessSubmitProofRequest Event:**
+/// - **[`ProcessSubmitProofRequest`] Event:**
 ///   - Triggered when the Blockchain Service detects that the Forest write lock has been released.
 ///   - Generates proofs for the queued challenges derived from the seed in the [`MultipleNewChallengeSeeds`] event.
 ///   - Constructs key proofs for each file key involved in the challenges.
@@ -47,7 +47,7 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
 ///   - Verifies that the new Forest root matches the one recorded on-chain to ensure consistency.
 ///
-/// - **FinalisedTrieRemoveMutationsApplied Event:**
+/// - **[`FinalisedTrieRemoveMutationsApplied`] Event:**
 ///   - Triggered when mutations applied to the Merkle Trie have been finalized, indicating that certain keys should be removed.
 ///   - Iterates over each file key that was part of the finalised mutations.
 ///   - Checks if the file key is still present in the Forest Storage:
@@ -86,7 +86,7 @@ where
     }
 }
 
-/// Handles the `MultipleNewChallengeSeeds` event.
+/// Handles the [`MultipleNewChallengeSeeds`] event.
 ///
 /// This event is triggered when catching up to proof submissions, and there are multiple new challenge seeds
 /// that have to be responded in order. It queues the proof submissions for the given seeds.
@@ -119,7 +119,7 @@ where
     }
 }
 
-/// Handles the `ProcessSubmitProofRequest` event.
+/// Handles the [`ProcessSubmitProofRequest`] event.
 ///
 /// This event is triggered when the Blockchain Service realises that the Forest write lock has been released,
 /// giving this task the opportunity to generate proofs and submit them to the runtime.
@@ -365,7 +365,7 @@ where
     }
 }
 
-/// Handles the `FinalisedTrieRemoveMutationsApplied` event.
+/// Handles the [`FinalisedTrieRemoveMutationsApplied`] event.
 ///
 /// This event is triggered when mutations applied to the Forest of this BSP have been finalised,
 /// signalling that certain keys (representing files) should be removed from the File Storage if they are
@@ -430,7 +430,7 @@ where
 {
     async fn queue_submit_proof_request(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
     ) -> anyhow::Result<()> {
@@ -464,7 +464,7 @@ where
     async fn derive_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<Vec<H256>> {
         Ok(self
             .storage_hub_handler
@@ -475,7 +475,7 @@ where
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
         let last_tick_provided_submitted_proof = self
@@ -540,7 +540,7 @@ where
         &self,
         file_key: H256,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<KeyProof> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -623,10 +623,7 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(
-        &self,
-        provider_id: ChallengeableProviderId,
-    ) -> anyhow::Result<()> {
+    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler

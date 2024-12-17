@@ -2531,10 +2531,8 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                // Register the MSP.
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                // Create the bucket that will hold the file.
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
@@ -4799,6 +4797,23 @@ mod bsp_confirm {
                     .into(),
                 );
 
+				// Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
 				// Assert that the payment stream between the BSP and the user has been created
 				assert!(<<Test as file_system::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&bsp_id, &owner_account_id));
             });
@@ -5057,6 +5072,23 @@ mod bsp_confirm {
                         bsp_id,
                     }
                         .into(),
+                );
+
+				// Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+				assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+				// Assert that the correct event was deposited.
+				let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
                 );
 
 				// Assert that the payment stream between the BSP and the user has been created and get its amount provided
@@ -6015,6 +6047,23 @@ mod bsp_stop_storing {
                     })
                 );
 
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+                let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
@@ -6089,6 +6138,20 @@ mod bsp_stop_storing {
 
                 // Assert that the pending stop storing request was removed.
                 assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+
+                // Assert that the used capacity of this BSP is now 0
+                assert_eq!(Providers::get_used_capacity(&bsp_id), 0);
+
+                // Assert that the randomness cycle for this BSP has been stopped
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_none());
+
+                // Assert that the correct event was deposited.
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleStopped {
+                        provider_id: bsp_id,
+                    }
+                    .into(),
+                );
 
                 // Assert that the correct event was deposited.
                 let new_root = Providers::get_root(bsp_id).unwrap();
@@ -7985,6 +8048,23 @@ mod stop_storing_for_insolvent_user {
                     .into(),
                 );
 
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+                let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
                 // Assert that the capacity used by the BSP was updated
                 assert_eq!(
                     pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
@@ -8318,6 +8398,23 @@ mod stop_storing_for_insolvent_user {
                     .into(),
                 );
 
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+                let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
                 // Assert that the capacity used by the BSP was updated
                 assert_eq!(
                     pallet_storage_providers::BackupStorageProviders::<Test>::get(bsp_id)
@@ -8545,6 +8642,23 @@ mod stop_storing_for_insolvent_user {
                     .into(),
                 );
 
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+                let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
                 // Now that the BSP has confirmed storing, we can simulate the user being not insolvent
                 // and the BSP trying to stop storing a file for the user using the stop_storing_for_insolvent_user function.
                 assert_noop!(
@@ -8735,6 +8849,23 @@ mod stop_storing_for_insolvent_user {
                     Event::BspChallengeCycleInitialised {
                         who: bsp_account_id,
                         bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+                let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
                     }
                     .into(),
                 );

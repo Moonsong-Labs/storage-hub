@@ -14,7 +14,7 @@ use shc_blockchain_service::{
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
-    types::{ChallengeableProviderId, MaxUsersToCharge},
+    types::{MaxUsersToCharge, ProofsDealerProviderId},
 };
 use shc_forest_manager::traits::ForestStorage;
 use sp_core::{Get, H256};
@@ -403,10 +403,7 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(
-        &self,
-        provider_id: ChallengeableProviderId,
-    ) -> anyhow::Result<()> {
+    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler

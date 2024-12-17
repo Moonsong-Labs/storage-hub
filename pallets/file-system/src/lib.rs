@@ -29,8 +29,12 @@
 
 pub use pallet::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmarking;
+
 pub mod types;
 mod utils;
+pub mod weights;
 
 #[cfg(test)]
 mod mock;
@@ -43,7 +47,7 @@ mod tests;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::types::*;
+    use super::{types::*, weights::WeightInfo};
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResult,
@@ -70,6 +74,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// The trait for reading and mutating Storage Provider and Bucket data.
         type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
@@ -112,6 +119,11 @@ pub mod pallet {
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
         >
         + shp_traits::MutatePricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
+
+        /// The trait to initialise a Provider's randomness commit-reveal cycle.
+        type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
+            ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+        >;
 
         type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
             Price = BalanceOf<Self>,
@@ -810,7 +822,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_bucket())]
         pub fn create_bucket(
             origin: OriginFor<T>,
             msp_id: Option<ProviderIdFor<T>>,
@@ -952,7 +964,7 @@ pub mod pallet {
 
         /// Issue a new storage request for a file
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::issue_storage_request())]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,

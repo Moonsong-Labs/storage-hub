@@ -1,7 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
+use sc_network::Multiaddr;
 use serde_json::Number;
+use sp_api::ApiError;
+use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
@@ -17,12 +20,10 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChallengeableProviderId, ChunkId, ForestLeaf, MainStorageProviderId,
-    Multiaddresses, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProofsDealerProviderId,
+    ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
     TrieRemoveMutation,
 };
-use sp_api::ApiError;
-use sp_core::H256;
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use super::{
@@ -77,14 +78,14 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
     },
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: ChallengeableProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
     },
     QueryMspConfirmChunksToProveForFile {
-        msp_id: ChallengeableProviderId,
+        msp_id: ProofsDealerProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
@@ -93,7 +94,7 @@ pub enum BlockchainServiceCommand {
     QueryProviderMultiaddresses {
         provider_id: ChallengeableProviderId,
         callback:
-            tokio::sync::oneshot::Sender<Result<Multiaddresses, QueryProviderMultiaddressesError>>,
+            tokio::sync::oneshot::Sender<Result<Vec<Multiaddr>, QueryProviderMultiaddressesError>>,
     },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
@@ -113,27 +114,27 @@ pub enum BlockchainServiceCommand {
     },
     QueryChallengesFromSeed {
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         count: u32,
         callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
     QueryForestChallengesFromSeed {
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
     QueryLastTickProviderSubmittedProof {
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         callback: tokio::sync::oneshot::Sender<
             Result<BlockNumber, GetLastTickProviderSubmittedProofError>,
         >,
     },
     QueryChallengePeriod {
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetChallengePeriodError>>,
     },
     QueryNextChallengeTickForProvider {
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber>>,
     },
     QueryLastCheckpointChallengeTick {
@@ -224,7 +225,7 @@ pub trait BlockchainServiceInterface {
     /// Query the earliest tick number that a file was volunteered for storage.
     async fn query_file_earliest_volunteer_tick(
         &self,
-        bsp_id: ChallengeableProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError>;
 
@@ -239,22 +240,22 @@ pub trait BlockchainServiceInterface {
     /// Query the chunks that a BSP needs to confirm for a file.
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: ChallengeableProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 
     /// Query the chunks that a MSP needs to confirm for a file.
     async fn query_msp_confirm_chunks_to_prove_for_file(
         &self,
-        msp_id: ChallengeableProviderId,
+        msp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
 
-    /// Query the MSP multiaddresses.
+    /// Query the a Provider's multiaddresses.
     async fn query_provider_multiaddresses(
         &self,
-        msp_id: ChallengeableProviderId,
-    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
+        provider_id: ProviderId,
+    ) -> Result<Vec<Multiaddr>, QueryProviderMultiaddressesError>;
 
     /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
@@ -276,7 +277,7 @@ pub trait BlockchainServiceInterface {
     async fn query_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         count: u32,
     ) -> Result<Vec<ForestLeaf>, ApiError>;
 
@@ -287,25 +288,25 @@ pub trait BlockchainServiceInterface {
     async fn query_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<Vec<ForestLeaf>, ApiError>;
 
     /// Query the last tick that a Provider submitted a proof for.
     async fn query_last_tick_provider_submitted_proof(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
 
     /// Query the challenge period for a given Provider.
     async fn query_challenge_period(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber, GetChallengePeriodError>;
 
     /// Query the next challenge tick for a given Provider.
     async fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber>;
 
     /// Query the last checkpoint tick.
@@ -493,7 +494,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: ChallengeableProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -509,7 +510,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_msp_confirm_chunks_to_prove_for_file(
         &self,
-        msp_id: ChallengeableProviderId,
+        msp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -525,8 +526,8 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_provider_multiaddresses(
         &self,
-        provider_id: ChallengeableProviderId,
-    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError> {
+        provider_id: ProviderId,
+    ) -> Result<Vec<Multiaddr>, QueryProviderMultiaddressesError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryProviderMultiaddresses {
             provider_id,
@@ -574,7 +575,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         count: u32,
     ) -> Result<Vec<ForestLeaf>, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -592,7 +593,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<Vec<ForestLeaf>, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryForestChallengesFromSeed {
@@ -606,7 +607,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_last_tick_provider_submitted_proof(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastTickProviderSubmittedProof {
@@ -619,7 +620,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_challenge_period(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber, GetChallengePeriodError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryChallengePeriod {
@@ -632,7 +633,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryNextChallengeTickForProvider {

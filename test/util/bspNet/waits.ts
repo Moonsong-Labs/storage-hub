@@ -4,6 +4,57 @@ import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import assert from "node:assert";
 import type { Address, H256 } from "@polkadot/types/interfaces";
+import type { WaitForTxOptions } from "./test-api";
+
+/**
+ * Generic function to wait for a transaction in the pool
+ */
+export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions) => {
+  const {
+    module,
+    method,
+    checkQuantity,
+    shouldSeal = false,
+    expectedEvent,
+    iterations = 100,
+    delay = 100,
+    timeout = 100
+  } = options;
+
+  // To allow node time to react on chain events
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      const matches = await assertExtrinsicPresent(api, {
+        module,
+        method,
+        checkTxPool: true,
+        timeout
+      });
+      if (checkQuantity) {
+        assert(
+          matches.length === checkQuantity,
+          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
+        );
+      }
+
+      if (shouldSeal) {
+        const { events } = await sealBlock(api);
+        if (expectedEvent) {
+          assertEventPresent(api, module, expectedEvent, events);
+        }
+      }
+
+      break;
+    } catch (e) {
+      if (i === iterations - 1) {
+        throw new Error(
+          `Failed to detect ${module}.${method} extrinsic in txPool after ${(i * delay) / 1000}s`
+        );
+      }
+    }
+  }
+};
 
 /**
  * Waits for a BSP to volunteer for a storage request.
@@ -20,36 +71,13 @@ import type { Address, H256 } from "@polkadot/types/interfaces";
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
 export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: number) => {
-  const iterations = 100;
-  const delay = 100;
-
-  // To allow node time to react on chain events
-  for (let i = 0; i < iterations; i++) {
-    try {
-      await sleep(delay);
-      const matches = await assertExtrinsicPresent(api, {
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true,
-        timeout: 100
-      });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
-        );
-      }
-      break;
-    } catch {
-      assert(
-        i < iterations - 1,
-        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
-      );
-    }
-  }
-
-  const { events } = await sealBlock(api);
-  assertEventPresent(api, "fileSystem", "AcceptedBspVolunteer", events);
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "bspVolunteer",
+    checkQuantity,
+    shouldSeal: true,
+    expectedEvent: "AcceptedBspVolunteer"
+  });
 };
 
 /**
@@ -69,33 +97,11 @@ export const waitForBspVolunteerWithoutSealing = async (
   api: ApiPromise,
   checkQuantity?: number
 ) => {
-  const iterations = 100;
-  const delay = 100;
-
-  // To allow node time to react on chain events
-  for (let i = 0; i < iterations; i++) {
-    try {
-      await sleep(delay);
-      const matches = await assertExtrinsicPresent(api, {
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true,
-        timeout: 100
-      });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
-        );
-      }
-      break;
-    } catch {
-      assert(
-        i < iterations - 1,
-        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
-      );
-    }
-  }
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "bspVolunteer",
+    checkQuantity
+  });
 };
 
 /**
@@ -183,33 +189,14 @@ export const waitForBspStored = async (
  * @throws Will throw an error if the expected extrinsic is not found.
  */
 export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
-  // To allow time for local file transfer to complete (5s)
-  const iterations = 50;
-  const delay = 200;
-  for (let i = 0; i < iterations + 1; i++) {
-    try {
-      await sleep(delay);
-      const matches = await assertExtrinsicPresent(api, {
-        module: "fileSystem",
-        method: "bspConfirmStoring",
-        checkTxPool: true,
-        timeout: 300
-      });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
-        );
-      }
-      break;
-    } catch (e) {
-      console.error(e);
-      assert(
-        i !== iterations,
-        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
-      );
-    }
-  }
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "bspConfirmStoring",
+    checkQuantity,
+    iterations: 50,
+    delay: 200,
+    timeout: 300
+  });
 };
 
 /**
@@ -325,6 +312,7 @@ export const waitForBlockImported = async (api: ApiPromise, blockHash: string) =
   }
 };
 
+// TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
 /**
  * Waits for a MSP to respond to storage requests.
  *
@@ -339,29 +327,78 @@ export const waitForBlockImported = async (api: ApiPromise, blockHash: string) =
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
 export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
-  const iterations = 41;
-  const delay = 50;
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "mspRespondStorageRequestsMultipleBuckets",
+    checkQuantity,
+    iterations: 41,
+    delay: 50
+  });
+};
 
-  // To allow node time to react on chain events
+/**
+ * Options for the `waitFor` function.
+ * @param lambda - The condition to wait for.
+ * @param iterations - The number of iterations to wait for the condition to be true.
+ * @param delay - The delay between iterations.
+ */
+export interface WaitForOptions {
+  lambda: () => Promise<boolean>;
+  iterations?: number;
+  delay?: number;
+}
+
+/**
+ * Waits for an arbitrary condition to be true. It keeps polling the condition until it is true or
+ * a timeout is reached.
+ */
+export const waitFor = async (options: WaitForOptions) => {
+  const { lambda, iterations = 100, delay = 100 } = options;
+
   for (let i = 0; i < iterations; i++) {
     try {
       await sleep(delay);
-      const matches = await assertExtrinsicPresent(api, {
-        module: "fileSystem",
-        method: "mspRespondStorageRequestsMultipleBuckets",
-        checkTxPool: true
-      });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspVolunteer`
-        );
+      const result = await lambda();
+      if (result) {
+        return;
       }
+    } catch (e: unknown) {
+      if (i === iterations - 1) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        throw new Error(`Failed after ${(iterations * delay) / 1000}s: ${errorMessage}`);
+      }
+    }
+  }
+  throw new Error(`Failed after ${(iterations * delay) / 1000}s`);
+};
+
+/**
+ * Waits for a MSP to complete storing a file in its file storage.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a longer period to allow for local file transfer.
+ * 2. Checks for the FileFound return from the isFileInFileStorage RPC method.
+ *
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for in the file storage.
+ * @returns A Promise that resolves when the MSP has correctly stored a file in its file storage.
+ *
+ * @throws Will throw an error if the file is not complete in the file storage after a timeout.
+ */
+export const waitForMspFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
+  // To allow time for local file transfer to complete (10s)
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const fileStorageResult = await api.rpc.storagehubclient.isFileInFileStorage(fileKey);
+      assert(fileStorageResult.isFileFound, "File not found in file storage");
       break;
     } catch {
       assert(
-        i < iterations - 1,
-        `Failed to detect MSP respond extrinsic in txPool after ${(i * delay) / 1000}s`
+        i !== iterations,
+        `Failed to detect MSP file in file storage after ${(i * delay) / 1000}s`
       );
     }
   }

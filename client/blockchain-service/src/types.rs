@@ -10,7 +10,7 @@ use frame_support::dispatch::DispatchInfo;
 use log::warn;
 use sc_client_api::BlockImportNotification;
 use shc_common::types::{
-    BlockNumber, ChallengeableProviderId, HasherOutT, RandomnessOutput,
+    BlockNumber, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
     RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
     TrieRemoveMutation,
 };
@@ -24,7 +24,7 @@ use crate::handler::LOG_TARGET;
 /// This struct is used as an item in the `pending_submit_proof_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct SubmitProofRequest {
-    pub provider_id: ChallengeableProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
@@ -33,7 +33,7 @@ pub struct SubmitProofRequest {
 
 impl SubmitProofRequest {
     pub fn new(
-        provider_id: ChallengeableProviderId,
+        provider_id: ProofsDealerProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
         forest_challenges: Vec<H256>,
