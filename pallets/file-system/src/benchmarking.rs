@@ -70,12 +70,24 @@ mod benchmarks {
         let location = vec![1; MaxFilePathSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
-        let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(b"tes");
+        let fingerprint =
+            <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
         let size: StorageData<T> = 100;
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
         let peer_ids: PeerIds<T> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-        Pallet::<T>::create_bucket(signed_origin.clone().into(), None, name, true, None)?;
+        // Register MSP with value proposition
+        let msp: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            Some(msp_id),
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
 
         #[extrinsic_call]
         _(
@@ -84,7 +96,7 @@ mod benchmarks {
             location,
             fingerprint,
             size,
-            None,
+            Some(msp_id),
             peer_ids,
         );
 
