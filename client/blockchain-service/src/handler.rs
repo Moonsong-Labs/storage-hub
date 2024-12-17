@@ -292,7 +292,7 @@ impl Actor for BlockchainService {
                     }
                 },
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
-                    let best_block_info = self.best_block.clone();
+                    let best_block_info = self.best_block;
                     match callback.send(best_block_info) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Best block info sent successfully");

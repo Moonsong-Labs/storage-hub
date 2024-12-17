@@ -114,7 +114,7 @@ impl BlockchainService {
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let last_best_block = self.best_block.clone();
+        let last_best_block = self.best_block;
         let new_block_info: BestBlockInfo = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.

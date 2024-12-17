@@ -961,7 +961,7 @@ where
                 let mut provider = BackupStorageProviders::<T>::get(provider_id)
                     .ok_or(Error::<T>::NotRegistered)?;
                 provider.capacity = final_capacity;
-                BackupStorageProviders::<T>::insert(provider_id.clone(), provider);
+                BackupStorageProviders::<T>::insert(*provider_id, provider);
             }
         }
 
@@ -2550,7 +2550,7 @@ mod hooks {
 
             // Remove expired move bucket requests if any existed and process them.
             let mut provider_top_up_expirations =
-                ProviderTopUpExpirations::<T>::take(tick_to_process.clone());
+                ProviderTopUpExpirations::<T>::take(*tick_to_process);
             meter.consume(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to

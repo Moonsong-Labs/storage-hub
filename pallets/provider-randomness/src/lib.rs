@@ -315,19 +315,19 @@ pub mod pallet {
 
             // Check that the Provider is active in the system
             ensure!(
-                ActiveProviders::<T>::contains_key(&provider_id),
+                ActiveProviders::<T>::contains_key(provider_id),
                 Error::<T>::ProviderIdNotValid
             );
 
             // Check that the new commitment is not on the pending commitments storage
             ensure!(
-                !PendingCommitments::<T>::contains_key(&new_seed_commitment),
+                !PendingCommitments::<T>::contains_key(new_seed_commitment),
                 Error::<T>::NewCommitmentAlreadyPending
             );
 
             // Get the deadline tick for the seed commitment
             let (deadline, provider_without_previous_commitment) =
-                match ProvidersWithoutCommitment::<T>::take(&provider_id) {
+                match ProvidersWithoutCommitment::<T>::take(provider_id) {
                     // If the Provider is a first-time submitter or has been slashed, the deadline is the one stored in the ProvidersWithoutCommitment storage
                     Some(deadline) => (deadline, true),
                     None => {
@@ -337,7 +337,7 @@ pub mod pallet {
                             .ok_or(Error::<T>::MissingSeedReveal)?
                             .commitment;
                         let deadline =
-                            SeedCommitmentToDeadline::<T>::take(&seed_commitment_to_reveal)
+                            SeedCommitmentToDeadline::<T>::take(seed_commitment_to_reveal)
                                 .ok_or(Error::<T>::NoEndTickForSeedCommitment)?;
                         (deadline, false)
                     }
@@ -378,7 +378,7 @@ pub mod pallet {
                 );
 
                 // If verification passed, remove the seed commitment from the pending commitments
-                PendingCommitments::<T>::remove(&seed_commitment_to_reveal);
+                PendingCommitments::<T>::remove(seed_commitment_to_reveal);
 
                 // Calculate the distance from the head of the queue that the deadline is, to know from where to start mixing the revealed seed
                 // The head of the queue is the current tick, and the mixing should start from the deadline tick
@@ -392,7 +392,7 @@ pub mod pallet {
                 BoundedQueue::<T>::overwrite_queue(
                     &|element: &mut <T as Config>::Seed| {
                         *element = T::RandomSeedMixer::mix_randomness_seed(
-                            &element,
+                            element,
                             &seed_to_reveal,
                             None::<T::Seed>,
                         );
@@ -488,7 +488,7 @@ pub mod pallet {
 
             // Emit the ProviderCycleInitialised event
             Self::deposit_event(Event::ProviderCycleInitialised {
-                provider_id: provider_id.clone(),
+                provider_id: *provider_id,
                 first_seed_commitment_deadline_tick: deadline,
             });
 
@@ -515,7 +515,7 @@ pub mod pallet {
 
             // Emit the ProviderCycleStopped event
             Self::deposit_event(Event::ProviderCycleStopped {
-                provider_id: provider_id.clone(),
+                provider_id: *provider_id,
             });
 
             Ok(())
@@ -543,7 +543,7 @@ pub mod pallet {
             // Update the next commitment that this Provider has to answer
             ActiveProviders::<T>::insert(provider_id, Some(next_seed_commitment));
             // Add the new seed commitment to the pending commitments storage
-            PendingCommitments::<T>::insert(next_seed_commitment.clone(), provider_id.clone());
+            PendingCommitments::<T>::insert(*next_seed_commitment, *provider_id);
             // And append the Provider as a valid seed revealer for the deadline tick
             ReceivedCommitments::<T>::append(deadline, provider_id);
 
@@ -583,11 +583,11 @@ pub mod pallet {
             // Then, for the current tick, get the Providers that had to reveal their seed commitments
             let tick_to_target = pallet_proofs_dealer::ChallengesTicker::<T>::get();
             let due_providers_for_current_tick =
-                BTreeSet::from_iter(DeadlineTickToProviders::<T>::take(tick_to_target).into_iter());
+                BTreeSet::from_iter(DeadlineTickToProviders::<T>::take(tick_to_target));
 
             // And get the ones that actually submitted their seed commitments
             let providers_that_submitted =
-                BTreeSet::from_iter(ReceivedCommitments::<T>::take(tick_to_target).into_iter());
+                BTreeSet::from_iter(ReceivedCommitments::<T>::take(tick_to_target));
 
             // The difference between the sets are the Providers that did not submit their seed commitments
             let missing_providers: Vec<ProviderIdFor<T>> = due_providers_for_current_tick
@@ -691,7 +691,7 @@ pub mod pallet {
                             // If the Provider is active in the system
                             Some(maybe_seed_commitment) => {
                                 // Mark them as slashable
-                                Self::mark_provider_as_slashable(&provider_id);
+                                Self::mark_provider_as_slashable(provider_id);
 
                                 // If they have a seed commitment that they had to answer
                                 if let Some(seed_commitment) = maybe_seed_commitment {
@@ -713,7 +713,7 @@ pub mod pallet {
 
                                 // Emit the ProviderMarkedAsSlashable event
                                 Self::deposit_event(Event::ProviderMarkedAsSlashable {
-                                    provider_id: provider_id.clone(),
+                                    provider_id: *provider_id,
                                     next_deadline: new_deadline,
                                 });
 
