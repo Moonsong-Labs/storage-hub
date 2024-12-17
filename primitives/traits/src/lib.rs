@@ -1046,7 +1046,7 @@ pub trait PaymentStreamsInterface {
     /// Remove a priviledge provider to the PriviledgerProvider storage.
     fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 
-    /// Get current tick
+    /// Get current tick.
     fn current_tick() -> Self::TickNumber;
 }
 

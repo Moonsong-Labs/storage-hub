@@ -1864,7 +1864,7 @@ where
     /// Returns the `ProviderLastChargeableInfo` of a Provider, which includes the last chargeable tick and the last chargeable price index.
     ///
     /// If the provider is insolvent, the last chargeable tick is set to the block at which the provider became insolvent since we do not allow
-    /// Providers to charge for the time they were insolvent. `LastChargeableInfo` is updated to reflect this change.
+    /// providers to charge for the time they were insolvent. `LastChargeableInfo` is updated to reflect this change.
     pub fn get_last_chargeable_info_with_privilege(
         provider_id: &ProviderIdFor<T>,
     ) -> ProviderLastChargeableInfo<T> {

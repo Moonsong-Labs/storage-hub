@@ -83,7 +83,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       shUser
     );
 
-    // Wait for the bsp to volunteer
+    // Wait for the BSP to volunteer.
     await sleep(500);
 
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");

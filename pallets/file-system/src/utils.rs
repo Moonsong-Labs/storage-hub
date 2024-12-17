@@ -112,8 +112,7 @@ where
             }
         };
 
-        // Check if the storage request is open to volunteers.
-        // This should always be true since the storage request would be deleted from storage if the `bsps_confirmed` is equal to `bsps_required`.
+        // This should always be true since the storage request will be deleted from storage if the `bsps_confirmed` is equal to `bsps_required`.
         Ok(storage_request.bsps_confirmed < storage_request.bsps_required)
     }
 
@@ -277,7 +276,7 @@ where
                 Error::<T>::NotAMsp
             );
 
-            // Check if provider is insolvent
+            // Check if MSP is insolvent
             ensure!(
                 !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
                 Error::<T>::OperationNotAllowedForInsolventProvider
@@ -379,7 +378,7 @@ where
         let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
-        // Check if provider is insolvent.
+        // Check if MSP is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider
@@ -614,7 +613,7 @@ where
                 Error::<T>::NotAMsp
             );
 
-            // Check if the provider is insolvent
+            // Check if the MSP is insolvent
             ensure!(
                 !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
                 Error::<T>::OperationNotAllowedForInsolventProvider
@@ -819,7 +818,7 @@ where
         bucket_id: BucketIdFor<T>,
         accepted_file_keys: StorageRequestMspAcceptedFileKeys<T>,
     ) -> Result<MerkleHash<T>, DispatchError> {
-        // Check if provider is insolvent.
+        // Check if MSP is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider
@@ -1042,7 +1041,7 @@ where
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
-        // Check if provider is insolvent.
+        // Check if BSP is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(bsp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider
@@ -1150,7 +1149,7 @@ where
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
-        // Check if provider is insolvent.
+        // Check if BSP is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(bsp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider

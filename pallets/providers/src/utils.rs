@@ -1066,7 +1066,7 @@ where
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
-        // Check if provider is insolvent
+        // Check if MSP is insolvent
         ensure!(
             InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
                 .is_none(),
