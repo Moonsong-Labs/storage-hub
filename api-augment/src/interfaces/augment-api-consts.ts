@@ -473,10 +473,7 @@ declare module "@polkadot/api-base/types/consts" {
        *
        * This TTL is used to determine at what point to insert the expiration item in the
        * [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at
-       * the time when the relay chain block number has been reached.
-       *
-       * This uses the relay chain block number for consistent time tracking based on 6
-       * second timeslots.
+       * the time when the tick has been reached.
        **/
       providerTopUpTtl: u32 & AugmentedConst<ApiType>;
       /**
@@ -495,13 +492,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Starting reputation weight for a newly registered BSP.
        **/
       startingReputationWeight: u32 & AugmentedConst<ApiType>;
-      /**
-       * Period of time for a provider to top up their deposit after being slashed.
-       *
-       * If the provider does not top up their deposit within this period, they will
-       * be marked as insolvent.
-       **/
-      topUpGracePeriod: u32 & AugmentedConst<ApiType>;
       /**
        * The Treasury AccountId.
        * The account to which:

@@ -362,7 +362,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the starting block to clean up expired storage requests.
+       * A pointer to the starting block to clean up expired items.
        *
        * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
        * attempt to advance this block pointer as close to or up to the current block number. This
@@ -1634,12 +1634,6 @@ declare module "@polkadot/api-base/types/storage" {
        * A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
        *
        * Providers are marked insolvent by the `on_idle` hook.
-       *
-       * This stores the tick at which the provider was marked insolvent.
-       *
-       * The tick used here is queried from the [`Config::PaymentStreams`] trait. This is because the payment
-       * streams implementation is responsible for charging users based on the time non-insolvent providers have
-       * been storing their data.
        **/
       insolventProviders: AugmentedQuery<
         ApiType,
@@ -1654,7 +1648,7 @@ declare module "@polkadot/api-base/types/storage" {
               }
             | string
             | Uint8Array
-        ) => Observable<Option<u32>>,
+        ) => Observable<Option<Null>>,
         [PalletStorageProvidersStorageProviderId]
       > &
         QueryableStorageEntry<ApiType, [PalletStorageProvidersStorageProviderId]>;
@@ -1722,27 +1716,27 @@ declare module "@polkadot/api-base/types/storage" {
       mspCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the earliest available block to insert a new provider top up expiration item.
+       * A pointer to the earliest available Storage Hub tick to insert a new provider top up expiration item.
        *
-       * This should always be greater or equal than `current_block` + [`Config::ProviderTopUpTtl`].
+       * This should always be greater or equal than `current_sh_tick` + [`Config::ProviderTopUpTtl`].
        **/
-      nextAvailableProviderTopUpExpirationBlock: AugmentedQuery<
+      nextAvailableProviderTopUpExpirationShTick: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the starting block to clean up expired storage requests.
+       * A pointer to the starting Storage Hub tick number to clean up expired items.
        *
-       * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-       * attempt to advance this block pointer as close to or up to the current block number. This
+       * If this Storage Hub tick is behind the one, the cleanup algorithm in `on_idle` will
+       * attempt to advance this tick pointer as close to or up to the current one. This
        * will execute provided that there is enough remaining weight to do so.
        **/
-      nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      nextStartingShTickToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A map of relay chain block numbers to expired provider top up period.
+       * A map of Storage Hub tick numbers to expired provider top up expired items.
        *
        * Processed in the `on_idle` hook.
        *

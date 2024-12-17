@@ -5287,7 +5287,6 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketSizeExceedsLimit: boolean;
     readonly isBucketHasNoValueProposition: boolean;
     readonly isMaxBlockNumberReached: boolean;
-    readonly isBlockNumberToRelayBlockNumberConversionFailed: boolean;
     readonly isOperationNotAllowedForInsolventProvider: boolean;
     readonly isDeleteProviderConditionsNotMet: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
@@ -5335,7 +5334,6 @@ declare module "@polkadot/types/lookup" {
       | "BucketSizeExceedsLimit"
       | "BucketHasNoValueProposition"
       | "MaxBlockNumberReached"
-      | "BlockNumberToRelayBlockNumberConversionFailed"
       | "OperationNotAllowedForInsolventProvider"
       | "DeleteProviderConditionsNotMet"
       | "InvalidEncodedFileMetadata"
