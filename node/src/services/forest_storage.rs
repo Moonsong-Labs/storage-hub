@@ -46,6 +46,7 @@ impl ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>> {
 impl
     ForestStorageSingle<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>
 {
+    #[allow(dead_code)]
     pub fn new(storage_path: String) -> Self {
         let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(storage_path.clone())
             .expect("Failed to create RocksDB");

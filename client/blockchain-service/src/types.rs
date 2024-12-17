@@ -7,21 +7,24 @@ use std::{
 
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
+use log::warn;
 use sc_client_api::BlockImportNotification;
+use shc_common::types::{
+    BlockNumber, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
+    RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
+    TrieRemoveMutation,
+};
 use sp_core::H256;
 use sp_runtime::{traits::Header, AccountId32, DispatchError, SaturatedConversion};
 
-use shc_common::types::{
-    BlockNumber, ProviderId, RandomnessOutput, RejectedStorageRequestReason, StorageHubEventsVec,
-    TrieRemoveMutation,
-};
+use crate::handler::LOG_TARGET;
 
 /// A struct that holds the information to submit a storage proof.
 ///
 /// This struct is used as an item in the `pending_submit_proof_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct SubmitProofRequest {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
@@ -30,7 +33,7 @@ pub struct SubmitProofRequest {
 
 impl SubmitProofRequest {
     pub fn new(
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
         forest_challenges: Vec<H256>,
@@ -319,4 +322,59 @@ pub enum NewBlockNotificationKind {
         old_best_block: BestBlockInfo,
         new_best_block: BestBlockInfo,
     },
+}
+
+/// The information needed to register a Forest Storage snapshot.
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
+pub struct ForestStorageSnapshotInfo {
+    /// The block number at which the Forest Storage snapshot was taken.
+    ///
+    /// i.e. the block number at which the Forest Storage changed from this snapshot
+    /// version due to adding or removing files.
+    pub block_number: BlockNumber,
+    /// The Forest Storage snapshot hash.
+    ///
+    /// This is to uniquely identify the Forest Storage snapshot, as there could be
+    /// snapshots at the same block number, but in different forks.
+    pub block_hash: H256,
+    /// The Forest Storage root when the snapshot was taken.
+    ///
+    /// This is used to identify the Forest Storage snapshot and retrieve it.
+    pub forest_root: HasherOutT<StorageProofsMerkleTrieLayout>,
+}
+
+impl PartialOrd for ForestStorageSnapshotInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Implements the `Ord` trait for `ForestStorageSnapshotInfo`.
+///
+/// This allows for a BTreeSet to be used to store Forest Storage snapshots.
+impl Ord for ForestStorageSnapshotInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Block number ordering is the first criteria.
+        match self.block_number.cmp(&other.block_number) {
+            std::cmp::Ordering::Less => std::cmp::Ordering::Less,
+            std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+            std::cmp::Ordering::Equal => {
+                // If the block numbers are equal, compare the block hashes.
+                match self.block_hash.cmp(&other.block_hash) {
+                    std::cmp::Ordering::Less => std::cmp::Ordering::Less,
+                    std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+                    std::cmp::Ordering::Equal => {
+                        // If the block hashes and block numbers are equal, the forest roots should be
+                        // the same, because there can only be one snapshot at a given block number,
+                        // for a given fork.
+                        if self.forest_root != other.forest_root {
+                            warn!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest storage snapshot forest roots are not equal, for the same block number and hash. This should not happen. This is a bug. Please report it to the StorageHub team.");
+                        }
+
+                        std::cmp::Ordering::Equal
+                    }
+                }
+            }
+        }
+    }
 }
