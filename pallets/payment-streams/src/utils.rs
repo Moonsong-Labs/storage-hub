@@ -1870,13 +1870,13 @@ where
     ) -> ProviderLastChargeableInfo<T> {
         let current_tick = Self::get_current_tick();
 
-        // Get the block number when the provider became insolvent (if any)
+        // Get the block number at which the provider cannot charge anymore (if any)
         let maybe_non_chargeable_tick =
             <T::ProvidersPallet as ReadProvidersInterface>::starting_non_chargeable_tick(
                 *provider_id,
             );
 
-        // Adjust the last chargeable tick to exclude the time when the provider has been insolvent
+        // Adjust the last chargeable tick to exclude the time when the provider cannot charge
         let adjusted_last_chargeable_tick = match maybe_non_chargeable_tick {
             Some(non_chargeable_tick) => current_tick.min(non_chargeable_tick),
             None => current_tick,
