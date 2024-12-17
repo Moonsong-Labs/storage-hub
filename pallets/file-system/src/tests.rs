@@ -2531,10 +2531,8 @@ mod msp_respond_storage_request {
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 // Register the MSP.
-                // Register the MSP.
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                // Create the bucket that will hold the file.
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =

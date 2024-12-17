@@ -565,6 +565,7 @@ parameter_types! {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;

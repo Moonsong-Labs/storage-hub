@@ -233,6 +233,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
 impl pallet_file_system::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Providers = Providers;
     type ProofDealer = MockProofsDealer;
     type PaymentStreams = PaymentStreams;
