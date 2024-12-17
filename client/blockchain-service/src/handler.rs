@@ -936,35 +936,6 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
-                BlockchainServiceCommand::GetCurrentForestKey {
-                    provider_id,
-                    callback,
-                } => {
-                    let maybe_current_forest_key = self
-                        .current_forest_keys
-                        .get(&provider_id)
-                        .map(|root| root.clone());
-
-                    // TODO: Remove this `allow(unused_variables)` once we have implemented the Forest Storage snapshots.
-                    #[allow(unused_variables)]
-                    let current_forest_key = maybe_current_forest_key.ok_or_else(|| {
-                        anyhow!(
-                            "Current Forest Root not found for Provider ID {}",
-                            provider_id
-                        )
-                    });
-
-                    // Temporarily returning the default Forest root for this to work with the current setup.
-                    // TODO: Remove this once we have implemented the Forest Storage snapshots.
-                    let current_forest_key = Ok(CURRENT_FOREST_KEY.to_vec());
-
-                    match callback.send(current_forest_key) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send current forest root: {:?}", e);
-                        }
-                    }
-                }
             }
         }
     }
