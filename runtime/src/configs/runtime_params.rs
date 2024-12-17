@@ -3,7 +3,6 @@ use crate::{
     Balance, BlockNumber, Perbill, Runtime, NANOUNIT, UNIT,
 };
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
-use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
 pub mod dynamic_params {
@@ -136,12 +135,12 @@ pub mod dynamic_params {
         /// Set to 14_400 relay blocks = 1 day with 6 second timeslots.
         #[codec(index = 17)]
         #[allow(non_upper_case_globals)]
-        pub static ProviderTopUpTtl: RelayChainBlockNumber = 14_400;
+        pub static ProviderTopUpTtl: BlockNumber = 14_400;
 
         /// Default replication target when issuing storage requests via the file system pallet.
         #[codec(index = 18)]
         #[allow(non_upper_case_globals)]
-        pub static DefaultReplicationTarget: u32 = 3;
+        pub static DefaultReplicationTarget: u32 = 7;
 
         #[codec(index = 19)]
         #[allow(non_upper_case_globals)]

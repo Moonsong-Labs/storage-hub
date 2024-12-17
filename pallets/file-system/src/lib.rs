@@ -447,6 +447,7 @@ pub mod pallet {
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
+    // TODO: add this to pallet params instead of a storage element
     /// Maximum number replication target allowed to be set for a storage request to be fulfilled.
     #[pallet::storage]
     pub type MaxReplicationTarget<T: Config> =

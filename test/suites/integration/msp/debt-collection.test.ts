@@ -359,10 +359,9 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
       )
     ).unwrap();
     const paymentStreamRate = paymentStream.rate.toNumber();
-
-    // TODO: make this deterministic
-    assert(
-      paymentStreamRate - expectedRateOfPaymentStream <= 1,
+    strictEqual(
+      paymentStreamRate,
+      expectedRateOfPaymentStream,
       "Payment stream rate not matching the expected value"
     );
 

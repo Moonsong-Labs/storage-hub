@@ -26,14 +26,12 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use crate::types::BestBlockInfo;
-
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest, RetryStrategy,
-        StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
+        BestBlockInfo, ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest,
+        RetryStrategy, StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
     },
 };
 
@@ -221,15 +219,13 @@ pub trait BlockchainServiceInterface {
     /// Unwatch an extrinsic.
     async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<()>;
 
-    /// Get the latest block number.
-    async fn get_best_block_info(&self) -> BestBlockInfo;
-
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
 
     /// Wait for a tick number.
     async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError>;
 
+    /// Determine if a storage request is still open to volunteers.
     async fn is_storage_request_open_to_volunteers(
         &self,
         file_key: H256,
@@ -436,14 +432,6 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
             subscription_id,
             callback,
         };
-        self.send(message).await;
-        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
-    }
-
-    async fn get_best_block_info(&self) -> BestBlockInfo {
-        let (callback, rx) = tokio::sync::oneshot::channel();
-        // Build command to send to blockchain service.
-        let message = BlockchainServiceCommand::GetBestBlockInfo { callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

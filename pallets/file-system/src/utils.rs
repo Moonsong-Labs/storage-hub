@@ -98,6 +98,7 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    /// This function is used primarily for the runtime API exposed for BSPs to call before they attempt to volunteer for a storage request.
     pub fn is_storage_request_open_to_volunteers(
         file_key: MerkleHash<T>,
     ) -> Result<bool, IsStorageRequestOpenToVolunteersError>

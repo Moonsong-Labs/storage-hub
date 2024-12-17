@@ -1057,7 +1057,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     // Remove a provider from challenge cycle.
     fn stop_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
-        // Check that `who` is a registered Provider.
+        // Check that `provider_id` is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
             return Err(Error::<T>::NotProvider.into());
         }
@@ -1081,7 +1081,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             // Remove the provider from the deadlines storage
             TickToProvidersDeadlines::<T>::remove(old_next_challenge_deadline, *provider_id);
 
-            // Remove the provider from the submited proof storage.
+            // Remove the provider from the submitted proof storage.
             LastTickProviderSubmittedAProofFor::<T>::remove(*provider_id);
         }
 
@@ -1089,7 +1089,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     }
 
     fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
-        // Check that `who` is a registered Provider.
+        // Check that `provider_id` is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
             return Err(Error::<T>::NotProvider.into());
         }

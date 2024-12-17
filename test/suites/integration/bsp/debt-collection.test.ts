@@ -259,7 +259,7 @@ describeBspNet(
         null,
         null,
         null,
-        3 // There are 3 running BSPs to fulfill the storage request
+        3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
@@ -274,7 +274,7 @@ describeBspNet(
         null,
         null,
         null,
-        3 // There are 3 running BSPs to fulfill the storage request
+        3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);

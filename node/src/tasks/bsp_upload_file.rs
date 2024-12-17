@@ -722,7 +722,7 @@ where
 
         // TODO: Have this dynamically called at every tick in `wait_for_tick` to exit early without waiting until `earliest_volunteer_tick` in the event the storage request
         // TODO: is closed mid-way through the process.
-        let can_volulnteer = self
+        let can_volunteer = self
             .storage_hub_handler
             .blockchain
             .is_storage_request_open_to_volunteers(file_key.into())
@@ -732,7 +732,7 @@ where
         // Skip volunteering if the storage request is no longer open to volunteers.
         // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
         // TODO: we catch up to the latest block and if the storage request is still open to volunteers, volunteer then.
-        if !can_volulnteer {
+        if !can_volunteer {
             let err_msg = "Storage request is no longer open to volunteers. Skipping volunteering.";
             warn!(
                 target: LOG_TARGET, "{}", err_msg

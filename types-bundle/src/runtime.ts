@@ -1,6 +1,16 @@
 import type { DefinitionCall, DefinitionsCall } from "@polkadot/types/types";
 
 const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
+  is_storage_request_open_to_volunteers: {
+    description: "Check if a storage request is open to volunteers.",
+    params: [
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<bool, IsStorageRequestOpenToVolunteersError>"
+  },
   query_earliest_file_volunteer_tick: {
     description: "Query the earliest tick number that a BSP can volunteer for a file.",
     params: [
@@ -240,6 +250,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Vec<ValuePropositionWithId>"
+  },
+  can_delete_provider: {
+    description: "Check if a provider can be deleted.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "bool"
   }
 };
 
