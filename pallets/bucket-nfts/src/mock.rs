@@ -220,6 +220,12 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(H256::default())
     }
 
+    fn stop_challenge_cycle(
+        _provider_id: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
     fn initialise_challenge_cycle(
         _who: &Self::ProviderId,
     ) -> frame_support::dispatch::DispatchResult {
@@ -391,6 +397,7 @@ impl pallet_storage_providers::Config for Test {
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = MockProofsDealer;
     type FileMetadataManager = FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },

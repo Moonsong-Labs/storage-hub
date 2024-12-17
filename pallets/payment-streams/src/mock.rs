@@ -226,6 +226,7 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;

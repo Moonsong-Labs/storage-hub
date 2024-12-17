@@ -72,6 +72,9 @@ pub mod pallet {
                 TickNumber = BlockNumberFor<Self>,
             > + ReadUserSolvencyInterface<AccountId = Self::AccountId>;
 
+        /// The trait for stopping challenge cycles of providers.
+        type ProofDealer: shp_traits::ProofsDealerInterface<ProviderId = ProviderIdFor<Self>>;
+
         /// Trait that allows the pallet to manage generic file metadatas
         type FileMetadataManager: FileMetadataInterface<
             AccountId = Self::AccountId,

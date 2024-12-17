@@ -2631,7 +2631,18 @@ mod hooks {
                     }
                 }
 
-                // TODO: stop challenge cycle of provider for proofs dealer
+                if let Err(e) =
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
+                        &typed_provider_id.inner(),
+                    )
+                {
+                    log::error!(
+                        target: "runtime::providers",
+                        "Could not stop challenge cycle for provider {:?} due to error: {:?}",
+                        typed_provider_id,
+                        e
+                    );
+                }
             }
 
             meter.consume(potential_weight);

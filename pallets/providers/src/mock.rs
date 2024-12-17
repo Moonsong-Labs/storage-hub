@@ -355,6 +355,7 @@ impl crate::Config for Test {
     type ValuePropIdHashing = BlakeTwo256;
     type ReadAccessGroupId = u32;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
     type StorageHubTickGetter = MockStorageHubTickGetter;

@@ -373,6 +373,7 @@ impl pallet_storage_providers::Config for Test {
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type FileMetadataManager = shp_file_metadata::FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },

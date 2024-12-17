@@ -210,6 +210,7 @@ impl pallet_storage_providers::Config for Test {
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
