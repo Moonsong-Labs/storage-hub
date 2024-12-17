@@ -25,16 +25,16 @@ use shp_traits::{
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
-    StorageHubTickGetter, SystemMetricsInterface,
+    SystemMetricsInterface,
 };
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
     Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
-    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, ShTickGetter,
-    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TickNumberFor,
-    TopUpMetadata, ValuePropIdFor, ValueProposition, ValuePropositionWithId,
+    MultiAddress, Multiaddresses, PaymentStreamsTickNumber, ProviderIdFor, RateDeltaParam,
+    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
+    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -518,7 +518,7 @@ where
 
         // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
         let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
-            // Check if provider is insolvent
+            // Check if MSP is insolvent
             ensure!(
                 InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
                     .is_none(),
@@ -530,7 +530,7 @@ where
                 Self::do_change_capacity_msp(who, msp_id, new_capacity)?,
             )
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
-            // Check if provider is insolvent
+            // Check if BSP is insolvent
             ensure!(
                 InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(bsp_id))
                     .is_none(),
@@ -720,7 +720,7 @@ where
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
-            // Check if provider is insolvent
+            // Check if MSP is insolvent
             ensure!(
                 InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
                     .is_none(),
@@ -741,7 +741,7 @@ where
             MainStorageProviders::<T>::insert(&msp_id, msp);
             msp_id
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
-            // Check if provider is insolvent
+            // Check if BSP is insolvent
             ensure!(
                 InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(bsp_id))
                     .is_none(),
@@ -852,7 +852,6 @@ where
         let (account_id, _capacity, used_capacity) = Self::get_provider_details(*provider_id)?;
 
         // Calculate slashable amount for the current number of accrued failed proof submissions
-        // Calculate slashable amount for the current number of accrued failed proof submissions
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
 
         // Clear the accrued failed proof submissions for the Storage Provider
@@ -933,7 +932,8 @@ where
             )?;
 
             let top_up_metadata = TopUpMetadata {
-                started_at: ShTickGetter::<T>::get_current_tick(),
+                started_at:
+                    <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::current_tick(),
                 end_block_grace_period: block_number_expiry,
             };
 
@@ -2061,7 +2061,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
     type ProviderId = ProviderIdFor<T>;
-    type TickNumber = TickNumberFor<T>;
+    type TickNumber = PaymentStreamsTickNumber<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
@@ -2146,7 +2146,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
                 .is_some()
     }
 
-    fn starting_non_chargeable_tick(who: Self::ProviderId) -> Option<TickNumberFor<T>> {
+    fn starting_non_chargeable_tick(who: Self::ProviderId) -> Option<Self::TickNumber> {
         // Providers cannot charge for the time they are in the state of being awaited for to top up their deposit.
         if let Some(top_up_metadata) =
             AwaitingTopUpFromProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(who))
@@ -2491,10 +2491,10 @@ where
 mod hooks {
     use crate::{
         pallet,
-        types::ShTickGetter,
-        utils::{BlockNumberFor, StorageProviderId},
+        types::{ShTickGetter, StorageHubTickNumber},
+        utils::StorageProviderId,
         AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
-        MainStorageProviders, NextStartingBlockToCleanUp, Pallet, ProviderTopUpExpirations,
+        MainStorageProviders, NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2512,33 +2512,34 @@ mod hooks {
     };
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_idle(
-            current_block: BlockNumberFor<T>,
-            mut meter: &mut WeightMeter,
-        ) -> &mut WeightMeter {
+        pub(crate) fn do_on_idle(mut meter: &mut WeightMeter) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
-            let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
+            let current_sh_tick = ShTickGetter::<T>::get_current_tick();
+            let mut sh_tick_to_clean = NextStartingShTickToCleanUp::<T>::get();
 
-            while block_to_clean <= current_block && !meter.remaining().is_zero() {
-                Self::process_block_expired_items(&mut meter);
+            while sh_tick_to_clean <= current_sh_tick && !meter.remaining().is_zero() {
+                Self::process_block_expired_items(&mut sh_tick_to_clean, &mut meter);
 
                 if meter.remaining().is_zero() {
                     break;
                 }
 
-                block_to_clean.saturating_accrue(BlockNumberFor::<T>::one());
+                sh_tick_to_clean.saturating_accrue(StorageHubTickNumber::<T>::one());
             }
 
             // Update the next starting block for cleanup
-            if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
-                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
+            if sh_tick_to_clean > NextStartingShTickToCleanUp::<T>::get() {
+                NextStartingShTickToCleanUp::<T>::put(sh_tick_to_clean);
                 meter.consume(db_weight.writes(1));
             }
 
             meter
         }
 
-        fn process_block_expired_items(meter: &mut WeightMeter) {
+        fn process_block_expired_items(
+            tick_to_process: &mut StorageHubTickNumber<T>,
+            meter: &mut WeightMeter,
+        ) {
             let db_weight = T::DbWeight::get();
             let minimum_required_weight_processing_expired_items = db_weight.reads_writes(2, 1);
 
@@ -2547,12 +2548,9 @@ mod hooks {
                 return;
             }
 
-            // Provider top up expirations expire based on the global tick.
-            // TODO: use next starting block to clean up instead of current block number here
-            let global_tick = ShTickGetter::<T>::get_current_tick();
-
             // Remove expired move bucket requests if any existed and process them.
-            let mut provider_top_up_expirations = ProviderTopUpExpirations::<T>::take(&global_tick);
+            let mut provider_top_up_expirations =
+                ProviderTopUpExpirations::<T>::take(tick_to_process.clone());
             meter.consume(minimum_required_weight_processing_expired_items);
 
             // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
@@ -2563,7 +2561,7 @@ mod hooks {
 
             // If there are remaining items which were not processed, put them back in storage
             if !provider_top_up_expirations.is_empty() {
-                ProviderTopUpExpirations::<T>::insert(&global_tick, provider_top_up_expirations);
+                ProviderTopUpExpirations::<T>::insert(tick_to_process, provider_top_up_expirations);
                 meter.consume(db_weight.writes(1));
             }
         }
@@ -2585,10 +2583,8 @@ mod hooks {
             // Mark the provider as insolvent if it was awaiting a top up
             // If the provider was not awaiting a top up, it means they already topped up either via an
             // automatic top up or a manual top up.
-            let current_tick =
-                <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::current_tick();
             if maybe_awaiting_top_up.is_some() {
-                InsolventProviders::<T>::insert(typed_provider_id.clone(), current_tick);
+                InsolventProviders::<T>::insert(typed_provider_id.clone(), ());
 
                 Self::deposit_event(Event::ProviderInsolvent {
                     provider_id: *typed_provider_id.inner(),
@@ -2602,7 +2598,7 @@ mod hooks {
                 {
                     msp.owner_account
                 } else {
-                    log::warn!(
+                    log::error!(
                         target: "runtime::providers",
                         "Could not slash any potentially remaining deposit for provider {:?} as it does not exist.",
                         typed_provider_id
@@ -2626,7 +2622,7 @@ mod hooks {
                         Restriction::Free,
                         Fortitude::Force,
                     ) {
-                        log::warn!(
+                        log::error!(
                             target: "runtime::providers",
                             "Could not slash remaining deposit for provider {:?} due to error: {:?}",
                             typed_provider_id,

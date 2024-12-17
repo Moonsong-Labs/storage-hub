@@ -124,6 +124,10 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
+parameter_types! {
+    pub const ProviderTopUpTtl: u64 = 10;
+}
+
 // Storage Providers pallet:
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -164,10 +168,9 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
-    type ProviderTopUpTtl = ConstU32<10>;
+    type ProviderTopUpTtl = ProviderTopUpTtl;
     type MaxExpiredItemsInBlock = ConstU32<10>;
 }
 

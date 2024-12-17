@@ -2,8 +2,7 @@
 
 use super::*;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::pallet_prelude::*;
-use frame_support::traits::fungible::Inspect;
+use frame_support::{pallet_prelude::*, traits::fungible::Inspect};
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
 use shp_traits::{PaymentStreamsInterface, StorageHubTickGetter};
@@ -14,14 +13,20 @@ pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T
 
 pub type ValuePropId<T> = HashId<T>;
 
-/// Top up metadata for a provider tracked in storage.
+/// Awaited top up metadata for a provider.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct TopUpMetadata<T: Config> {
-    /// The Storage Hub tick number at which the provider started awaiting for a top up.
-    pub started_at: StorageHubTickNumber<T>,
-    /// The Storage Hub tick number at which the provider will either forcibly top up their deposit or be marked as
-    /// insolvent.
+    /// The payment streams tick number at which the provider started awaiting a top up.
+    ///
+    /// This is used for payment streams to determine when the provider should not be able to charge the user anymore starting
+    /// from this tick number.
+    ///
+    /// It is referenced in the [`starting_non_chargeable_tick`](shp_traits::ReadProvidersInterface::starting_non_chargeable_tick) trait implementation.
+    pub started_at: PaymentStreamsTickNumber<T>,
+    /// The Storage Hub tick number at which the provider will be marked as insolvent.
+    ///
+    /// It is the tick number at which the provider will be marked as insolvent after processing it from the [`ProviderTopUpExpirations`](crate::ProviderTopUpExpirations) storage.
     pub end_block_grace_period: StorageHubTickNumber<T>,
 }
 
@@ -32,21 +37,23 @@ pub enum ExpirationItem<T: Config> {
 }
 
 impl<T: Config> ExpirationItem<T> {
-    pub(crate) fn get_ttl(&self) -> BlockNumberFor<T> {
+    pub(crate) fn get_ttl(&self) -> StorageHubTickNumber<T> {
         match self {
-            ExpirationItem::ProviderTopUp(_) => T::ProviderTopUpTtl::get().into(),
+            ExpirationItem::ProviderTopUp(_) => T::ProviderTopUpTtl::get(),
         }
     }
 
-    pub(crate) fn get_next_expiration_block(&self) -> Result<BlockNumberFor<T>, DispatchError> {
+    pub(crate) fn get_next_expiration_block(
+        &self,
+    ) -> Result<StorageHubTickNumber<T>, DispatchError> {
         // The expiration block is the maximum between the next available block and the current block number plus the TTL.
         let current_global_tick_with_ttl = ShTickGetter::<T>::get_current_tick()
             .checked_add(&self.get_ttl())
             .ok_or(ArithmeticError::Overflow)?;
 
-        let next_available_block: BlockNumberFor<T> = match self {
+        let next_available_block: StorageHubTickNumber<T> = match self {
             ExpirationItem::ProviderTopUp(_) => {
-                NextAvailableProviderTopUpExpirationBlock::<T>::get()
+                NextAvailableProviderTopUpExpirationShTick::<T>::get()
             }
         };
 
@@ -55,8 +62,8 @@ impl<T: Config> ExpirationItem<T> {
 
     pub(crate) fn try_append(
         &self,
-        expiration_block: BlockNumberFor<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        expiration_block: StorageHubTickNumber<T>,
+    ) -> Result<StorageHubTickNumber<T>, DispatchError> {
         let mut next_expiration_block = expiration_block;
         while let Err(_) = match self {
             ExpirationItem::ProviderTopUp(provider_id) => {
@@ -76,11 +83,11 @@ impl<T: Config> ExpirationItem<T> {
 
     pub(crate) fn set_next_expiration_block(
         &self,
-        next_expiration_block: BlockNumberFor<T>,
+        next_expiration_block: StorageHubTickNumber<T>,
     ) -> DispatchResult {
         match self {
             ExpirationItem::ProviderTopUp(_) => {
-                NextAvailableProviderTopUpExpirationBlock::<T>::set(next_expiration_block);
+                NextAvailableProviderTopUpExpirationShTick::<T>::set(next_expiration_block);
 
                 Ok(())
             }
@@ -316,5 +323,5 @@ pub type StorageDataUnitAndBalanceConverter<T> =
 pub type ProviderTopUpTtl<T> = <T as crate::Config>::ProviderTopUpTtl;
 
 /// Type alias for the `TickNumber` type used in the Storage Providers pallet.
-pub type TickNumberFor<T> =
+pub type PaymentStreamsTickNumber<T> =
     <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::TickNumber;

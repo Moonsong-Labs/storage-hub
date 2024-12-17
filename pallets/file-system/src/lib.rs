@@ -385,7 +385,7 @@ pub mod pallet {
     pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
-    /// A pointer to the starting block to clean up expired storage requests.
+    /// A pointer to the starting block to clean up expired items.
     ///
     /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
     /// attempt to advance this block pointer as close to or up to the current block number. This

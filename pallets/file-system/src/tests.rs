@@ -106,7 +106,7 @@ mod create_bucket_tests {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 // Dispatch a signed extrinsic.
@@ -438,7 +438,7 @@ mod delete_bucket_tests {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 // Accept the storage request to store the file, so the bucket is not empty.
@@ -1020,7 +1020,7 @@ mod request_move_bucket {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(msp_dave_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 // Dispatch a signed extrinsic.
@@ -1970,7 +1970,7 @@ mod request_storage {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     &StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 // Dispatch a signed extrinsic.
@@ -3698,7 +3698,7 @@ mod msp_respond_storage_request {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 assert_noop!(
@@ -4272,7 +4272,7 @@ mod bsp_volunteer {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(bsp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 assert_noop!(
@@ -5201,7 +5201,7 @@ mod bsp_confirm {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(bsp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 // Dispatch BSP confirm storing.

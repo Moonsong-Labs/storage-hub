@@ -34,7 +34,13 @@ pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
 /// Storage Hub global tick which should be relied upon for time-sensitive operations.
 pub trait StorageHubTickGetter {
-    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    type TickNumber: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + One;
 
     fn get_current_tick() -> Self::TickNumber;
 }

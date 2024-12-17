@@ -6,15 +6,18 @@ use crate::{
         SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
         ValuePropositionWithId,
     },
-    Error, Event, InsolventProviders, MainStorageProviders,
+    AwaitingTopUpFromProviders, Error, Event, InsolventProviders, MainStorageProviders,
+    ProviderTopUpExpirations,
 };
 
+use core::u32;
 use frame_support::traits::fungible::MutateHold;
 use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{
-        fungible::{InspectHold, Mutate},
+        fungible::{Inspect, InspectHold, Mutate},
+        tokens::{Fortitude, Precision},
         Get, OnFinalize, OnIdle, OnInitialize,
     },
 };
@@ -25,7 +28,8 @@ use shp_traits::{
     ReadBucketsInterface, ReadProvidersInterface, StorageHubTickGetter,
 };
 use sp_arithmetic::{MultiplyRational, Rounding};
-use sp_runtime::bounded_vec;
+use sp_core::H256;
+use sp_runtime::{bounded_vec, traits::ConvertBack};
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -37,7 +41,6 @@ type DepositPerData = <Test as crate::Config>::DepositPerData;
 type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
 type DefaultMerkleRoot = <Test as crate::Config>::DefaultMerkleRoot;
 type BucketDeposit = <Test as crate::Config>::BucketDeposit;
-type TopUpGracePeriod = <Test as crate::Config>::TopUpGracePeriod;
 
 // Runtime constants:
 // This is the duration of an epoch in blocks, a constant from the runtime configuration that we mock here
@@ -3312,7 +3315,7 @@ mod change_capacity {
                     // Simulate insolvent provider
                     InsolventProviders::<Test>::insert(
                         StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                        System::block_number(),
+                        (),
                     );
 
                     // Try to change the capacity of Alice before enough time has passed
@@ -3572,7 +3575,7 @@ mod change_capacity {
                     // Simulate insolvent provider
                     InsolventProviders::<Test>::insert(
                         StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                        System::block_number(),
+                        (),
                     );
 
                     // Check the total capacity of the network (BSPs)
@@ -4892,10 +4895,8 @@ mod storage_data_unit_and_balance_converters {
 
 mod slash_and_top_up {
     use super::*;
-    mod failure {
-        use frame_support::traits::tokens::{Fortitude, Precision};
-        use sp_core::H256;
 
+    mod failure {
         use super::*;
 
         #[test]
@@ -5000,7 +5001,7 @@ mod slash_and_top_up {
                 // Simulate insolvent provider
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    1,
+                    (),
                 );
 
                 // Try to top up a provider that does not have enough balance to cover the held deposit
@@ -5019,7 +5020,7 @@ mod slash_and_top_up {
                 // Simulate insolvent provider
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(bob_bsp_id),
-                    1,
+                    (),
                 );
 
                 // Try to top up a provider that does not have enough balance to cover the held deposit
@@ -5032,13 +5033,6 @@ mod slash_and_top_up {
     }
 
     mod success {
-        use core::u32;
-
-        use frame_support::traits::fungible::Inspect;
-        use sp_runtime::traits::ConvertBack;
-
-        use crate::{AwaitingTopUpFromProviders, InsolventProviders, ProviderTopUpExpirations};
-
         use super::*;
 
         struct TestSetup {
@@ -5177,9 +5171,9 @@ mod slash_and_top_up {
                 assert_eq!(last_slashed_event.0, self.provider_id);
                 assert_eq!(last_slashed_event.1, expected_slash_amount);
 
-                let grace_period: u32 = TopUpGracePeriod::get();
+                let grace_period = ProviderTopUpTtl::<Test>::get();
                 let end_block_grace_period =
-                    ShTickGetter::<Test>::get_current_tick() + grace_period as u64;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period;
 
                 // Verify post state based on the test setup
                 if self.automatic_top_up {
@@ -5262,6 +5256,10 @@ mod slash_and_top_up {
                     assert_eq!(NativeBalance::free_balance(self.account), pre_state_balance);
 
                     assert_eq!(
+                        top_up_metadata.started_at,
+                        <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::current_tick()
+                    );
+                    assert_eq!(
                         top_up_metadata.end_block_grace_period,
                         end_block_grace_period
                     );
@@ -5295,9 +5293,9 @@ mod slash_and_top_up {
             }
 
             fn manual_top_up(&self) {
-                let grace_period: u32 = TopUpGracePeriod::get();
+                let grace_period = ProviderTopUpTtl::<Test>::get();
                 let end_block_grace_period =
-                    ShTickGetter::<Test>::get_current_tick() + grace_period as u64;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period;
 
                 let pre_state_provider =
                     MainStorageProviders::<Test>::get(self.provider_id).unwrap();
@@ -5384,9 +5382,9 @@ mod slash_and_top_up {
                 let pre_state_treasury_balance =
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
-                let grace_period: u32 = ProviderTopUpTtl::<Test>::get();
+                let grace_period = ProviderTopUpTtl::<Test>::get();
                 let end_block_grace_period =
-                    ShTickGetter::<Test>::get_current_tick() + grace_period as u64;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period;
 
                 // Wait for the grace period to expire
                 run_to_block((end_block_grace_period + 1).into());
@@ -5405,12 +5403,9 @@ mod slash_and_top_up {
                 .is_none());
 
                 // Held deposit was slashed
-                if let Some(block) = InsolventProviders::<Test>::get(
+                if let Some(_) = InsolventProviders::<Test>::get(
                     &StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
                 ) {
-                    // Block stored should be the current local block number
-                    assert_eq!(block, <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::current_tick());
-
                     assert_eq!(
                         NativeBalance::balance_on_hold(
                             &StorageProvidersHoldReason::get(),
@@ -5633,7 +5628,7 @@ mod multiaddresses {
                 // Simulate insolvent provider
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    1,
+                    (),
                 );
 
                 assert_noop!(
@@ -5661,7 +5656,7 @@ mod multiaddresses {
                 // Simulate insolvent provider
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(bob_bsp_id),
-                    1,
+                    (),
                 );
 
                 assert_noop!(
@@ -5976,7 +5971,7 @@ mod add_value_prop {
                 // Simulate insolvent provider
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    1,
+                    (),
                 );
 
                 assert_noop!(
@@ -6235,7 +6230,7 @@ mod delete_provider {
 
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 assert_noop!(
@@ -6261,7 +6256,7 @@ mod delete_provider {
 
                 InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(msp_id),
-                    frame_system::Pallet::<Test>::block_number(),
+                    (),
                 );
 
                 assert_ok!(StorageProviders::delete_provider(

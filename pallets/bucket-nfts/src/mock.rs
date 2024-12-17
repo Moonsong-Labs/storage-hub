@@ -341,6 +341,7 @@ parameter_types! {
     pub const MaxNumberOfPeerIds: u32 = 100;
     pub const MaxMultiAddressSize: u32 = 100;
     pub const MaxMultiAddressAmount: u32 = 5;
+    pub const ProviderTopUpTtl: u64 = 10;
 }
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 pub struct DefaultMerkleRoot<T>(PhantomData<T>);
@@ -427,8 +428,7 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
-    type ProviderTopUpTtl = ConstU32<10>;
+    type ProviderTopUpTtl = ProviderTopUpTtl;
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();

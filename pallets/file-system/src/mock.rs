@@ -365,6 +365,7 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
 parameter_types! {
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
     pub const SpMinDeposit: Balance = 10 * UNITS;
+    pub const ProviderTopUpTtl: u64 = 10;
 }
 
 impl pallet_storage_providers::Config for Test {
@@ -410,8 +411,7 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
-    type ProviderTopUpTtl = ConstU32<10>;
+    type ProviderTopUpTtl = ProviderTopUpTtl;
     type MaxExpiredItemsInBlock = ConstU32<100>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();

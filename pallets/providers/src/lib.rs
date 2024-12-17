@@ -44,7 +44,6 @@ pub mod pallet {
     };
     use frame_support::{traits::Randomness, weights::WeightMeter};
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface,
@@ -202,7 +201,7 @@ pub mod pallet {
             + Ord
             + Bounded;
 
-        /// Interface to get the relay chain block number which was used as an anchor for the last block in the parachain.
+        /// Interface to get the current Storage Hub tick number.
         type StorageHubTickGetter: StorageHubTickGetter<TickNumber = BlockNumberFor<Self>>;
 
         /// The Treasury AccountId.
@@ -286,13 +285,6 @@ pub mod pallet {
         #[pallet::constant]
         type ZeroSizeBucketFixedRate: Get<BalanceOf<Self>>;
 
-        /// Period of time for a provider to top up their deposit after being slashed.
-        ///
-        /// If the provider does not top up their deposit within this period, they will
-        /// be marked as insolvent.
-        #[pallet::constant]
-        type TopUpGracePeriod: Get<u32>;
-
         /// Trait that has benchmark helpers
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelpers: crate::benchmarking::BenchmarkHelpers<Self>;
@@ -301,12 +293,9 @@ pub mod pallet {
         ///
         /// This TTL is used to determine at what point to insert the expiration item in the
         /// [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at
-        /// the time when the relay chain block number has been reached.
-        ///
-        /// This uses the relay chain block number for consistent time tracking based on 6
-        /// second timeslots.
+        /// the time when the tick has been reached.
         #[pallet::constant]
-        type ProviderTopUpTtl: Get<RelayChainBlockNumber>;
+        type ProviderTopUpTtl: Get<StorageHubTickNumber<Self>>;
 
         /// Maximum number of expired items (per type) to clean up in a single block.
         #[pallet::constant]
@@ -479,19 +468,17 @@ pub mod pallet {
     /// If a provider is marked as insolvent, the network (e.g users, other providers) can call `issue_storage_request`
     /// with a replication target of 1 to fill a slot with another BSP if the provider who was marked as insolvent is in fact a BSP.
     /// If it was an MSP, the user can decide to move their buckets to another MSP or delete their buckets (as they normally can).
-    // TODO: use enum for ProviderIdFor
     #[pallet::storage]
     pub type AwaitingTopUpFromProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, StorageProviderId<T>, TopUpMetadata<T>>;
 
-    /// A map of relay chain block numbers to expired provider top up period.
+    /// A map of Storage Hub tick numbers to expired provider top up expired items.
     ///
     /// Processed in the `on_idle` hook.
     ///
     /// Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
     /// Providers are removed from [`AwaitingTopUpFromProviders`] storage when they have successfully topped up their deposit.
     /// If they are still part of the [`AwaitingTopUpFromProviders`] storage after the expiration period, they are marked as insolvent.
-    // TODO: use enum for ProviderIdFor
     #[pallet::storage]
     pub type ProviderTopUpExpirations<T: Config> = StorageMap<
         _,
@@ -501,33 +488,28 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// A pointer to the earliest available block to insert a new provider top up expiration item.
+    /// A pointer to the earliest available Storage Hub tick to insert a new provider top up expiration item.
     ///
-    /// This should always be greater or equal than `current_block` + [`Config::ProviderTopUpTtl`].
+    /// This should always be greater or equal than `current_sh_tick` + [`Config::ProviderTopUpTtl`].
     #[pallet::storage]
-    pub type NextAvailableProviderTopUpExpirationBlock<T: Config> =
+    pub type NextAvailableProviderTopUpExpirationShTick<T: Config> =
         StorageValue<_, StorageHubTickNumber<T>, ValueQuery>;
 
-    /// A pointer to the starting block to clean up expired storage requests.
+    /// A pointer to the starting Storage Hub tick number to clean up expired items.
     ///
-    /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to advance this block pointer as close to or up to the current block number. This
+    /// If this Storage Hub tick is behind the one, the cleanup algorithm in `on_idle` will
+    /// attempt to advance this tick pointer as close to or up to the current one. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
-    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextStartingShTickToCleanUp<T: Config> =
+        StorageValue<_, StorageHubTickNumber<T>, ValueQuery>;
 
     /// A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
     ///
     /// Providers are marked insolvent by the `on_idle` hook.
-    ///
-    /// This stores the tick at which the provider was marked insolvent.
-    ///
-    /// The tick used here is queried from the [`Config::PaymentStreams`] trait. This is because the payment
-    /// streams implementation is responsible for charging users based on the time non-insolvent providers have
-    /// been storing their data.
     #[pallet::storage]
     pub type InsolventProviders<T: Config> =
-        StorageMap<_, Blake2_128Concat, StorageProviderId<T>, TickNumberFor<T>>;
+        StorageMap<_, Blake2_128Concat, StorageProviderId<T>, ()>;
 
     // Events & Errors:
 
@@ -761,8 +743,6 @@ pub mod pallet {
         BucketHasNoValueProposition,
         /// Congratulations, you either lived long enough or were born late enough to see this error.
         MaxBlockNumberReached,
-        /// Failed thrown when trying to convert a type to a block number.
-        BlockNumberToRelayBlockNumberConversionFailed,
         /// Operation not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
         /// Failed to delete a provider due to conditions not being met.
@@ -770,7 +750,7 @@ pub mod pallet {
         /// Call `can_delete_provider` runtime API to check if the provider can be deleted.
         DeleteProviderConditionsNotMet,
 
-        // Payment streams interface errors:
+        // `MutateChallengeableProvidersInterface` errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
         InvalidEncodedFileMetadata,
         /// Error thrown when failing to decode the owner Account ID from the received metadata.
@@ -1474,9 +1454,9 @@ pub mod pallet {
     where
         u32: TryFrom<BlockNumberFor<T>>,
     {
-        fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+        fn on_idle(_: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut meter = WeightMeter::with_limit(remaining_weight);
-            Self::do_on_idle(current_block, &mut meter);
+            Self::do_on_idle(&mut meter);
 
             meter.consumed()
         }

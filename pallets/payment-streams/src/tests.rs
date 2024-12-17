@@ -130,7 +130,7 @@ mod fixed_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Try to create a payment stream from Bob to Alice of 10 units per block again
@@ -484,7 +484,7 @@ mod fixed_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Try to update the rate of the payment stream from Bob to Alice to 0 units per block
@@ -878,7 +878,7 @@ mod fixed_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Delete the payment stream from Bob to Alice
@@ -1333,7 +1333,7 @@ mod fixed_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
@@ -2850,7 +2850,7 @@ mod dynamic_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Try to create a payment stream from Bob to Alice of 100 units provided again
@@ -3273,7 +3273,7 @@ mod dynamic_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Try to update the amount provided of the payment stream from Bob to Alice to 0 units
@@ -3722,7 +3722,7 @@ mod dynamic_rate_streams {
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Check the new free balance of Bob (after the new stream deposit)
@@ -3945,7 +3945,7 @@ mod dynamic_rate_streams {
                 run_to_block(System::block_number() + 5);
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 5 blocks ahead
@@ -5006,7 +5006,7 @@ mod dynamic_rate_streams {
 
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
                     StorageProviderId::BackupStorageProvider(alice_bsp_id),
-                    System::block_number(),
+                    (),
                 );
 
                 run_to_block(alice_on_poll);
