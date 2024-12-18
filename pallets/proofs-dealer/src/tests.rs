@@ -1544,11 +1544,11 @@ fn submit_proof_after_stake_increase_success() {
 
         // Hold some of the Provider's balance so it simulates it having a stake.
         let init_challenge_period: BalanceFor<Test> = 15;
-        let stake = STAKE_TO_CHALLENGE_PERIOD / init_challenge_period;
+        let old_stake = STAKE_TO_CHALLENGE_PERIOD / init_challenge_period;
         assert_ok!(<Test as crate::Config>::NativeBalance::hold(
             &HoldReason::StorageProviderDeposit.into(),
             &1,
-            stake,
+            old_stake,
         ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
@@ -1666,14 +1666,24 @@ fn submit_proof_after_stake_increase_success() {
             Some(()),
         );
 
-        // Add more stake to the Provider, thus changing its challenge period.
+        // Add more stake to the Provider, thus decreasing its challenge period.
         let new_challenge_period: BalanceFor<Test> = 10;
         let new_stake = STAKE_TO_CHALLENGE_PERIOD / new_challenge_period;
-        let stake_to_add = new_stake - stake;
+        let stake_to_add = new_stake - old_stake;
         assert_ok!(<Test as crate::Config>::NativeBalance::hold(
             &HoldReason::StorageProviderDeposit.into(),
             &1,
             stake_to_add,
+        ));
+
+        // Re-initialising Provider to adjust its deadline.
+        // This prevents the Provider from being slashed after changing its stake, because the deadline
+        // was calculated in the previous proof submission with the old stake. Now if we want to make
+        // it so that the new proof submission removes the Provider from its next deadline, we need to
+        // adjust such deadline after changing the Provider's stake.
+        assert_ok!(ProofsDealer::reinitialise_challenge_cycle(
+            &provider_id,
+            old_stake
         ));
 
         // Advance to the next challenge the Provider should listen to.
@@ -1798,11 +1808,11 @@ fn submit_proof_after_stake_decrease_success() {
 
         // Hold some of the Provider's balance so it simulates it having a stake.
         let init_challenge_period: BalanceFor<Test> = 15;
-        let stake = STAKE_TO_CHALLENGE_PERIOD / init_challenge_period;
+        let old_stake = STAKE_TO_CHALLENGE_PERIOD / init_challenge_period;
         assert_ok!(<Test as crate::Config>::NativeBalance::hold(
             &HoldReason::StorageProviderDeposit.into(),
             &1,
-            stake,
+            old_stake,
         ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
@@ -1920,15 +1930,26 @@ fn submit_proof_after_stake_decrease_success() {
             Some(()),
         );
 
-        // Add more stake to the Provider, thus changing its challenge period.
+        // Reduce Provider's stake, thus increasing its challenge period.
         let new_challenge_period: BalanceFor<Test> = 20;
         let new_stake = STAKE_TO_CHALLENGE_PERIOD / new_challenge_period;
-        let stake_to_decrease = stake - new_stake;
+        let stake_to_decrease = old_stake - new_stake;
         assert_ok!(<Test as crate::Config>::NativeBalance::release(
             &HoldReason::StorageProviderDeposit.into(),
             &1,
             stake_to_decrease,
             Precision::BestEffort,
+        ));
+
+        // Re-initialising Provider to adjust its deadline.
+        // This prevents the Provider from being slashed after changing its stake, because the deadline
+        // was calculated in the previous proof submission with the old stake. Now given that the new
+        // challenge period is longer, it is possible that the old deadline comes before the new tick
+        // for which the Provider should submit a proof, essentially making the Provider unable to submit
+        // a proof before being slashed.
+        assert_ok!(ProofsDealer::reinitialise_challenge_cycle(
+            &provider_id,
+            old_stake
         ));
 
         // Advance to the next challenge the Provider should listen to.

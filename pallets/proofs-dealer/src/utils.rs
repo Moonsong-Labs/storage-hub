@@ -946,6 +946,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type MerkleHashing = T::MerkleTrieHashing;
     type RandomnessOutput = RandomnessOutputFor<T>;
     type TickNumber = BlockNumberFor<T>;
+    type Balance = BalanceFor<T>;
 
     fn verify_forest_proof(
         provider_id: &Self::ProviderId,
@@ -1101,6 +1102,57 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             provider: *provider_id,
             maybe_provider_account: ProvidersPalletFor::<T>::get_owner_account(*provider_id),
         });
+
+        Ok(())
+    }
+
+    fn reinitialise_challenge_cycle(
+        provider_id: &Self::ProviderId,
+        old_stake: Self::Balance,
+    ) -> DispatchResult {
+        // Check that `who` is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
+            return Err(Error::<T>::NotProvider.into());
+        }
+
+        // Get stake for submitter.
+        // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
+        // However, since the implementation of that is not up to this pallet, we need to check.
+        let stake = ProvidersPalletFor::<T>::get_stake(*provider_id)
+            .ok_or(Error::<T>::ProviderStakeNotFound)?;
+
+        // Check that the stake is non-zero.
+        ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
+
+        // Check that this Provider previously had a challenge cycle initialised.
+        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(*provider_id)
+            .ok_or(Error::<T>::NoRecordOfLastSubmittedProof)?;
+
+        // Compute the next tick for which the Provider should have been submitting a proof.
+        let old_next_challenge_tick = last_tick_proven
+            .checked_add(&Self::stake_to_challenge_period(old_stake))
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+        let old_next_challenge_deadline = old_next_challenge_tick
+            .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Remove the old deadline.
+        TickToProvidersDeadlines::<T>::remove(old_next_challenge_deadline, *provider_id);
+
+        // Compute the next tick for which the Provider should be submitting a proof.
+        let next_challenge_tick = last_tick_proven
+            .checked_add(&Self::stake_to_challenge_period(stake))
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+        let next_challenge_deadline = next_challenge_tick
+            .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Set the deadline for submitting a proof.
+        TickToProvidersDeadlines::<T>::set(next_challenge_deadline, *provider_id, Some(()));
 
         Ok(())
     }
