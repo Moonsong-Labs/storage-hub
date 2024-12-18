@@ -160,7 +160,6 @@ impl ProofsDealerInterface for MockProofsDealer {
     type RandomnessOutput = H256;
     type MerkleHashing = BlakeTwo256;
     type TickNumber = BlockNumber;
-    type Balance = Balance;
 
     fn challenge(_key_challenged: &Self::MerkleHash) -> frame_support::dispatch::DispatchResult {
         Ok(())
@@ -223,13 +222,6 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn initialise_challenge_cycle(
         _who: &Self::ProviderId,
-    ) -> frame_support::dispatch::DispatchResult {
-        Ok(())
-    }
-
-    fn reinitialise_challenge_cycle(
-        _provider_id: &Self::ProviderId,
-        _old_stake: Self::Balance,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }

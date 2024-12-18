@@ -5,7 +5,7 @@ use frame_support::{
     dispatch::DispatchResult,
     pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member},
     sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps},
-    traits::{fungible, tokens::Balance, Incrementable},
+    traits::{fungible, Incrementable},
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
@@ -705,8 +705,6 @@ pub trait ProofsDealerInterface {
     /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
     /// challenges and making sure that Providers respond to them in time
     type TickNumber: NumericalParam;
-    /// The type of the balance of the runtime.
-    type Balance: Balance;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -792,22 +790,6 @@ pub trait ProofsDealerInterface {
     ///
     /// The Provider's challenge period is calculated based on its stake.
     fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult;
-
-    /// Adjusts the challenge deadline of a Provider after changing its stake.
-    ///
-    /// The last tick the Provider submitted a proof for is kept the same, but the deadline for
-    /// submitting a proof is adjusted:
-    /// ```ignore
-    /// deadline = last_tick_provider_submitted_proof_for + provider_challenge_period + challenges_tolerance.
-    /// ```
-    ///
-    /// The Provider's challenge period is calculated based on its new stake.
-    /// The `old_stake` parameter is used to calculate the old deadline and remove the Provider from
-    /// the old deadline.
-    fn reinitialise_challenge_cycle(
-        provider_id: &Self::ProviderId,
-        old_stake: Self::Balance,
-    ) -> DispatchResult;
 
     /// Get the current tick.
     ///

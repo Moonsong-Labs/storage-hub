@@ -1676,16 +1676,6 @@ fn submit_proof_after_stake_increase_success() {
             stake_to_add,
         ));
 
-        // Re-initialising Provider to adjust its deadline.
-        // This prevents the Provider from being slashed after changing its stake, because the deadline
-        // was calculated in the previous proof submission with the old stake. Now if we want to make
-        // it so that the new proof submission removes the Provider from its next deadline, we need to
-        // adjust such deadline after changing the Provider's stake.
-        assert_ok!(ProofsDealer::reinitialise_challenge_cycle(
-            &provider_id,
-            old_stake
-        ));
-
         // Advance to the next challenge the Provider should listen to.
         let providers_stake =
             <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
@@ -1939,17 +1929,6 @@ fn submit_proof_after_stake_decrease_success() {
             &1,
             stake_to_decrease,
             Precision::BestEffort,
-        ));
-
-        // Re-initialising Provider to adjust its deadline.
-        // This prevents the Provider from being slashed after changing its stake, because the deadline
-        // was calculated in the previous proof submission with the old stake. Now given that the new
-        // challenge period is longer, it is possible that the old deadline comes before the new tick
-        // for which the Provider should submit a proof, essentially making the Provider unable to submit
-        // a proof before being slashed.
-        assert_ok!(ProofsDealer::reinitialise_challenge_cycle(
-            &provider_id,
-            old_stake
         ));
 
         // Advance to the next challenge the Provider should listen to.
