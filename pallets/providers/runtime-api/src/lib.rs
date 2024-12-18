@@ -31,6 +31,7 @@ sp_api::decl_runtime_apis! {
         fn get_slash_amount_per_max_file_size() -> Balance;
         fn query_value_propositions_for_msp(who: &ProviderId) -> sp_runtime::Vec<ValuePropositionWithId>;
         fn get_bsp_stake(bsp_id: &BspId) -> Result<Balance, GetStakeError>;
+        fn can_delete_provider(provider_id: &ProviderId) -> bool;
     }
 }
 

@@ -32,6 +32,19 @@ impl<T> MaybeDebug for T {}
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
+/// Storage Hub global tick which should be relied upon for time-sensitive operations.
+pub trait StorageHubTickGetter {
+    type TickNumber: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + One;
+
+    fn get_current_tick() -> Self::TickNumber;
+}
+
 pub trait NumericalParam:
     Parameter
     + Member
@@ -612,6 +625,9 @@ pub trait ReadProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Check if the provider is insolvent.
+    fn is_provider_insolvent(who: Self::ProviderId) -> bool;
 }
 
 /// A trait to mutate the state of a generic Provider, such as updating their root.
@@ -778,6 +794,12 @@ pub trait ProofsDealerInterface {
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
 
+    /// Stop a Provider's challenge cycle.
+    ///
+    /// If the provider doesn't have any files left we remove it teh challenge cycle. It shouldn't
+    /// submit proof.
+    fn stop_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult;
+
     /// Initialise a Provider's challenge cycle.
     ///
     /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
@@ -910,8 +932,10 @@ pub trait PaymentStreamsInterface {
         + Ord
         + MaxEncodedLen
         + Copy;
-    /// The type which represents a block number.
-    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents ticks.
+    ///
+    /// Used to keep track of the system time.
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a fixed-rate payment stream.
     type FixedRatePaymentStream: Encode
         + Decode
@@ -1005,16 +1029,22 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::Units>;
 
     /// Check if a user has an active payment stream with a provider.
-    fn has_active_payment_stream(
+    fn has_active_payment_stream_with_user(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> bool;
+
+    /// Check if a provider has any active payment streams.
+    fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool;
 
     /// Add a priviledge provider to the PriviledgerProvider storage.
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 
     /// Remove a priviledge provider to the PriviledgerProvider storage.
     fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+
+    /// Get current tick.
+    fn current_tick() -> Self::TickNumber;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.

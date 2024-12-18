@@ -12,7 +12,7 @@ use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
     CommitRevealRandomnessInterface, ProofSubmittersInterface, ProofsDealerInterface,
-    ReadUserSolvencyInterface, TrieMutation, TrieRemoveMutation,
+    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -220,6 +220,12 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(H256::default())
     }
 
+    fn stop_challenge_cycle(
+        _provider_id: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
     fn initialise_challenge_cycle(
         _who: &Self::ProviderId,
     ) -> frame_support::dispatch::DispatchResult {
@@ -267,6 +273,7 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget = ConstU32<2>;
 }
 
 pub struct MockUserSolvency;
@@ -341,6 +348,7 @@ parameter_types! {
     pub const MaxNumberOfPeerIds: u32 = 100;
     pub const MaxMultiAddressSize: u32 = 100;
     pub const MaxMultiAddressAmount: u32 = 5;
+    pub const ProviderTopUpTtl: u64 = 10;
 }
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 pub struct DefaultMerkleRoot<T>(PhantomData<T>);
@@ -376,11 +384,20 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
     }
 }
 
+pub struct MockStorageHubTickGetter;
+impl StorageHubTickGetter for MockStorageHubTickGetter {
+    type TickNumber = BlockNumberFor<Test>;
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = MockProofsDealer;
     type FileMetadataManager = FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
@@ -399,7 +416,7 @@ impl pallet_storage_providers::Config for Test {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = MockStorageHubTickGetter;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = ConstU128<10>;
@@ -419,7 +436,8 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
+    type ProviderTopUpTtl = ProviderTopUpTtl;
+    type MaxExpiredItemsInBlock = ConstU32<100u32>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
 }

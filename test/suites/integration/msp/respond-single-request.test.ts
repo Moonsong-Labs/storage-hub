@@ -53,7 +53,8 @@ describeMspNet(
           userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
           userApi.shConsts.TEST_ARTEFACTS[source].size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         ),
         shUser
       );

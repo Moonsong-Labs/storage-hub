@@ -19,6 +19,11 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
   });
 
   it("Volunteer for multiple files and delete them", async () => {
+    // Set global params
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+    );
+
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
     const bucketName = "something-3";
@@ -48,7 +53,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           fingerprint,
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          1
         )
       );
     }
@@ -157,7 +163,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
             fingerprint,
             file_size,
             userApi.shConsts.DUMMY_MSP_ID,
-            [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            1
           )
         );
       }

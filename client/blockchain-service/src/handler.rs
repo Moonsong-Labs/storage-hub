@@ -18,8 +18,8 @@ use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
-    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
@@ -302,6 +302,17 @@ impl Actor for BlockchainService {
                         }
                     }
                 },
+                BlockchainServiceCommand::GetBestBlockInfo { callback } => {
+                    let best_block_info = self.best_block;
+                    match callback.send(best_block_info) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Best block info sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send best block info: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::WaitForBlock {
                     block_number,
                     callback,
@@ -405,6 +416,29 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send earliest block to change capacity: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::IsStorageRequestOpenToVolunteers {
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let is_open = self
+                        .client
+                        .runtime_api()
+                        .is_storage_request_open_to_volunteers(current_block_hash, file_key)
+                        .unwrap_or_else(|_| {
+                            Err(IsStorageRequestOpenToVolunteersError::InternalError)
+                        });
+
+                    match callback.send(is_open) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Storage request open to volunteers result sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send storage request open to volunteers: {:?}", e);
                         }
                     }
                 }
