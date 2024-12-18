@@ -284,7 +284,10 @@ where
 
                     match fs {
                         Some(fs) => fs.read().await.root() != *cloned_forest_root,
-                        None => true,
+                        None => {
+                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get forest storage.");
+                            true
+                        }
                     }
                 };
 
