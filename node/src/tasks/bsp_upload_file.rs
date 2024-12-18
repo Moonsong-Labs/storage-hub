@@ -122,7 +122,7 @@ where
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
-                self.unvolunteer_file(*file_key).await?;
+                self.unvolunteer_file(*file_key).await;
             }
         }
         result
@@ -167,7 +167,7 @@ where
                 warn!(target: LOG_TARGET, "{}", e);
 
                 // Unvolunteer the file.
-                self.unvolunteer_file(event.file_key.into()).await?;
+                self.unvolunteer_file(event.file_key.into()).await;
                 return Err(e);
             }
         };
@@ -197,7 +197,7 @@ where
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
@@ -214,7 +214,7 @@ where
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{:?}",
@@ -226,7 +226,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
@@ -238,7 +238,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "This is a bug! Failed to construct trie iter for key {:?}.",
@@ -799,17 +799,7 @@ where
                 e
             );
 
-            // Delete file metadata from file storage.
-            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-            write_file_storage
-                .delete_file(&file_key.into())
-                .map_err(|e| anyhow!("Failed to delete file from file storage: {:?}", e))?;
-
-            // Unregister the file from the file transfer service.
-            self.storage_hub_handler
-                .file_transfer
-                .unregister_file(file_key.into())
-                .await?;
+            self.unvolunteer_file(file_key.into()).await;
         }
 
         Ok(())
@@ -846,16 +836,19 @@ where
         Ok(new_capacity)
     }
 
-    async fn unvolunteer_file(&self, file_key: H256) -> anyhow::Result<()> {
+    async fn unvolunteer_file(&self, file_key: H256) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
-        let _ = self
+        if let Err(e) = self
             .storage_hub_handler
             .file_transfer
             .unregister_file(file_key.as_ref().into())
-            .await;
+            .await
+        {
+            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}", file_key, e);
+        }
 
         // TODO: Send transaction to runtime to unvolunteer the file.
 
@@ -863,9 +856,9 @@ where
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // TODO: Handle error
-        let _ = write_file_storage.delete_file(&file_key);
-
-        Ok(())
+        if let Err(e) = write_file_storage.delete_file(&file_key) {
+            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}", file_key, e);
+        }
     }
 
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
