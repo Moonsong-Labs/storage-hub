@@ -1269,6 +1269,7 @@ import type {
   GetNextDeadlineTickError,
   GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
+  IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
   MerklePatriciaRoot,
   Multiaddresses,
@@ -1854,6 +1855,7 @@ declare module "@polkadot/types/types/registry" {
     InvalidTransaction: InvalidTransaction;
     isize: isize;
     ISize: ISize;
+    IsStorageRequestOpenToVolunteersError: IsStorageRequestOpenToVolunteersError;
     Json: Json;
     Junction: Junction;
     Junctions: Junctions;

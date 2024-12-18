@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::{cmp::max, str::FromStr, time::Duration};
+use std::{cmp::max, collections::HashMap, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use pallet_file_system::types::RejectedStorageRequest;
@@ -9,8 +8,6 @@ use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequ
 use sp_core::{bounded_vec, H256};
 use sp_runtime::AccountId32;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{FileStorageT, MspForestStorageHandlerT};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
@@ -25,6 +22,11 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::StorageDataUnit;
+
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{FileStorageT, MspForestStorageHandlerT},
+};
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -129,7 +131,7 @@ where
     FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+        trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let proven = match event
             .file_key_proof

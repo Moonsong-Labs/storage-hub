@@ -35,8 +35,10 @@ use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -120,7 +122,7 @@ where
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
-                self.unvolunteer_file(*file_key).await?;
+                self.unvolunteer_file(*file_key).await;
             }
         }
         result
@@ -137,7 +139,7 @@ where
     FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+        trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let proven = match event
             .file_key_proof
@@ -165,7 +167,7 @@ where
                 warn!(target: LOG_TARGET, "{}", e);
 
                 // Unvolunteer the file.
-                self.unvolunteer_file(event.file_key.into()).await?;
+                self.unvolunteer_file(event.file_key.into()).await;
                 return Err(e);
             }
         };
@@ -195,7 +197,7 @@ where
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
@@ -212,7 +214,7 @@ where
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{:?}",
@@ -224,7 +226,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
@@ -236,7 +238,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "This is a bug! Failed to construct trie iter for key {:?}.",
@@ -720,6 +722,26 @@ where
             .wait_for_tick(earliest_volunteer_tick)
             .await?;
 
+        // TODO: Have this dynamically called at every tick in `wait_for_tick` to exit early without waiting until `earliest_volunteer_tick` in the event the storage request
+        // TODO: is closed mid-way through the process.
+        let can_volunteer = self
+            .storage_hub_handler
+            .blockchain
+            .is_storage_request_open_to_volunteers(file_key.into())
+            .await
+            .map_err(|e| anyhow!("Failed to query file can volunteer: {:?}", e))?;
+
+        // Skip volunteering if the storage request is no longer open to volunteers.
+        // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
+        // TODO: we catch up to the latest block and if the storage request is still open to volunteers, volunteer then.
+        if !can_volunteer {
+            let err_msg = "Storage request is no longer open to volunteers. Skipping volunteering.";
+            warn!(
+                target: LOG_TARGET, "{}", err_msg
+            );
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
@@ -756,7 +778,8 @@ where
             });
 
         // Send extrinsic and wait for it to be included in the block.
-        self.storage_hub_handler
+        let result = self
+            .storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
             .await?
@@ -766,7 +789,18 @@ where
                     .extrinsic_retry_timeout,
             ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .await;
+
+        if let Err(e) = result {
+            debug!(
+                target: LOG_TARGET,
+                "Failed to volunteer for file {:?}: {:?}",
+                file_key,
+                e
+            );
+
+            self.unvolunteer_file(file_key.into()).await;
+        }
 
         Ok(())
     }
@@ -802,16 +836,19 @@ where
         Ok(new_capacity)
     }
 
-    async fn unvolunteer_file(&self, file_key: H256) -> anyhow::Result<()> {
+    async fn unvolunteer_file(&self, file_key: H256) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
-        let _ = self
+        if let Err(e) = self
             .storage_hub_handler
             .file_transfer
             .unregister_file(file_key.as_ref().into())
-            .await;
+            .await
+        {
+            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}", file_key, e);
+        }
 
         // TODO: Send transaction to runtime to unvolunteer the file.
 
@@ -819,9 +856,9 @@ where
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // TODO: Handle error
-        let _ = write_file_storage.delete_file(&file_key);
-
-        Ok(())
+        if let Err(e) = write_file_storage.delete_file(&file_key) {
+            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}", file_key, e);
+        }
     }
 
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {

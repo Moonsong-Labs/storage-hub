@@ -486,6 +486,7 @@ impl pallet_storage_providers::Config for Runtime {
     type WeightInfo = pallet_storage_providers::weights::SubstrateWeight<Runtime>;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type FileMetadataManager = FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
@@ -505,7 +506,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type StorageHubTickGetter = ProofsDealer;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;
@@ -526,7 +527,8 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate =
         runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate;
-    type TopUpGracePeriod = ConstU32<{ 24 * 60 * 60 / 6 }>; // 1 day with 6 second timeslots.
+    type ProviderTopUpTtl = runtime_params::dynamic_params::runtime_config::ProviderTopUpTtl;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ProvidersBenchmarkHelpers;
 }
@@ -839,6 +841,8 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {

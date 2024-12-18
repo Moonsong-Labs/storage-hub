@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use codec::Encode;
 use cumulus_primitives_core::BlockT;
-use log::{debug, error, info, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
@@ -11,6 +10,7 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
@@ -107,6 +107,13 @@ impl BlockchainService {
         }
     }
 
+    /// From a [`BlockImportNotification`], gets the imported block, and checks if:
+    /// 1. The block is not the new best block. For example, it could be a block from a non-best fork branch.
+    ///     - If so, it returns [`NewNonBestBlock`].
+    /// 2. The block is the new best block, and its parent is the previous best block.
+    ///     - If so, it registers it as the new best block and returns [`NewBestBlock`].
+    /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
+    ///     - If so, it registers it as the new best block and returns [`Reorg`].
     pub(crate) fn register_best_block_and_check_reorg<Block>(
         &mut self,
         block_import_notification: &BlockImportNotification<Block>,
@@ -114,7 +121,7 @@ impl BlockchainService {
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let last_best_block = self.best_block.clone();
+        let last_best_block = self.best_block;
         let new_block_info: BestBlockInfo = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
@@ -138,8 +145,8 @@ impl BlockchainService {
             .as_ref()
             .expect("Tree route should exist, it was just checked to be `Some`; qed")
             .clone();
-        info!(target: LOG_TARGET, "New best block caused a reorg: {:?}", new_block_info);
-        info!(target: LOG_TARGET, "Tree route: {:?}", tree_route);
+        info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
+        info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
             old_best_block: last_best_block,
             new_best_block: new_block_info,
@@ -194,7 +201,7 @@ impl BlockchainService {
         // Case: There is no Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
         // This is expected, if this node starts up before the Provider has been registered.
         if provider_ids_found.is_empty() {
-            warn!(target: LOG_TARGET, "There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
+            warn!(target: LOG_TARGET, "🔑 There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
             return;
         }
 

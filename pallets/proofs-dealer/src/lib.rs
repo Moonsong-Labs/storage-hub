@@ -805,9 +805,9 @@ pub mod pallet {
             let min_stake = T::ProvidersPallet::get_min_stake();
             let max_period = Self::stake_to_challenge_period(min_stake);
 
-            // Check that `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
+            // Check that `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have plus the tolerance.
             assert!(
-                T::CheckpointChallengePeriod::get() >= max_period,
+                T::CheckpointChallengePeriod::get() > max_period + T::ChallengeTicksTolerance::get(),
                 "CheckpointChallengePeriod ({:?}) const in ProofsDealer pallet should be greater or equal than the longest period a Provider can have ({:?}).",
                 T::CheckpointChallengePeriod::get(),
                 max_period

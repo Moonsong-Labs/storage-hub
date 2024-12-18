@@ -1311,9 +1311,10 @@ mod users {
                     bucket_id: bucket_id.clone(),
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
-                    size: size,
+                    size,
                     msp_id: Some(alice_msp_id.clone()),
                     peer_ids: parachain_peer_id,
+                    replication_target: None,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1676,9 +1677,10 @@ mod users {
                     bucket_id: bucket_id.clone(),
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
-                    size: size,
+                    size,
                     msp_id: Some(alice_msp_id.clone()),
                     peer_ids: parachain_peer_id,
+                    replication_target: None,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
