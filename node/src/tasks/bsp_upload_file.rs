@@ -35,8 +35,10 @@ use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -137,7 +139,7 @@ where
     FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+        trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let proven = match event
             .file_key_proof

@@ -157,7 +157,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "BlockchainService starting up!");
+        info!(target: LOG_TARGET, "💾 StorageHub's Blockchain Service starting up!");
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -1029,7 +1029,7 @@ impl BlockchainService {
             }
         };
 
-        info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.pre_block_processing_checks(&block_hash);
@@ -1054,7 +1054,7 @@ impl BlockchainService {
         self.get_provider_id(&block_hash);
     }
 
-    /// Handle the first time this node syncs with the chain.
+    /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
     async fn handle_initial_sync<Block>(&mut self, notification: BlockImportNotification<Block>)
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
@@ -1063,7 +1063,7 @@ impl BlockchainService {
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
         // If this is the first block import notification, we might need to catch up.
-        info!(target: LOG_TARGET, "First block import notification (synced to #{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
 
         // Check if there was an ongoing process confirm storing task.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
@@ -1137,7 +1137,7 @@ impl BlockchainService {
     }
 
     async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
-        info!(target: LOG_TARGET, "Processing block import #{}: {}", block_number, block_hash);
+        trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Notify all tasks waiting for this block number (or lower).
         self.notify_import_block_number(&block_number);
@@ -1196,7 +1196,7 @@ impl BlockchainService {
                                         .to_vec();
                                 if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
                                     // If so, add the Provider ID to the list of Providers that this node is monitoring.
-                                    info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
+                                    info!(target: LOG_TARGET, "🔑 New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
 
                                     // Managing more than one Provider is not supported, so if this node is already managing another Provider, emit a warning
                                     // and stop managing it, in favour of the new Provider.
@@ -1210,7 +1210,7 @@ impl BlockchainService {
                                             }
                                         };
                                         if managed_provider_id != &provider_id {
-                                            warn!(target: LOG_TARGET, "This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
+                                            warn!(target: LOG_TARGET, "🔄 This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
                                         }
                                     }
 
@@ -1456,7 +1456,7 @@ impl BlockchainService {
         let block_hash: H256 = notification.hash;
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
-        debug!(target: LOG_TARGET, "Finality notification #{}: {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
         match get_events_at_block(&self.client, &block_hash) {
