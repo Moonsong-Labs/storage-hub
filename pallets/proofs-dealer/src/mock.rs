@@ -29,7 +29,7 @@ type Balance = u128;
 type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
-const UNITS: Balance = 1_000_000_000_000;
+pub(crate) const UNITS: Balance = 1_000_000_000_000;
 pub(crate) const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
