@@ -19,8 +19,11 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, Tip},
 };
-use shc_common::types::{
-    Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+    },
 };
 use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
@@ -32,8 +35,10 @@ use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -117,7 +122,7 @@ where
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
-                self.unvolunteer_file(*file_key).await?;
+                self.unvolunteer_file(*file_key).await;
             }
         }
         result
@@ -134,7 +139,7 @@ where
     FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+        trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let proven = match event
             .file_key_proof
@@ -162,7 +167,7 @@ where
                 warn!(target: LOG_TARGET, "{}", e);
 
                 // Unvolunteer the file.
-                self.unvolunteer_file(event.file_key.into()).await?;
+                self.unvolunteer_file(event.file_key.into()).await;
                 return Err(e);
             }
         };
@@ -192,7 +197,7 @@ where
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
@@ -209,7 +214,7 @@ where
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{:?}",
@@ -221,7 +226,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
@@ -233,7 +238,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await?;
+                    self.unvolunteer_file(event.file_key.into()).await;
 
                     return Err(anyhow::anyhow!(format!(
                         "This is a bug! Failed to construct trie iter for key {:?}.",
@@ -263,6 +268,8 @@ where
             event.data.confirm_storing_requests,
         );
 
+        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
+        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -272,12 +279,12 @@ where
             }
         };
 
+        // Get the BSP ID of the Provider running this node and its current Forest root.
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
             .query_storage_provider_id(None)
             .await?;
-
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
@@ -292,6 +299,7 @@ where
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
         };
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
@@ -374,7 +382,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -410,7 +418,14 @@ where
                     )),
                 true,
             )
-            .await?;
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to confirm file after {} retries: {:?}",
+                    MAX_CONFIRM_STORING_REQUEST_TRY_COUNT,
+                    e
+                )
+            })?;
 
         let maybe_new_root: Option<H256> = events.and_then(|events| {
             events.into_iter().find_map(|event| {
@@ -494,11 +509,14 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
         // Verify if file not already stored
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
         if fs.read().await.contains_file_key(&event.file_key.into())? {
@@ -704,6 +722,26 @@ where
             .wait_for_tick(earliest_volunteer_tick)
             .await?;
 
+        // TODO: Have this dynamically called at every tick in `wait_for_tick` to exit early without waiting until `earliest_volunteer_tick` in the event the storage request
+        // TODO: is closed mid-way through the process.
+        let can_volunteer = self
+            .storage_hub_handler
+            .blockchain
+            .is_storage_request_open_to_volunteers(file_key.into())
+            .await
+            .map_err(|e| anyhow!("Failed to query file can volunteer: {:?}", e))?;
+
+        // Skip volunteering if the storage request is no longer open to volunteers.
+        // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
+        // TODO: we catch up to the latest block and if the storage request is still open to volunteers, volunteer then.
+        if !can_volunteer {
+            let err_msg = "Storage request is no longer open to volunteers. Skipping volunteering.";
+            warn!(
+                target: LOG_TARGET, "{}", err_msg
+            );
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
@@ -740,7 +778,8 @@ where
             });
 
         // Send extrinsic and wait for it to be included in the block.
-        self.storage_hub_handler
+        let result = self
+            .storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))
             .await?
@@ -750,7 +789,18 @@ where
                     .extrinsic_retry_timeout,
             ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .await;
+
+        if let Err(e) = result {
+            debug!(
+                target: LOG_TARGET,
+                "Failed to volunteer for file {:?}: {:?}",
+                file_key,
+                e
+            );
+
+            self.unvolunteer_file(file_key.into()).await;
+        }
 
         Ok(())
     }
@@ -786,16 +836,19 @@ where
         Ok(new_capacity)
     }
 
-    async fn unvolunteer_file(&self, file_key: H256) -> anyhow::Result<()> {
+    async fn unvolunteer_file(&self, file_key: H256) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
-        let _ = self
+        if let Err(e) = self
             .storage_hub_handler
             .file_transfer
             .unregister_file(file_key.as_ref().into())
-            .await;
+            .await
+        {
+            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}", file_key, e);
+        }
 
         // TODO: Send transaction to runtime to unvolunteer the file.
 
@@ -803,9 +856,9 @@ where
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // TODO: Handle error
-        let _ = write_file_storage.delete_file(&file_key);
-
-        Ok(())
+        if let Err(e) = write_file_storage.delete_file(&file_key) {
+            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}", file_key, e);
+        }
     }
 
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {

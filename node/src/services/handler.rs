@@ -16,6 +16,7 @@ use shc_blockchain_service::{
     },
     BlockchainService,
 };
+use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
     FileTransferService,
@@ -205,6 +206,15 @@ where
     FL: FileStorageT,
     FSH: BspForestStorageHandlerT,
 {
+    pub async fn initialise_bsp(&mut self) {
+        // Create an empty Forest Storage instance.
+        // A BSP is expected to always have at least one empty Forest Storage instance.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        self.forest_storage_handler
+            .create(&current_forest_key)
+            .await;
+    }
+
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
 

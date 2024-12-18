@@ -108,6 +108,12 @@ export interface IncompleteFileStatus extends Struct {
   readonly stored_chunks: u64;
   readonly total_chunks: u64;
 }
+/** @name IsStorageRequestOpenToVolunteersError */
+export interface IsStorageRequestOpenToVolunteersError extends Enum {
+  readonly isStorageRequestNotFound: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "StorageRequestNotFound" | "InternalApiError";
+}
 /** @name Key */
 export interface Key extends H256 {}
 /** @name MainStorageProviderId */
