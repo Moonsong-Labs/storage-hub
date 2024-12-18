@@ -7,6 +7,7 @@ use frame_support::{
     pallet_prelude::Weight,
     traits::{
         fungible::{Mutate, MutateHold},
+        tokens::Precision,
         OnFinalize, OnIdle, OnPoll,
     },
     weights::WeightMeter,
@@ -28,7 +29,7 @@ use crate::{
     mock::*,
     pallet::Event,
     types::{
-        BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
+        BalanceFor, BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor,
         KeyProof, MaxCustomChallengesPerBlockFor, MaxSlashableProvidersPerTickFor,
         MaxSubmittersPerTickFor, MinChallengePeriodFor, MinNotFullBlocksRatioFor, Proof,
@@ -1502,6 +1503,515 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // This is to avoid having to construct valid tries and proofs.
         let root = Providers::get_root(provider_id).unwrap();
         assert_eq!(root.as_ref(), challenges.last().unwrap().as_ref());
+    });
+}
+
+#[test]
+fn submit_proof_after_stake_increase_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Create user and add funds to the account.
+        let user = RuntimeOrigin::signed(1);
+        let user_balance = 1_000_000 * UNITS;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            user_balance
+        ));
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
+            },
+        );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        let init_challenge_period: BalanceFor<Test> = 15;
+        let stake = STAKE_TO_CHALLENGE_PERIOD / init_challenge_period;
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            stake,
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let last_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
+            &provider_id,
+            last_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(
+            user.clone(),
+            proof.clone(),
+            None
+        ));
+
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+                last_tick_proven,
+            }
+            .into(),
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
+            None
+        );
+        let new_deadline_1 = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline_1, provider_id),
+            Some(()),
+        );
+
+        // Add more stake to the Provider, thus changing its challenge period.
+        let new_challenge_period: BalanceFor<Test> = 10;
+        let new_stake = STAKE_TO_CHALLENGE_PERIOD / new_challenge_period;
+        let stake_to_add = new_stake - stake;
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            stake_to_add,
+        ));
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        let challenge_block = last_tick_provider_submitted_proof + challenge_period;
+
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
+
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+                last_tick_proven,
+            }
+            .into(),
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline_1, provider_id),
+            None
+        );
+        let new_deadline_2 = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline_2, provider_id),
+            Some(()),
+        );
+    });
+}
+
+#[test]
+fn submit_proof_after_stake_decrease_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Create user and add funds to the account.
+        let user = RuntimeOrigin::signed(1);
+        let user_balance = 1_000_000 * UNITS;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            user_balance
+        ));
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
+            },
+        );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        let init_challenge_period: BalanceFor<Test> = 15;
+        let stake = STAKE_TO_CHALLENGE_PERIOD / init_challenge_period;
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            stake,
+        ));
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let last_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
+            &provider_id,
+            last_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(
+            user.clone(),
+            proof.clone(),
+            None
+        ));
+
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+                last_tick_proven,
+            }
+            .into(),
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
+            None
+        );
+        let new_deadline_1 = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline_1, provider_id),
+            Some(()),
+        );
+
+        // Add more stake to the Provider, thus changing its challenge period.
+        let new_challenge_period: BalanceFor<Test> = 20;
+        let new_stake = STAKE_TO_CHALLENGE_PERIOD / new_challenge_period;
+        let stake_to_decrease = stake - new_stake;
+        assert_ok!(<Test as crate::Config>::NativeBalance::release(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            stake_to_decrease,
+            Precision::BestEffort,
+        ));
+
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        let challenge_block = last_tick_provider_submitted_proof + challenge_period;
+
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
+
+        let last_tick_proven =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+                last_tick_proven,
+            }
+            .into(),
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline_1, provider_id),
+            None
+        );
+        let new_deadline_2 = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            TickToProvidersDeadlines::<Test>::get(new_deadline_2, provider_id),
+            Some(()),
+        );
     });
 }
 
