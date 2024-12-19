@@ -385,13 +385,13 @@ where
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
-        // Check if the sender is the MSP.
+        // Check if the sender is a MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
         );
 
-        // Check if the move bucket request exists for MSP and bucket.
+        // Check if the move bucket request exists for the MSP and bucket.
         let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
         ensure!(
             move_bucket_requester.is_some(),
@@ -400,7 +400,6 @@ where
 
         if response == BucketMoveRequestResponse::Rejected {
             <PendingBucketsToMove<T>>::remove(&bucket_id);
-            <PendingMoveBucketRequests<T>>::remove(&msp_id, bucket_id);
 
             return Ok(msp_id);
         }
