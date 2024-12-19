@@ -1,18 +1,19 @@
 use super::{types::*, *};
 use frame_benchmarking::v2::*;
 use frame_system::pallet_prelude::BlockNumberFor;
-use pallet_storage_providers::types::{MaxMultiAddressAmount, MaxMultiAddressSize};
 use sp_runtime::traits::One;
 
 #[benchmarks(where
-    T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash> + pallet_storage_providers::Config<
-        ProviderId = <T as frame_system::Config>::Hash,
-        StorageDataUnit = u64
-    > + pallet_randomness::Config,
+    T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash, Providers = pallet_storage_providers::Pallet<T>>
+  		+ pallet_storage_providers::Config<
+  			ProviderId = <T as frame_system::Config>::Hash,
+  			StorageDataUnit = u64
+  		>,
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
         + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
     // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers:
-    <T as crate::Config>::Providers: shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
+    <T as crate::Config>::Providers: shp_traits::ReadBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash> + shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
+	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>>,
 )]
 mod benchmarks {
     use super::*;
@@ -177,7 +178,7 @@ mod benchmarks {
         for i in 0..n {
             let bsp_user: T::AccountId = account("bsp", i as u32, i as u32);
             mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
-            let bsp_id = bsp_sign_up::<T>(RawOrigin::Signed(bsp_user.clone()))?;
+            let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone());
 
             StorageRequestBsps::<T>::insert(
                 file_key,
@@ -233,10 +234,6 @@ mod benchmarks {
         _(RawOrigin::Signed(msp), bucket_id);
 
         Ok(())
-    }
-
-    fn run_to_block<T: crate::Config>(n: BlockNumberFor<T>) {
-        frame_system::Pallet::<T>::set_block_number(frame_system::Pallet::<T>::block_number() + n);
     }
 
     fn mint_into_account<T: crate::Config>(
@@ -311,60 +308,45 @@ mod benchmarks {
         (msp_hash, value_prop_id)
     }
 
-    /// Helper function that registers an account as a Backup Storage Provider
-    fn bsp_sign_up<T>(
-        bsp_signed: RawOrigin<T::AccountId>,
-    ) -> Result<<T as pallet_storage_providers::Config>::ProviderId, BenchmarkError>
+    fn add_bsp_to_provider_storage<T>(bsp_account: &T::AccountId) -> ProviderIdFor<T>
     where
-        T: pallet::Config + pallet_storage_providers::Config + pallet_randomness::Config,
+        T: crate::Config
+            + pallet_storage_providers::Config<
+                ProviderId = <T as frame_system::Config>::Hash,
+                StorageDataUnit = u64,
+            >,
+        T: crate::Config<Providers = pallet_storage_providers::Pallet<T>>,
     {
-        // Setup the parameters of the BSP to register
-        let capacity = 100000u32;
-        let mut multiaddresses: BoundedVec<
-            BoundedVec<u8, MaxMultiAddressSize<T>>,
-            MaxMultiAddressAmount<T>,
-        > = BoundedVec::new();
-        multiaddresses.force_push(
-            "/ip4/127.0.0.1/udp/1234"
-                .as_bytes()
-                .to_vec()
-                .try_into()
-                .unwrap(),
+        // Derive the BSP ID from the hash of its account
+        let bsp_id = T::Hashing::hash_of(&bsp_account);
+
+        // Create the BSP info
+        let bsp_info = pallet_storage_providers::types::BackupStorageProvider {
+            capacity: 1024 * 1024 * 1024,
+            capacity_used: 0,
+            multiaddresses: BoundedVec::default(),
+            root: <T as pallet_storage_providers::Config>::DefaultMerkleRoot::get(),
+            last_capacity_change: frame_system::Pallet::<T>::block_number(),
+            owner_account: bsp_account.clone(),
+            payment_account: bsp_account.clone(),
+            reputation_weight:
+                <T as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+            sign_up_block: frame_system::Pallet::<T>::block_number(),
+        };
+
+        // Insert the BSP info into storage
+        pallet_storage_providers::BackupStorageProviders::<T>::insert(bsp_id, bsp_info);
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::insert(
+            bsp_account.clone(),
+            bsp_id,
         );
 
-        let user_account = bsp_signed.as_signed().unwrap().clone();
+        // Update the Global Reputation Weight
+        pallet_storage_providers::GlobalBspsReputationWeight::<T>::mutate(|reputation_weight| {
+            *reputation_weight =
+                <T as pallet_storage_providers::Config>::StartingReputationWeight::get();
+        });
 
-        // Request the sign up of the BSP
-        pallet_storage_providers::Pallet::<T>::request_bsp_sign_up(
-            bsp_signed.into(),
-            capacity.into(),
-            multiaddresses.clone(),
-            user_account.clone(),
-        )
-        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
-
-        // Advance enough blocks to set up a valid random seed
-        let random_seed =
-            <<T as frame_system::Config>::Hashing as sp_core::Hasher>::hash(b"random_seed");
-        run_to_block::<T>(10u32.into());
-        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
-            random_seed,
-            frame_system::Pallet::<T>::block_number(),
-        )));
-
-        // Confirm the sign up of the BSP
-        pallet_storage_providers::Pallet::<T>::confirm_sign_up(
-            RawOrigin::Signed(user_account.clone()).into(),
-            None,
-        )
-        .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
-
-        // Verify that the BSP is now in the providers' storage
-        let bsp_id =
-            pallet_storage_providers::AccountIdToBackupStorageProviderId::<T>::get(&user_account)
-                .unwrap();
-        assert!(pallet_storage_providers::BackupStorageProviders::<T>::get(&bsp_id).is_some());
-
-        Ok(bsp_id)
+        bsp_id
     }
 }

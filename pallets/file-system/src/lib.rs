@@ -1053,7 +1053,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(9)]
-        #[pallet::weight(T::WeightInfo::stop_storing_bucket())]
+        #[pallet::weight(T::WeightInfo::msp_stop_storing_bucket())]
         pub fn msp_stop_storing_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -1344,10 +1344,7 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
-    where
-        u32: TryFrom<BlockNumberFor<T>>,
-    {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 

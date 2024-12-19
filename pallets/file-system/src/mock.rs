@@ -13,7 +13,6 @@ use frame_system::{
 };
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
-use pallet_randomness::GetBabeData;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
@@ -156,8 +155,6 @@ mod test_runtime {
     pub type Nfts = pallet_nfts;
     #[runtime::pallet_index(8)]
     pub type CrRandomness = pallet_cr_randomness;
-    #[runtime::pallet_index(9)]
-    pub type RandomnessPallet = pallet_randomness;
 }
 
 parameter_types! {
@@ -419,28 +416,6 @@ impl pallet_storage_providers::Config for Test {
     type MaxExpiredItemsInBlock = ConstU32<100>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
-}
-
-pub struct BabeDataGetter;
-impl GetBabeData<u64, H256> for BabeDataGetter {
-    fn get_epoch_index() -> u64 {
-        frame_system::Pallet::<Test>::block_number()
-    }
-    fn get_epoch_randomness() -> H256 {
-        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
-    }
-    fn get_parent_randomness() -> H256 {
-        H256::from_slice(&blake2_256(
-            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
-        ))
-    }
-}
-
-impl pallet_randomness::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = MockRelaychainDataProvider;
-    type WeightInfo = ();
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
