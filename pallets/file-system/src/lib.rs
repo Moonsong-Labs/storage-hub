@@ -1321,10 +1321,7 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
-    where
-        u32: TryFrom<BlockNumberFor<T>>,
-    {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
