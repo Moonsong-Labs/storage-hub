@@ -115,8 +115,8 @@ export const createBucketAndSendNewStorageRequest = async (
     api.tx.fileSystem.issueStorageRequest(
       newBucketEventDataBlob.bucketId,
       location,
-      fileMetadata.fingerprint,
-      fileMetadata.file_size,
+      fileMetadata.file_metadata.fingerprint,
+      fileMetadata.file_metadata.file_size,
       mspId ?? null,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       replicationTarget ?? null
