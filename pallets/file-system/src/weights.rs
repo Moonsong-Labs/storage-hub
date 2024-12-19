@@ -46,6 +46,10 @@ pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `Nfts::NextCollectionId` (r:1 w:1)
 	/// Proof: `Nfts::NextCollectionId` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `Nfts::Collection` (r:1 w:1)
@@ -81,16 +85,20 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn create_bucket() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1568`
-		//  Estimated: `4588`
-		// Minimum execution time: 131_000_000 picoseconds.
-		Weight::from_parts(133_000_000, 4588)
-			.saturating_add(T::DbWeight::get().reads(13_u64))
+		//  Estimated: `6054`
+		// Minimum execution time: 144_000_000 picoseconds.
+		Weight::from_parts(147_000_000, 6054)
+			.saturating_add(T::DbWeight::get().reads(17_u64))
 			.saturating_add(T::DbWeight::get().writes(11_u64))
 	}
 	/// Storage: `Providers::Buckets` (r:1 w:0)
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(192), added: 2667, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingBucketsToMove` (r:1 w:1)
 	/// Proof: `FileSystem::PendingBucketsToMove` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:1 w:0)
@@ -103,17 +111,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `FileSystem::PendingMoveBucketRequests` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	fn request_move_bucket() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `574`
+		//  Measured:  `665`
 		//  Estimated: `9887`
-		// Minimum execution time: 30_000_000 picoseconds.
-		Weight::from_parts(31_000_000, 9887)
-			.saturating_add(T::DbWeight::get().reads(6_u64))
+		// Minimum execution time: 38_000_000 picoseconds.
+		Weight::from_parts(39_000_000, 9887)
+			.saturating_add(T::DbWeight::get().reads(10_u64))
 			.saturating_add(T::DbWeight::get().writes(4_u64))
 	}
 	/// Storage: `Providers::AccountIdToBackupStorageProviderId` (r:1 w:0)
 	/// Proof: `Providers::AccountIdToBackupStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::AccountIdToMainStorageProviderId` (r:1 w:0)
 	/// Proof: `Providers::AccountIdToMainStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:4 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:4 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:2 w:2)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingMoveBucketRequests` (r:1 w:1)
@@ -154,11 +166,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `FileSystem::PendingBucketsToMove` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	fn msp_respond_move_bucket_request() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `4200`
+		//  Measured:  `4223`
 		//  Estimated: `13545`
-		// Minimum execution time: 226_000_000 picoseconds.
-		Weight::from_parts(240_000_000, 13545)
-			.saturating_add(T::DbWeight::get().reads(29_u64))
+		// Minimum execution time: 252_000_000 picoseconds.
+		Weight::from_parts(255_000_000, 13545)
+			.saturating_add(T::DbWeight::get().reads(37_u64))
 			.saturating_add(T::DbWeight::get().writes(12_u64))
 	}
 	/// Storage: `Providers::Buckets` (r:1 w:1)
@@ -179,8 +191,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `680`
 		//  Estimated: `6108`
-		// Minimum execution time: 42_000_000 picoseconds.
-		Weight::from_parts(47_000_000, 6108)
+		// Minimum execution time: 45_000_000 picoseconds.
+		Weight::from_parts(46_000_000, 6108)
 			.saturating_add(T::DbWeight::get().reads(5_u64))
 			.saturating_add(T::DbWeight::get().writes(7_u64))
 	}
@@ -194,8 +206,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::ReplicationTarget` (r:1 w:0)
-	/// Proof: `FileSystem::ReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:1 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MaxReplicationTarget` (r:1 w:0)
+	/// Proof: `FileSystem::MaxReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
@@ -208,15 +226,19 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	fn issue_storage_request() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `865`
+		//  Measured:  `953`
 		//  Estimated: `6687`
-		// Minimum execution time: 71_000_000 picoseconds.
-		Weight::from_parts(73_000_000, 6687)
-			.saturating_add(T::DbWeight::get().reads(10_u64))
+		// Minimum execution time: 82_000_000 picoseconds.
+		Weight::from_parts(85_000_000, 6687)
+			.saturating_add(T::DbWeight::get().reads(15_u64))
 			.saturating_add(T::DbWeight::get().writes(6_u64))
 	}
 	/// Storage: `Providers::AccountIdToBackupStorageProviderId` (r:1 w:0)
 	/// Proof: `Providers::AccountIdToBackupStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
@@ -225,19 +247,19 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::GlobalBspsReputationWeight` (r:1 w:0)
 	/// Proof: `Providers::GlobalBspsReputationWeight` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::ReplicationTarget` (r:1 w:0)
-	/// Proof: `FileSystem::ReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MaxReplicationTarget` (r:1 w:0)
+	/// Proof: `FileSystem::MaxReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::TickRangeToMaximumThreshold` (r:1 w:0)
 	/// Proof: `FileSystem::TickRangeToMaximumThreshold` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	fn bsp_volunteer() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `2111`
-		//  Estimated: `4692`
-		// Minimum execution time: 47_000_000 picoseconds.
-		Weight::from_parts(50_000_000, 4692)
-			.saturating_add(T::DbWeight::get().reads(8_u64))
+		//  Measured:  `2195`
+		//  Estimated: `6054`
+		// Minimum execution time: 57_000_000 picoseconds.
+		Weight::from_parts(61_000_000, 6054)
+			.saturating_add(T::DbWeight::get().reads(12_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
 }
@@ -246,6 +268,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 impl WeightInfo for () {
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `Nfts::NextCollectionId` (r:1 w:1)
 	/// Proof: `Nfts::NextCollectionId` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `Nfts::Collection` (r:1 w:1)
@@ -281,16 +307,20 @@ impl WeightInfo for () {
 	fn create_bucket() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1568`
-		//  Estimated: `4588`
-		// Minimum execution time: 131_000_000 picoseconds.
-		Weight::from_parts(133_000_000, 4588)
-			.saturating_add(RocksDbWeight::get().reads(13_u64))
+		//  Estimated: `6054`
+		// Minimum execution time: 144_000_000 picoseconds.
+		Weight::from_parts(147_000_000, 6054)
+			.saturating_add(RocksDbWeight::get().reads(17_u64))
 			.saturating_add(RocksDbWeight::get().writes(11_u64))
 	}
 	/// Storage: `Providers::Buckets` (r:1 w:0)
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(192), added: 2667, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingBucketsToMove` (r:1 w:1)
 	/// Proof: `FileSystem::PendingBucketsToMove` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:1 w:0)
@@ -303,17 +333,21 @@ impl WeightInfo for () {
 	/// Proof: `FileSystem::PendingMoveBucketRequests` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	fn request_move_bucket() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `574`
+		//  Measured:  `665`
 		//  Estimated: `9887`
-		// Minimum execution time: 30_000_000 picoseconds.
-		Weight::from_parts(31_000_000, 9887)
-			.saturating_add(RocksDbWeight::get().reads(6_u64))
+		// Minimum execution time: 38_000_000 picoseconds.
+		Weight::from_parts(39_000_000, 9887)
+			.saturating_add(RocksDbWeight::get().reads(10_u64))
 			.saturating_add(RocksDbWeight::get().writes(4_u64))
 	}
 	/// Storage: `Providers::AccountIdToBackupStorageProviderId` (r:1 w:0)
 	/// Proof: `Providers::AccountIdToBackupStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::AccountIdToMainStorageProviderId` (r:1 w:0)
 	/// Proof: `Providers::AccountIdToMainStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:4 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:4 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:2 w:2)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingMoveBucketRequests` (r:1 w:1)
@@ -354,11 +388,11 @@ impl WeightInfo for () {
 	/// Proof: `FileSystem::PendingBucketsToMove` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	fn msp_respond_move_bucket_request() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `4200`
+		//  Measured:  `4223`
 		//  Estimated: `13545`
-		// Minimum execution time: 226_000_000 picoseconds.
-		Weight::from_parts(240_000_000, 13545)
-			.saturating_add(RocksDbWeight::get().reads(29_u64))
+		// Minimum execution time: 252_000_000 picoseconds.
+		Weight::from_parts(255_000_000, 13545)
+			.saturating_add(RocksDbWeight::get().reads(37_u64))
 			.saturating_add(RocksDbWeight::get().writes(12_u64))
 	}
 	/// Storage: `Providers::Buckets` (r:1 w:1)
@@ -379,8 +413,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `680`
 		//  Estimated: `6108`
-		// Minimum execution time: 42_000_000 picoseconds.
-		Weight::from_parts(47_000_000, 6108)
+		// Minimum execution time: 45_000_000 picoseconds.
+		Weight::from_parts(46_000_000, 6108)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(7_u64))
 	}
@@ -394,8 +428,14 @@ impl WeightInfo for () {
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(175), added: 2650, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::ReplicationTarget` (r:1 w:0)
-	/// Proof: `FileSystem::ReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:1 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MaxReplicationTarget` (r:1 w:0)
+	/// Proof: `FileSystem::MaxReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
@@ -408,15 +448,19 @@ impl WeightInfo for () {
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	fn issue_storage_request() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `865`
+		//  Measured:  `953`
 		//  Estimated: `6687`
-		// Minimum execution time: 71_000_000 picoseconds.
-		Weight::from_parts(73_000_000, 6687)
-			.saturating_add(RocksDbWeight::get().reads(10_u64))
+		// Minimum execution time: 82_000_000 picoseconds.
+		Weight::from_parts(85_000_000, 6687)
+			.saturating_add(RocksDbWeight::get().reads(15_u64))
 			.saturating_add(RocksDbWeight::get().writes(6_u64))
 	}
 	/// Storage: `Providers::AccountIdToBackupStorageProviderId` (r:1 w:0)
 	/// Proof: `Providers::AccountIdToBackupStorageProviderId` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
@@ -425,19 +469,19 @@ impl WeightInfo for () {
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::GlobalBspsReputationWeight` (r:1 w:0)
 	/// Proof: `Providers::GlobalBspsReputationWeight` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::ReplicationTarget` (r:1 w:0)
-	/// Proof: `FileSystem::ReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MaxReplicationTarget` (r:1 w:0)
+	/// Proof: `FileSystem::MaxReplicationTarget` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::TickRangeToMaximumThreshold` (r:1 w:0)
 	/// Proof: `FileSystem::TickRangeToMaximumThreshold` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	fn bsp_volunteer() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `2111`
-		//  Estimated: `4692`
-		// Minimum execution time: 47_000_000 picoseconds.
-		Weight::from_parts(50_000_000, 4692)
-			.saturating_add(RocksDbWeight::get().reads(8_u64))
+		//  Measured:  `2195`
+		//  Estimated: `6054`
+		// Minimum execution time: 57_000_000 picoseconds.
+		Weight::from_parts(61_000_000, 6054)
+			.saturating_add(RocksDbWeight::get().reads(12_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
 }
