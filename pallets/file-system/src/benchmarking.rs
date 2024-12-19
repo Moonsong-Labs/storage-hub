@@ -277,6 +277,7 @@ mod benchmarks {
             size,
             Some(msp_id),
             peer_ids,
+            None,
         );
 
         Ok(())

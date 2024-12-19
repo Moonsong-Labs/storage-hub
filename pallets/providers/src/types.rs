@@ -2,27 +2,96 @@
 
 use super::*;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::pallet_prelude::*;
-use frame_support::traits::fungible::Inspect;
+use frame_support::{pallet_prelude::*, traits::fungible::Inspect};
 use frame_system::pallet_prelude::BlockNumberFor;
-use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 use scale_info::TypeInfo;
-use sp_runtime::BoundedVec;
+use shp_traits::{PaymentStreamsInterface, StorageHubTickGetter};
+use sp_runtime::{traits::CheckedAdd, ArithmeticError, BoundedVec};
+use sp_std::cmp::max;
 
 pub type Multiaddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>;
 
 pub type ValuePropId<T> = HashId<T>;
 
-/// Top up metadata for a provider tracked in storage.
+/// Awaited top up metadata for a provider.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
-pub struct TopUpMetadata {
-    /// The last block at which the provider will either forcibly top up their deposit or be marked as
-    /// insolvent.
+#[scale_info(skip_type_params(T))]
+pub struct TopUpMetadata<T: Config> {
+    /// The payment streams tick number at which the provider started awaiting a top up.
     ///
-    /// This is the relay chain block number which the parachain is anchored to.
-    pub end_block_grace_period: RelayChainBlockNumber,
+    /// This is used for payment streams to determine when the provider should not be able to charge the user anymore starting
+    /// from this tick number.
+    pub started_at: PaymentStreamsTickNumber<T>,
+    /// The Storage Hub tick number at which the provider will be marked as insolvent.
+    ///
+    /// It is the tick number at which the provider will be marked as insolvent after processing it from the [`ProviderTopUpExpirations`](crate::ProviderTopUpExpirations) storage.
+    pub end_block_grace_period: StorageHubTickNumber<T>,
 }
 
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum ExpirationItem<T: Config> {
+    ProviderTopUp(StorageProviderId<T>),
+}
+
+impl<T: Config> ExpirationItem<T> {
+    pub(crate) fn get_ttl(&self) -> StorageHubTickNumber<T> {
+        match self {
+            ExpirationItem::ProviderTopUp(_) => T::ProviderTopUpTtl::get(),
+        }
+    }
+
+    pub(crate) fn get_next_expiration_block(
+        &self,
+    ) -> Result<StorageHubTickNumber<T>, DispatchError> {
+        // The expiration block is the maximum between the next available block and the current block number plus the TTL.
+        let current_global_tick_with_ttl = ShTickGetter::<T>::get_current_tick()
+            .checked_add(&self.get_ttl())
+            .ok_or(ArithmeticError::Overflow)?;
+
+        let next_available_block: StorageHubTickNumber<T> = match self {
+            ExpirationItem::ProviderTopUp(_) => {
+                NextAvailableProviderTopUpExpirationShTick::<T>::get()
+            }
+        };
+
+        Ok(max(next_available_block, current_global_tick_with_ttl))
+    }
+
+    pub(crate) fn try_append(
+        &self,
+        expiration_block: StorageHubTickNumber<T>,
+    ) -> Result<StorageHubTickNumber<T>, DispatchError> {
+        let mut next_expiration_block = expiration_block;
+        while let Err(_) = match self {
+            ExpirationItem::ProviderTopUp(provider_id) => {
+                <ProviderTopUpExpirations<T>>::try_append(
+                    next_expiration_block,
+                    provider_id.clone(),
+                )
+            }
+        } {
+            next_expiration_block = next_expiration_block
+                .checked_add(&1u8.into())
+                .ok_or(Error::<T>::MaxBlockNumberReached)?;
+        }
+
+        Ok(next_expiration_block)
+    }
+
+    pub(crate) fn set_next_expiration_block(
+        &self,
+        next_expiration_block: StorageHubTickNumber<T>,
+    ) -> DispatchResult {
+        match self {
+            ExpirationItem::ProviderTopUp(_) => {
+                NextAvailableProviderTopUpExpirationShTick::<T>::set(next_expiration_block);
+
+                Ok(())
+            }
+        }
+    }
+}
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValuePropositionWithId<T: Config> {
@@ -167,6 +236,16 @@ pub enum StorageProviderId<T: Config> {
     MainStorageProvider(MainStorageProviderId<T>),
 }
 
+impl<T: Config> StorageProviderId<T> {
+    /// Returns the inner value of the enum variant.
+    pub fn inner(&self) -> &ProviderIdFor<T> {
+        match self {
+            StorageProviderId::BackupStorageProvider(id) => id,
+            StorageProviderId::MainStorageProvider(id) => id,
+        }
+    }
+}
+
 /// The delta applied to a fixed rate payment stream via [`Pallet::compute_new_rate_delta`].
 pub enum RateDeltaParam<T: Config> {
     /// Variant should be used when a new bucket is associated to an MSP.
@@ -229,9 +308,20 @@ pub type ReputationWeightType<T> = <T as crate::Config>::ReputationWeightType;
 /// Type alias for the `StartingReputationWeight` type used in the Storage Providers pallet.
 pub type StartingReputationWeight<T> = <T as crate::Config>::StartingReputationWeight;
 
-/// Type alias for the `RelayBlockGetter` type used in the Storage Providers pallet.
-pub type RelayBlockGetter<T> = <T as crate::Config>::RelayBlockGetter;
+/// Type alias for the `StorageHubTickGetter` type used in the Storage Providers pallet.
+pub type ShTickGetter<T> = <T as crate::Config>::StorageHubTickGetter;
+
+/// Type alias for the `BlockNumber` type used by `StorageHubTickGetter`.
+pub type StorageHubTickNumber<T> =
+    <<T as crate::Config>::StorageHubTickGetter as shp_traits::StorageHubTickGetter>::TickNumber;
 
 /// Type alias for the `StorageDataUnitAndBalanceConvert` type used in the Storage Providers pallet.
 pub type StorageDataUnitAndBalanceConverter<T> =
     <T as crate::Config>::StorageDataUnitAndBalanceConvert;
+
+/// Type alias for the `ProviderTopUpTtl` type used in the Storage Providers pallet.
+pub type ProviderTopUpTtl<T> = <T as crate::Config>::ProviderTopUpTtl;
+
+/// Type alias for the `TickNumber` type used in the Storage Providers pallet.
+pub type PaymentStreamsTickNumber<T> =
+    <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::TickNumber;

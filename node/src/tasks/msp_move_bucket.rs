@@ -172,7 +172,7 @@ where
                 .file_storage
                 .write()
                 .await
-                .insert_file(file_key.clone(), file_metadata.clone())
+                .insert_file(file_key, file_metadata.clone())
                 .expect("Failed to insert file into file storage");
 
             let chunks_count = file_metadata.chunks_count();
