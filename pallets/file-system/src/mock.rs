@@ -4,7 +4,7 @@ use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
-    traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
+    traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::{constants::RocksDbWeight, Weight, WeightMeter},
     BoundedBTreeSet,
 };
@@ -13,6 +13,7 @@ use frame_system::{
 };
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
+use pallet_randomness::GetBabeData;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
@@ -155,6 +156,8 @@ mod test_runtime {
     pub type Nfts = pallet_nfts;
     #[runtime::pallet_index(8)]
     pub type CrRandomness = pallet_cr_randomness;
+    #[runtime::pallet_index(9)]
+    pub type RandomnessPallet = pallet_randomness;
 }
 
 parameter_types! {
@@ -418,6 +421,28 @@ impl pallet_storage_providers::Config for Test {
     type BenchmarkHelpers = ();
 }
 
+pub struct BabeDataGetter;
+impl GetBabeData<u64, H256> for BabeDataGetter {
+    fn get_epoch_index() -> u64 {
+        frame_system::Pallet::<Test>::block_number()
+    }
+    fn get_epoch_randomness() -> H256 {
+        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
+    }
+    fn get_parent_randomness() -> H256 {
+        H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
+        ))
+    }
+}
+
+impl pallet_randomness::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type BabeDataGetter = BabeDataGetter;
+    type RelayBlockGetter = MockRelaychainDataProvider;
+    type WeightInfo = ();
+}
+
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
 pub struct MockSubmittingProviders;
 impl ProofSubmittersInterface for MockSubmittingProviders {
@@ -636,37 +661,6 @@ impl ReadUserSolvencyInterface for MockUserSolvency {
     }
 }
 
-// Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> sp_io::TestExternalities {
-    let mut t = frame_system::GenesisConfig::<Test>::default()
-        .build_storage()
-        .unwrap();
-
-    crate::GenesisConfig::<Test> {
-        max_replication_target: 10,
-        tick_range_to_maximum_threshold: 1,
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    pallet_balances::GenesisConfig::<Test> {
-        balances: vec![
-            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
-            (TreasuryAccount::get(), ExistentialDeposit::get()),
-        ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| roll_one_block(false));
-    ext
-}
-
 // Converter from the Balance type to the BlockNumber type for math.
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
 pub struct SaturatingBalanceToBlockNumber;
@@ -734,4 +728,35 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
 
         H256::from_slice(&bytes)
     }
+}
+
+// Build genesis storage according to the mock runtime.
+pub fn new_test_ext() -> sp_io::TestExternalities {
+    let mut t = frame_system::GenesisConfig::<Test>::default()
+        .build_storage()
+        .unwrap();
+
+    crate::GenesisConfig::<Test> {
+        max_replication_target: 10,
+        tick_range_to_maximum_threshold: 1,
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    pallet_balances::GenesisConfig::<Test> {
+        balances: vec![
+            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
+            (TreasuryAccount::get(), ExistentialDeposit::get()),
+        ],
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    let mut ext = sp_io::TestExternalities::new(t);
+    ext.execute_with(|| roll_one_block(false));
+    ext
 }

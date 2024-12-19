@@ -7818,6 +7818,7 @@ dependencies = [
  "pallet-nfts",
  "pallet-payment-streams",
  "pallet-proofs-dealer",
+ "pallet-randomness",
  "pallet-storage-providers",
  "parity-scale-codec",
  "scale-info",
