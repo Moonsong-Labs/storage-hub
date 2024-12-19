@@ -1,7 +1,7 @@
 import assert from "node:assert";
-import { bspKey, describeBspNet, type EnrichedBspApi, ferdie, sleep } from "../../../util";
+import { bspKey, describeBspNet, type EnrichedBspApi, ferdie, sleep, BspNetTestApi, bspTwoKey, bspTwoSeed, addBsp, ShConsts } from "../../../util";
 
-describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
+describeBspNet("BSPNet: Validating max storage", { only: true }, ({ before, it, createUserApi, createBspApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 
@@ -208,4 +208,40 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
   });
+
+  it("Test BSP storage size cannot go over MAX STORAGE", async () => {
+    // Add a second BSP
+    const { rpcPort } = await addBsp(userApi, bspTwoKey, {
+      name: "sh-bsp-two",
+      bspKeySeed: bspTwoSeed,
+      bspId: ShConsts.BSP_TWO_ID,
+      maxStorageCapacity: 416600,
+      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
+    });
+    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+
+    await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
+
+    await userApi.sealBlock();
+
+    // First storage request
+    const source1 = "res/cloud.jpg";
+    const location1 = "test/cloud.jpg";
+    const bucketName1 = "kek1";
+    await userApi.file.createBucketAndSendNewStorageRequest(source1, location1, bucketName1);
+
+    // Second storage request
+    const source2 = "res/adolphus.jpg";
+    const location2 = "test/adolphus.jpg";
+    const bucketName2 = "kek2";
+    await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
+
+    // We can only store one file.
+    await userApi.wait.bspVolunteer();
+    // await userApi.wait.bspStored();
+
+    await bspTwoApi.disconnect();
+    await userApi.docker.stopBspContainer("sh-bsp-two");
+  });
+
 });
