@@ -636,37 +636,6 @@ impl ReadUserSolvencyInterface for MockUserSolvency {
     }
 }
 
-// Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> sp_io::TestExternalities {
-    let mut t = frame_system::GenesisConfig::<Test>::default()
-        .build_storage()
-        .unwrap();
-
-    crate::GenesisConfig::<Test> {
-        max_replication_target: 10,
-        tick_range_to_maximum_threshold: 1,
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    pallet_balances::GenesisConfig::<Test> {
-        balances: vec![
-            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
-            (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
-            (TreasuryAccount::get(), ExistentialDeposit::get()),
-        ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| roll_one_block(false));
-    ext
-}
-
 // Converter from the Balance type to the BlockNumber type for math.
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
 pub struct SaturatingBalanceToBlockNumber;
@@ -734,4 +703,35 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
 
         H256::from_slice(&bytes)
     }
+}
+
+// Build genesis storage according to the mock runtime.
+pub fn new_test_ext() -> sp_io::TestExternalities {
+    let mut t = frame_system::GenesisConfig::<Test>::default()
+        .build_storage()
+        .unwrap();
+
+    crate::GenesisConfig::<Test> {
+        max_replication_target: 10,
+        tick_range_to_maximum_threshold: 1,
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    pallet_balances::GenesisConfig::<Test> {
+        balances: vec![
+            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
+            (TreasuryAccount::get(), ExistentialDeposit::get()),
+        ],
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    let mut ext = sp_io::TestExternalities::new(t);
+    ext.execute_with(|| roll_one_block(false));
+    ext
 }
