@@ -101,6 +101,7 @@ import type {
   CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
+  LoadFileInStorageResult,
   SaveFileToDisk
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
@@ -1101,7 +1102,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           location: Text | string,
           owner: AccountId32 | string | Uint8Array,
           bucket_id: H256 | string | Uint8Array
-        ) => Observable<FileMetadata>
+        ) => Observable<LoadFileInStorageResult>
       >;
       /**
        * Remove keys of BCSV type for the Blockchain Service.
