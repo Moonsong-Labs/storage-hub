@@ -4,7 +4,7 @@
 
 ### pnpm
 
-[pnpm](https://pnpm.io/) is used in this project as the Javascript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
+[pnpm](https://pnpm.io/) is used in this project as the JavaScript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
 
 The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
 
@@ -24,7 +24,7 @@ cargo build --release
 ##### MacOS
 
 > [!IMPORTANT]
-> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. Instructions to install can be found [here](https://ziglang.org/learn/getting-started/).
+> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. Instructions for installation can be found [here](https://ziglang.org/learn/getting-started/).
 
 ```sh
 pnpm i
@@ -49,7 +49,7 @@ pnpm test:bspnet
 
 ### Dev Node Test
 
-The `storage-hub` node is run in a docker container in dev mode, so that it can be isolated and parallelized across multiple threads & runners. The purpose of this suite is verify functionality of both the RPC and runtime.
+The `storage-hub` node is run in a Docker container in dev mode, so that it can be isolated and parallelized across multiple threads & runners. The purpose of this suite is verify the functionality of both the RPC and the runtime.
 
 > [!IMPORTANT]
 > Provider functionality is not covered here, only how the system chain behaves.
@@ -61,20 +61,20 @@ pnpm test:node
 ### End-To-End Tests
 
 > [!NOTE]
-> Please ensure the rust project is built first e.g. `cargo build --release`.
+> Please ensure the Rust project is built first, e.g., `cargo build --release`.
 > This is required as currently we only support native binaries.
 
-In `/test` run: `pnpm install` to install zombienet
+In `/test` run: `pnpm install` to install ZombieNet
 
 #### 1. Run Network
 
 ```shell
-# in the /test directory
+# In the /test directory
 pnpm i
 pnpm zombie:run:full:native
 ```
 
-Wait for zombie network to start, and then:
+Wait for ZombieNet network to start, and then:
 
 #### 2. Run Setup & Tests
 
@@ -109,7 +109,7 @@ pnpm docker:start:bspnet
 This will start a BSPNet network with a BSP and a User node. As part of the setup it will force onboard a MSP and BSP, and then upload a file from user node.
 
 > [!NOTE]  
-> The BSP id is chosen to be the fingerprint of a file that is uploaded by the user node. This is to "game the system" to ensure that the BSP is guaranteed to be selected to store the file.
+> The BSP id is chosen to be the fingerprint of a file that is uploaded by the user node. This is done to "game the system" to ensure that the BSP is guaranteed to be selected to store the file.
 
 ### Spawning NoisyNet
 
@@ -118,11 +118,11 @@ This will start a BSPNet network with a BSP and a User node. As part of the setu
 ### Spawning ZombieNet Native
 
 > [!TIP]
-> Polkadot binaries are required to run a zombienet network.
+> Polkadot binaries are required to run a ZombieNet network.
 > For Linux you can run the script: `pnpm tsx scripts/downloadPolkadot.ts <version>`
 > For macOS you will have to [compile from source](https://github.com/paritytech/polkadot-sdk/tree/master/polkadot#build-from-source).
 
-To launch a non-ephemeral ZombieNetwork by executing the following in: `/test` directory:
+To launch a non-ephemeral ZombieNet network by executing the following in: `/test` directory:
 
 ```sh
 pnpm install
@@ -149,7 +149,7 @@ pnpm typegen
 ```
 
 > [!TIP]  
-> Like with other commands, this assumes you have built a node binary and docker image before executing this activity.
+> Like with other commands, this assumes you have built a node binary and Docker image before executing this activity.
 
 ## Misc
 

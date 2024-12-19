@@ -6,7 +6,7 @@
 
 As a reminder, files stored by providers, be it BSPs or MSPs, can only be removed from a provider's _forest_ once they provide a proof of inclusion. The runtime is responsible for verifying the proof and removing the leaf (file) from the _forest_.
 
-User's who wish to delete a file will initially call the `delete_file` extrinsic. This extrinsic optionally accepts a proof of inclusion of the file in a bucket's _forest_. MSPs will expose an RPC endpoint to allow users to request a proof of inclusion of a file in their _forest_.
+Users who wish to delete a file will initially call the `delete_file` extrinsic. This extrinsic optionally accepts a proof of inclusion of the file in a bucket's _forest_. MSPs will expose an RPC endpoint to allow users to request a proof of inclusion of a file in their _forest_.
 
 If the proof is provided, the runtime will verify the proof and queue a priority challenge in the proofs-dealer pallet paired with `TrieRemoveMutation`, forcing all providers to provide a proof of (non-)inclusion of the challenged file. The runtime will automatically remove the file from the _forest_ for all providers who submitted a proof of inclusion.
 
@@ -35,7 +35,7 @@ Formulas:
 
 #### Threshold Global Starting Point
 
-The goal here is to have half of the replication target $R_{t}$ be probabilistically volunteered for by eligible BSPs after the first block from initiating the storage request., while taking into account the cumulative weight $W_{g}$ of the entire set of BSPs which reduces the starting point.
+The goal here is to have half of the replication target $R_{t}$ be probabilistically volunteered for by eligible BSPs after the first block from initiating the storage request, while taking into account the cumulative weight $W_{g}$ of the entire set of BSPs which reduces the starting point.
 
 $$T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
 
@@ -46,7 +46,7 @@ $M$: _Maximum threshold_ (all BSPs would be eligible to volunteer, for example `
 
 #### Threshold Weighted Starting Point
 
-Assuming the implemented reputation system sets all BSPs to have a starting weight of 1. Any increase in reputation (i.e. increase in weight) would give an advantage over other BSPs by multiplying their own weight to the global starting point $T_{gsp}$. This will increase their own starting point and increase the probably of succeeding the threshold check.
+Assuming the implemented reputation system sets all BSPs to have a starting weight of 1. Any increase in reputation (i.e. increase in weight) would give an advantage over other BSPs by multiplying their own weight to the global starting point $T_{gsp}$. This will increase their own starting point and increase the probability of succeeding the threshold check.
 
 $$T_{wsp} = w \cdot T_{gsp}$$
 
@@ -84,4 +84,4 @@ $b$: _Blocks passed_ (number of blocks passed since initiated storage request)
 >
 > Actually, the threshold calculation is not done using _**blocks**_, but _**ticks**_. The reason for this is to prevent a potential spamming attack, where a malicious BSP would spam the network with tipped transactions, preventing honest BSPs from volunteering first, and thus letting blocks pass until they themselves can volunteer first.
 >
-> For mor information on ticks, check out the [Proofs Dealer Pallet](./../proofs-dealer/README.md).
+> For more information on ticks, check out the [Proofs Dealer Pallet](./../proofs-dealer/README.md).

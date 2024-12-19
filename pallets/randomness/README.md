@@ -8,13 +8,13 @@ This pallet provides access to randomness using as source the **BABE epoch rando
 
 - This randomness is totally **independent of the parachain**, preventing a malicious actor on the parachain to influence the randomness value.
 - This randomness is **constant during a full epoch range** (~250 blocks on Kusama, ~2300 blocks on Polkadot) making it **resilient enough against censorship**. If a collator prevents fulfillment at a given block, another collator can fulfill it at the next block with the same random value.
-- This randomness **requires** at last 1 epoch after the current epoch (**~1h30** on Kusama, **~6h** on Polkadot) to ensure the pseudo-random word cannot be predicted at the time of the request.
+- This randomness **requires** at least 1 epoch after the current epoch (**~1h30** on Kusama, **~6h** on Polkadot) to ensure the pseudo-random word cannot be predicted at the time of the request.
 
 ### Risks
 
 The **danger** in this process comes from the knowledge that the **last validator** (Validator Y in the schema) has when producing the last block of an Epoch. The process being deterministic and all the material to generate the pseudo random word being known, the validator can decide to **skip producing the block** in order to not include its VRF, which would result in a different pseudo-random word.
 
-Because epoch are time-based, if the block is skipped, there won't be any additional block produced for that epoch. So the last validator of the block knows both possible output:
+Because epochs are time-based, if the block is skipped, there won't be any additional block produced for that epoch. So the last validator of the block knows both possible output:
 
 1. When **producing the block** including its VRF => pseudo-random word **AAAA**
 2. When **skipping the block** and using already known previous VRFs => pseudo-random word **BBBB**
@@ -44,9 +44,9 @@ _In this schema, we can see that validator Y can decide the epoch 2 randomness b
 
 ### Multiple slot leaders
 
-Additionally, the Babe consensus can sometime allow multiple validator to produce a block at the same slot. If that is the last slot of an Epoch,the selected validators coordinate in order to decide which one is producing the block, offering the choice of even more pseudo-random words.
+Additionally, the Babe consensus can sometimes allow multiple validator to produce a block at the same slot. If that is the last slot of an Epoch,the selected validators coordinate in order to decide which one is producing the block, offering the choice of even more pseudo-random words.
 
 ### Asynchronous Backing
 
-This solution is **safe** even after the asynchronous backing is supported as the pseudo-random is not dependant on which relay block the parachain block is referencing.
+This solution is **safe** even after the asynchronous backing is supported as the pseudo-random is not dependent on which relay block the parachain block is referencing.
 A collator being able to choose the relay block on top of which it builds the parachain block will not influence the pseudo-random word.

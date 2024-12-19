@@ -3,19 +3,19 @@
 ## Overview
 
 The Storage Providers pallet is designed for Substrate-based blockchains, providing a robust framework for managing storage providers within a decentralized network. This pallet allows for the registration and management of Main Storage Providers (MSPs) and Backup Storage Providers (BSPs).
-It is designed to be flexible and extensible, allowing developers to integrate it with decentralized storage solutions in their blockchain networks with ease. It provides essential services for managing the roles and capabilities of storage providers within the ecosystem, ensuring transparency, security, and operational integrity.
+It is designed to be flexible and extensible, allowing developers to integrate it with decentralized storage solutions in their blockchain networks with ease. It provides essential services for managing the roles and capabilities of Storage Providers within the ecosystem, ensuring transparency, security, and operational integrity.
 
 ### Features
 
 - Provider Management: Enables the sign-up of MSPs and BSPs, allowing them to register and become part of the network's storage solution.
 - Capacity and Value Proposition Management: Providers can modify their storage capacities and update their value propositions to reflect their current offerings and capabilities.
 - Lifecycle Events: Tracks significant lifecycle events like sign-up requests, confirmations, and sign-offs through a series of emitted events.
-- Robust Access Controls: Ensures that only authorized operations are performed by authorized storage providers.
-- Error Handling: Provides detailed error messages to help developers understand and resolve issues during storage provider management operations.
+- Robust Access Controls: Ensures that only authorized operations are performed by authorized Storage Providers.
+- Error Handling: Provides detailed error messages to help developers understand and resolve issues during Storage Provider management operations.
 
 ### Target Audience
 
-This pallet is intended for blockchain developers interested in integrating decentralized storage solutions into their Substrate-based blockchain. It provides essential services for managing the roles and capabilities of storage providers within the ecosystem. It was developed with StorageHub's specific providers framework but can be used by any other network that fits the Main Storage Provider/Backup Storage Provider structure, with some modifications.
+This pallet is intended for blockchain developers interested in integrating decentralized storage solutions into their Substrate-based blockchain. It provides essential services for managing the roles and capabilities of Storage Providers within the ecosystem. It was developed with StorageHub's specific providers framework but can be used by any other network that fits the Main Storage Provider/Backup Storage Provider structure, with some modifications.
 
 ## Design
 
@@ -41,7 +41,7 @@ The remaining portion of the user's payment for storing a file, after the MSP's 
 
 The sign up process for Storage Providers is a two-step process to avoid malicious users from predicting the randomness used to generate the unique ID of the Storage Provider.
 
-1. The first step is the request to sign up, where the user provides the necessary information to become a Storage Provider, commiting to that information, and the necessary deposit is held.
+1. The first step is the request to sign up, where the user provides the necessary information to become a Storage Provider, committing to that information, and the necessary deposit is held.
 2. The second step is the confirmation of the sign-up, which must be done by the user (or a third-party) after enough time has passed to ensure that the randomness used to generate the unique ID was not predictable when the sign-up request (commitment) was made.
 
 This process exists because the unique ID of a Storage Provider is what determines if they can volunteer to store a new file of the system after a store request was made by a user, and if the randomness used to generate the unique ID was predictable, malicious users could generate multiple Storage Provider accounts with similar IDs and collude to store the same file, which would be detrimental to the system as it would allow file storage centralization, allowing censorship and data loss.
@@ -75,7 +75,7 @@ Notes:
 - This extrinsic could be called by the user that requested the registration itself or by a third party in behalf of the user.
 - Requests have an expiration because if that wasn't the case, malicious users could wait indefinitely for a random seed from the relay chain that suits their malicious purpose.
 - The deposit that the user has to pay to register as a Storage Provider is held when the user requests to register as a Storage Provider, not in this extrinsic.
-- If this extrinsic is successful, it will be free for the caller, to incentive state debloating of pending requests.
+- If this extrinsic is successful, it will be free for the caller, to incentivise state debloating of pending requests.
 
 ### cancel_sign_up
 
@@ -191,7 +191,7 @@ The Storage Providers pallet emits the following events:
 
 This event is emitted when a Main Storage Provider has requested to sign up successfully. It provides information about that Main Storage Provider's account ID, the list of valid multiaddresses that it wants to register, the total capacity that it wants to register, and its list of value propositions.
 
-The nature of this event is to allow the caller of the extrinsic to know that the request to sign up as a Main Storage Provider was successful and that the corresponding deposit was held.
+The purpose of this event is to notify the caller of the extrinsict that the request to sign up as a Main Storage Provider was successful and that the corresponding deposit was held.
 
 ```rust
 MspRequestSignUpSuccess {
@@ -378,13 +378,13 @@ Error thrown when trying to get a root from a Main Storage Provider without pass
 
 ### `SpRegisteredButDataNotFound`
 
-Error thrown when a user has a Storage Provider ID assigned to it but its metadata data does not exist in storage (storage inconsistency error, should never happen).
+Error thrown when a user has a Storage Provider ID assigned to it but its metadata does not exist in storage (storage inconsistency error, should never happen).
 
 ## Slashing Protocol
 
 Storage Providers who fail to submit a proof by their challenge deadline _will_ be slashed. In the case of the StorageHub protocol, this is predefined in the proofs-dealer pallet.
 
-Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. This pallet requires an external data source to fetch the number of failed proof submissions. In the case of the StorageHub protocol, the proofs-dealer pallet would keep track of this data and expose an interface for this pallet to access it. This avoids the possibility of a Storage Provider not being slashed for all their failed challenges. Slashing a Storage Provider takes into account the aforementioned total number of failed challenges since the Provider's last slash and multiply it by a configurable slash factor. This factor is a value that is associated to the punishment for a single lost file.
+Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. This pallet requires an external data source to fetch the number of failed proof submissions. In the case of the StorageHub protocol, the proofs-dealer pallet would keep track of this data and expose an interface for this pallet to access it. This avoids the possibility of a Storage Provider not being slashed for all their failed challenges. Slashing a Storage Provider takes into account the aforementioned total number of failed challenges since the Provider's last slash and multiplies it by a configurable slash factor. This factor is a value that is associated to the punishment for a single lost file.
 
 ### Manual and Automatic Slashing
 
@@ -399,7 +399,7 @@ Since the Storage Provider's stake determines their total storage capacity, it i
 The grace period is based on the total stake/capacity of the Storage Provider. In essence, the more stake a Storage Provider has, the longer the grace period.
 This is to avoid a high stake Storage Provider from being removed from the network prematurely.
 
-The runtime automatically processes any expired grace periods within the `on_poll` hook to ensure that the redundancy process is initiated as soon as possible. For every insolvent Storage Provider, an event is emitted to notify the network and also mark the Storage Provider as insolvent, rendering them unable to operate as a Storage Provider. Finally all the of the Storage Provider's stake is slashed and transfered to the treasury.
+The runtime automatically processes any expired grace periods within the `on_poll` hook to ensure that the redundancy process is initiated as soon as possible. For every insolvent Storage Provider, an event is emitted to notify the network and also mark the Storage Provider as insolvent, rendering them unable to operate as a Storage Provider. Finally all of the Storage Provider's stake is slashed and transferred to the treasury.
 
 ### Ensuring Data Redundancy
 
