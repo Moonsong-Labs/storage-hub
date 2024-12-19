@@ -13,7 +13,7 @@
 //!
 //! ## Interface
 //!
-//! ### Dispatchable MaxReplicationTargetFunctions
+//! ### Dispatchable Functions
 //!
 //! - `issue_storage_request`: Issue a new storage request to store a file.
 //! - `volunteer_bsp`: BSP volunteers to store a file for a given storage request.
