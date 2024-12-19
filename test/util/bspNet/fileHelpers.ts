@@ -32,8 +32,8 @@ export const sendNewStorageRequest = async (
     api.tx.fileSystem.issueStorageRequest(
       bucketId,
       location,
-      fileMetadata.fingerprint,
-      fileMetadata.file_size,
+      fileMetadata.file_metadata.fingerprint,
+      fileMetadata.file_metadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       null
