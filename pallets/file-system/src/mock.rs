@@ -4,7 +4,7 @@ use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
-    traits::{AsEnsureOriginWithArg, Everything, Randomness},
+    traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
     weights::{constants::RocksDbWeight, Weight, WeightMeter},
     BoundedBTreeSet,
 };
