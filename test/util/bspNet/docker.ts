@@ -274,7 +274,11 @@ export const waitForLog = async (options: {
         if (options.timeout) {
           timeoutHandle = setTimeout(() => {
             cleanup();
-            reject(new Error(`Timeout of ${options.timeout}ms exceeded while waiting for log.`));
+            reject(
+              new Error(
+                `Timeout of ${options.timeout}ms exceeded while waiting for log ${options.searchString}`
+              )
+            );
           }, options.timeout);
         }
       }

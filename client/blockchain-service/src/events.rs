@@ -3,7 +3,8 @@ use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
     Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
-    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieMutation, TrieRemoveMutation,
+    PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageData, TrieMutation,
+    TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -12,6 +13,8 @@ use tokio::sync::{oneshot, Mutex};
 
 use crate::types::{ConfirmStoringRequest, RespondStorageRequest};
 
+// TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
+
 /// New random challenge emitted by the StorageHub runtime.
 ///
 /// This event is emitted when there's a new random challenge seed that affects this
@@ -19,7 +22,7 @@ use crate::types::{ConfirmStoringRequest, RespondStorageRequest};
 /// period of this BSP.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct NewChallengeSeed {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
 }
@@ -35,7 +38,7 @@ impl EventBusMessage for NewChallengeSeed {}
 /// should be responded to last.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct MultipleNewChallengeSeeds {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub seeds: Vec<(BlockNumber, RandomnessOutput)>,
 }
 
@@ -70,7 +73,7 @@ impl EventBusMessage for NewStorageRequest {}
 #[derive(Debug, Clone)]
 pub struct FinalisedMspStoppedStoringBucket {
     /// MSP ID who stopped storing the bucket.
-    pub msp_id: ProviderId,
+    pub msp_id: ProofsDealerProviderId,
     /// Account ID owner of the bucket.
     pub owner: AccountId32,
     pub bucket_id: BucketId,
@@ -128,7 +131,7 @@ impl From<ProcessStopStoringForInsolventUserRequestData> for ForestWriteLockTask
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessSubmitProofRequestData {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
@@ -187,7 +190,7 @@ impl EventBusMessage for ProcessStopStoringForInsolventUserRequest {}
 /// This event is emitted when a provider is marked as slashable by the runtime.
 #[derive(Debug, Clone)]
 pub struct SlashableProvider {
-    pub provider: ProviderId,
+    pub provider: ProofsDealerProviderId,
     pub next_challenge_deadline: BlockNumber,
 }
 
@@ -199,7 +202,7 @@ impl EventBusMessage for SlashableProvider {}
 /// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
 #[derive(Debug, Clone)]
 pub struct FinalisedTrieRemoveMutationsApplied {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub mutations: Vec<(ForestRoot, TrieMutation)>,
     pub new_root: H256,
 }
@@ -208,7 +211,7 @@ impl EventBusMessage for FinalisedTrieRemoveMutationsApplied {}
 
 #[derive(Debug, Clone)]
 pub struct ProofAccepted {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub proofs: KeyProofs,
 }
 
@@ -216,7 +219,7 @@ impl EventBusMessage for ProofAccepted {}
 
 #[derive(Debug, Clone)]
 pub struct LastChargeableInfoUpdated {
-    pub provider_id: ProviderId,
+    pub provider_id: ProofsDealerProviderId,
     pub last_chargeable_tick: BlockNumber,
     pub last_chargeable_price_index: Balance,
 }
@@ -238,7 +241,7 @@ impl EventBusMessage for UserWithoutFunds {}
 /// This event is emitted when a provider has stopped storing a file for an insolvent user.
 #[derive(Debug, Clone)]
 pub struct SpStopStoringInsolventUser {
-    pub sp_id: ProviderId,
+    pub sp_id: ProofsDealerProviderId,
     pub file_key: FileKey,
     pub owner: AccountId32,
     pub location: FileLocation,
@@ -246,6 +249,39 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+#[derive(Debug, Clone)]
+pub struct MoveBucketRequested {
+    pub bucket_id: BucketId,
+    pub new_msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketRequested {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketRequestedForNewMsp {
+    pub bucket_id: BucketId,
+}
+impl EventBusMessage for MoveBucketRequestedForNewMsp {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketRejected {
+    pub bucket_id: BucketId,
+    pub msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketRejected {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketAccepted {
+    pub bucket_id: BucketId,
+    pub msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketAccepted {}
+
+#[derive(Debug, Clone)]
+pub struct MoveBucketExpired {
+    pub bucket_id: BucketId,
+    pub msp_id: ProviderId,
+}
+impl EventBusMessage for MoveBucketExpired {}
 /// BSP stopped storing a specific file.
 ///
 /// This event is emitted when a BSP confirm stop storing a file.
@@ -300,6 +336,11 @@ pub struct BlockchainServiceEventBusProvider {
     user_without_funds_event_bus: EventBus<UserWithoutFunds>,
     sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
     finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
+    move_bucket_requested_event_bus: EventBus<MoveBucketRequested>,
+    move_bucket_rejected_event_bus: EventBus<MoveBucketRejected>,
+    move_bucket_accepted_event_bus: EventBus<MoveBucketAccepted>,
+    move_bucket_expired_event_bus: EventBus<MoveBucketExpired>,
+    move_bucket_requested_for_new_msp_event_bus: EventBus<MoveBucketRequestedForNewMsp>,
     bsp_stop_storing_event_bus: EventBus<BspConfirmStoppedStoring>,
     finalised_bsp_stop_storing_event_bus: EventBus<FinalisedBspConfirmStoppedStoring>,
     notify_period_event_bus: EventBus<NotifyPeriod>,
@@ -323,6 +364,11 @@ impl BlockchainServiceEventBusProvider {
             user_without_funds_event_bus: EventBus::new(),
             sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
             finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
+            move_bucket_requested_event_bus: EventBus::new(),
+            move_bucket_rejected_event_bus: EventBus::new(),
+            move_bucket_accepted_event_bus: EventBus::new(),
+            move_bucket_expired_event_bus: EventBus::new(),
+            move_bucket_requested_for_new_msp_event_bus: EventBus::new(),
             bsp_stop_storing_event_bus: EventBus::new(),
             finalised_bsp_stop_storing_event_bus: EventBus::new(),
             notify_period_event_bus: EventBus::new(),
@@ -419,6 +465,36 @@ impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusP
 impl ProvidesEventBus<FinalisedMspStoppedStoringBucket> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<FinalisedMspStoppedStoringBucket> {
         &self.finalised_msp_stopped_storing_bucket_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketRequested> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRequested> {
+        &self.move_bucket_requested_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketRejected> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRejected> {
+        &self.move_bucket_rejected_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketAccepted> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketAccepted> {
+        &self.move_bucket_accepted_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketExpired> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketExpired> {
+        &self.move_bucket_expired_event_bus
+    }
+}
+
+impl ProvidesEventBus<MoveBucketRequestedForNewMsp> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRequestedForNewMsp> {
+        &self.move_bucket_requested_for_new_msp_event_bus
     }
 }
 

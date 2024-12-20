@@ -4,14 +4,14 @@ import type { H256 } from "@polkadot/types/interfaces";
 
 describeMspNet(
   "MSP deleting bucket when stop storing bucket is called",
-  ({ before, createMspApi, it, createUserApi }) => {
+  ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
     let bucketId: H256;
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMspApi();
+      const maybeMspApi = await createMsp1Api();
       assert(maybeMspApi, "MSP API not available");
       mspApi = maybeMspApi;
     });

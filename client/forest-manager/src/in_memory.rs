@@ -28,7 +28,7 @@ impl<T: TrieLayout> InMemoryForestStorage<T> {
 impl<T: TrieLayout> Clone for InMemoryForestStorage<T> {
     fn clone(&self) -> Self {
         Self {
-            root: self.root.clone(),
+            root: self.root,
             memdb: self.memdb.clone(),
         }
     }

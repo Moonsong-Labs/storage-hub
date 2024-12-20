@@ -109,6 +109,12 @@ export const ALL_TYPES: RegistryTypes = {
       InternalApiError: null
     }
   },
+  IsStorageRequestOpenToVolunteersError: {
+    _enum: {
+      StorageRequestNotFound: null,
+      InternalApiError: null
+    }
+  },
   QueryFileEarliestVolunteerBlockError: {
     _enum: {
       FailedToEncodeFingerprint: null,
