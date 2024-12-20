@@ -44,6 +44,11 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
   });
 
   it("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
+    // 1 block to maxthreshold (i.e. instant acceptance)
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+    );
+
     const capacityUsed = (
       await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
     )

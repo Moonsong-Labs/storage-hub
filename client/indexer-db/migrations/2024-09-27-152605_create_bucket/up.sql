@@ -3,7 +3,7 @@ CREATE TABLE bucket (
     id SERIAL PRIMARY KEY,
     msp_id INTEGER,
     account VARCHAR NOT NULL,
-    onchain_bucket_id VARCHAR NOT NULL,
+    onchain_bucket_id BYTEA NOT NULL,
     name BYTEA NOT NULL,
     collection_id VARCHAR,
     private BOOLEAN NOT NULL,

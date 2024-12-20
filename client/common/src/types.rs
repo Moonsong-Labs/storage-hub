@@ -46,9 +46,13 @@ pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
-pub type MainStorageProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
-pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type BackupStorageProviderId =
+    pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
+pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
+pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
+pub type MultiAddress = pallet_storage_providers::types::MultiAddress<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
@@ -62,6 +66,8 @@ pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
+pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
+
 /// Type alias for the events vector.
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events
@@ -74,6 +80,11 @@ pub type StorageHubEventsVec = Vec<
         >,
     >,
 >;
+
+pub enum EitherBucketOrBspId {
+    Bucket(BucketId),
+    Bsp(BackupStorageProviderId),
+}
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;

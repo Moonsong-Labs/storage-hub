@@ -13,7 +13,7 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
-    ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieMutation,
+    ProofsDealerInterface, ReadChallengeableProvidersInterface, StorageHubTickGetter, TrieMutation,
     TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
@@ -234,7 +234,8 @@ where
         // have included proofs for those checkpoint challenges.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         let mut checkpoint_challenges = None;
-        if last_tick_proven <= last_checkpoint_tick && last_checkpoint_tick < challenges_tick {
+
+        if last_tick_proven <= last_checkpoint_tick && last_checkpoint_tick <= challenges_tick {
             // Add challenges from the Checkpoint Challenge block.
             checkpoint_challenges =
                 Some(expect_or_err!(
@@ -938,6 +939,14 @@ where
     }
 }
 
+impl<T: pallet::Config> StorageHubTickGetter for Pallet<T> {
+    type TickNumber = <Pallet<T> as ProofsDealerInterface>::TickNumber;
+
+    fn get_current_tick() -> Self::TickNumber {
+        <Pallet<T> as ProofsDealerInterface>::get_current_tick()
+    }
+}
+
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type ProviderId = ProviderIdFor<T>;
     type ForestProof = ForestVerifierProofFor<T>;
@@ -1048,7 +1057,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     // Remove a provider from challenge cycle.
     fn stop_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
-        // Check that `who` is a registered Provider.
+        // Check that `provider_id` is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
             return Err(Error::<T>::NotProvider.into());
         }
@@ -1072,7 +1081,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             // Remove the provider from the deadlines storage
             TickToProvidersDeadlines::<T>::remove(old_next_challenge_deadline, *provider_id);
 
-            // Remove the provider from the submited proof storage.
+            // Remove the provider from the submitted proof storage.
             LastTickProviderSubmittedAProofFor::<T>::remove(*provider_id);
         }
 
@@ -1080,7 +1089,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     }
 
     fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
-        // Check that `who` is a registered Provider.
+        // Check that `provider_id` is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
             return Err(Error::<T>::NotProvider.into());
         }

@@ -4,13 +4,13 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 describeMspNet(
   "Single MSP accepting storage request",
   { networkConfig: "standard" },
-  ({ before, createMspApi, it, createUserApi }) => {
+  ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMspApi();
+      const maybeMspApi = await createMsp1Api();
       assert(maybeMspApi, "MSP API not available");
       mspApi = maybeMspApi;
     });
@@ -53,7 +53,8 @@ describeMspNet(
           userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
           userApi.shConsts.TEST_ARTEFACTS[source].size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         ),
         shUser
       );

@@ -74,6 +74,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**
+       * Default replication target
+       **/
+      defaultReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
@@ -439,6 +443,10 @@ declare module "@polkadot/api-base/types/consts" {
       maxBlocksForRandomness: u32 & AugmentedConst<ApiType>;
       maxCommitmentSize: u32 & AugmentedConst<ApiType>;
       /**
+       * Maximum number of expired items (per type) to clean up in a single block.
+       **/
+      maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
+      /**
        * The estimated maximum size of an unknown file.
        *
        * Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
@@ -461,6 +469,14 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       minBlocksBetweenCapacityChanges: u32 & AugmentedConst<ApiType>;
       /**
+       * Time-to-live for a provider to top up their deposit to cover a capacity deficit.
+       *
+       * This TTL is used to determine at what point to insert the expiration item in the
+       * [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at
+       * the time when the tick has been reached.
+       **/
+      providerTopUpTtl: u32 & AugmentedConst<ApiType>;
+      /**
        * The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
        **/
       slashAmountPerMaxFileSize: u128 & AugmentedConst<ApiType>;
@@ -476,12 +492,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Starting reputation weight for a newly registered BSP.
        **/
       startingReputationWeight: u32 & AugmentedConst<ApiType>;
-      /**
-       * Period of time for a provider to top up their deposit after being slashed.
-       *
-       * If the provider does not top up their deposit within this period, they will be marked as insolvent.
-       **/
-      topUpGracePeriod: u32 & AugmentedConst<ApiType>;
       /**
        * The Treasury AccountId.
        * The account to which:

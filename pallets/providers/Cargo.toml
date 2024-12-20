@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+log = { workspace = true }
 scale-info = { workspace = true }
 
 # Local
@@ -56,43 +57,43 @@ pallet-balances = { workspace = true, features = ["std"] }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"pallet-randomness/runtime-benchmarks",
-	"pallet-proofs-dealer/runtime-benchmarks",
-	"shp-traits/runtime-benchmarks",
-	"shp-treasury-funding/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "pallet-randomness/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
+    "shp-traits/runtime-benchmarks",
+    "shp-treasury-funding/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
 ]
 std = [
-	"codec/std",
-	"frame-benchmarking?/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-balances/std",
-	"pallet-storage-providers-runtime-api/std",
-	"pallet-proofs-dealer/std",
-	"pallet-payment-streams/std",
-	"pallet-randomness/std",
-	"scale-info/std",
-	"shp-constants/std",
-	"shp-traits/std",
-	"shp-treasury-funding/std",
-	"sp-arithmetic/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-runtime/std",
-	"sp-std/std",
-	"sp-trie/std",
+    "codec/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-balances/std",
+    "pallet-storage-providers-runtime-api/std",
+    "pallet-proofs-dealer/std",
+    "pallet-payment-streams/std",
+    "pallet-randomness/std",
+    "scale-info/std",
+    "shp-constants/std",
+    "shp-traits/std",
+    "shp-treasury-funding/std",
+    "sp-arithmetic/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "sp-trie/std",
 ]
 try-runtime = [
-	"frame-support/try-runtime",
-	"frame-system/try-runtime",
-	"pallet-proofs-dealer/try-runtime",
-	"pallet-payment-streams/try-runtime",
-	"shp-file-metadata/try-runtime",
-	"shp-traits/try-runtime",
-	"shp-treasury-funding/try-runtime",
-	"sp-runtime/try-runtime",
+    "frame-support/try-runtime",
+    "frame-system/try-runtime",
+    "pallet-proofs-dealer/try-runtime",
+    "pallet-payment-streams/try-runtime",
+    "shp-file-metadata/try-runtime",
+    "shp-traits/try-runtime",
+    "shp-treasury-funding/try-runtime",
+    "sp-runtime/try-runtime",
 ]

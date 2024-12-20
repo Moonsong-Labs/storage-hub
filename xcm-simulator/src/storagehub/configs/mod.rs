@@ -524,6 +524,7 @@ impl pallet_storage_providers::Config for Runtime {
     type WeightInfo = pallet_storage_providers::weights::SubstrateWeight<Runtime>;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type FileMetadataManager = shp_file_metadata::FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
@@ -542,7 +543,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type StorageHubTickGetter = ProofsDealer;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
     type SpMinDeposit = SpMinDeposit;
@@ -563,7 +564,8 @@ impl pallet_storage_providers::Config for Runtime {
     type BspSignUpLockPeriod = BspSignUpLockPeriod;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
+    type ProviderTopUpTtl = ConstU32<10>;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ProvidersBenchmarkHelpers;
 }
@@ -762,6 +764,9 @@ impl pallet_proofs_dealer::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
+    // TODO: Once the client logic to keep track of CR randomness deadlines and execute their submissions is implemented
+    // AND after the chain has been live for enough time to have enough providers to avoid the commit-reveal randomness being
+    // gameable, the randomness provider should be CrRandomness
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod =
         runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod;
@@ -848,9 +853,13 @@ parameter_types! {
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_file_system::weights::SubstrateWeight<Runtime>;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    // TODO: Replace the mocked CR randomness with the actual one when it's ready
+    // type CrRandomness = CrRandomness;
+    type CrRandomness = MockCrRandomness;
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
@@ -880,6 +889,7 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget = ConstU32<2>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -959,3 +969,73 @@ impl pallet_bucket_nfts::Config for Runtime {
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
+
+/****** Commit-Reveal Randomness pallet ******/
+/* pub type Seed = Hash;
+pub type SeedCommitment = Hash;
+
+impl pallet_cr_randomness::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type SeedCommitment = SeedCommitment;
+    type Seed = Seed;
+    type SeedVerifier = SeedVerifier;
+    type SeedGenerator = SeedGenerator;
+    type RandomSeedMixer = RandomSeedMixer;
+    type MaxSeedTolerance = MaxSeedTolerance;
+    type StakeToSeedPeriod = runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod;
+    type MinSeedPeriod = runtime_params::dynamic_params::runtime_config::MinSeedPeriod;
+}
+
+parameter_types! {
+    pub const MaxSeedTolerance: u32 = 10;
+}
+
+// TODO: We should implement seed generation and verification with signatures instead of hashes,
+// so that we can have a more secure and decentralized randomness generation.
+pub struct SeedVerifier;
+impl pallet_cr_randomness::SeedVerifier for SeedVerifier {
+    type Seed = Seed;
+    type SeedCommitment = SeedCommitment;
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
+        BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
+    }
+}
+
+pub struct SeedGenerator;
+impl pallet_cr_randomness::SeedGenerator for SeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Hashing::hash(&generator)
+    }
+}
+
+pub struct RandomSeedMixer;
+impl pallet_cr_randomness::RandomSeedMixer<Seed> for RandomSeedMixer {
+    fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed {
+        let mut seed = seed_1.as_fixed_bytes().to_vec();
+        seed.extend_from_slice(seed_2.as_fixed_bytes());
+        if let Some(context) = context {
+            seed.extend_from_slice(context.into().as_fixed_bytes());
+        }
+        Hashing::hash(&seed)
+    }
+} */
+
+// TODO: Replace this mock with the actual implementation above when it is ready
+// We need this mock since `pallet-file-system` requires something that implements the CommitRevealRandomnessInterface trait
+pub struct MockCrRandomness;
+impl shp_traits::CommitRevealRandomnessInterface for MockCrRandomness {
+    type ProviderId = Hash;
+
+    fn initialise_randomness_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+}
+/****** ****** ****** ******/

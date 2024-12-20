@@ -36,7 +36,7 @@ describeBspNet(
 
       // Example of how to assert on a log message
       await bspApi.assert.log({
-        searchString: "Received remote upload request for file FileKey(",
+        searchString: "💤 Idle",
         containerName: "docker-sh-bsp-1"
       });
 

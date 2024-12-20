@@ -2,19 +2,22 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, HashId, MainStorageProvider,
-        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, RelayBlockGetter,
-        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, TopUpMetadata, ValueProposition,
+        MainStorageProviderId, MaxMultiAddressAmount, MultiAddress, ProviderTopUpTtl, ShTickGetter,
+        SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
         ValuePropositionWithId,
     },
-    Error, Event, MainStorageProviders,
+    AwaitingTopUpFromProviders, Error, Event, InsolventProviders, MainStorageProviders,
+    ProviderTopUpExpirations,
 };
 
+use core::u32;
 use frame_support::traits::fungible::MutateHold;
 use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{
-        fungible::{InspectHold, Mutate},
+        fungible::{Inspect, InspectHold, Mutate},
+        tokens::{Fortitude, Precision},
         Get, OnFinalize, OnIdle, OnInitialize,
     },
 };
@@ -22,11 +25,11 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
-    ReadBucketsInterface, ReadProvidersInterface,
+    ReadBucketsInterface, ReadProvidersInterface, StorageHubTickGetter,
 };
 use sp_arithmetic::{MultiplyRational, Rounding};
-use sp_runtime::bounded_vec;
-use sp_runtime::traits::BlockNumberProvider;
+use sp_core::H256;
+use sp_runtime::{bounded_vec, traits::ConvertBack};
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -38,7 +41,6 @@ type DepositPerData = <Test as crate::Config>::DepositPerData;
 type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
 type DefaultMerkleRoot = <Test as crate::Config>::DefaultMerkleRoot;
 type BucketDeposit = <Test as crate::Config>::BucketDeposit;
-type TopUpGracePeriod = <Test as crate::Config>::TopUpGracePeriod;
 
 // Runtime constants:
 // This is the duration of an epoch in blocks, a constant from the runtime configuration that we mock here
@@ -3299,6 +3301,41 @@ mod change_capacity {
             }
 
             #[test]
+            fn msp_change_capacity_fails_if_provider_is_insolvent() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = accounts::ALICE.0;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> = 200;
+                    let (_old_deposit_amount, _alice_msp, _) =
+                        register_account_as_msp(alice, old_storage_amount, None, None);
+
+                    let alice_msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                    // Simulate insolvent provider
+                    InsolventProviders::<Test>::insert(
+                        StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                        (),
+                    );
+
+                    // Try to change the capacity of Alice before enough time has passed
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::OperationNotAllowedForInsolventProvider
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
             fn msp_change_capacity_fails_when_changing_to_zero() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
@@ -3507,6 +3544,53 @@ mod change_capacity {
                             new_storage_amount
                         ),
                         Error::<Test>::NotEnoughTimePassed
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_if_provider_is_insolvent() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = accounts::ALICE.0;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> = 200;
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                    // Simulate insolvent provider
+                    InsolventProviders::<Test>::insert(
+                        StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
+                        (),
+                    );
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Try to change the capacity of Alice before enough time has passed
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::OperationNotAllowedForInsolventProvider
                     );
 
                     // Make sure that the capacity of Alice has not changed
@@ -4458,50 +4542,6 @@ mod increase_bucket_size {
                 );
             });
         }
-
-        #[test]
-        fn bucket_must_have_msp_for_operation() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount, None, None);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &bucket_owner,
-                    bucket_name,
-                );
-
-                // Add a bucket for Alice
-                assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
-                    bucket_owner,
-                    bucket_id,
-                    false,
-                    None,
-                    Some(value_prop_id)
-                ));
-
-                // Remove the MSP from the bucket
-                assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
-                        &bucket_id
-                    )
-                );
-
-                // Try to increase the size of a bucket that does not have an MSP
-                assert_noop!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
-                        &bucket_id, 100
-                    ),
-                    Error::<Test>::BucketMustHaveMspForOperation
-                );
-            });
-        }
     }
 
     mod success {
@@ -4588,6 +4628,49 @@ mod increase_bucket_size {
                 }
             });
         }
+
+        #[test]
+        fn increase_bucket_size_without_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                // Remove the MSP from the bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
+                );
+
+                // Try to increase the size of a bucket that does not have an MSP
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id, 100
+                    )
+                );
+            });
+        }
     }
 }
 
@@ -4629,7 +4712,7 @@ mod decrease_bucket_size {
         use super::*;
 
         #[test]
-        fn increase_and_decrease_bucket_size_works() {
+        fn increase_bucket_size_works() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -4739,37 +4822,6 @@ mod decrease_bucket_size {
         }
 
         #[test]
-        fn decrease_bucket_size_deletes_payment_stream_if_user_is_insolvent() {
-            ExtBuilder::build().execute_with(|| {
-				let alice = accounts::ALICE.0;
-				let storage_amount: StorageDataUnit<Test> = 100;
-				let (_deposit_amount, _alice_msp, value_prop_id) = register_account_as_msp(alice, storage_amount, Some(10), Some(100));
-				let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-				let bucket_owner = accounts::BOB.0;
-				let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(&bucket_owner, bucket_name);
-
-				// Add a bucket for Alice
-				assert_ok!(StorageProviders::add_bucket(Some(msp_id), bucket_owner, bucket_id, false, None, Some(value_prop_id)));
-
-				// Check that a payment stream between Alice and Bob exists now
-				assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&msp_id, &bucket_owner));
-
-				// Make Bob insolvent
-				pallet_payment_streams::UsersWithoutFunds::<Test>::insert(&bucket_owner, System::block_number());
-
-				// Decrease the bucket size. This should also delete the payment stream
-				assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, 50));
-
-				// Check that the payment stream was deleted
-				assert!(!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(&msp_id, &bucket_owner));
-
-				// Decrease the bucket size again. This should not fail
-				assert_ok!(<crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, 50));
-			});
-        }
-
-        #[test]
         fn decrease_bucket_size_without_msp() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
@@ -4843,10 +4895,8 @@ mod storage_data_unit_and_balance_converters {
 
 mod slash_and_top_up {
     use super::*;
-    mod failure {
-        use frame_support::traits::tokens::{Fortitude, Precision};
-        use sp_core::H256;
 
+    mod failure {
         use super::*;
 
         #[test]
@@ -4935,16 +4985,54 @@ mod slash_and_top_up {
                 );
             });
         }
+
+        #[test]
+        fn top_up_fails_when_provider_is_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let alice_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Simulate insolvent provider
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                    (),
+                );
+
+                // Try to top up a provider that does not have enough balance to cover the held deposit
+                assert_noop!(
+                    StorageProviders::top_up_deposit(RuntimeOrigin::signed(alice)),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+
+                let bob: AccountId = accounts::BOB.0;
+                // Register Bob as a Backup Storage Provider
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let bob_bsp_id =
+                    crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
+
+                // Simulate insolvent provider
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::BackupStorageProvider(bob_bsp_id),
+                    (),
+                );
+
+                // Try to top up a provider that does not have enough balance to cover the held deposit
+                assert_noop!(
+                    StorageProviders::top_up_deposit(RuntimeOrigin::signed(bob)),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
     }
 
     mod success {
-        use core::u32;
-
-        use frame_support::traits::fungible::Inspect;
-        use sp_runtime::traits::ConvertBack;
-
-        use crate::{AwaitingTopUpFromProviders, GracePeriodToSlashedProviders};
-
         use super::*;
 
         struct TestSetup {
@@ -5083,9 +5171,9 @@ mod slash_and_top_up {
                 assert_eq!(last_slashed_event.0, self.provider_id);
                 assert_eq!(last_slashed_event.1, expected_slash_amount);
 
-                let grace_period: u32 = TopUpGracePeriod::get();
+                let grace_period = ProviderTopUpTtl::<Test>::get();
                 let end_block_grace_period =
-                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period;
 
                 // Verify post state based on the test setup
                 if self.automatic_top_up {
@@ -5131,12 +5219,10 @@ mod slash_and_top_up {
                     );
 
                     // Check that the storage has been cleared
-                    assert!(GracePeriodToSlashedProviders::<Test>::get(
-                        end_block_grace_period,
-                        self.provider_id
+                    assert!(AwaitingTopUpFromProviders::<Test>::get(
+                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
                     )
                     .is_none());
-                    assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
 
                     // Check that the provider's capacity is equal to used capacity
                     assert_eq!(
@@ -5144,12 +5230,15 @@ mod slash_and_top_up {
                         post_state_provider.capacity
                     );
                 } else if deposit_needed_for_capacity_used_fn() > 0 {
+                    let top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                    )
+                    .unwrap();
+
                     System::assert_has_event(
                         Event::<Test>::AwaitingTopUp {
                             provider_id: self.provider_id,
-                            top_up_metadata: TopUpMetadata {
-                                end_block_grace_period,
-                            },
+                            top_up_metadata: top_up_metadata.clone(),
                         }
                         .into(),
                     );
@@ -5166,12 +5255,23 @@ mod slash_and_top_up {
                     // Check that the provider's free balance hasn't been reduced since there was not enough to top up
                     assert_eq!(NativeBalance::free_balance(self.account), pre_state_balance);
 
-                    // Check that the AwaitingTopUpFromProviders storage has been updated
-                    let top_up_metadata =
-                        AwaitingTopUpFromProviders::<Test>::get(self.provider_id).unwrap();
+                    assert_eq!(
+                        top_up_metadata.started_at,
+                        <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::current_tick()
+                    );
                     assert_eq!(
                         top_up_metadata.end_block_grace_period,
                         end_block_grace_period
+                    );
+
+                    // Check that we have queued the provider top up expiration item
+                    assert!(
+                        ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                            .iter()
+                            .any(|provider_id| *provider_id
+                                == StorageProviderId::<Test>::MainStorageProvider(
+                                    self.provider_id
+                                ))
                     );
 
                     // Check that the provider's capacity was reduced by the converted slash amount (storage data units)
@@ -5193,9 +5293,9 @@ mod slash_and_top_up {
             }
 
             fn manual_top_up(&self) {
-                let grace_period: u32 = TopUpGracePeriod::get();
+                let grace_period = ProviderTopUpTtl::<Test>::get();
                 let end_block_grace_period =
-                    RelayBlockGetter::<Test>::current_block_number() + grace_period;
+                    ShTickGetter::<Test>::get_current_tick() + grace_period;
 
                 let pre_state_provider =
                     MainStorageProviders::<Test>::get(self.provider_id).unwrap();
@@ -5258,13 +5358,91 @@ mod slash_and_top_up {
                     pre_state_held_amount + amount
                 );
 
+                // Check that the provider top up expiration still exists
+                // This is cleared in the `on_idle` hook
+                assert!(
+                    ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                        .iter()
+                        .any(|provider_id| *provider_id
+                            == StorageProviderId::<Test>::MainStorageProvider(self.provider_id))
+                );
                 // Check that the storage has been cleared
-                assert!(GracePeriodToSlashedProviders::<Test>::get(
-                    end_block_grace_period,
-                    self.provider_id
+                assert!(AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
                 )
                 .is_none());
-                assert!(AwaitingTopUpFromProviders::<Test>::get(self.provider_id).is_none());
+            }
+
+            fn wait_for_top_up_expiration(&self) {
+                let pre_state_held_deposit = NativeBalance::balance_on_hold(
+                    &StorageProvidersHoldReason::get(),
+                    &self.account,
+                );
+
+                let pre_state_treasury_balance =
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+
+                let grace_period = ProviderTopUpTtl::<Test>::get();
+                let end_block_grace_period =
+                    ShTickGetter::<Test>::get_current_tick() + grace_period;
+
+                // Wait for the grace period to expire
+                run_to_block((end_block_grace_period + 1).into());
+
+                // Check that the provider top up expiration no longer exists
+                assert!(
+                    ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
+                        .iter()
+                        .all(|provider_id| *provider_id
+                            != StorageProviderId::<Test>::MainStorageProvider(self.provider_id))
+                );
+                // Storage should be cleared
+                assert!(AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
+                )
+                .is_none());
+
+                // Held deposit was slashed
+                if let Some(_) = InsolventProviders::<Test>::get(
+                    &StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                ) {
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(
+                            &StorageProvidersHoldReason::get(),
+                            &self.account
+                        ),
+                        0
+                    );
+
+                    // Check treasury was increased by remaining held deposit
+                    assert_eq!(
+                        NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
+                        pre_state_treasury_balance + pre_state_held_deposit
+                    );
+                } else {
+                    // Check that the held deposit was not slashed
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(
+                            &StorageProvidersHoldReason::get(),
+                            &self.account
+                        ),
+                        pre_state_held_deposit
+                    );
+
+                    // Check that the treasury balance has not changed
+                    assert_eq!(
+                        NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
+                        pre_state_treasury_balance
+                    );
+                }
+
+                // Challenge cycle in proofs dealer should have been stopped
+                assert!(
+                    pallet_proofs_dealer::LastTickProviderSubmittedAProofFor::<Test>::get(
+                        &self.provider_id
+                    )
+                    .is_none()
+                );
             }
         }
 
@@ -5332,6 +5510,48 @@ mod slash_and_top_up {
                 alice_test_setup.manual_top_up();
             });
         }
+
+        #[test]
+        fn top_up_expired_provider_marked_as_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.induce_capacity_deficit = true;
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.wait_for_top_up_expiration();
+
+                // Check that the provider is marked as insolvent
+                assert!(InsolventProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id)
+                )
+                .is_some());
+            });
+        }
+
+        #[test]
+        fn top_up_expired_provider_manual_top_up_not_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.induce_capacity_deficit = true;
+                alice_test_setup.slash_and_verify();
+
+                alice_test_setup.manual_top_up();
+
+                alice_test_setup.wait_for_top_up_expiration();
+
+                // Check that the provider was not marked as insolvent
+                assert!(InsolventProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id)
+                )
+                .is_none());
+            });
+        }
     }
 }
 
@@ -5391,6 +5611,68 @@ mod multiaddresses {
                         new_multiaddress
                     ),
                     Error::<Test>::MultiAddressAlreadyExists
+                );
+            });
+        }
+
+        #[test]
+        fn add_multiaddress_fails_if_provider_is_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                let alice_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Simulate insolvent provider
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                    (),
+                );
+
+                assert_noop!(
+                    StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(alice),
+                        new_multiaddress
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+
+                let bob: AccountId = accounts::BOB.0;
+                // Register Bob as a Backup Storage Provider
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let new_multiaddress: MultiAddress<Test> =
+                    "/ip4/127.0.0.1/udp/1234/new/multiaddress"
+                        .as_bytes()
+                        .to_vec()
+                        .try_into()
+                        .unwrap();
+
+                let bob_bsp_id =
+                    crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
+
+                // Simulate insolvent provider
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::BackupStorageProvider(bob_bsp_id),
+                    (),
+                );
+
+                assert_noop!(
+                    StorageProviders::add_multiaddress(
+                        RuntimeOrigin::signed(bob),
+                        new_multiaddress
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
         }
@@ -5682,6 +5964,35 @@ mod add_value_prop {
                 );
             });
         }
+
+        #[test]
+        fn add_value_prop_fails_with_insolvent_provider() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
+
+                let alice_msp_id = StorageProviders::get_provider_id(alice).unwrap();
+                // Simulate insolvent provider
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
+                    (),
+                );
+
+                assert_noop!(
+                    StorageProviders::add_value_prop(
+                        RuntimeOrigin::signed(alice),
+                        value_prop.price_per_giga_unit_of_data_per_block,
+                        value_prop.commitment.clone(),
+                        value_prop.bucket_data_limit
+                    ),
+                    Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
     }
 
     mod success {
@@ -5870,6 +6181,96 @@ mod make_value_prop_unavailable {
                     ),
                     Error::<Test>::ValuePropositionNotAvailable
                 );
+            });
+        }
+    }
+}
+
+mod delete_provider {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn deleting_provider_fails_if_not_insolvent() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                assert_noop!(
+                    StorageProviders::delete_provider(RuntimeOrigin::signed(alice), msp_id),
+                    Error::<Test>::DeleteProviderConditionsNotMet
+                );
+            });
+        }
+
+        #[test]
+        fn deleting_provider_fails_if_payment_stream_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice which creates a payment stream
+                assert_ok!(StorageProviders::add_bucket(
+                    Some(msp_id),
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    Some(value_prop_id)
+                ));
+
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
+                    (),
+                );
+
+                assert_noop!(
+                    StorageProviders::delete_provider(RuntimeOrigin::signed(alice), msp_id),
+                    Error::<Test>::DeleteProviderConditionsNotMet
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn deleting_provider_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                InsolventProviders::<Test>::insert(
+                    StorageProviderId::<Test>::MainStorageProvider(msp_id),
+                    (),
+                );
+
+                assert_ok!(StorageProviders::delete_provider(
+                    RuntimeOrigin::signed(alice),
+                    msp_id
+                ));
             });
         }
     }

@@ -32,6 +32,19 @@ impl<T> MaybeDebug for T {}
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
+/// Storage Hub global tick which should be relied upon for time-sensitive operations.
+pub trait StorageHubTickGetter {
+    type TickNumber: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + One;
+
+    fn get_current_tick() -> Self::TickNumber;
+}
+
 pub trait NumericalParam:
     Parameter
     + Member
@@ -612,6 +625,9 @@ pub trait ReadProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Check if the provider is insolvent.
+    fn is_provider_insolvent(who: Self::ProviderId) -> bool;
 }
 
 /// A trait to mutate the state of a generic Provider, such as updating their root.
@@ -916,8 +932,10 @@ pub trait PaymentStreamsInterface {
         + Ord
         + MaxEncodedLen
         + Copy;
-    /// The type which represents a block number.
-    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents ticks.
+    ///
+    /// Used to keep track of the system time.
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a fixed-rate payment stream.
     type FixedRatePaymentStream: Encode
         + Decode
@@ -1011,16 +1029,22 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::Units>;
 
     /// Check if a user has an active payment stream with a provider.
-    fn has_active_payment_stream(
+    fn has_active_payment_stream_with_user(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> bool;
+
+    /// Check if a provider has any active payment streams.
+    fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool;
 
     /// Add a priviledge provider to the PriviledgerProvider storage.
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 
     /// Remove a priviledge provider to the PriviledgerProvider storage.
     fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+
+    /// Get current tick.
+    fn current_tick() -> Self::TickNumber;
 }
 
 /// The interface of the Payment Streams pallet that allows for the reading of user's solvency.
@@ -1135,4 +1159,39 @@ pub trait TreasuryCutCalculator {
         used_amount: Self::ProvidedUnit,
         amount_to_charge: Self::Balance,
     ) -> Self::Balance;
+}
+
+/// The interface for the Commit-Reveal Randomness pallet.
+pub trait CommitRevealRandomnessInterface {
+    /// The type which represents a Provider's ID.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// Initialise a Provider's randomness commit-reveal cycle.
+    ///
+    /// Sets the Provider as a ProviderWithoutCommitment (that is, a Provider that has
+    /// not submitted a seed commitment previously) and the sets its deadline to submit
+    /// the initial seed commitment to the current tick + the Provider's period
+    /// (based on its stake) + the randomness tick tolerance.
+    fn initialise_randomness_cycle(who: &Self::ProviderId) -> DispatchResult;
+
+    /// Stop a Provider's randomness commit-reveal cycle.
+    ///
+    /// This cleans up the Provider's used storage and allows the Provider
+    /// to not be penalized for not submitting more randomness seeds.
+    /// This makes it so this function should only be called when a Provider
+    /// is being signed off from the network.
+    fn stop_randomness_cycle(who: &Self::ProviderId) -> DispatchResult;
 }

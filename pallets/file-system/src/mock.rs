@@ -42,6 +42,7 @@ type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
+const STAKE_TO_SEED_PERIOD: Balance = 1000 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -152,12 +153,13 @@ mod test_runtime {
     pub type BucketNfts = pallet_bucket_nfts;
     #[runtime::pallet_index(7)]
     pub type Nfts = pallet_nfts;
+    #[runtime::pallet_index(8)]
+    pub type CrRandomness = pallet_cr_randomness;
 }
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
-    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
     pub const ExistentialDeposit: u128 = 1;
 }
 
@@ -238,6 +240,59 @@ impl pallet_nfts::Config for Test {
     }
 }
 
+/****** Commit-Reveal Randomness pallet ******/
+impl pallet_cr_randomness::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+    type SeedCommitment = H256;
+    type Seed = H256;
+    type SeedVerifier = MockSeedVerifier;
+    type SeedGenerator = MockSeedGenerator;
+    type RandomSeedMixer = MockRandomSeedMixer;
+    type MaxSeedTolerance = MaxSeedTolerance;
+    type StakeToSeedPeriod = StakeToSeedPeriod;
+    type MinSeedPeriod = MinSeedPeriod;
+}
+
+parameter_types! {
+    pub const MaxSeedTolerance: u32 = 10;
+    pub const StakeToSeedPeriod: u128 = STAKE_TO_SEED_PERIOD;
+    pub const MinSeedPeriod: u64 = 4;
+}
+
+pub type Seed = H256;
+pub type SeedCommitment = H256;
+
+pub struct MockSeedVerifier;
+impl pallet_cr_randomness::SeedVerifier for MockSeedVerifier {
+    type Seed = Seed;
+    type SeedCommitment = SeedCommitment;
+    fn verify(seed: &Self::Seed, seed_commitment: &Self::SeedCommitment) -> bool {
+        BlakeTwo256::hash(seed.as_bytes()) == *seed_commitment
+    }
+}
+
+pub struct MockRandomSeedMixer;
+impl pallet_cr_randomness::RandomSeedMixer<Seed> for MockRandomSeedMixer {
+    fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed {
+        let mut seed = seed_1.as_fixed_bytes().to_vec();
+        seed.extend_from_slice(seed_2.as_fixed_bytes());
+        if let Some(context) = context {
+            seed.extend_from_slice(context.into().as_fixed_bytes());
+        }
+        Seed::from_slice(&blake2_256(&seed))
+    }
+}
+
+pub struct MockSeedGenerator;
+impl pallet_cr_randomness::SeedGenerator for MockSeedGenerator {
+    type Seed = Seed;
+    fn generate_seed(generator: &[u8]) -> Self::Seed {
+        Seed::from_slice(&blake2_256(generator))
+    }
+}
+/****** ****** ****** ******/
+
 // Payment streams pallet:
 parameter_types! {
     pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
@@ -307,11 +362,18 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
     }
 }
 
+parameter_types! {
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+    pub const SpMinDeposit: Balance = 10 * UNITS;
+    pub const ProviderTopUpTtl: u64 = 10;
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type FileMetadataManager = shp_file_metadata::FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
@@ -330,10 +392,10 @@ impl pallet_storage_providers::Config for Test {
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = ProofsDealer;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
+    type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -350,7 +412,8 @@ impl pallet_storage_providers::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
+    type ProviderTopUpTtl = ProviderTopUpTtl;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
 }
@@ -400,6 +463,19 @@ impl Get<Perbill> for MinNotFullBlocksRatio {
     }
 }
 
+parameter_types! {
+    pub const StakeToChallengePeriod: Balance = STAKE_TO_CHALLENGE_PERIOD;
+    pub const ChallengeTicksTolerance: BlockNumberFor<Test> = 10;
+    pub const CheckpointChallengePeriod: u64 = {
+        const STAKE_TO_CHALLENGE_PERIOD: u128 = StakeToChallengePeriod::get();
+        const SP_MIN_DEPOSIT: u128 = SpMinDeposit::get();
+        const CHALLENGE_TICKS_TOLERANCE: u128 = ChallengeTicksTolerance::get() as u128;
+        ((STAKE_TO_CHALLENGE_PERIOD / SP_MIN_DEPOSIT)
+            .saturating_add(CHALLENGE_TICKS_TOLERANCE)
+            .saturating_add(1)) as u64
+    };
+}
+
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
@@ -416,13 +492,13 @@ impl pallet_proofs_dealer::Config for Test {
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
-    type CheckpointChallengePeriod = ConstU64<20>;
+    type CheckpointChallengePeriod = CheckpointChallengePeriod;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
-    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
-    type ChallengeTicksTolerance = ConstU64<10>;
+    type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
@@ -509,9 +585,11 @@ parameter_types! {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type PaymentStreams = PaymentStreams;
+    type CrRandomness = CrRandomness;
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
@@ -541,6 +619,7 @@ impl crate::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget = ConstU32<2>;
 }
 
 // If we ever require a better mock that doesn't just return true if it is Eve, change this.
@@ -564,7 +643,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .unwrap();
 
     crate::GenesisConfig::<Test> {
-        replication_target: 2,
+        max_replication_target: 10,
         tick_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)

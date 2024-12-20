@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use clap::{Parser, ValueEnum};
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::command::{IndexerOptions, ProviderOptions};
+use crate::command::ProviderOptions;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -155,18 +155,6 @@ pub struct IndexerConfigurations {
     /// environment variable is not set, the node will abort.
     #[arg(long)]
     pub database_url: Option<String>,
-}
-
-impl IndexerConfigurations {
-    pub fn indexer_options(&self) -> Option<IndexerOptions> {
-        if self.indexer {
-            Some(IndexerOptions {
-                database_url: self.database_url.clone(),
-            })
-        } else {
-            None
-        }
-    }
 }
 
 /// Block authoring scheme to be used by the dev service.

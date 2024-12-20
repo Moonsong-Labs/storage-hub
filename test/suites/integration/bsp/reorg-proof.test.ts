@@ -4,11 +4,13 @@ import { ShConsts, describeBspNet, type EnrichedBspApi } from "../../../util";
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
   { initialised: true, networkConfig: "standard" },
-  ({ before, createUserApi, it }) => {
+  ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
+      bspApi = await createBspApi();
     });
 
     // This is skipped because it currently fails with timeout for ext inclusion
@@ -86,6 +88,13 @@ describeBspNet(
 
       // Reorg away from the last block by finalising another block from another fork.
       await userApi.block.reOrgWithFinality();
+
+      // Finalising the block in the BSP node as well, to trigger the reorg in the BSP node too.
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      // Wait for BSP node to have imported the finalised block built by the user node.
+      await bspApi.wait.blockImported(finalisedBlockHash.toString());
+      await bspApi.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Wait for the BSP to catch up to proofs in the new fork.
       await userApi.assert.extrinsicPresent({

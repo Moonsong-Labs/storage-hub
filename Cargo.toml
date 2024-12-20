@@ -15,12 +15,12 @@ lto = true
 
 [workspace]
 members = [
-    "runtime",
-    "pallets/*",
-    "node",
-    "client/*",
-    "primitives/*",
-    "xcm-simulator",
+	"runtime",
+	"pallets/*",
+	"node",
+	"client/*",
+	"primitives/*",
+	"xcm-simulator",
 ]
 resolver = "2"
 
@@ -35,7 +35,7 @@ bincode = "1.3.3"
 clap = { version = "4.5.3", features = ["derive"] }
 chrono = "0.4"
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [
-    "derive",
+	"derive",
 ], default-features = false }
 color-print = "0.3.4"
 diesel = { version = "2.2.4", features = ["postgres", "chrono", "numeric"] }
@@ -60,7 +60,7 @@ prost-build = "0.12.3"
 rand = "0.8.5"
 reference-trie = "0.29.1"
 scale-info = { version = "2.11.0", default-features = false, features = [
-    "derive",
+	"derive",
 ] }
 serde = { version = "1.0.210", default-features = false }
 serde_json = { version = "1.0.121", default-features = false }
@@ -143,7 +143,7 @@ pallet-uniques = { git = "https://github.com/paritytech/polkadot-sdk.git", branc
 
 # Polkadot
 polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", features = [
-    "rococo-native",
+	"rococo-native",
 ], default-features = false }
 polkadot-core-primitives = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
@@ -183,6 +183,7 @@ parachain-info = { package = "staging-parachain-info", git = "https://github.com
 
 # Local Pallets
 pallet-bucket-nfts = { path = "pallets/bucket-nfts", default-features = false }
+pallet-cr-randomness = { path = "pallets/provider-randomness", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-file-system-runtime-api = { path = "pallets/file-system/runtime-api", default-features = false }
 pallet-payment-streams = { path = "pallets/payment-streams", default-features = false }

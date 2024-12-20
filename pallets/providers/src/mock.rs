@@ -67,7 +67,6 @@ mod test_runtime {
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
-    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
     pub const BucketHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::BucketDeposit);
     pub const ExistentialDeposit: u128 = 1;
 }
@@ -121,6 +120,7 @@ impl Get<AccountId> for TreasuryAccount {
         1000
     }
 }
+
 // Randomness pallet:
 /// Mock implementation of the relay chain data provider, which should return the relay chain block
 /// that the previous parachain block was anchored to.
@@ -157,6 +157,19 @@ impl pallet_randomness::Config for Test {
     type WeightInfo = ();
 }
 
+parameter_types! {
+    pub const StakeToChallengePeriod: Balance = STAKE_TO_CHALLENGE_PERIOD;
+    pub const ChallengeTicksTolerance: BlockNumberFor<Test> = 10;
+    pub const CheckpointChallengePeriod: u64 = {
+        const STAKE_TO_CHALLENGE_PERIOD: u128 = StakeToChallengePeriod::get();
+        const SP_MIN_DEPOSIT: u128 = SpMinDeposit::get();
+        const CHALLENGE_TICKS_TOLERANCE: u128 = ChallengeTicksTolerance::get() as u128;
+        ((STAKE_TO_CHALLENGE_PERIOD / SP_MIN_DEPOSIT)
+            .saturating_add(CHALLENGE_TICKS_TOLERANCE)
+            .saturating_add(1)) as u64
+    };
+}
+
 // Proofs dealer pallet:
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -174,13 +187,13 @@ impl pallet_proofs_dealer::Config for Test {
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
-    type CheckpointChallengePeriod = ConstU64<20>;
+    type CheckpointChallengePeriod = CheckpointChallengePeriod;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
-    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
-    type ChallengeTicksTolerance = ConstU64<10>;
+    type ChallengeTicksTolerance = ChallengeTicksTolerance;
     type BlockFullnessPeriod = ConstU64<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
@@ -308,6 +321,21 @@ impl ConvertBack<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverte
     }
 }
 
+parameter_types! {
+    pub const SpMinDeposit: Balance = 10 * UNITS;
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+    pub const ProviderTopUpTtl: u64 = 5;
+}
+
+pub struct MockStorageHubTickGetter;
+impl shp_traits::StorageHubTickGetter for MockStorageHubTickGetter {
+    type TickNumber = BlockNumberFor<Test>;
+
+    fn get_current_tick() -> Self::TickNumber {
+        System::block_number()
+    }
+}
+
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -327,11 +355,12 @@ impl crate::Config for Test {
     type ValuePropIdHashing = BlakeTwo256;
     type ReadAccessGroupId = u32;
     type PaymentStreams = PaymentStreams;
+    type ProofDealer = ProofsDealer;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type ReputationWeightType = u32;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type StorageHubTickGetter = MockStorageHubTickGetter;
     type Treasury = TreasuryAccount;
-    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
+    type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU64<2>;
     type DepositPerData = ConstU128<2>;
     type MaxFileSize = ConstU64<{ u64::MAX }>;
@@ -348,7 +377,8 @@ impl crate::Config for Test {
     type BspSignUpLockPeriod = ConstU64<10>;
     type MaxCommitmentSize = ConstU32<1000>;
     type ZeroSizeBucketFixedRate = ConstU128<1>;
-    type TopUpGracePeriod = ConstU32<5>;
+    type ProviderTopUpTtl = ProviderTopUpTtl;
+    type MaxExpiredItemsInBlock = ConstU32<10>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelpers = ();
 }

@@ -109,6 +109,10 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
   execSync("docker rm linux-libpq-container", { stdio: "inherit" });
 
   console.log(`libpq.so has been copied to ${destPath}`);
+
+  // Set RUSTFLAGS with the correct library path
+  process.env.RUSTFLAGS = `-C link-arg=-Wl,-rpath,$ORIGIN/../release/deps -L ${destPath}`;
+  console.log(`RUSTFLAGS set to: ${process.env.RUSTFLAGS}`);
 };
 
 main();
