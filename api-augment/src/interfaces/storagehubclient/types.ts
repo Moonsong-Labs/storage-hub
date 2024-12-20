@@ -81,14 +81,6 @@ export interface GetFileFromFileStorageResult extends Enum {
   readonly type: "FileNotFound" | "FileFound" | "IncompleteFile" | "FileFoundWithInconsistency";
 }
 
-/** @name GetLastTickProviderSubmittedProofError */
-export interface GetLastTickProviderSubmittedProofError extends Enum {
-  readonly isProviderNotRegistered: boolean;
-  readonly isProviderNeverSubmittedProof: boolean;
-  readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
-}
-
 /** @name GetNextDeadlineTickError */
 export interface GetNextDeadlineTickError extends Enum {
   readonly isProviderNotRegistered: boolean;
@@ -100,6 +92,14 @@ export interface GetNextDeadlineTickError extends Enum {
     | "ProviderNotInitialised"
     | "ArithmeticOverflow"
     | "InternalApiError";
+}
+
+/** @name GetProofSubmissionRecordError */
+export interface GetProofSubmissionRecordError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isProviderNeverSubmittedProof: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
 }
 
 /** @name GetUsersWithDebtOverThresholdError */
