@@ -1927,7 +1927,7 @@ where
         if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&sp_id)?;
         };
-     
+
         // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
         if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
             && <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
