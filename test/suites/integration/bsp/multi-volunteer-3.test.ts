@@ -64,8 +64,8 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
         .issueStorageRequest(
           newBucketEventDataBlob.bucketId,
           "cat/cloud.jpg",
-          fileMetadata.fingerprint,
-          fileMetadata.file_size,
+          fileMetadata.file_metadata.fingerprint,
+          fileMetadata.file_metadata.file_size,
           ShConsts.DUMMY_MSP_ID,
           [ShConsts.NODE_INFOS.user.expectedPeerId],
           null
