@@ -9,7 +9,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError,
-    GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
+    GetNextDeadlineTickError, GetProofSubmissionRecordError,
 };
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
@@ -1193,16 +1193,30 @@ where
 {
     pub fn get_last_tick_provider_submitted_proof(
         provider_id: &ProviderIdFor<T>,
-    ) -> Result<BlockNumberFor<T>, GetLastTickProviderSubmittedProofError> {
+    ) -> Result<BlockNumberFor<T>, GetProofSubmissionRecordError> {
         // Check if submitter is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
-            return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
+            return Err(GetProofSubmissionRecordError::ProviderNotRegistered);
         }
 
         let record = ProviderToProofSubmissionRecord::<T>::get(provider_id)
-            .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)?;
+            .ok_or(GetProofSubmissionRecordError::ProviderNeverSubmittedProof)?;
 
         Ok(record.last_tick_proven)
+    }
+
+    pub fn get_next_tick_to_submit_proof_for(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetProofSubmissionRecordError> {
+        // Check if submitter is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
+            return Err(GetProofSubmissionRecordError::ProviderNotRegistered);
+        }
+
+        let record = ProviderToProofSubmissionRecord::<T>::get(provider_id)
+            .ok_or(GetProofSubmissionRecordError::ProviderNeverSubmittedProof)?;
+
+        Ok(record.next_tick_to_submit_proof_for)
     }
 
     pub fn get_last_checkpoint_challenge_tick() -> BlockNumberFor<T> {

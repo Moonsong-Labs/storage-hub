@@ -1511,7 +1511,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         };
 
         // Dispatch submit proof extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(user, proof, None));
+        assert_ok!(ProofsDealer::submit_proof(user.clone(), proof, None));
 
         // Check that the event for mutations applied is emitted.
         System::assert_has_event(
@@ -1531,6 +1531,63 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // This is to avoid having to construct valid tries and proofs.
         let root = Providers::get_root(provider_id).unwrap();
         assert_eq!(root.as_ref(), challenges.last().unwrap().as_ref());
+
+        // Run another challenge cycle to verify that Provider doesn't have to submit proofs again
+        // for the checkpoint challenges.
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(provider_id).unwrap();
+        let challenge_block = proof_record.next_tick_to_submit_proof_for;
+
+        // Advance to the next challenge the Provider should listen to.
+        run_to_block(challenge_block);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        // This time no checkpoint challenges are included.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Set custom challenges in checkpoint block.
+        TickToCheckpointChallenges::<Test>::insert(
+            checkpoint_challenge_block,
+            custom_challenges.clone(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        // We build the proof before adding the custom challenges to the challenges vector
+        // because the custom challenges have a `TrieRemoveMutation`, therefore key proofs
+        // are not required for them.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in &challenges {
+            key_proofs.insert(
+                *challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch submit proof extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(user, proof, None));
     });
 }
 
