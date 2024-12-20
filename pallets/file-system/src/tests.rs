@@ -6780,6 +6780,7 @@ mod bsp_stop_storing {
                     size,
                     Some(msp_id),
                     peer_ids.clone(),
+					None
                 ));
 
                 // Sign up account as a Backup Storage Provider
@@ -6857,7 +6858,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -6901,7 +6902,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -6990,6 +6991,7 @@ mod bsp_stop_storing {
                     size,
                     Some(msp_id),
                     peer_ids.clone(),
+					None
                 ));
 
 				// Dispatch second storage request.
@@ -7001,6 +7003,7 @@ mod bsp_stop_storing {
                     size,
                     Some(msp_id),
                     peer_ids.clone(),
+					None
                 ));
 
                 // Sign up account as a Backup Storage Provider
@@ -7112,7 +7115,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -7128,7 +7131,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -7164,7 +7167,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
