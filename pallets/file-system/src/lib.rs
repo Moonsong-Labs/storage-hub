@@ -1007,7 +1007,12 @@ pub mod pallet {
 
         /// Revoke storage request
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+          let confirmed = StorageRequests::<T>::get(file_key).map_or(0, |metadata| metadata.bsps_confirmed.into());
+          let weight = T::WeightInfo::revoke_storage_request(confirmed as u32);
+
+          weight.saturating_add(T::DbWeight::get().reads_writes(1, 0))
+        })]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1048,7 +1053,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(9)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::msp_stop_storing_bucket())]
         pub fn msp_stop_storing_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -1339,10 +1344,7 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
-    where
-        u32: TryFrom<BlockNumberFor<T>>,
-    {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
