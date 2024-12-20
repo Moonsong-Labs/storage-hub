@@ -1400,6 +1400,11 @@ where
         // Update root of BSP.
         <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // We should remove the BSP from the dealer proof
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+        };
+
         // This should not fail since `skipped_file_keys` purposely share the same bound as `file_keys_and_metadata`.
         let skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
             skipped_file_keys.into_iter().collect::<Vec<_>>().try_into(),
@@ -1759,6 +1764,11 @@ where
         // Remove the pending stop storing request from storage.
         <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // We should remove the BSP from the dealer proof
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+        };
+
         Ok((bsp_id, new_root))
     }
 
@@ -1912,6 +1922,11 @@ where
 
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
+
+        // If it doesn't store any files we stop the challenge cycle.
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&sp_id)?;
+        };
 
         // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
         if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
