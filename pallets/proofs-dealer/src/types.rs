@@ -1,5 +1,6 @@
-use codec::{Decode, Encode};
+use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::traits::fungible;
+use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
 use shp_traits::{CommitmentVerifier, ReadChallengeableProvidersInterface};
 use sp_std::{
@@ -55,6 +56,40 @@ impl<T: crate::Config> Debug for KeyProof<T> {
             self.proof, self.challenge_count
         )
     }
+}
+
+/// Information to keep track of the Provider's challenge cycle.
+///
+/// This stores the last tick the Provider submitted a proof for, and the next tick
+/// the Provider should submit a proof for. Normally the difference between these two
+/// ticks is equal to the Provider's challenge period, but if the Provider's period
+/// is changed, this change only affects the next cycle. In other words, for one
+/// cycle, `next_tick_to_submit_proof_for - last_tick_proven ≠ provider_challenge_period`.
+#[derive(Debug, Encode, Decode, TypeInfo, PartialEq, Eq, Clone, MaxEncodedLen)]
+#[scale_info(skip_type_params(T))]
+pub struct ProofSubmissionRecord<T: crate::Config> {
+    /// The last tick the Provider submitted a proof for.
+    ///
+    /// Or in other words,
+    /// the last proof submitted by the Provider, was a response to the challenge
+    /// seed in this tick.
+    pub last_tick_proven: BlockNumberFor<T>,
+    /// The next tick the Provider should submit a proof for.
+    ///
+    /// When the Provider submits a valid proof, this is calculated as:
+    /// ```ignore
+    /// next_tick_to_submit_proof_for = last_tick_proven + provider_challenge_period
+    /// ```
+    /// Where `provider_challenge_period` is the Provider's challenge period at the time
+    /// it submits a proof.
+    ///
+    /// If the Provider is slashed, this is calculated as:
+    /// ```ignore
+    /// next_tick_to_submit_proof_for = old_next_tick_to_submit_proof_for + provider_challenge_period
+    /// ```
+    /// Where `old_next_tick_to_submit_proof_for` is the challenge missed, and `provider_challenge_period`
+    /// is the Provider's challenge period at the time it is marked as slashable.
+    pub next_tick_to_submit_proof_for: BlockNumberFor<T>,
 }
 
 // ****************************************************************************

@@ -61,7 +61,17 @@ const PROOFS_DEALER_V1 = {
         type: "ProviderId"
       }
     ],
-    type: "Result<BlockNumber, GetLastTickProviderSubmittedProofError>"
+    type: "Result<BlockNumber, GetProofSubmissionRecordError>"
+  },
+  get_next_tick_to_submit_proof_for: {
+    description: "Get the next tick for which the submitter should submit a proof.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<BlockNumber, GetProofSubmissionRecordError>"
   },
   get_last_checkpoint_challenge_tick: {
     description: "Get the last checkpoint challenge tick.",

@@ -23,7 +23,7 @@ use pallet_file_system_runtime_api::{
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetProofSubmissionRecordError,
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
@@ -618,9 +618,7 @@ impl Actor for BlockchainService {
                         .client
                         .runtime_api()
                         .get_last_tick_provider_submitted_proof(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| {
-                            Err(GetLastTickProviderSubmittedProofError::InternalApiError)
-                        });
+                        .unwrap_or_else(|_| Err(GetProofSubmissionRecordError::InternalApiError));
 
                     match callback.send(last_tick) {
                         Ok(_) => {

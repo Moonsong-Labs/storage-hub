@@ -66,7 +66,7 @@ export const ALL_TYPES = {
       MainStorageProvider: "MainStorageProviderId"
     }
   },
-  GetLastTickProviderSubmittedProofError: {
+  GetProofSubmissionRecordError: {
     _enum: {
       ProviderNotRegistered: null,
       ProviderNeverSubmittedProof: null,

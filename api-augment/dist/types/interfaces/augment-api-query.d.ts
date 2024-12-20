@@ -53,6 +53,7 @@ import type {
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsFixedRatePaymentStream,
   PalletPaymentStreamsProviderLastChargeableInfo,
+  PalletProofsDealerProofSubmissionRecord,
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
@@ -1377,23 +1378,6 @@ declare module "@polkadot/api-base/types/storage" {
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
-       * If for a Provider `p`, `LastTickProviderSubmittedAProofFor[p]` is `n`, then the
-       * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
-       *
-       * This gets updated when a Provider submits a proof successfully and is used to determine the
-       * next tick for which the Provider should submit a proof, and it's deadline.
-       *
-       * If the Provider fails to submit a proof in time and is slashed, this will still get updated
-       * to the tick it should have submitted a proof for.
-       **/
-      lastTickProviderSubmittedAProofFor: AugmentedQuery<
-        ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
-        [H256]
-      > &
-        QueryableStorageEntry<ApiType, [H256]>;
-      /**
        * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
        *
        * This is used to check if the network is presumably under a spam attack.
@@ -1430,6 +1414,27 @@ declare module "@polkadot/api-base/types/storage" {
         []
       > &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * A mapping from a Provider to its [`ProofSubmissionRecord`], which stores the last tick
+       * the Provider submitted a proof for, and the next tick the Provider should submit a proof for.
+       *
+       * Normally the difference between these two ticks is equal to the Provider's challenge period,
+       * but if the Provider's period is changed, this change only affects the next cycle. In other words,
+       * for one cycle, `next_tick_to_submit_proof_for - last_tick_proven ≠ provider_challenge_period`.
+       *
+       * If a Provider submits a proof successfully, both fields are updated.
+       *
+       * If the Provider fails to submit a proof in time and is slashed, only `next_tick_to_submit_proof_for`
+       * is updated.
+       **/
+      providerToProofSubmissionRecord: AugmentedQuery<
+        ApiType,
+        (
+          arg: H256 | string | Uint8Array
+        ) => Observable<Option<PalletProofsDealerProofSubmissionRecord>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
       slashableProviders: AugmentedQuery<
         ApiType,
         (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,

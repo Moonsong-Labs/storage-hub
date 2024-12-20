@@ -404,7 +404,7 @@ impl IndexerService {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
             pallet_proofs_dealer::Event::ProofAccepted {
-                provider,
+                provider_id: provider,
                 proof: _proof,
                 last_tick_proven,
             } => {

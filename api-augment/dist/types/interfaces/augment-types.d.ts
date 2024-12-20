@@ -1265,8 +1265,8 @@ import type {
   GetChallengeSeedError,
   GetCheckpointChallengesError,
   GetFileFromFileStorageResult,
-  GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
+  GetProofSubmissionRecordError,
   GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
   IsStorageRequestOpenToVolunteersError,
@@ -1762,8 +1762,8 @@ declare module "@polkadot/types/types/registry" {
     GetChallengeSeedError: GetChallengeSeedError;
     GetCheckpointChallengesError: GetCheckpointChallengesError;
     GetFileFromFileStorageResult: GetFileFromFileStorageResult;
-    GetLastTickProviderSubmittedProofError: GetLastTickProviderSubmittedProofError;
     GetNextDeadlineTickError: GetNextDeadlineTickError;
+    GetProofSubmissionRecordError: GetProofSubmissionRecordError;
     GetUsersWithDebtOverThresholdError: GetUsersWithDebtOverThresholdError;
     GiltBid: GiltBid;
     GlobalValidationData: GlobalValidationData;

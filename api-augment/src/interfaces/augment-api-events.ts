@@ -1657,8 +1657,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofAccepted: AugmentedEvent<
         ApiType,
-        [provider: H256, proof: PalletProofsDealerProof, lastTickProven: u32],
-        { provider: H256; proof: PalletProofsDealerProof; lastTickProven: u32 }
+        [providerId: H256, proof: PalletProofsDealerProof, lastTickProven: u32],
+        { providerId: H256; proof: PalletProofsDealerProof; lastTickProven: u32 }
       >;
       /**
        * A provider was marked as slashable and their challenge deadline was forcefully pushed.

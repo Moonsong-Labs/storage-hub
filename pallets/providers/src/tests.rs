@@ -5438,7 +5438,7 @@ mod slash_and_top_up {
 
                 // Challenge cycle in proofs dealer should have been stopped
                 assert!(
-                    pallet_proofs_dealer::LastTickProviderSubmittedAProofFor::<Test>::get(
+                    pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
                         &self.provider_id
                     )
                     .is_none()
