@@ -481,7 +481,7 @@ where
         provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
-        let last_tick_provided_submitted_proof = self
+        let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
             .query_last_tick_provider_submitted_proof(provider_id)
@@ -504,11 +504,11 @@ where
             .query_challenge_period(provider_id)
             .await
             .map_err(|e| anyhow!("Failed to query challenge period: {:?}", e))?;
-        let challenges_tick = last_tick_provided_submitted_proof + challenge_period;
+        let challenges_tick = last_tick_provider_submitted_proof_for + challenge_period;
 
         // If there were checkpoint challenges since the last tick this provider submitted a proof for,
         // get the checkpoint challenges.
-        if last_tick_provided_submitted_proof <= last_checkpoint_tick
+        if last_tick_provider_submitted_proof_for < last_checkpoint_tick
             && last_checkpoint_tick <= challenges_tick
         {
             let checkpoint_challenges = self
