@@ -14,6 +14,7 @@ import {
 
 describeBspNet(
   "BSPNet: Validating max storage",
+  { only: true },
   ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -221,26 +222,8 @@ describeBspNet(
       );
       assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
     });
-  }
-);
-
-
-describeBspNet(
-  "BSPNet: Validating max storage (Test respect off limit)",
-  { only: true },
-  ({ before, it, createUserApi, createBspApi }) => {
-    let userApi: EnrichedBspApi;
-    let bspApi: EnrichedBspApi;
-
-    before(async () => {
-      userApi = await createUserApi();
-      bspApi = await createBspApi();
-    });
 
     it("Test BSP storage size cannot go over MAX STORAGE", async () => {
-      // stop other container
-      await userApi.docker.pauseBspContainer("docker-sh-bsp-1");
-
       const MAX_STORAGE_CAPACITY = 416600;
       // Add a second BSP
       const { rpcPort } = await addBsp(userApi, bspTwoKey, {
@@ -256,6 +239,9 @@ describeBspNet(
 
       await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
 
+      // stop other container
+      await userApi.docker.pauseBspContainer("docker-sh-bsp-1");
+
       // First storage request
       const source1 = "res/cloud.jpg";
       const location1 = "test/cloud.jpg";
@@ -263,10 +249,10 @@ describeBspNet(
       const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(source1, location1, bucketName1);
 
       // Second storage request (both are biggar than the max storage capacity of the BSP two)
-      // const source2 = "res/adolphus.jpg";
-      // const location2 = "test/adolphus.jpg";
-      // const bucketName2 = "kek2";
-      // await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
+      const source2 = "res/adolphus.jpg";
+      const location2 = "test/adolphus.jpg";
+      const bucketName2 = "kek2";
+      await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
 
       const bspVolunteerTick = (
         await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
@@ -290,7 +276,7 @@ describeBspNet(
         .capacityUsed.toNumber();
 
       assert(
-        capacityUsed < MAX_STORAGE_CAPACITY,
+        (0 < capacityUsed && capacityUsed < MAX_STORAGE_CAPACITY),
         "capacity used should be smaller than max storage capacity"
       );
 
