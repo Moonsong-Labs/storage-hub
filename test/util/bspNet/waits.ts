@@ -49,7 +49,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     } catch (e) {
       if (i === iterations - 1) {
         throw new Error(
-          `Failed to detect ${module}.${method} extrinsic in txPool after ${(i * delay) / 1000}s`
+          `Failed to detect ${module}.${method} extrinsic in txPool after ${(i * delay) / 1000}s. Last error: ${e}`
         );
       }
     }
