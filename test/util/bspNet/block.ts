@@ -313,6 +313,7 @@ export const advanceToBlock = async (
   const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
   if (options.watchForBspProofs) {
     for (const bspId of options.watchForBspProofs) {
+      // TODO: Change this to a runtime API that gets the next challenge tick for a BSP.
       // First we get the last tick for which the BSP submitted a proof.
       const lastTickResult =
         await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
@@ -405,7 +406,6 @@ export const advanceToBlock = async (
 
           // Update next challenge block.
           challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
-          break;
         }
       }
 
