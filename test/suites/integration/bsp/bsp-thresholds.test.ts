@@ -44,10 +44,12 @@ describeBspNet(
         200,
         "Threshold should have changed"
       );
+      const maxReplicationTarget = await userApi.query.fileSystem.maxReplicationTarget();
+
       strictEqual(
-        (await userApi.query.fileSystem.replicationTarget()).toNumber(),
+        maxReplicationTarget.toNumber(),
         87,
-        "Replication Target should have changed"
+        "Max replication target should have changed"
       );
     });
 
@@ -63,13 +65,14 @@ describeBspNet(
 
       strictEqual(
         (await userApi.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
-        1,
+        200,
         "Threshold should not have changed"
       );
+      const maxReplicationTarget = await userApi.query.fileSystem.maxReplicationTarget();
       strictEqual(
-        (await userApi.query.fileSystem.replicationTarget()).toNumber(),
-        1,
-        "Replication Target should not have changed"
+        maxReplicationTarget.toNumber(),
+        87,
+        "Max replication target should not have changed"
       );
     });
 
@@ -99,8 +102,19 @@ describeBspNet(
     });
 
     it("lower reputation can still volunteer and be accepted", async () => {
+      const defaultReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          DefaultReplicationTarget: [null, 5]
+        }
+      };
       await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 10))
+        userApi.tx.sudo.sudo(
+          userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+        )
+      );
+
+      await userApi.sealBlock(
+        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 10))
       );
 
       // Create a new BSP and onboard with no reputation
@@ -162,8 +176,19 @@ describeBspNet(
     });
 
     it("BSP two eventually volunteers after threshold curve is met", async () => {
+      const defaultReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          DefaultReplicationTarget: [null, 2]
+        }
+      };
       await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 20))
+        userApi.tx.sudo.sudo(
+          userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+        )
+      );
+
+      await userApi.sealBlock(
+        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 20))
       );
 
       // Add the second BSP
@@ -322,8 +347,19 @@ describeBspNet(
         skip: "Test takes way to long to run. This test actually spams the chain with transactions, unskip it if you want to run it."
       },
       async () => {
+        const defaultReplicationTargetRuntimeParameter = {
+          RuntimeConfig: {
+            DefaultReplicationTarget: [null, 2]
+          }
+        };
         await userApi.sealBlock(
-          userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 50))
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+          )
+        );
+
+        await userApi.sealBlock(
+          userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 50))
         );
 
         const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(

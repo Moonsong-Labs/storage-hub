@@ -315,6 +315,7 @@ mod benches {
         [pallet_proofs_dealer, ProofsDealer]
         [pallet_storage_providers, Providers]
         [pallet_randomness, Randomness]
+        [pallet_file_system, FileSystem]
     );
 }
 

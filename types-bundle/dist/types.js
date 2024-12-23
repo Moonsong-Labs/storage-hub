@@ -107,6 +107,12 @@ export const ALL_TYPES = {
       InternalApiError: null
     }
   },
+  IsStorageRequestOpenToVolunteersError: {
+    _enum: {
+      StorageRequestNotFound: null,
+      InternalApiError: null
+    }
+  },
   QueryFileEarliestVolunteerBlockError: {
     _enum: {
       FailedToEncodeFingerprint: null,

@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { bspKey, describeBspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -19,6 +19,11 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
   });
 
   it("Volunteer for multiple files and delete them", async () => {
+    // Set global params
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+    );
+
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
     const bucketName = "something-3";
@@ -48,7 +53,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           fingerprint,
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          1
         )
       );
     }
@@ -74,12 +80,22 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     }
 
     // Waiting for a confirmation of the first file to be stored
-    await sleep(500);
     await userApi.wait.bspStored(1);
 
     // Here we expect the 2 others files to be batched
-    await sleep(500);
     await userApi.wait.bspStored(1);
+
+    // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
+    await waitFor({
+      lambda: async () => {
+        let isRootUpdatedWithAllNewFiles = true;
+        for (const fileKey of fileKeys) {
+          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          isRootUpdatedWithAllNewFiles = isRootUpdatedWithAllNewFiles && isFileInForest.isTrue;
+        }
+        return isRootUpdatedWithAllNewFiles;
+      }
+    });
 
     const stopStroringTxs = [];
     for (let i = 0; i < fileKeys.length; i++) {
@@ -101,13 +117,17 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     }
 
     await userApi.sealBlock(stopStroringTxs, bspKey);
-
-    await userApi.assert.eventMany("fileSystem", "BspRequestedToStopStoring");
+    const stopStoringEvents = await userApi.assert.eventMany(
+      "fileSystem",
+      "BspRequestedToStopStoring"
+    );
+    strictEqual(stopStoringEvents.length, fileKeys.length);
 
     // Wait enough blocks for the deletion to be allowed.
     const currentBlock = await userApi.rpc.chain.getBlock();
     const currentBlockNumber = currentBlock.block.header.number.toNumber();
-    const cooldown = currentBlockNumber + bspApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+    const cooldown =
+      currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
     await userApi.block.skipTo(cooldown);
 
     for (let i = 0; i < fileKeys.length; i++) {
@@ -121,6 +141,17 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
       // Check for the confirm stopped storing event.
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+      // Wait for BSP to update its local Forest root as a consequence of the confirmed stop storing extrinsic.
+      await waitFor({
+        lambda: async () => {
+          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            fileKeys[i]
+          );
+          return isFileInForest.isFalse;
+        }
+      });
     }
   });
 
@@ -157,7 +188,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
             fingerprint,
             file_size,
             userApi.shConsts.DUMMY_MSP_ID,
-            [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            1
           )
         );
       }
@@ -186,12 +218,22 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       }
 
       // Waiting for a confirmation of the first file to be stored
-      await sleep(500);
       await userApi.wait.bspStored(1);
 
       // Here we expect the 2 others files to be batched
-      await sleep(500);
       await userApi.wait.bspStored(1);
+
+      // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
+      await waitFor({
+        lambda: async () => {
+          let isRootUpdatedWithAllNewFiles = true;
+          for (const fileKey of fileKeys) {
+            const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+            isRootUpdatedWithAllNewFiles = isRootUpdatedWithAllNewFiles && isFileInForest.isTrue;
+          }
+          return isRootUpdatedWithAllNewFiles;
+        }
+      });
 
       const stopStroringTxs = [];
       for (let i = 0; i < fileKeys.length; i++) {
@@ -213,14 +255,17 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       }
 
       await userApi.sealBlock(stopStroringTxs, bspKey);
-
-      await userApi.assert.eventMany("fileSystem", "BspRequestedToStopStoring");
+      const stopStoringEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "BspRequestedToStopStoring"
+      );
+      strictEqual(stopStoringEvents.length, fileKeys.length);
 
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
-        currentBlockNumber + bspApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+        currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
 
       // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsinc 2 and 3
@@ -232,6 +277,20 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         confirmStopStoringTxs.push(
           userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
         );
+
+        // Check for the confirm stopped storing event.
+        await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
+
+        // Wait for BSP to update its local Forest root as a consequence of the confirmed stop storing extrinsic.
+        await waitFor({
+          lambda: async () => {
+            const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
+              null,
+              fileKeys[i]
+            );
+            return isFileInForest.isFalse;
+          }
+        });
       }
 
       await userApi.sealBlock(confirmStopStoringTxs, bspKey);

@@ -1,11 +1,13 @@
-use sc_tracing::tracing::{error, info};
+use sc_tracing::tracing::{error, trace};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteDownloadRequest,
 };
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-download-file-task";
 
@@ -51,7 +53,7 @@ where
     FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
+        trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
         let RemoteDownloadRequest {
             chunk_id,

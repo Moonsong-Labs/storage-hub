@@ -32,6 +32,7 @@ import {
 import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
 import { spawn, spawnSync } from "node:child_process";
+import { DUMMY_MSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -474,6 +475,14 @@ export class NetworkLauncher {
     await api.sealBlock(
       api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))
     );
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 3]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
   }
 
   public async execDemoTransfer() {
@@ -485,7 +494,11 @@ export class NetworkLauncher {
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
       source,
       destination,
-      bucketName
+      bucketName,
+      null,
+      DUMMY_MSP_ID,
+      shUser,
+      1
     );
 
     if (this.type === "bspnet") {
@@ -507,7 +520,16 @@ export class NetworkLauncher {
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 1)));
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 4]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
+
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.
