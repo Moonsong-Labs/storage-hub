@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
   "Single MSP accepting multiple storage requests",
@@ -79,25 +79,13 @@ describeMspNet(
         `Expected ${source.length} NewStorageRequest events`
       );
 
-      // Allow time for the MSP to receive and store the files from the user
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(3000);
-
       // Check if the MSP received the files.
       for (const e of matchedEvents) {
         const newStorageRequestDataBlob =
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
-
         assert(newStorageRequestDataBlob, "Event doesn't match NewStorageRequest type");
 
-        const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(
-          newStorageRequestDataBlob.fileKey
-        );
-
-        assert(
-          result.isFileFound,
-          `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-        );
+        await mspApi.wait.mspFileStorageComplete(newStorageRequestDataBlob.fileKey);
       }
 
       // Seal block containing the MSP's first response.
@@ -106,13 +94,6 @@ describeMspNet(
       // the first response it can immediately.
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
-
-      // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
 
       const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
         "providers",
@@ -126,7 +107,12 @@ describeMspNet(
         "Expected BucketRootChanged event but received event of different type"
       );
 
-      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
+      await waitFor({
+        lambda: async () => {
+          const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
+          return localBucketRoot.toString() === bucketRootChangedDataBlob.newRoot.toString();
+        }
+      });
 
       // The MSP should have accepted exactly one file.
       // Register how many were accepted in the last block sealed.
@@ -152,13 +138,6 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
 
-      // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot2 = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
-
       const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
         "providers",
         "BucketRootChanged"
@@ -171,7 +150,12 @@ describeMspNet(
         "Expected BucketRootChanged event but received event of different type"
       );
 
-      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
+      await waitFor({
+        lambda: async () => {
+          const localBucketRoot2 = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
+          return localBucketRoot2.toString() === bucketRootChangedDataBlob2.newRoot.toString();
+        }
+      });
 
       // The MSP should have accepted at least one file.
       // Register how many were accepted in the last block sealed.
