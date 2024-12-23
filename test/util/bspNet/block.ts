@@ -16,6 +16,7 @@ import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
 import * as Assertions from "../asserts";
 import { waitForLog } from "./docker";
+import { waitForTxInPool } from "./waits";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -397,16 +398,23 @@ export const advanceToBlock = async (
 
     // Check if we need to wait for BSP proofs.
     if (options.watchForBspProofs) {
+      let txsToWaitFor = 0;
       for (const challengeBlockNumber of challengeBlockNumbers) {
         if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
-          // Wait for the BSP to process the proof.
-          await sleep(500);
+          txsToWaitFor++;
 
           // Update next challenge block.
           challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
           break;
         }
       }
+
+      // Wait for all corresponding BSPs to have submitted their proofs.
+      waitForTxInPool(api, {
+        module: "proofsDealer",
+        method: "submitProof",
+        checkQuantity: txsToWaitFor
+      });
     }
 
     if (options.waitBetweenBlocks) {
