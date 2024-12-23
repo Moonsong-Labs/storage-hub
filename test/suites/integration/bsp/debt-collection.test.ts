@@ -1,13 +1,6 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import {
-  bob,
-  describeBspNet,
-  fetchEvent,
-  ShConsts,
-  sleep,
-  type EnrichedBspApi
-} from "../../../util";
+import { bob, describeBspNet, fetchEvent, ShConsts, type EnrichedBspApi } from "../../../util";
 import { BN } from "@polkadot/util";
 
 describeBspNet(
@@ -493,7 +486,6 @@ describeBspNet(
 
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
-      await sleep(500);
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");

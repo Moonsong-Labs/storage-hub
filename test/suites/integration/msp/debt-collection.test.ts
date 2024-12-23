@@ -368,11 +368,26 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
     // The expected amount to be charged is the rate of the payment stream times the charging period.
     const expectedChargedAmount = paymentStreamRate * MSP_CHARGING_PERIOD;
 
-    // Verify that it charged for the correct amount.
-    const paymentStreamChargedEvent = await userApi.assert.eventPresent(
+    // Getting the PaymentStreamCharged events. There could be multiple of these events in the last block,
+    // so we get them all and then filter the one where the Provider ID matches the MSP ID.
+    const paymentStreamChargedEvents = await userApi.assert.eventMany(
       "paymentStreams",
       "PaymentStreamCharged"
     );
+    const paymentStreamChargedEventsFiltered = paymentStreamChargedEvents.filter((e) => {
+      const event = e.event;
+      assert(userApi.events.paymentStreams.PaymentStreamCharged.is(event));
+      return event.data.providerId.eq(DUMMY_MSP_ID);
+    });
+
+    // There should be only one PaymentStreamCharged event for the MSP
+    assert(
+      paymentStreamChargedEventsFiltered.length === 1,
+      "Expected a single PaymentStreamCharged event"
+    );
+
+    // Verify that it charged for the correct amount.
+    const paymentStreamChargedEvent = firstPaymentStreamChargedEvents[0];
     assert(userApi.events.paymentStreams.PaymentStreamCharged.is(paymentStreamChargedEvent.event));
     const paymentStreamChargedEventAmount = paymentStreamChargedEvent.event.data.amount.toNumber();
 
