@@ -334,12 +334,12 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
       "User account does not match"
     );
 
-    // Advance many MSP charging periods to charge again, but this time with a known number of
+    // Advance one MSP charging period to charge again, but this time with a known number of
     // blocks since last charged. That way, we can check for the exact amount charged.
     // Since the MSP is going to charge each period, the last charge should be for one period.
     currentBlock = await userApi.rpc.chain.getHeader();
     currentBlockNumber = currentBlock.number.toNumber();
-    await userApi.block.skipTo(currentBlockNumber + 10 * MSP_CHARGING_PERIOD);
+    await userApi.block.skipTo(currentBlockNumber + MSP_CHARGING_PERIOD);
 
     // Calculate the expected rate of the payment stream and compare it to the actual rate.
     const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
@@ -387,7 +387,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
     );
 
     // Verify that it charged for the correct amount.
-    const paymentStreamChargedEvent = firstPaymentStreamChargedEvents[0];
+    const paymentStreamChargedEvent = paymentStreamChargedEventsFiltered[0];
     assert(userApi.events.paymentStreams.PaymentStreamCharged.is(paymentStreamChargedEvent.event));
     const paymentStreamChargedEventAmount = paymentStreamChargedEvent.event.data.amount.toNumber();
 
