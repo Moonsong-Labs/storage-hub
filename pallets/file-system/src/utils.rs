@@ -2023,14 +2023,27 @@ where
                     Error::<T>::ExpectedInclusionProof
                 );
 
+                // Compute new root after removing file key from forest partial trie.
+                let new_root =
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
+                        &bucket_root,
+                        &[(file_key, TrieRemoveMutation::default().into())],
+                        &inclusion_forest_proof,
+                    )?;
+
+                // Update root of the Bucket.
+                <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
+                    bucket_id, new_root,
+                )?;
+
+                // Decrease size of the bucket.
+                <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                     &file_key,
                     Some(TrieRemoveMutation),
                 )?;
-
-                // Decrease size of the bucket.
-                <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
                 // Emit event.
                 Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
@@ -2091,15 +2104,29 @@ where
 
         let file_key_included = proven_keys.contains(&file_key);
 
+        // If the file key was part of the forest, remove it from the forest and update the root of the bucket.
         if file_key_included {
+            // Compute new root after removing file key from forest partial trie.
+            let new_root =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
+                    &bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                )?;
+
+            // Update root of the Bucket.
+            <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
+                bucket_id, new_root,
+            )?;
+
+            // Decrease size of the bucket.
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, file_size)?;
+
             // Initiate the priority challenge to remove the file key from all the providers.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
                 Some(TrieRemoveMutation),
             )?;
-
-            // Decrease size of the bucket.
-            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, file_size)?;
 
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
