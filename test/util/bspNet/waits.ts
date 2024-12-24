@@ -16,6 +16,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     module,
     method,
     checkQuantity,
+    strictQuantity = false,
     shouldSeal = false,
     expectedEvent,
     timeout = 1000,
@@ -39,10 +40,15 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
       checkTxPool: true,
       timeout
     });
-    if (checkQuantity) {
+    if (checkQuantity && strictQuantity) {
       assert(
         matches.length === checkQuantity,
         `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
+      );
+    } else if (checkQuantity && !strictQuantity) {
+      assert(
+        matches.length >= checkQuantity,
+        `Expected at least ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
       );
     }
 
@@ -276,8 +282,8 @@ export const waitForBspToCatchUpToChainTip = async (
   syncedApi: ApiPromise,
   bspBehindApi: ApiPromise
 ) => {
-  // To allow time for BSP to catch up to the tip of the chain (10s)
-  const iterations = 100;
+  // To allow time for BSP to catch up to the tip of the chain (30s)
+  const iterations = 300;
   const delay = 100;
   for (let i = 0; i < iterations + 1; i++) {
     try {

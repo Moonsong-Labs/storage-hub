@@ -34,6 +34,7 @@ export interface WaitForTxOptions {
   module: string;
   method: string;
   checkQuantity?: number;
+  strictQuantity?: boolean;
   shouldSeal?: boolean;
   expectedEvent?: string;
   timeout?: number;

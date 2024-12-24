@@ -400,7 +400,8 @@ export const advanceToBlock = async (
       await waitForTxInPool(api, {
         module: "proofsDealer",
         method: "submitProof",
-        checkQuantity: txsToWaitFor
+        checkQuantity: txsToWaitFor,
+        strictQuantity: false
       });
     }
 

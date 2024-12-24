@@ -334,7 +334,11 @@ describeBspNet(
       });
 
       // Wait for BSPs to resync.
-      await sleep(1000);
+      await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+
+      // And give some time to process proofs.
+      await sleep(3000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
@@ -376,11 +380,10 @@ describeBspNet(
 
       if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
-        await userApi.block.skipTo(nextChallengeTick);
+        await userApi.block.skipTo(nextChallengeTick, {
+          watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        });
       }
-
-      // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(500);
 
       // There should be at least one pending submit proof transaction.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
