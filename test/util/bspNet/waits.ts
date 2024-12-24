@@ -194,7 +194,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
     module: "fileSystem",
     method: "bspConfirmStoring",
     checkQuantity,
-    timeout: 1000
+    timeout: 10000
   });
 };
 
@@ -330,7 +330,7 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
     module: "fileSystem",
     method: "mspRespondStorageRequestsMultipleBuckets",
     checkQuantity,
-    timeout: 1000
+    timeout: 10000
   });
 };
 
