@@ -884,7 +884,7 @@ impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
         // Get the hash as bytes
         let hash_bytes = hash.as_ref();
 
-        // Get the 4 least significant bytes of the hash and interpret them as a u32
+        // Get the 4 least significant bytes of the hash and interpret them as an u32
         let truncated_hash_bytes: [u8; 4] =
             hash_bytes[28..].try_into().expect("Hash is 32 bytes; qed");
 
