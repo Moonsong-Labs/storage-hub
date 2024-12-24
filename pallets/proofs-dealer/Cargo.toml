@@ -16,8 +16,10 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+log = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 scale-info = { workspace = true }
+sp-core = { workspace = true, optional = true }
 
 # Local
 pallet-proofs-dealer-runtime-api = { workspace = true }
@@ -64,42 +66,44 @@ pallet-balances = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks",
-    "frame-support/runtime-benchmarks",
-    "frame-system/runtime-benchmarks",
-    "hex",
-    "pallet-balances/runtime-benchmarks",
-    "pallet-storage-providers/runtime-benchmarks",
-    "shp-file-key-verifier/runtime-benchmarks",
-    "shp-file-metadata/runtime-benchmarks",
-    "shp-forest-verifier/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
-    "sp-trie",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"hex",
+	"log",
+	"pallet-balances/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
+	"shp-file-key-verifier/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"shp-forest-verifier/runtime-benchmarks",
+	"sp-core",
+	"sp-runtime/runtime-benchmarks",
+	"sp-trie",
 ]
 std = [
-    "codec/std",
-    "frame-benchmarking?/std",
-    "frame-support/std",
-    "frame-system/std",
-    "pallet-balances/std",
-    "pallet-payment-streams/std",
-    "pallet-proofs-dealer-runtime-api/std",
-    "pallet-storage-providers/std",
-    "scale-info/std",
-    "shp-traits/std",
-    "shp-treasury-funding/std",
-    "sp-core/std",
-    "sp-io/std",
-    "sp-runtime/std",
-    "sp-trie/std",
-    "sp-weights/std",
+	"codec/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-balances/std",
+	"pallet-payment-streams/std",
+	"pallet-proofs-dealer-runtime-api/std",
+	"pallet-storage-providers/std",
+	"scale-info/std",
+	"shp-traits/std",
+	"shp-treasury-funding/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-trie/std",
+	"sp-weights/std",
 ]
 try-runtime = [
-    "frame-support/try-runtime",
-    "frame-system/try-runtime",
-    "pallet-balances/try-runtime",
-    "pallet-payment-streams/try-runtime",
-    "shp-traits/try-runtime",
-    "shp-treasury-funding/try-runtime",
-    "sp-runtime/try-runtime",
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+	"pallet-balances/try-runtime",
+	"pallet-payment-streams/try-runtime",
+	"shp-traits/try-runtime",
+	"shp-treasury-funding/try-runtime",
+	"sp-runtime/try-runtime",
 ]

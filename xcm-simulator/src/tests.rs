@@ -1423,10 +1423,10 @@ mod users {
                 1
             );
             let mut file_deletion_requests_vec: BoundedVec<
-                (H256, H256),
+                (H256, u64, H256),
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
             > = BoundedVec::new();
-            file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
+            file_deletion_requests_vec.force_push((file_key.clone(), size, bucket_id.clone()));
             assert_eq!(
                 pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     parachain_account_in_sh.clone()
@@ -1811,10 +1811,10 @@ mod users {
                 1
             );
             let mut file_deletion_requests_vec: BoundedVec<
-                (H256, H256),
+                (H256, u64, H256),
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
             > = BoundedVec::new();
-            file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
+            file_deletion_requests_vec.force_push((file_key.clone(), size, bucket_id.clone()));
             assert_eq!(
                 pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     charlie_parachain_account_in_sh.clone()

@@ -692,6 +692,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           user: AccountId32 | string | Uint8Array,
           fileKey: H256 | string | Uint8Array,
+          fileSize: u64 | AnyNumber | Uint8Array,
           bucketId: H256 | string | Uint8Array,
           forestProof:
             | SpTrieStorageProofCompactProof
@@ -701,7 +702,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, H256, SpTrieStorageProofCompactProof]
+        [AccountId32, H256, u64, H256, SpTrieStorageProofCompactProof]
       >;
       requestMoveBucket: AugmentedSubmittable<
         (
