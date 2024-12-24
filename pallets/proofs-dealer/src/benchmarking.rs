@@ -118,14 +118,30 @@ mod benchmarks {
         n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, provider_id, challenged_tick, proof) =
+        let (caller, user, provider_id, challenged_tick, proof) =
             setup_submit_proof::<T>(file_key_proofs_count)?;
 
-        // TODO: Check payment stream before and after call to make sure it was updated correctly.
+        // Payment stream should exist before calling the extrinsic, to account for the worst-case scenario
+        // of having to update it.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_before = maybe_payment_stream_amount_provided.unwrap();
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
+
+        // Check that the payment stream still exists but the amount provided has decreased.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_after = maybe_payment_stream_amount_provided.unwrap();
+        assert!(amount_provided_after < amount_provided_before);
 
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
@@ -168,14 +184,34 @@ mod benchmarks {
         >,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, provider_id, challenged_tick, proof) =
+        let (caller, user, provider_id, challenged_tick, proof) =
             setup_submit_proof::<T>(file_key_proofs_count)?;
 
-        // TODO: Check payment stream before and after call to make sure it was updated correctly.
+        // Payment stream should exist before calling the extrinsic, to account for the worst-case scenario
+        // of having to update it.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_before = maybe_payment_stream_amount_provided.unwrap();
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
+
+        // Check that the payment stream still exists but the amount provided has decreased if there was a trie remove mutation.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_after = maybe_payment_stream_amount_provided.unwrap();
+        if file_key_proofs_count < T::MaxCustomChallengesPerBlock::get() * 2 - 1 {
+            assert!(amount_provided_after < amount_provided_before);
+        } else {
+            assert!(amount_provided_after == amount_provided_before);
+        }
 
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
@@ -542,7 +578,7 @@ mod benchmarks {
             crate::mock::Test,
     }
 
-    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
+    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
     where
     // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
         T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
@@ -696,7 +732,7 @@ mod benchmarks {
 			&amount_provided.into());
         assert_ok!(payment_stream_creation_result);
 
-        Ok((caller, provider_id, challenge_block, proof))
+        Ok((caller, user_account, provider_id, challenge_block, proof))
     }
 
     fn generate_challenges<T: Config>(
