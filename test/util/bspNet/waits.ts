@@ -7,7 +7,9 @@ import type { Address, H256 } from "@polkadot/types/interfaces";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
- * Generic function to wait for a transaction in the pool
+ * Generic function to wait for a transaction in the pool.
+ *
+ * If the expected amount of extrinsics is 0, this function will return immediately.
  */
 export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions) => {
   const {
@@ -16,43 +18,42 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     checkQuantity,
     shouldSeal = false,
     expectedEvent,
-    iterations = 100,
-    delay = 100,
-    timeout = 100
+    timeout = 100,
+    verbose = false
   } = options;
+  // Handle the case where the expected amount of extrinsics is 0
+  if (checkQuantity === 0) {
+    // If the expected amount is 0, we can return immediately
+    verbose &&
+      console.log(
+        `Expected 0 extrinsics for ${module}.${method}. Skipping wait for extrinsic in txPool.`
+      );
+    return;
+  }
 
   // To allow node time to react on chain events
-  for (let i = 0; i < iterations; i++) {
-    try {
-      await sleep(delay);
-      const matches = await assertExtrinsicPresent(api, {
-        module,
-        method,
-        checkTxPool: true,
-        timeout
-      });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
-        );
-      }
+  try {
+    const matches = await assertExtrinsicPresent(api, {
+      module,
+      method,
+      checkTxPool: true,
+      timeout
+    });
+    if (checkQuantity) {
+      assert(
+        matches.length === checkQuantity,
+        `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
+      );
+    }
 
-      if (shouldSeal) {
-        const { events } = await sealBlock(api);
-        if (expectedEvent) {
-          assertEventPresent(api, module, expectedEvent, events);
-        }
-      }
-
-      break;
-    } catch (e) {
-      if (i === iterations - 1) {
-        throw new Error(
-          `Failed to detect ${module}.${method} extrinsic in txPool after ${(i * delay) / 1000}s. Last error: ${e}`
-        );
+    if (shouldSeal) {
+      const { events } = await sealBlock(api);
+      if (expectedEvent) {
+        assertEventPresent(api, module, expectedEvent, events);
       }
     }
+  } catch (e) {
+    throw new Error(`Failed to detect ${module}.${method} extrinsic in txPool. Error: ${e}`);
   }
 };
 
@@ -193,9 +194,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
     module: "fileSystem",
     method: "bspConfirmStoring",
     checkQuantity,
-    iterations: 50,
-    delay: 200,
-    timeout: 300
+    timeout: 1000
   });
 };
 
@@ -331,8 +330,7 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
     module: "fileSystem",
     method: "mspRespondStorageRequestsMultipleBuckets",
     checkQuantity,
-    iterations: 41,
-    delay: 50
+    timeout: 1000
   });
 };
 

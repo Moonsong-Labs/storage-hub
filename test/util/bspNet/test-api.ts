@@ -36,9 +36,8 @@ export interface WaitForTxOptions {
   checkQuantity?: number;
   shouldSeal?: boolean;
   expectedEvent?: string;
-  iterations?: number;
-  delay?: number;
   timeout?: number;
+  verbose?: boolean;
 }
 
 /**

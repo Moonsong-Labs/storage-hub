@@ -410,7 +410,7 @@ export const advanceToBlock = async (
       }
 
       // Wait for all corresponding BSPs to have submitted their proofs.
-      waitForTxInPool(api, {
+      await waitForTxInPool(api, {
         module: "proofsDealer",
         method: "submitProof",
         checkQuantity: txsToWaitFor
