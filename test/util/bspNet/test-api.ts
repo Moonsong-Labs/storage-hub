@@ -34,11 +34,11 @@ export interface WaitForTxOptions {
   module: string;
   method: string;
   checkQuantity?: number;
+  strictQuantity?: boolean;
   shouldSeal?: boolean;
   expectedEvent?: string;
-  iterations?: number;
-  delay?: number;
   timeout?: number;
+  verbose?: boolean;
 }
 
 /**
@@ -446,7 +446,7 @@ export class BspNetTestApi implements AsyncDisposable {
         blockNumber: number,
         options?: {
           waitBetweenBlocks?: number | boolean;
-          waitForBspProofs?: string[];
+          watchForBspProofs?: string[];
           finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;
