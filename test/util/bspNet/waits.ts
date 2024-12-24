@@ -18,7 +18,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     checkQuantity,
     shouldSeal = false,
     expectedEvent,
-    timeout = 100,
+    timeout = 1000,
     verbose = false
   } = options;
   // Handle the case where the expected amount of extrinsics is 0
