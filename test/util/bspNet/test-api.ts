@@ -445,7 +445,7 @@ export class BspNetTestApi implements AsyncDisposable {
         blockNumber: number,
         options?: {
           waitBetweenBlocks?: number | boolean;
-          waitForBspProofs?: string[];
+          watchForBspProofs?: string[];
           finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;

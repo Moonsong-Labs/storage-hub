@@ -12,7 +12,7 @@ import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../uti
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard", only: true },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -322,7 +322,7 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID]
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID]
       });
 
       // Resume BSP-Two and BSP-Three.
@@ -464,7 +464,7 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.block.skipTo(currentBlockNumber + deletionRequestTtl, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
       // Check for a file deletion request event.
@@ -481,7 +481,7 @@ describeBspNet(
       );
       const nextCheckpointChallengeBlock = lastCheckpointChallengeTick + checkpointChallengePeriod;
       await userApi.block.skipTo(nextCheckpointChallengeBlock, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
       // Check that the event for the priority challenge is emitted.
@@ -561,7 +561,7 @@ describeBspNet(
       if (firstBlockToAdvance !== currentBlockNumber) {
         // Advance to first next challenge block.
         await userApi.block.skipTo(firstBlockToAdvance, {
-          waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+          watchForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
         });
       }
 
@@ -617,7 +617,7 @@ describeBspNet(
         if (secondBlockToAdvance !== currentBlockNumber) {
           // Advance to second next challenge block.
           await userApi.block.skipTo(secondBlockToAdvance, {
-            waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+            watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
           });
         }
 
