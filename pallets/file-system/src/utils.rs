@@ -1277,7 +1277,7 @@ where
 					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
 						&bsp_id,
 						&storage_request_metadata.owner,
-						&(previous_amount_provided + storage_request_metadata.size),
+						&(previous_amount_provided.saturating_add(storage_request_metadata.size)),
 					)?;
 				},
 				None => {
@@ -1657,7 +1657,7 @@ where
             // add this BSP as a data server if they can serve the file.
             None => {
                 Self::do_request_storage(
-                    owner,
+                    owner.clone(),
                     bucket_id,
                     location.clone(),
                     fingerprint,
@@ -1685,7 +1685,7 @@ where
         <PendingStopStoringRequests<T>>::insert(
             &bsp_id,
             &file_key,
-            (frame_system::Pallet::<T>::block_number(), size),
+            (frame_system::Pallet::<T>::block_number(), size, owner),
         );
 
         Ok(bsp_id)
@@ -1708,7 +1708,7 @@ where
         );
 
         // Get the block when the pending stop storing request of the BSP for the file key was opened.
-        let (block_when_opened, file_size) =
+        let (block_when_opened, file_size, owner) =
             <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
                 .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
 
@@ -1748,6 +1748,22 @@ where
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
             &bsp_id, file_size,
         )?;
+
+        // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
+        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner)
+			.ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
+			.saturating_sub(file_size);
+        if new_amount_provided == Zero::zero() {
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                &bsp_id, &owner,
+            )?;
+        } else {
+            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+                &bsp_id,
+                &owner,
+                &new_amount_provided,
+            )?;
+        }
 
         // If the new capacity used for this BSP is 0, stop its randomness cycle.
         if <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id)
@@ -1965,12 +1981,12 @@ where
 
                 // Check if the file key is already in the pending deletion requests.
                 ensure!(
-                    !pending_file_deletion_requests.contains(&(file_key, bucket_id)),
+                    !pending_file_deletion_requests.contains(&(file_key, size, bucket_id)),
                     Error::<T>::FileKeyAlreadyPendingDeletion
                 );
 
                 // Add the file key to the pending deletion requests.
-                PendingFileDeletionRequests::<T>::try_append(&sender, (file_key, bucket_id))
+                PendingFileDeletionRequests::<T>::try_append(&sender, (file_key, size, bucket_id))
                     .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
@@ -2033,6 +2049,7 @@ where
         sender: T::AccountId,
         user: T::AccountId,
         file_key: MerkleHash<T>,
+        file_size: StorageData<T>,
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
@@ -2055,7 +2072,7 @@ where
 
         // Check if the file key is in the pending deletion requests.
         ensure!(
-            pending_file_deletion_requests.contains(&(file_key, bucket_id)),
+            pending_file_deletion_requests.contains(&(file_key, file_size, bucket_id)),
             Error::<T>::FileKeyNotPendingDeletion
         );
 
@@ -2081,6 +2098,9 @@ where
                 Some(TrieRemoveMutation),
             )?;
 
+            // Decrease size of the bucket.
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, file_size)?;
+
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
                 issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
@@ -2090,7 +2110,7 @@ where
 
         // Delete the pending deletion request.
         <PendingFileDeletionRequests<T>>::mutate(&user, |requests| {
-            requests.retain(|(key, _)| key != &file_key);
+            requests.retain(|(key, _, _)| key != &file_key);
         });
 
         Ok((file_key_included, msp_id))
@@ -2442,7 +2462,7 @@ mod hooks {
             // Check if the file key is still a pending deletion requests.
             let expired_item_index = match requests
                 .iter()
-                .position(|(key, _)| key == &expired_file_deletion_request.file_key)
+                .position(|(key, _, _)| key == &expired_file_deletion_request.file_key)
             {
                 Some(i) => i,
                 None => return,

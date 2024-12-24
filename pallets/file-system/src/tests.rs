@@ -7770,7 +7770,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );
@@ -7788,6 +7788,7 @@ mod delete_file_and_pending_deletions_tests {
 						msp_origin,
 						owner_account_id.clone(),
 						file_key,
+						size,
 						bucket_id,
 						forest_proof
 					),
@@ -7798,7 +7799,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );
@@ -7841,6 +7842,7 @@ mod delete_file_and_pending_deletions_tests {
                         msp_origin,
                         owner_account_id.clone(),
                         file_key,
+                        size,
                         bucket_id,
                         forest_proof
                     ),
@@ -7934,7 +7936,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );
@@ -8177,7 +8179,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );
@@ -8243,6 +8245,13 @@ mod delete_file_and_pending_deletions_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+				// Increase bucket size to simulate it storing the file
+				pallet_storage_providers::Buckets::<Test>::mutate(bucket_id, |bucket| {
+					// Bucket should be Some() since we just added it
+					let bucket = bucket.as_mut().unwrap();
+					bucket.size += size;
+				});
+
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
@@ -8266,7 +8275,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );
@@ -8281,6 +8290,7 @@ mod delete_file_and_pending_deletions_tests {
 					msp_origin,
 					owner_account_id.clone(),
 					file_key,
+					size,
 					bucket_id,
 					forest_proof
 				));
@@ -8349,7 +8359,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );
@@ -8364,6 +8374,7 @@ mod delete_file_and_pending_deletions_tests {
 					msp_origin,
 					owner_account_id.clone(),
 					file_key,
+					size,
 					bucket_id,
 					forest_proof
 				));
@@ -8490,7 +8501,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, bucket_id)]
+                        vec![(file_key, size, bucket_id)]
                     )
                         .unwrap()
                 );

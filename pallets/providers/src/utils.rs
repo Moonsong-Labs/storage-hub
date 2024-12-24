@@ -2308,6 +2308,7 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
             }
         } else {
             // If the user is solvent, update the payment stream between the user and the provider.
+            // If the new amount provided would be zero, delete it instead.
             let previous_amount_provided =
             <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
                 provider_id,
@@ -2315,11 +2316,18 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
             )
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
             let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
-            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-                provider_id,
-                &owner,
-                &new_amount_provided,
-            )?;
+            if new_amount_provided.is_zero() {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                    provider_id,
+                    &owner,
+                )?;
+            } else {
+                <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+                    provider_id,
+                    &owner,
+                    &new_amount_provided,
+                )?;
+            }
         }
 
         Ok(())

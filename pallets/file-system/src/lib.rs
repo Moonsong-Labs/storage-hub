@@ -402,22 +402,26 @@ pub mod pallet {
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+    /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key, file size and bucket id.
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        BoundedVec<(MerkleHash<T>, BucketIdFor<T>), T::MaxUserPendingDeletionRequests>,
+        BoundedVec<
+            (MerkleHash<T>, StorageData<T>, BucketIdFor<T>),
+            T::MaxUserPendingDeletionRequests,
+        >,
         ValueQuery,
     >;
 
     /// Pending file stop storing requests.
     ///
-    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
-    /// and the proven size of the file.
+    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened,
+    /// the proven size of the file and the owner of the file.
     /// The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
     /// of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+    /// The owner is to be able to update the payment stream between the user and the BSP.
     #[pallet::storage]
     pub type PendingStopStoringRequests<T: Config> = StorageDoubleMap<
         _,
@@ -425,7 +429,7 @@ pub mod pallet {
         ProviderIdFor<T>,
         Blake2_128Concat,
         MerkleHash<T>,
-        (BlockNumberFor<T>, StorageData<T>),
+        (BlockNumberFor<T>, StorageData<T>, T::AccountId),
     >;
 
     /// Pending move bucket requests.
@@ -802,6 +806,8 @@ pub mod pallet {
         InconsistentStateKeyAlreadyExists,
         /// Failed to fetch the rate for the payment stream.
         FixedRatePaymentStreamNotFound,
+        /// Failed to fetch the dynamic-rate payment stream.
+        DynamicRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
         /// Failed to query earliest volunteer tick
@@ -1277,6 +1283,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
@@ -1286,6 +1293,7 @@ pub mod pallet {
                 who.clone(),
                 user.clone(),
                 file_key,
+                file_size,
                 bucket_id,
                 forest_proof,
             )?;
