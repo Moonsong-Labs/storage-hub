@@ -104,13 +104,14 @@ describeMspNet(
       // Seal block with 3 storage requests.
       const txs = [];
       for (let i = 0; i < source.length; i++) {
-        const { fingerprint, file_size, location } =
-          await userApi.rpc.storagehubclient.loadFileInStorage(
-            source[i],
-            destination[i],
-            userApi.shConsts.NODE_INFOS.user.AddressId,
-            bucketId
-          );
+        const {
+          file_metadata: { location, fingerprint, file_size }
+        } = await userApi.rpc.storagehubclient.loadFileInStorage(
+          source[i],
+          destination[i],
+          userApi.shConsts.NODE_INFOS.user.AddressId,
+          bucketId
+        );
 
         txs.push(
           userApi.tx.fileSystem.issueStorageRequest(

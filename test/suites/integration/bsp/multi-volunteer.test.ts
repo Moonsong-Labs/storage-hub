@@ -25,7 +25,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 1", ({ before, it, createUse
 
       assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-      const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+      const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
         "res/smile.jpg",
         "cat/smile.jpg",
         signer.address,
