@@ -3,7 +3,7 @@ import { bspKey, describeBspNet, shUser, type EnrichedBspApi } from "../../../ut
 
 describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
-  { initialised: "multi", networkConfig: "standard", only: true },
+  { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
