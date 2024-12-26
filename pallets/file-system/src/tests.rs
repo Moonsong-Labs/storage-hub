@@ -4,9 +4,9 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileDeletionRequestExpirationItem,
         FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds,
-        PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        StorageRequestTtl, ThresholdType, ValuePropId,
+        PendingFileDeletionRequest, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, ValuePropId,
     },
     Config, Error, Event, MaxReplicationTarget, PendingBucketsToMove, PendingMoveBucketRequests,
     PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
@@ -3957,7 +3957,7 @@ mod msp_respond_storage_request {
                 let msp = Keyring::Charlie.to_account_id();
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 2 * 1024 * 1024 * 1024;
+                let size = 100 * 1024 * 1024 * 1024;
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -7612,6 +7612,7 @@ mod delete_file_and_pending_deletions_tests {
     use super::*;
 
     mod failure {
+
         use super::*;
 
         #[test]
@@ -7770,7 +7771,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -7797,9 +7803,14 @@ mod delete_file_and_pending_deletions_tests {
 
                 // Assert that the pending file deletion request was not removed from storage
                 assert_eq!(
-                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id,
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -7936,7 +7947,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -7970,7 +7986,7 @@ mod delete_file_and_pending_deletions_tests {
                     vec![]
                 );
 
-                // Asser that the pending file deletion request was removed from storage
+                // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
@@ -8002,7 +8018,7 @@ mod delete_file_and_pending_deletions_tests {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
+                let size = 1024 * 1024 * 1024;
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
@@ -8014,6 +8030,9 @@ mod delete_file_and_pending_deletions_tests {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+				// Increase bucket size and payment stream rate to simulate it storing the file
+				let initial_bucket_size = 2 * size;
+				assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
@@ -8054,6 +8073,9 @@ mod delete_file_and_pending_deletions_tests {
                     }],
                 ));
 
+				let bucket_size_after_confirm = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let payment_stream_rate_after_confirm = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
@@ -8076,6 +8098,19 @@ mod delete_file_and_pending_deletions_tests {
                         .iter()
                         .any(|x| *x == (file_key, Some(TrieRemoveMutation))),
                 );
+
+				// Assert that the Bucket root was correctly updated
+				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
+				let bucket_root = bucket_info.root;
+				assert_eq!(bucket_root, file_key); // This is because our mocked apply delta sets the root as the last mutation
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size = bucket_info.size;
+				assert_eq!(new_bucket_size, bucket_size_after_confirm - size);
+
+				// Assert that the payment stream rate decrease
+				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				assert!(new_payment_stream_rate < payment_stream_rate_after_confirm);
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8179,7 +8214,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -8236,7 +8276,7 @@ mod delete_file_and_pending_deletions_tests {
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
+                let size = 1024 * 1024 * 1024; // One gigabyte
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
 
@@ -8245,12 +8285,10 @@ mod delete_file_and_pending_deletions_tests {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-				// Increase bucket size to simulate it storing the file
-				pallet_storage_providers::Buckets::<Test>::mutate(bucket_id, |bucket| {
-					// Bucket should be Some() since we just added it
-					let bucket = bucket.as_mut().unwrap();
-					bucket.size += size;
-				});
+				// Increase bucket size and payment stream rate to simulate it storing the file
+				let initial_bucket_size = 2 * size;
+				assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
+				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8275,7 +8313,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -8294,6 +8337,19 @@ mod delete_file_and_pending_deletions_tests {
 					bucket_id,
 					forest_proof
 				));
+
+				// Assert that the Bucket root was correctly updated
+				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
+				let bucket_root = bucket_info.root;
+				assert_eq!(bucket_root, file_key); // This is because our mocked apply delta sets the root as the last mutation
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size = bucket_info.size;
+				assert_eq!(new_bucket_size, initial_bucket_size - size);
+
+				// Assert that the payment stream rate decrease
+				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				assert!(new_payment_stream_rate < initial_payment_stream_rate);
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8359,7 +8415,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -8501,7 +8562,12 @@ mod delete_file_and_pending_deletions_tests {
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![(file_key, size, bucket_id)]
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
                     )
                         .unwrap()
                 );
@@ -10168,7 +10234,7 @@ fn add_msp_to_provider_storage(
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
-        capacity: 1024 * 1024 * 1024,
+        capacity: 10 * 1024 * 1024 * 1024,
         capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
@@ -10183,7 +10249,7 @@ fn add_msp_to_provider_storage(
         msp_hash,
     );
 
-    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10000);
+    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10 * 1024 * 1024 * 1024);
     let value_prop_id = value_prop.derive_id();
     pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
         msp_hash,

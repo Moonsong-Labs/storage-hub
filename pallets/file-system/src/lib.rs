@@ -402,16 +402,13 @@ pub mod pallet {
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key, file size and bucket id.
+    /// A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        BoundedVec<
-            (MerkleHash<T>, StorageData<T>, BucketIdFor<T>),
-            T::MaxUserPendingDeletionRequests,
-        >,
+        BoundedVec<PendingFileDeletionRequest<T>, T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
 
@@ -429,7 +426,7 @@ pub mod pallet {
         ProviderIdFor<T>,
         Blake2_128Concat,
         MerkleHash<T>,
-        (BlockNumberFor<T>, StorageData<T>, T::AccountId),
+        PendingStopStoringRequest<T>,
     >;
 
     /// Pending move bucket requests.

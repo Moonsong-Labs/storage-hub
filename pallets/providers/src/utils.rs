@@ -1272,7 +1272,7 @@ where
     /// Adjust the fixed rate payment stream between a user and an MSP based on the [`RateDeltaParam`].
     ///
     /// Handles creating, updating, or deleting the fixed rate payment stream storage.
-    fn apply_delta_fixed_rate_payment_stream(
+    pub fn apply_delta_fixed_rate_payment_stream(
         msp_id: &MainStorageProviderId<T>,
         bucket_id: &BucketId<T>,
         user_id: &T::AccountId,

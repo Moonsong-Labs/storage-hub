@@ -40,9 +40,10 @@ use crate::{
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
         FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
         MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
+        PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest, ProviderIdFor,
+        RejectedStorageRequest, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
@@ -1687,7 +1688,11 @@ where
         <PendingStopStoringRequests<T>>::insert(
             &bsp_id,
             &file_key,
-            (frame_system::Pallet::<T>::block_number(), size, owner),
+            PendingStopStoringRequest {
+                tick_when_requested: frame_system::Pallet::<T>::block_number(),
+                file_owner: owner,
+                file_size: size,
+            },
         );
 
         Ok(bsp_id)
@@ -1710,9 +1715,12 @@ where
         );
 
         // Get the block when the pending stop storing request of the BSP for the file key was opened.
-        let (block_when_opened, file_size, owner) =
-            <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
-                .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
+        let PendingStopStoringRequest {
+            tick_when_requested: block_when_opened,
+            file_size,
+            file_owner,
+        } = <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
+            .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
 
         // Check that enough time has passed since the pending stop storing request was opened.
         ensure!(
@@ -1752,17 +1760,18 @@ where
         )?;
 
         // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
-        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner)
+        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &file_owner)
 			.ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
 			.saturating_sub(file_size);
         if new_amount_provided == Zero::zero() {
             <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
-                &bsp_id, &owner,
+                &bsp_id,
+                &file_owner,
             )?;
         } else {
             <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
                 &bsp_id,
-                &owner,
+                &file_owner,
                 &new_amount_provided,
             )?;
         }
@@ -1982,14 +1991,23 @@ where
                 let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&sender);
 
                 // Check if the file key is already in the pending deletion requests.
+                let pending_file_deletion_request = PendingFileDeletionRequest {
+                    user: sender.clone(),
+                    file_key,
+                    bucket_id,
+                    file_size: size,
+                };
                 ensure!(
-                    !pending_file_deletion_requests.contains(&(file_key, size, bucket_id)),
+                    !pending_file_deletion_requests.contains(&pending_file_deletion_request),
                     Error::<T>::FileKeyAlreadyPendingDeletion
                 );
 
                 // Add the file key to the pending deletion requests.
-                PendingFileDeletionRequests::<T>::try_append(&sender, (file_key, size, bucket_id))
-                    .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
+                PendingFileDeletionRequests::<T>::try_append(
+                    &sender,
+                    pending_file_deletion_request,
+                )
+                .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
                 let expiration_item = ExpirationItem::PendingFileDeletionRequests(
@@ -2086,8 +2104,15 @@ where
         let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
 
         // Check if the file key is in the pending deletion requests.
+        let pending_file_deletion_request_to_prove = PendingFileDeletionRequest {
+            user: user.clone(),
+            file_key,
+            bucket_id,
+            file_size,
+        };
+
         ensure!(
-            pending_file_deletion_requests.contains(&(file_key, file_size, bucket_id)),
+            pending_file_deletion_requests.contains(&pending_file_deletion_request_to_prove),
             Error::<T>::FileKeyNotPendingDeletion
         );
 
@@ -2139,7 +2164,9 @@ where
 
         // Delete the pending deletion request.
         <PendingFileDeletionRequests<T>>::mutate(&user, |requests| {
-            requests.retain(|(key, _, _)| key != &file_key);
+            requests.retain(|pending_file_deletion_request| {
+                &pending_file_deletion_request.file_key != &file_key
+            });
         });
 
         Ok((file_key_included, msp_id))
@@ -2489,13 +2516,14 @@ mod hooks {
                 PendingFileDeletionRequests::<T>::get(&expired_file_deletion_request.user);
 
             // Check if the file key is still a pending deletion requests.
-            let expired_item_index = match requests
-                .iter()
-                .position(|(key, _, _)| key == &expired_file_deletion_request.file_key)
-            {
-                Some(i) => i,
-                None => return,
-            };
+            let expired_item_index =
+                match requests.iter().position(|pending_file_deletion_request| {
+                    &pending_file_deletion_request.file_key
+                        == &expired_file_deletion_request.file_key
+                }) {
+                    Some(i) => i,
+                    None => return,
+                };
 
             // Remove the file key from the pending deletion requests.
             PendingFileDeletionRequests::<T>::mutate(
