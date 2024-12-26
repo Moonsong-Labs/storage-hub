@@ -305,7 +305,24 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the MSP has completed to store a file.
        */
       mspFileStorageComplete: (fileKey: H256 | string) =>
-        Waits.waitForBspFileStorageComplete(this._api, fileKey)
+        Waits.waitForBspFileStorageComplete(this._api, fileKey),
+
+      /**
+       * Waits for a block where the given address has no pending extrinsics.
+       *
+       * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
+       * without risking it clashing with another transaction with the same nonce already in the pool. For example,
+       * BSP nodes are often sending transactions, so if you want to send a transaction using one of the BSP keys,
+       * you should wait for the BSP to have no pending extrinsics before sending the transaction.
+       *
+       * IMPORTANT: As long as the address keeps having pending extrinsics, this function will keep waiting and building
+       * blocks to include such transactions.
+       *
+       * @param address - The address of the account to wait for.
+       * @returns A promise that resolves when the address has no pending extrinsics.
+       */
+      waitForAvailabilityToSendTx: (address: string) =>
+        Waits.waitForAvailabilityToSendTx(this._api, address)
     };
 
     /**

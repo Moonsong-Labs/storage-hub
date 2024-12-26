@@ -341,6 +341,46 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
 };
 
 /**
+ * Waits for a block where the given address has no pending extrinsics.
+ *
+ * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
+ * without risking it clashing with another transaction with the same nonce already in the pool. For example,
+ * BSP nodes are often sending transactions, so if you want to send a transaction using one of the BSP keys,
+ * you should wait for the BSP to have no pending extrinsics before sending the transaction.
+ *
+ * IMPORTANT: As long as the address keeps having pending extrinsics, this function will keep waiting and building
+ * blocks to include such transactions.
+ *
+ * @param api - The ApiPromise instance.
+ * @param address - The address of the account to wait for.
+ */
+export const waitForAvailabilityToSendTx = async (
+  api: ApiPromise,
+  address: string,
+  iterations = 100,
+  delay = 500
+) => {
+  let isTxFromAddressPresent = false;
+  let its = iterations;
+  do {
+    await sleep(delay);
+
+    // Check if the address has pending extrinsics
+    const result = await api.rpc.author.pendingExtrinsics();
+    isTxFromAddressPresent = result.some((tx) => tx.signer.toString() === address);
+    if (isTxFromAddressPresent) {
+      // Build a block with the transactions from the address
+      await sealBlock(api);
+    }
+  } while (isTxFromAddressPresent && its-- > 0);
+
+  if (isTxFromAddressPresent) {
+    // If the address still has pending extrinsics after the maximum number of iterations, throw an error
+    throw new Error(`Failed after ${iterations} iterations and ${(iterations * delay) / 1000}s`);
+  }
+};
+
+/**
  * Options for the `waitFor` function.
  * @param lambda - The condition to wait for.
  * @param iterations - The number of iterations to wait for the condition to be true.

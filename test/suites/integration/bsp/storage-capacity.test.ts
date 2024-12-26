@@ -57,6 +57,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     const { extSuccess } = await userApi.sealBlock(
       userApi.tx.providers.changeCapacity(newCapacity),
       bspKey
@@ -116,6 +117,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     await userApi.sealBlock(userApi.tx.providers.changeCapacity(newCapacity), bspKey);
 
     const totalCapacityAfter = await userApi.query.providers.totalBspsCapacity();
@@ -138,6 +140,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     const { events, extSuccess } = await userApi.sealBlock(
       userApi.tx.providers.changeCapacity(2n),
       bspKey
@@ -167,6 +170,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     const { extSuccess } = await userApi.sealBlock(
       userApi.tx.providers.changeCapacity(newCapacity),
       bspKey
