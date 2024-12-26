@@ -14,6 +14,7 @@ use frame_benchmarking::v2::*;
     // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers:
     <T as crate::Config>::Providers: shp_traits::ReadBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId> + shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
 	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>>,
+	<T as crate::Config>::Nfts: frame_support::traits::nonfungibles_v2::Inspect<<T as frame_system::Config>::AccountId, CollectionId = <T as pallet_nfts::Config>::CollectionId>,
 )]
 mod benchmarks {
     use super::*;
@@ -26,7 +27,7 @@ mod benchmarks {
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use pallet_file_system_runtime_api::QueryFileEarliestVolunteerTickError;
     use pallet_storage_providers::types::ValueProposition;
-    use shp_traits::ReadBucketsInterface;
+    use shp_traits::{ReadBucketsInterface, ReadStorageProvidersInterface};
     use sp_core::Hasher;
     use sp_runtime::traits::{Hash, One};
     use sp_std::vec;
@@ -109,6 +110,15 @@ mod benchmarks {
         // Ensure the PendingBucketsToMove storage has the bucket
         assert!(PendingBucketsToMove::<T>::contains_key(&bucket_id));
 
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MoveBucketRequested {
+                who: user,
+                bucket_id,
+                new_msp_id,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
         Ok(())
     }
 
@@ -169,6 +179,14 @@ mod benchmarks {
             )
         );
 
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MoveBucketAccepted {
+                bucket_id,
+                msp_id: new_msp_id,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
         Ok(())
     }
 
@@ -224,6 +242,137 @@ mod benchmarks {
             new_collection_id
         ));
         assert_ne!(collection_id, new_collection_id);
+
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BucketPrivacyUpdated {
+                who: user,
+                bucket_id,
+                private: true,
+                collection_id: Some(new_collection_id),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn create_and_associate_collection_with_bucket() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get a user account and mint some tokens into it
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Set up parameters for the bucket to use
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+
+        // Register a MSP with a value proposition
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+
+        // Create the bucket as private, creating the collection
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            Some(msp_id),
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        // The worst-case scenario is when the bucket has an associated collection but it doesn't exist in storage,
+        // since it has to perform an extra check compared to the bucket being public from the start
+        // So, we delete the collection from storage
+        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?.unwrap();
+        pallet_nfts::Collection::<T>::remove(collection_id);
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(signed_origin, bucket_id);
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the bucket is still private
+        assert!(T::Providers::is_bucket_private(&bucket_id).unwrap());
+
+        // Ensure it has a collection now, after we deleted the previous one
+        let new_collection_id =
+            T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?.unwrap();
+        assert!(pallet_nfts::Collection::<T>::contains_key(
+            new_collection_id
+        ));
+        assert_ne!(collection_id, new_collection_id);
+
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::NewCollectionAndAssociation {
+                who: user,
+                bucket_id,
+                collection_id: new_collection_id,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_bucket() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get a user account and mint some tokens into it
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Set up parameters for the bucket to use
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+
+        // Register a MSP with a value proposition
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+
+        // Create the bucket as private, creating the collection so it has to be deleted as well.
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            Some(msp_id),
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        // Get the collection ID of the bucket
+        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?.unwrap();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(signed_origin, bucket_id);
+
+        /*********** Post-benchmark checks: ***********/
+        // The bucket should have been deleted.
+        assert!(!T::Providers::bucket_exists(&bucket_id));
+
+        // And the collection should have been deleted as well
+        assert!(!pallet_nfts::Collection::<T>::contains_key(collection_id));
+
+        // Ensure the expected event was emitted.
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BucketDeleted {
+            who: user,
+            bucket_id,
+            maybe_collection_id: Some(collection_id),
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
     }
@@ -301,6 +450,7 @@ mod benchmarks {
         let bsp_signed_origin = RawOrigin::Signed(bsp_account.clone());
         mint_into_account::<T>(bsp_account.clone(), 1_000_000_000_000_000)?;
         let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_account);
+        let bsp_multiaddresses = <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_bsp_multiaddresses(&bsp_id)?;
 
         // Create the bucket, assigning it to the MSP
         let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
@@ -387,6 +537,19 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Ensure the BSP has correctly volunteered for the file
         assert!(StorageRequestBsps::<T>::contains_key(&file_key, &bsp_id));
+
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::AcceptedBspVolunteer {
+                bsp_id,
+                multiaddresses: bsp_multiaddresses,
+                bucket_id,
+                location,
+                fingerprint,
+                owner: user,
+                size,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
     }

@@ -4,7 +4,7 @@ use frame_support::{
     pallet_prelude::DispatchResult,
     traits::{
         fungible::{InspectHold, Mutate, MutateHold},
-        nonfungibles_v2::Create,
+        nonfungibles_v2::{Create, Destroy},
         tokens::{Precision, Preservation},
         Get,
     },
@@ -558,6 +558,16 @@ where
 
         // Delete the bucket.
         <T::Providers as MutateBucketsInterface>::remove_root_bucket(bucket_id)?;
+
+        // Delete the collection associated with the bucket if it existed.
+        if let Some(collection_id) = maybe_collection_id.clone() {
+            let destroy_witness = expect_or_err!(
+                T::Nfts::get_destroy_witness(&collection_id),
+                "Failed to get destroy witness for collection, when it was already checked to exist",
+                Error::<T>::CollectionNotFound
+            );
+            T::Nfts::destroy(collection_id, destroy_witness, Some(sender))?;
+        }
 
         // Return the collection ID associated with the bucket, if any.
         Ok(maybe_collection_id)

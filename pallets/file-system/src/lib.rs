@@ -55,7 +55,7 @@ pub mod pallet {
         sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
             fungible::*,
-            nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
+            nonfungibles_v2::{Create, Destroy, Inspect as NonFungiblesInspect},
         },
         Blake2_128Concat,
     };
@@ -229,7 +229,8 @@ pub mod pallet {
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
-            + Create<Self::AccountId, CollectionConfigFor<Self>>;
+            + Create<Self::AccountId, CollectionConfigFor<Self>>
+            + Destroy<Self::AccountId>;
 
         /// Collection inspector
         type CollectionInspector: shp_traits::InspectCollections<
@@ -738,6 +739,8 @@ pub mod pallet {
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
+        /// Collection ID was not found.
+        CollectionNotFound,
         /// Root of the provider not found.
         ProviderRootNotFound,
         /// Failed to verify proof: required to provide a proof of non-inclusion.
