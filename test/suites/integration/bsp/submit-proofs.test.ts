@@ -240,7 +240,7 @@ describeBspNet(
     it("BSP three is not challenged any more", async () => {
       const result = await userApi.call.proofsDealerApi.getNextDeadlineTick(ShConsts.BSP_THREE_ID);
 
-      assert(result.isErr, "BSP three doesn't have files so it it shouldnt have deadline");
+      assert(result.isErr, "BSP three doesn't have files so it shouldn't have deadline");
     });
 
     it("New storage request sent by user, to only one BSP", async () => {

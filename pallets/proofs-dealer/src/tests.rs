@@ -794,7 +794,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_not_provider_fail() {
 }
 
 #[test]
-fn proofs_dealer_trait_stop_challenge_cycle() {
+fn proofs_dealer_trait_stop_challenge_cycle_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
