@@ -252,7 +252,7 @@ where
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::generate_challenges_from_seed(
                 T::MerkleHashToRandomnessOutput::convert(file_key),
                 &sp_id,
-                chunks_to_check - 1,
+                chunks_to_check.saturating_sub(One::one()),
             );
 
         let last_chunk_id = file_metadata.last_chunk_id();
@@ -947,7 +947,7 @@ where
 
                 // Remove storage request bsps
                 let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key_with_proof.file_key)
-                    .fold(0, |acc, _| acc + 1);
+                    .fold(0, |acc, _| acc.saturating_add(One::one()));
 
                 // Make sure that the expected number of bsps were removed.
                 expect_or_err!(
@@ -1315,8 +1315,8 @@ where
                 );
 
                 // Remove storage request bsps
-                let removed =
-                    <StorageRequestBsps<T>>::drain_prefix(&file_key.0).fold(0, |acc, _| acc + 1);
+                let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key.0)
+                    .fold(0, |acc, _| acc.saturating_add(One::one()));
 
                 // Make sure that the expected number of bsps were removed.
                 expect_or_err!(
@@ -1490,7 +1490,8 @@ where
         }
 
         // Remove storage request bsps
-        let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
+        let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
+            .fold(0, |acc, _| acc.saturating_add(One::one()));
 
         // Make sure that the expected number of bsps were removed.
         expect_or_err!(
@@ -1715,7 +1716,7 @@ where
         // Check that enough time has passed since the pending stop storing request was opened.
         ensure!(
             frame_system::Pallet::<T>::block_number()
-                >= block_when_opened + T::MinWaitForStopStoring::get(),
+                >= block_when_opened.saturating_add(T::MinWaitForStopStoring::get()),
             Error::<T>::MinWaitForStopStoringNotReached
         );
 
@@ -2437,8 +2438,8 @@ mod hooks {
 
             // Remove storage request and all bsps that volunteered for it.
             let storage_request_metadata = StorageRequests::<T>::take(&file_key);
-            let removed =
-                StorageRequestBsps::<T>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1u32);
+            let removed = StorageRequestBsps::<T>::drain_prefix(&file_key)
+                .fold(0u32, |acc, _| acc.saturating_add(One::one()));
 
             let weight_used = db_weight.writes(1.saturating_add(removed.into()));
             meter.consume(weight_used);
