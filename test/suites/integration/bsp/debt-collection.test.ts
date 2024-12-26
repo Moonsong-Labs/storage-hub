@@ -1,13 +1,6 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import {
-  bob,
-  describeBspNet,
-  fetchEvent,
-  ShConsts,
-  sleep,
-  type EnrichedBspApi
-} from "../../../util";
+import { bob, describeBspNet, fetchEvent, ShConsts, type EnrichedBspApi } from "../../../util";
 import { BN } from "@polkadot/util";
 
 describeBspNet(
@@ -262,9 +255,9 @@ describeBspNet(
         3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
-      await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
-      await bspTwoApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
-      await bspThreeApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
+      await bspTwoApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
       const adolphusFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -277,9 +270,9 @@ describeBspNet(
         3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
-      await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
-      await bspTwoApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
-      await bspThreeApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspTwoApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
       // Check the payment stream info after adding the new files
@@ -493,7 +486,6 @@ describeBspNet(
 
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
-      await sleep(500);
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
