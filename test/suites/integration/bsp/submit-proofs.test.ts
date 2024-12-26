@@ -584,7 +584,7 @@ describeBspNet(
           userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
         assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
 
-        return firstChallengeBlockEventDataBlob.provider.toString() === firstBspToRespond;
+        return firstChallengeBlockEventDataBlob.providerId.toString() === firstBspToRespond;
       });
       assert(atLeastOneEventBelongsToFirstBsp, "No ProofAccepted event belongs to the first BSP");
 
@@ -641,7 +641,7 @@ describeBspNet(
           userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
         assert(secondChallengeBlockEventDataBlob, "Event doesn't match Type");
 
-        return secondChallengeBlockEventDataBlob.provider.toString() === secondBspToRespond;
+        return secondChallengeBlockEventDataBlob.providerId.toString() === secondBspToRespond;
       });
       assert(atLeastOneEventBelongsToSecondBsp, "No ProofAccepted event belongs to the second BSP");
 
