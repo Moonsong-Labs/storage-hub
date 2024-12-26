@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { bspKey, describeBspNet, type EnrichedBspApi, ferdie, sleep } from "../../../util";
+import { addBsp, BspNetTestApi, bspKey, bspTwoKey, bspTwoSeed, describeBspNet, type EnrichedBspApi, ferdie, sleep, ShConsts } from "../../../util";
 
 describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
   let userApi: EnrichedBspApi;
@@ -212,5 +212,68 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
       bspApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
+  });
+
+  it("Test BSP storage size cannot go over MAX STORAGE", async () => {
+    const MAX_STORAGE_CAPACITY = 416600;
+    // Add a second BSP
+    const { rpcPort } = await addBsp(userApi, bspTwoKey, {
+      name: "sh-bsp-two",
+      bspKeySeed: bspTwoSeed,
+      bspId: ShConsts.BSP_TWO_ID,
+      maxStorageCapacity: MAX_STORAGE_CAPACITY,
+      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
+    });
+    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+
+    await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
+
+    await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
+
+    // stop other container
+    await userApi.docker.pauseBspContainer("docker-sh-bsp-1");
+
+    // First storage request
+    const source1 = "res/cloud.jpg";
+    const location1 = "test/cloud.jpg";
+    const bucketName1 = "kek1";
+    const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+      source1,
+      location1,
+      bucketName1
+    );
+
+    // Second storage request (both are biggar than the max storage capacity of the BSP two)
+    const source2 = "res/adolphus.jpg";
+    const location2 = "test/adolphus.jpg";
+    const bucketName2 = "kek2";
+    await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
+
+    const bspVolunteerTick = (
+      await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
+        ShConsts.BSP_TWO_ID,
+        fileMetadata.fileKey
+      )
+    ).asOk.toNumber();
+
+    if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick) {
+      await userApi.block.skipTo(bspVolunteerTick);
+    }
+
+    // We can only store one file.
+    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspStored();
+
+    const capacityUsed = (await userApi.query.providers.backupStorageProviders(ShConsts.BSP_TWO_ID))
+      .unwrap()
+      .capacityUsed.toNumber();
+
+    assert(
+      0 < capacityUsed && capacityUsed < MAX_STORAGE_CAPACITY,
+      "capacity used should be smaller than max storage capacity"
+    );
+
+    await bspTwoApi.disconnect();
+    await userApi.docker.stopBspContainer("sh-bsp-two");
   });
 });
