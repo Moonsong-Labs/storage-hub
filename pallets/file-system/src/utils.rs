@@ -1274,10 +1274,11 @@ where
             match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
 				Some(previous_amount_provided) => {
 					// Update the payment stream.
+                    let new_amount_provided = &previous_amount_provided.checked_add(storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
 					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
 						&bsp_id,
 						&storage_request_metadata.owner,
-						&(previous_amount_provided.saturating_add(storage_request_metadata.size)),
+						new_amount_provided,
 					)?;
 				},
 				None => {
