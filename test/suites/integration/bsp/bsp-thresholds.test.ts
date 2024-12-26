@@ -266,6 +266,7 @@ describeBspNet(
         bspStartingWeight: 800_000_000n
       });
       const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // Wait for it to catch up to the top of the chain
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
@@ -303,11 +304,11 @@ describeBspNet(
       );
 
       // Advance to the tick where the new BSP can volunteer
-      if (
-        (await userApi.rpc.chain.getHeader()).number.toNumber() < highReputationBspVolunteerTick
-      ) {
-        await userApi.block.skipTo(highReputationBspVolunteerTick);
-      }
+      const currentBlockNumber = (await userApi.rpc.chain.getHeader()).number.toNumber();
+      assert(
+        currentBlockNumber === highReputationBspVolunteerTick,
+        "BSP with high reputation should be able to volunteer immediately"
+      );
 
       // Wait until the new BSP volunteers
       await userApi.wait.bspVolunteer(1);
