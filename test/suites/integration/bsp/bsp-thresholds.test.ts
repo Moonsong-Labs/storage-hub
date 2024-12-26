@@ -114,7 +114,7 @@ describeBspNet(
       );
 
       await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 10))
+        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 500))
       );
 
       // Create a new BSP and onboard with no reputation
@@ -131,8 +131,8 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspDownApi);
 
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
-        "res/smile.jpg",
-        "test/smile.jpg",
+        "res/whatsup.jpg",
+        "test/whatsup.jpg",
         "bucket-1"
       );
 
@@ -150,17 +150,27 @@ describeBspNet(
         )
       ).asOk.toNumber();
 
-      if ((await userApi.rpc.chain.getHeader()).number.toNumber() < lowReputationVolunteerTick) {
-        await userApi.block.skipTo(lowReputationVolunteerTick);
-      }
+      const currentBlockNumber = (await userApi.rpc.chain.getHeader()).number.toNumber();
+      assert(
+        currentBlockNumber === normalReputationVolunteerTick,
+        "The BSP with high reputation should be able to volunteer immediately"
+      );
+      assert(
+        currentBlockNumber < lowReputationVolunteerTick,
+        "The volunteer tick for the low reputation BSP should be in the future"
+      );
 
-      if (normalReputationVolunteerTick < lowReputationVolunteerTick) {
-        await userApi.wait.bspVolunteer();
-      } else {
-        await userApi.wait.bspVolunteer(2);
-      }
+      // Checking volunteering and confirming for the high reputation BSP
+      await userApi.wait.bspVolunteer(1);
+      await bspApi.wait.fileStorageComplete(fileKey);
+      await userApi.wait.bspStored(1);
+
+      // Checking volunteering and confirming for the low reputation BSP
+      await userApi.block.skipTo(lowReputationVolunteerTick);
+      await userApi.wait.bspVolunteer(1);
       const matchedEvents = await userApi.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
+      // Check that it is in fact the BSP with low reputation that just volunteered
       const filtered = matchedEvents.filter(
         ({ event }) =>
           (userApi.events.fileSystem.AcceptedBspVolunteer.is(event) &&
@@ -224,49 +234,23 @@ describeBspNet(
         )
       ).asOk.toNumber();
 
-      if (bsp1VolunteerTick < bsp2VolunteerTick) {
-        // If the first BSP can volunteer first, wait for it to volunteer and confirm storing the file
-        if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
-          await userApi.block.skipTo(bsp1VolunteerTick);
-        }
-        await userApi.wait.bspVolunteer(1);
-        await bspApi.wait.bspFileStorageComplete(fileKey);
-        await userApi.wait.bspStored(1);
+      assert(bsp1VolunteerTick < bsp2VolunteerTick, "BSP one should be able to volunteer first");
+      const currentBlockNumber = (await userApi.rpc.chain.getHeader()).number.toNumber();
+      assert(
+        currentBlockNumber === bsp1VolunteerTick,
+        "BSP one should be able to volunteer immediately"
+      );
 
-        // Then wait for the second BSP to volunteer and confirm storing the file
-        if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
-          await userApi.block.skipTo(bsp2VolunteerTick);
-        }
-        await userApi.wait.bspVolunteer(1);
-        await bspTwoApi.wait.bspFileStorageComplete(fileKey);
-        await userApi.wait.bspStored(1);
-      } else if (bsp1VolunteerTick > bsp2VolunteerTick) {
-        // If the second BSP can volunteer first, wait for it to volunteer and confirm storing the file
-        if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp2VolunteerTick) {
-          await userApi.block.skipTo(bsp2VolunteerTick);
-        }
-        await userApi.wait.bspVolunteer(1);
-        await bspTwoApi.wait.bspFileStorageComplete(fileKey);
-        await userApi.wait.bspStored(1);
+      await userApi.wait.bspVolunteer(1);
+      await bspApi.wait.fileStorageComplete(fileKey);
+      await userApi.wait.bspStored(1);
 
-        // Then wait for the first BSP to volunteer and confirm storing the file
-        if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
-          await userApi.block.skipTo(bsp1VolunteerTick);
-        }
-        await userApi.wait.bspVolunteer(1);
-        await bspApi.wait.bspFileStorageComplete(fileKey);
-        await userApi.wait.bspStored(1);
-      } else {
-        // If both BSPs can volunteer at the same time, advance to the tick where both can volunteer
-        if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bsp1VolunteerTick) {
-          await userApi.block.skipTo(bsp1VolunteerTick);
-        }
-        // And wait for them to volunteer and confirm storing the file
-        await userApi.wait.bspVolunteer(2);
-        await bspApi.wait.bspFileStorageComplete(fileKey);
-        await bspTwoApi.wait.bspFileStorageComplete(fileKey);
-        await userApi.wait.bspStored(2);
-      }
+      // Then wait for the second BSP to volunteer and confirm storing the file
+      await userApi.block.skipTo(bsp2VolunteerTick);
+
+      await userApi.wait.bspVolunteer(1);
+      await bspTwoApi.wait.fileStorageComplete(fileKey);
+      await userApi.wait.bspStored(1);
 
       await bspTwoApi.disconnect();
       await userApi.docker.stopBspContainer("sh-bsp-two");
@@ -282,6 +266,7 @@ describeBspNet(
         bspStartingWeight: 800_000_000n
       });
       const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // Wait for it to catch up to the top of the chain
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
@@ -319,11 +304,11 @@ describeBspNet(
       );
 
       // Advance to the tick where the new BSP can volunteer
-      if (
-        (await userApi.rpc.chain.getHeader()).number.toNumber() < highReputationBspVolunteerTick
-      ) {
-        await userApi.block.skipTo(highReputationBspVolunteerTick);
-      }
+      const currentBlockNumber = (await userApi.rpc.chain.getHeader()).number.toNumber();
+      assert(
+        currentBlockNumber === highReputationBspVolunteerTick,
+        "BSP with high reputation should be able to volunteer immediately"
+      );
 
       // Wait until the new BSP volunteers
       await userApi.wait.bspVolunteer(1);

@@ -226,7 +226,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     // Wait for the BSP to receive and store all files
     for (let i = 0; i < source.length; i++) {
       const fileKey = fileKeys[i];
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
     }
 
     // The first file to be completed will immediately acquire the forest write lock
