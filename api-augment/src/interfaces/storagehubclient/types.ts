@@ -136,6 +136,12 @@ export interface IsStorageRequestOpenToVolunteersError extends Enum {
 /** @name Key */
 export interface Key extends H256 {}
 
+/** @name LoadFileInStorageResult */
+export interface LoadFileInStorageResult extends Struct {
+  readonly file_key: H256;
+  readonly file_metadata: FileMetadata;
+}
+
 /** @name MainStorageProviderId */
 export interface MainStorageProviderId extends H256 {}
 

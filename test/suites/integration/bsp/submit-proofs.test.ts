@@ -169,11 +169,15 @@ describeBspNet(
     });
 
     it("BSP three stops storing last file", async () => {
+      // Wait for BSP-Three to catch up to the tip of the chain
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+
+      // Build transaction for BSP-Three to stop storing the only file it has.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileMetadata.fileKey]
       );
-      // Build transaction for BSP-Three to stop storing the only file it has.
+      await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
       await userApi.sealBlock(
         bspThreeApi.tx.fileSystem.bspRequestStopStoring(
           fileMetadata.fileKey,
