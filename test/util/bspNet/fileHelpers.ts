@@ -18,7 +18,7 @@ export const sendNewStorageRequest = async (
   owner?: KeyringPair,
   mspId?: HexString
 ): Promise<FileMetadata> => {
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
     ShConsts.NODE_INFOS.user.AddressId,
@@ -32,8 +32,8 @@ export const sendNewStorageRequest = async (
     api.tx.fileSystem.issueStorageRequest(
       bucketId,
       location,
-      fileMetadata.file_metadata.fingerprint,
-      fileMetadata.file_metadata.file_size,
+      fileMetadata.fingerprint,
+      fileMetadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       null
@@ -103,7 +103,7 @@ export const createBucketAndSendNewStorageRequest = async (
 
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
     ShConsts.NODE_INFOS.user.AddressId,
@@ -115,8 +115,8 @@ export const createBucketAndSendNewStorageRequest = async (
     api.tx.fileSystem.issueStorageRequest(
       newBucketEventDataBlob.bucketId,
       location,
-      fileMetadata.file_metadata.fingerprint,
-      fileMetadata.file_metadata.file_size,
+      fileMetadata.fingerprint,
+      fileMetadata.file_size,
       mspId ?? null,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       replicationTarget ?? null
