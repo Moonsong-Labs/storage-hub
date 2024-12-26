@@ -162,7 +162,7 @@ describeBspNet(
 
       // Checking volunteering and confirming for the high reputation BSP
       await userApi.wait.bspVolunteer(1);
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
       await userApi.wait.bspStored(1);
 
       // Checking volunteering and confirming for the low reputation BSP
@@ -242,14 +242,14 @@ describeBspNet(
       );
 
       await userApi.wait.bspVolunteer(1);
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
       await userApi.wait.bspStored(1);
 
       // Then wait for the second BSP to volunteer and confirm storing the file
       await userApi.block.skipTo(bsp2VolunteerTick);
 
       await userApi.wait.bspVolunteer(1);
-      await bspTwoApi.wait.bspFileStorageComplete(fileKey);
+      await bspTwoApi.wait.fileStorageComplete(fileKey);
       await userApi.wait.bspStored(1);
 
       await bspTwoApi.disconnect();

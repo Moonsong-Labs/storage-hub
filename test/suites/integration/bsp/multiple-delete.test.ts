@@ -76,7 +76,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     // Wait for the BSP to volunteer
     await userApi.wait.bspVolunteer(source.length);
     for (const fileKey of fileKeys) {
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
     }
 
     // Waiting for a confirmation of the first file to be stored
@@ -214,7 +214,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       // Wait for the BSP to volunteer
       await userApi.wait.bspVolunteer(source.length);
       for (const fileKey of fileKeys) {
-        await bspApi.wait.bspFileStorageComplete(fileKey);
+        await bspApi.wait.fileStorageComplete(fileKey);
       }
 
       // Waiting for a confirmation of the first file to be stored

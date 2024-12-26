@@ -85,7 +85,7 @@ describeMspNet(
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
         assert(newStorageRequestDataBlob, "Event doesn't match NewStorageRequest type");
 
-        await mspApi.wait.mspFileStorageComplete(newStorageRequestDataBlob.fileKey);
+        await mspApi.wait.fileStorageComplete(newStorageRequestDataBlob.fileKey);
       }
 
       // Seal block containing the MSP's first response.

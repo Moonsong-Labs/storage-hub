@@ -255,9 +255,9 @@ describeBspNet(
         3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
-      await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
-      await bspTwoApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
-      await bspThreeApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
+      await bspTwoApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
       const adolphusFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -270,9 +270,9 @@ describeBspNet(
         3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
-      await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
-      await bspTwoApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
-      await bspThreeApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspTwoApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
       // Check the payment stream info after adding the new files

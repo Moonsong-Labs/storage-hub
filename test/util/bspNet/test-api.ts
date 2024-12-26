@@ -260,12 +260,12 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
 
       /**
-       * Waits for a BSP to complete storing a file key.
+       * Waits for a Storage Provider to complete storing a file key.
        * @param fileKey - Param to specify the file key to wait for.
        * @returns A promise that resolves when a BSP has completed to store a file.
        */
-      bspFileStorageComplete: (fileKey: H256 | string) =>
-        Waits.waitForBspFileStorageComplete(this._api, fileKey),
+      fileStorageComplete: (fileKey: H256 | string) =>
+        Waits.waitForFileStorageComplete(this._api, fileKey),
 
       /**
        * Waits for a BSP to complete deleting a file from its forest.
@@ -298,14 +298,6 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       mspResponseInTxPool: (expectedExts?: number) =>
         Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
-
-      /**
-       * Waits for a MSP to complete storing a file key.
-       * @param fileKey - Param to specify the file key to wait for.
-       * @returns A promise that resolves when the MSP has completed to store a file.
-       */
-      mspFileStorageComplete: (fileKey: H256 | string) =>
-        Waits.waitForBspFileStorageComplete(this._api, fileKey),
 
       /**
        * Waits for a block where the given address has no pending extrinsics.

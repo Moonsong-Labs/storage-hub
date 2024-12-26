@@ -109,7 +109,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
 
       assert(newStorageRequestDataBlob, "Event doesn't match NewStorageRequest type");
 
-      await mspApi.wait.mspFileStorageComplete(newStorageRequestDataBlob.fileKey);
+      await mspApi.wait.fileStorageComplete(newStorageRequestDataBlob.fileKey);
 
       issuedFileKeys.push(newStorageRequestDataBlob.fileKey);
     }
