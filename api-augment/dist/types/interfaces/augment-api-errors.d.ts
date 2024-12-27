@@ -207,6 +207,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Collection ID was not found.
+       **/
+      CollectionNotFound: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;

@@ -5670,6 +5670,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketNotFound: boolean;
     readonly isBucketNotEmpty: boolean;
     readonly isNotBucketOwner: boolean;
+    readonly isCollectionNotFound: boolean;
     readonly isProviderRootNotFound: boolean;
     readonly isExpectedNonInclusionProof: boolean;
     readonly isExpectedInclusionProof: boolean;
@@ -5743,6 +5744,7 @@ declare module "@polkadot/types/lookup" {
       | "BucketNotFound"
       | "BucketNotEmpty"
       | "NotBucketOwner"
+      | "CollectionNotFound"
       | "ProviderRootNotFound"
       | "ExpectedNonInclusionProof"
       | "ExpectedInclusionProof"
