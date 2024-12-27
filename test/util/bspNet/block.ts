@@ -132,7 +132,9 @@ export const sealBlock = async (
           signer || alice,
           { nonce: nonce.addn(i) },
           ({ txHash, status, events, dispatchError }) => {
-            results.hashes.push(txHash);
+            if (!results.hashes.includes(txHash)) {
+              results.hashes.push(txHash);
+            }
             // If any included tx errored out, print the error for easier debugging
             if (dispatchError) {
               if (dispatchError.isModule) {
