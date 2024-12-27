@@ -257,24 +257,11 @@ where
                     mutated_keys_and_values.push((*key, Some(mutation.value.clone())));
                 }
                 (key, TrieMutation::Remove(_)) => {
-                    let node_value = trie
-                        .remove(key.as_ref())
+                    let previous_value = trie
+                        .get(key.as_ref())
+                        .map_err(|_| "Failed to get value from trie.")?;
+                    trie.remove(key.as_ref())
                         .map_err(|_| "Failed to remove key from trie.")?;
-                    let previous_value = if let Some(node_value) = node_value {
-                        match node_value {
-                            trie_db::Value::Inline(value) | trie_db::Value::NewNode(_, value) => {
-                                Some(value.to_vec())
-                            }
-                            trie_db::Value::Node(value_hash) => {
-                                let value = trie
-                                    .get(value_hash.as_ref())
-                                    .map_err(|_| "Failed to get value from trie.")?;
-                                value.map(|v| v.to_vec())
-                            }
-                        }
-                    } else {
-                        None
-                    };
                     mutated_keys_and_values.push((*key, previous_value));
                 }
             }

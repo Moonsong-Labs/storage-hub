@@ -151,6 +151,21 @@ export const sealBlock = async (
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
 
+    // Print any errors in the extrinsics to console for easier debugging
+    for (const { event } of allEvents.filter(
+      ({ event }) => api.events.system.ExtrinsicFailed.is(event) && event.data
+    )) {
+      const errorEventDataBlob = api.events.system.ExtrinsicFailed.is(event) && event.data;
+      assert(errorEventDataBlob, "Must have errorEventDataBlob since array is filtered for it");
+      if (errorEventDataBlob.dispatchError.isModule) {
+        const decoded = api.registry.findMetaError(errorEventDataBlob.dispatchError.asModule);
+        const { docs, method, section } = decoded;
+        console.log(`${section}.${method}: ${docs.join(" ")}`);
+      } else {
+        console.log(errorEventDataBlob.dispatchError.toString());
+      }
+    }
+
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
       const extEvents = allEvents.filter(

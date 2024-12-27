@@ -219,6 +219,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       DividedByZero: AugmentedError<ApiType>;
       /**
+       * Failed to fetch the dynamic-rate payment stream.
+       **/
+      DynamicRatePaymentStreamNotFound: AugmentedError<ApiType>;
+      /**
        * Failed to verify proof: required to provide a proof of inclusion.
        **/
       ExpectedInclusionProof: AugmentedError<ApiType>;

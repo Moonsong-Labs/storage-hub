@@ -4,31 +4,24 @@
 //! THIS FILE WAS AUTO-GENERATED USING THE SUBSTRATE BENCHMARK CLI VERSION 43.0.0
 //! DATE: 2024-12-27, STEPS: `50`, REPEAT: `20`, LOW RANGE: `[]`, HIGH RANGE: `[]`
 //! WORST CASE MAP SIZE: `1000000`
-//! HOSTNAME: `Facundos-MacBook-Pro.local`, CPU: `<UNKNOWN>`
+//! HOSTNAME: `Tobiass-MacBook-Pro.local`, CPU: `<UNKNOWN>`
 //! WASM-EXECUTION: `Compiled`, CHAIN: `None`, DB CACHE: `1024`
 
 // Executed Command:
-// target/release/storage-hub-node
+// frame-omni-bencher
+// v1
 // benchmark
 // pallet
 // --runtime
-// ./target/release/wbuild/storage-hub-runtime/storage_hub_runtime.wasm
-// --genesis-builder
-// runtime
-// --wasm-execution
-// compiled
+// target/production/wbuild/storage-hub-runtime/storage_hub_runtime.wasm
 // --pallet
-// pallet_proofs_dealer
+// pallet-proofs-dealer
 // --extrinsic
-// *
-// --steps
-// 50
-// --repeat
-// 20
+// 
 // --output
 // pallets/proofs-dealer/src/weights.rs
 // --template
-// ../polkadot-sdk/substrate/.maintain/frame-weight-template.hbs
+// ../../polkadot-sdk/substrate/.maintain/frame-weight-template.hbs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
@@ -125,6 +118,30 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `ProofsDealer::ValidProofSubmittersLastTicks` (`max_values`: None, `max_size`: Some(3542), added: 6017, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::TickToProvidersDeadlines` (r:0 w:2)
 	/// Proof: `ProofsDealer::TickToProvidersDeadlines` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:1)
+	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::DynamicRatePaymentStreams` (r:1 w:1)
+	/// Proof: `PaymentStreams::DynamicRatePaymentStreams` (`max_values`: None, `max_size`: Some(141), added: 2616, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:1 w:0)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::LastChargeableInfo` (r:1 w:0)
+	/// Proof: `PaymentStreams::LastChargeableInfo` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:2 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
+	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[21, 40]`.
 	fn submit_proof_with_checkpoint_challenges_key_proofs(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -234,7 +251,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		//  Measured:  `0`
 		//  Estimated: `0`
 		// Minimum execution time: 1_000_000 picoseconds.
-		Weight::from_parts(2_000_000, 0)
+		Weight::from_parts(1_000_000, 0)
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
 	/// Storage: `ProofsDealer::PastBlocksWeight` (r:0 w:2)
@@ -351,6 +368,30 @@ impl WeightInfo for () {
 	/// Proof: `ProofsDealer::ValidProofSubmittersLastTicks` (`max_values`: None, `max_size`: Some(3542), added: 6017, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::TickToProvidersDeadlines` (r:0 w:2)
 	/// Proof: `ProofsDealer::TickToProvidersDeadlines` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(647), added: 3122, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:1)
+	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::DynamicRatePaymentStreams` (r:1 w:1)
+	/// Proof: `PaymentStreams::DynamicRatePaymentStreams` (`max_values`: None, `max_size`: Some(141), added: 2616, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:1 w:0)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::LastChargeableInfo` (r:1 w:0)
+	/// Proof: `PaymentStreams::LastChargeableInfo` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:2 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
+	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (r:1 w:0)
+	/// Proof: `PaymentStreams::CurrentPricePerGigaUnitPerTick` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
 	/// The range of component `n` is `[21, 40]`.
 	fn submit_proof_with_checkpoint_challenges_key_proofs(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -460,7 +501,7 @@ impl WeightInfo for () {
 		//  Measured:  `0`
 		//  Estimated: `0`
 		// Minimum execution time: 1_000_000 picoseconds.
-		Weight::from_parts(2_000_000, 0)
+		Weight::from_parts(1_000_000, 0)
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
 	/// Storage: `ProofsDealer::PastBlocksWeight` (r:0 w:2)

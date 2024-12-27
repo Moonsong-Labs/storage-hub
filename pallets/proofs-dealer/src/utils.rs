@@ -1044,13 +1044,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         let root = ProvidersPalletFor::<T>::get_root(*provider_id)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        Ok(
+        let (_, new_root, _) =
             <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                 &root, mutations, proof,
             )
-            .map_err(|_| Error::<T>::FailedToApplyDelta)?
-            .1,
-        )
+            .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+
+        Ok(new_root)
     }
 
     fn generic_apply_delta(

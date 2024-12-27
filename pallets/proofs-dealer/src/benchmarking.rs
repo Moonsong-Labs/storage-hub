@@ -38,7 +38,8 @@ mod benchmarks {
     use frame_system::{pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, RawOrigin};
     use pallet_storage_providers::types::ProviderIdFor;
     use shp_traits::{
-        ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation,
+        PaymentStreamsInterface, ProofsDealerInterface, ReadChallengeableProvidersInterface,
+        TrieRemoveMutation,
     };
     use sp_runtime::{
         traits::{Hash, One, Zero},
@@ -49,7 +50,9 @@ mod benchmarks {
 
     use super::*;
     use crate::{
-        benchmark_proofs::{fetch_challenges, fetch_proof, get_provider_id, get_root, get_seed},
+        benchmark_proofs::{
+            fetch_challenges, fetch_proof, get_provider_id, get_root, get_seed, get_user_account,
+        },
         pallet,
         types::{
             ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, KeyFor,
@@ -116,12 +119,30 @@ mod benchmarks {
         n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, provider_id, challenged_tick, proof) =
+        let (caller, user, provider_id, challenged_tick, proof) =
             setup_submit_proof::<T>(file_key_proofs_count)?;
+
+        // Payment stream should exist before calling the extrinsic, to account for the worst-case scenario
+        // of having to update it.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_before = maybe_payment_stream_amount_provided.unwrap();
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
+
+        // Check that the payment stream still exists but the amount provided has decreased.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_after = maybe_payment_stream_amount_provided.unwrap();
+        assert!(amount_provided_after < amount_provided_before);
 
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
@@ -164,12 +185,34 @@ mod benchmarks {
         >,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, provider_id, challenged_tick, proof) =
+        let (caller, user, provider_id, challenged_tick, proof) =
             setup_submit_proof::<T>(file_key_proofs_count)?;
+
+        // Payment stream should exist before calling the extrinsic, to account for the worst-case scenario
+        // of having to update it.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_before = maybe_payment_stream_amount_provided.unwrap();
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
+
+        // Check that the payment stream still exists but the amount provided has decreased if there was a trie remove mutation.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_after = maybe_payment_stream_amount_provided.unwrap();
+        if file_key_proofs_count < T::MaxCustomChallengesPerBlock::get() * 2 - 1 {
+            assert!(amount_provided_after < amount_provided_before);
+        } else {
+            assert!(amount_provided_after == amount_provided_before);
+        }
 
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
@@ -540,7 +583,7 @@ mod benchmarks {
             crate::mock::Test,
     }
 
-    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
+    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
     where
     // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
         T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
@@ -572,6 +615,18 @@ mod benchmarks {
             provider_balance,
         ));
 
+        // Set up an account with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
         // Register caller as a Provider in Providers pallet.
         let encoded_provider_id = get_provider_id();
         let provider_id =
@@ -581,11 +636,13 @@ mod benchmarks {
             &caller,
             provider_id,
         );
+        let used_capacity: u32 = 1024 * 1024 * 1024; // One gigabyte
+        let total_capacity: u32 = used_capacity * 2; // Two gigabytes
         pallet_storage_providers::BackupStorageProviders::<T>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
-                capacity: Default::default(),
-                capacity_used: Default::default(),
+                capacity: total_capacity.into(),
+                capacity_used: used_capacity.into(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
@@ -596,6 +653,7 @@ mod benchmarks {
                 sign_up_block: Default::default(),
             },
         );
+        pallet_storage_providers::UsedBspsCapacity::<T>::set(used_capacity.into());
 
         // Hold some of the Provider's balance so it simulates it having a stake.
         let provider_stake = provider_balance / 100u32.into();
@@ -675,7 +733,14 @@ mod benchmarks {
         // Check that the proof has the expected number of file key proofs.
         assert_eq!(proof.key_proofs.len() as u32, n);
 
-        Ok((caller, provider_id, challenge_block, proof))
+        // Create a dynamic-rate payment stream between the user and the provider.
+        let amount_provided: u32 = 1024 * 1024 * 1024; // One gigabyte
+        let payment_stream_creation_result = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(&provider_id,
+			&user_account,
+			&amount_provided.into());
+        assert_ok!(payment_stream_creation_result);
+
+        Ok((caller, user_account, provider_id, challenge_block, proof))
     }
 
     fn generate_challenges<T: Config>(

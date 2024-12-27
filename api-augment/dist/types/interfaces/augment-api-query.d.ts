@@ -37,6 +37,7 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
+  PalletFileSystemPendingStopStoringRequest,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -383,11 +384,13 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file deletion requests.
        *
-       * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+       * A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
        **/
       pendingFileDeletionRequests: AugmentedQuery<
         ApiType,
-        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>,
+        (
+          arg: AccountId32 | string | Uint8Array
+        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
@@ -409,17 +412,18 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file stop storing requests.
        *
-       * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
-       * and the proven size of the file.
+       * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened,
+       * the proven size of the file and the owner of the file.
        * The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
        * of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+       * The owner is to be able to update the payment stream between the user and the BSP.
        **/
       pendingStopStoringRequests: AugmentedQuery<
         ApiType,
         (
           arg1: H256 | string | Uint8Array,
           arg2: H256 | string | Uint8Array
-        ) => Observable<Option<ITuple<[u32, u64]>>>,
+        ) => Observable<Option<PalletFileSystemPendingStopStoringRequest>>,
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
