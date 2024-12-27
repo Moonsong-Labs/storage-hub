@@ -123,15 +123,29 @@ export const sealBlock = async (
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
       const call = callArray[i];
-      let hash: Hash;
 
       if (call.isSigned) {
-        hash = await call.send();
+        const txHash = await call.send();
+        results.hashes.push(txHash);
       } else {
-        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
+        await call.signAndSend(
+          signer || alice,
+          { nonce: nonce.addn(i) },
+          ({ txHash, status, events, dispatchError }) => {
+            results.hashes.push(txHash);
+            // If any included tx errored out, print the error for easier debugging
+            if (dispatchError) {
+              if (dispatchError.isModule) {
+                const decoded = api.registry.findMetaError(dispatchError.asModule);
+                const { docs, name, section } = decoded;
+                console.log(`${section}.${name}: ${docs.join(" ")}`);
+              } else {
+                console.log(dispatchError.toString());
+              }
+            }
+          }
+        );
       }
-
-      results.hashes.push(hash);
     }
   }
 
