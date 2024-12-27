@@ -43,6 +43,7 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
+  PalletFileSystemPendingStopStoringRequest,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -391,11 +392,13 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file deletion requests.
        *
-       * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key, file size and bucket id.
+       * A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
        **/
       pendingFileDeletionRequests: AugmentedQuery<
         ApiType,
-        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, u64, H256]>>>,
+        (
+          arg: AccountId32 | string | Uint8Array
+        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
@@ -428,7 +431,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg1: H256 | string | Uint8Array,
           arg2: H256 | string | Uint8Array
-        ) => Observable<Option<ITuple<[u32, u64, AccountId32]>>>,
+        ) => Observable<Option<PalletFileSystemPendingStopStoringRequest>>,
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
