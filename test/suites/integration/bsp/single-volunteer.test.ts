@@ -31,13 +31,14 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       throw new Error("Event doesn't match Type");
     }
 
-    const { location, fingerprint, file_size } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
     strictEqual(location.toHuman(), destination);
     strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
@@ -62,13 +63,14 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-    const { fingerprint, file_size, location } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
     await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
@@ -183,13 +185,14 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
 
     const txs = [];
     for (let i = 0; i < source.length; i++) {
-      const { fingerprint, file_size, location } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source[i],
-          destination[i],
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
+      const {
+        file_metadata: { location, fingerprint, file_size }
+      } = await userApi.rpc.storagehubclient.loadFileInStorage(
+        source[i],
+        destination[i],
+        userApi.shConsts.NODE_INFOS.user.AddressId,
+        newBucketEventDataBlob.bucketId
+      );
 
       txs.push(
         userApi.tx.fileSystem.issueStorageRequest(
@@ -226,7 +229,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     // Wait for the BSP to receive and store all files
     for (let i = 0; i < source.length; i++) {
       const fileKey = fileKeys[i];
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
     }
 
     // The first file to be completed will immediately acquire the forest write lock

@@ -132,7 +132,7 @@ export class NetworkLauncher {
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
       );
       if (this.type === "fullnet") {
-        composeYaml.services["sh-msp"].command.push(
+        composeYaml.services["sh-msp-1"].command.push(
           `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
         );
       }
@@ -441,6 +441,23 @@ export class NetworkLauncher {
     //     StakeToChallengePeriod: [null, {VALUE_YOU_WANT}],
     //     CheckpointChallengePeriod: [null, {VALUE_YOU_WANT}],
     //     MinChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //     SystemUtilisationLowerThresholdPercentage: [null, {VALUE_YOU_WANT}],
+    //     SystemUtilisationUpperThresholdPercentage: [null, {VALUE_YOU_WANT}],
+    //     MostlyStablePrice: [null, {VALUE_YOU_WANT}],
+    //     MaxPrice: [null, {VALUE_YOU_WANT}],
+    //     MinPrice: [null, {VALUE_YOU_WANT}],
+    //     UpperExponentFactor: [null, {VALUE_YOU_WANT}],
+    //     LowerExponentFactor: [null, {VALUE_YOU_WANT}],
+    //     ZeroSizeBucketFixedRate: [null, {VALUE_YOU_WANT}],
+    //     IdealUtilisationRate: [null, {VALUE_YOU_WANT}],
+    //     DecayRate: [null, {VALUE_YOU_WANT}],
+    //     MinimumTreasuryCut: [null, {VALUE_YOU_WANT}],
+    //     MaximumTreasuryCut: [null, {VALUE_YOU_WANT}],
+    //     BspStopStoringFilePenalty: [null, {VALUE_YOU_WANT}],
+    //     ProviderTopUpTtl: [null, {VALUE_YOU_WANT}],
+    //     DefaultReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     MinSeedPeriod: [null, {VALUE_YOU_WANT}],
+    //     StakeToSeedPeriod: [null, {VALUE_YOU_WANT}],
     //   }
     // }
     const slashAmountPerMaxFileSizeRuntimeParameter = {
@@ -539,6 +556,7 @@ export class NetworkLauncher {
       bspKeySeed: bspDownSeed,
       bspId: ShConsts.BSP_DOWN_ID,
       bspStartingWeight: this.config.capacity,
+      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(api, bspTwoKey, {
@@ -547,6 +565,7 @@ export class NetworkLauncher {
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       bspStartingWeight: this.config.capacity,
+      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(api, bspThreeKey, {
@@ -555,6 +574,7 @@ export class NetworkLauncher {
       bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
       bspStartingWeight: this.config.capacity,
+      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 

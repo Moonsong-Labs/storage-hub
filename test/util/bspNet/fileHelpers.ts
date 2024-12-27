@@ -18,7 +18,7 @@ export const sendNewStorageRequest = async (
   owner?: KeyringPair,
   mspId?: HexString
 ): Promise<FileMetadata> => {
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
     ShConsts.NODE_INFOS.user.AddressId,
@@ -103,7 +103,7 @@ export const createBucketAndSendNewStorageRequest = async (
 
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
     ShConsts.NODE_INFOS.user.AddressId,

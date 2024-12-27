@@ -792,7 +792,7 @@ where
             .await;
 
         if let Err(e) = result {
-            debug!(
+            error!(
                 target: LOG_TARGET,
                 "Failed to volunteer for file {:?}: {:?}",
                 file_key,

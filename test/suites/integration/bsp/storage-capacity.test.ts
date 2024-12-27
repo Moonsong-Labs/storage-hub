@@ -1,24 +1,22 @@
 import assert from "node:assert";
 import { bspKey, describeBspNet, type EnrichedBspApi, ferdie, sleep } from "../../../util";
 
-describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, createBspApi }) => {
+describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();
-    bspApi = await createBspApi();
   });
 
   it("Unregistered accounts fail when changing capacities", async () => {
     const totalCapacityBefore = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityBefore = await userApi.query.providers.backupStorageProviders(
-      bspApi.shConsts.DUMMY_BSP_ID
+      userApi.shConsts.DUMMY_BSP_ID
     );
     assert.ok(bspCapacityBefore.unwrap().capacity.eq(totalCapacityBefore));
 
     const { events, extSuccess } = await userApi.sealBlock(
-      userApi.tx.providers.changeCapacity(bspApi.shConsts.CAPACITY[1024]),
+      userApi.tx.providers.changeCapacity(userApi.shConsts.CAPACITY[1024]),
       ferdie
     );
     assert.strictEqual(extSuccess, false);
@@ -37,7 +35,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
     const totalCapacityAfter = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
-      bspApi.shConsts.DUMMY_BSP_ID
+      userApi.shConsts.DUMMY_BSP_ID
     );
     assert.ok(bspCapacityAfter.unwrap().capacity.eq(totalCapacityBefore));
     assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
@@ -50,7 +48,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     );
 
     const capacityUsed = (
-      await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
+      await userApi.query.providers.backupStorageProviders(userApi.shConsts.DUMMY_BSP_ID)
     )
       .unwrap()
       .capacityUsed.toNumber();
@@ -59,6 +57,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     const { extSuccess } = await userApi.sealBlock(
       userApi.tx.providers.changeCapacity(newCapacity),
       bspKey
@@ -101,9 +100,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
     await userApi.sealBlock();
 
-    const updatedCapacity = BigInt(bspApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
+    const updatedCapacity = BigInt(userApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
-      bspApi.shConsts.DUMMY_BSP_ID
+      userApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
 
@@ -113,16 +112,17 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
   it("Total capacity updated when single BSP capacity updated", async () => {
     const newCapacity =
-      BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + bspApi.shConsts.CAPACITY_512;
+      BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + userApi.shConsts.CAPACITY_512;
 
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     await userApi.sealBlock(userApi.tx.providers.changeCapacity(newCapacity), bspKey);
 
     const totalCapacityAfter = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
-      bspApi.shConsts.DUMMY_BSP_ID
+      userApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), newCapacity);
     assert.strictEqual(totalCapacityAfter.toBigInt(), newCapacity);
@@ -140,6 +140,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     const { events, extSuccess } = await userApi.sealBlock(
       userApi.tx.providers.changeCapacity(2n),
       bspKey
@@ -160,7 +161,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
   it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
     const capacityUsed = (
-      await userApi.query.providers.backupStorageProviders(bspApi.shConsts.DUMMY_BSP_ID)
+      await userApi.query.providers.backupStorageProviders(userApi.shConsts.DUMMY_BSP_ID)
     )
       .unwrap()
       .capacityUsed.toNumber();
@@ -169,6 +170,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
+    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     const { extSuccess } = await userApi.sealBlock(
       userApi.tx.providers.changeCapacity(newCapacity),
       bspKey
@@ -196,7 +198,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
     await sleep(500);
 
     // Assert BSP has sent a call to increase its capacity.
-    await bspApi.assert.extrinsicPresent({
+    await userApi.assert.extrinsicPresent({
       module: "providers",
       method: "changeCapacity",
       checkTxPool: true
@@ -209,7 +211,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi, c
 
     const updatedCapacity = BigInt(userApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
-      bspApi.shConsts.DUMMY_BSP_ID
+      userApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
   });

@@ -39,11 +39,7 @@ describeMspNet(
       const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
 
       // Wait for MSP to download file from user
-      await sleep(2000);
-
-      const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey);
-
-      assert(result.isFileFound, "File not found in storage");
+      mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
 
       // Seal block containing the MSP's transaction response to the storage request
       await userApi.wait.mspResponseInTxPool();
