@@ -178,7 +178,7 @@ describeBspNet(
         [fileMetadata.fileKey]
       );
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
-      await userApi.sealBlock(
+      const blockResult = await userApi.sealBlock(
         bspThreeApi.tx.fileSystem.bspRequestStopStoring(
           fileMetadata.fileKey,
           fileMetadata.bucketId,
@@ -190,6 +190,11 @@ describeBspNet(
           inclusionForestProof.toString()
         ),
         bspThreeKey
+      );
+      assert(blockResult.extSuccess, "Extrinsic was part of the block so its result should exist.");
+      assert(
+        blockResult.extSuccess === true,
+        "Extrinsic to request stop storing should have been successful"
       );
 
       userApi.assert.fetchEvent(
