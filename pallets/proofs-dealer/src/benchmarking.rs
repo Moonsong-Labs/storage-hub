@@ -53,11 +53,12 @@ mod benchmarks {
         pallet,
         types::{
             ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, KeyFor,
-            MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
+            MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProofSubmissionRecord,
+            ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Config, Event,
-        LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor,
-        NotFullBlocksCount, Pallet, PastBlocksWeight, SlashableProviders, TickToChallengesSeed,
+        LastCheckpointTick, LastDeletedTick, NotFullBlocksCount, Pallet, PastBlocksWeight,
+        ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
         TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
         ValidProofSubmittersLastTicks,
     };
@@ -107,9 +108,9 @@ mod benchmarks {
     /// [`T::MaxCustomChallengesPerBlock`] * 2 file key proofs, depending on the Forest of the BSP and
     /// where the challenges fall within it. Additionally, in the worst case scenario for this amount
     /// of file key proofs, there can be [`T::MaxCustomChallengesPerBlock`] more file keys proven in the
-    /// forest proof, that correspond to an exact match of a challenge with TrieRemoveMutation.
+    /// forest proof, that correspond to an exact match of a challenge with [`TrieRemoveMutation`].
     /// File keys that would be removed from the Forest, are not meant to also send a file key proof, and
-    /// that is the case for an exact match of a custom challenge with TrieRemoveMutation.
+    /// that is the case for an exact match of a custom challenge with [`TrieRemoveMutation`].
     #[benchmark]
     fn submit_proof_no_checkpoint_challenges_key_proofs(
         n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
@@ -125,7 +126,7 @@ mod benchmarks {
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
             Event::ProofAccepted {
-                provider: provider_id,
+                provider_id,
                 proof,
                 last_tick_proven: challenged_tick,
             }
@@ -148,11 +149,11 @@ mod benchmarks {
     /// have [`T::MaxCustomChallengesPerBlock`] file keys proven to be removed from the Forest. For example,
     /// if {[`T::MaxCustomChallengesPerBlock`] = 10} and there are 21 file key proofs, then at least one of those
     /// file keys proven is a consequence of a checkpoint challenge either not falling exactly in an existing
-    /// leaf, or not having a TrieRemoveMutation. So the worst case scenario for 21 file keys proven is
-    /// another 9 file keys proven with a TrieRemoveMutation. For 22 file keys proven, the worst case scenario
-    /// is also 9 file keys proven with a TrieRemoveMutation. For 23, 8 file keys proven with a TrieRemoveMutation.
-    /// For 24, also 8 file keys proven with a TrieRemoveMutation. It continues like this until with 40 file keys
-    /// proven, the worst case scenario is 0 file keys proven with a TrieRemoveMutation. Basically, with 40 file
+    /// leaf, or not having a [`TrieRemoveMutation`]. So the worst case scenario for 21 file keys proven is
+    /// another 9 file keys proven with a [`TrieRemoveMutation`]. For 22 file keys proven, the worst case scenario
+    /// is also 9 file keys proven with a [`TrieRemoveMutation`]. For 23, 8 file keys proven with a [`TrieRemoveMutation`].
+    /// For 24, also 8 file keys proven with a [`TrieRemoveMutation`]. It continues like this until with 40 file keys
+    /// proven, the worst case scenario is 0 file keys proven with a [`TrieRemoveMutation`]. Basically, with 40 file
     /// keys proven, it means that there are 2 file keys proven for every random and checkpoint challenge, so no
     /// checkpoint challenge fell exactly in an existing leaf.
     #[benchmark]
@@ -173,7 +174,7 @@ mod benchmarks {
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
             Event::ProofAccepted {
-                provider: provider_id,
+                provider_id,
                 proof,
                 last_tick_proven: challenged_tick,
             }
@@ -490,7 +491,9 @@ mod benchmarks {
         <Pallet<T> as ProofsDealerInterface>::initialise_challenge_cycle(&provider_id)?;
 
         // Check that the last tick the Provider submitted a proof for so far is the current block.
-        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+        let ProofSubmissionRecord {
+            last_tick_proven, ..
+        } = ProviderToProofSubmissionRecord::<T>::get(provider_id)
             .expect("Provider should have a last tick it submitted a proof for.");
         assert_eq!(last_tick_proven, frame_system::Pallet::<T>::block_number());
 
@@ -502,7 +505,9 @@ mod benchmarks {
         Pallet::<T>::force_initialise_challenge_cycle(RawOrigin::Root, provider_id);
 
         // Check that the last tick the Provider submitted a proof for, is the new current block.
-        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+        let ProofSubmissionRecord {
+            last_tick_proven, ..
+        } = ProviderToProofSubmissionRecord::<T>::get(provider_id)
             .expect("Provider should have a last tick it submitted a proof for.");
         assert_eq!(last_tick_proven, current_block);
 
@@ -593,10 +598,11 @@ mod benchmarks {
         );
 
         // Hold some of the Provider's balance so it simulates it having a stake.
+        let provider_stake = provider_balance / 100u32.into();
         assert_ok!(<T as crate::Config>::NativeBalance::hold(
             &pallet_storage_providers::HoldReason::StorageProviderDeposit.into(),
             &caller,
-            provider_balance / 100u32.into(),
+            provider_stake,
         ));
 
         // Set Provider's root to be the one that matches the proofs that will be submitted.
@@ -610,10 +616,12 @@ mod benchmarks {
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<T>::get();
         let last_tick_provider_submitted_proof = current_tick;
-        LastTickProviderSubmittedAProofFor::<T>::insert(
-            &provider_id,
-            last_tick_provider_submitted_proof,
-        );
+        let challenge_period = crate::Pallet::<T>::stake_to_challenge_period(provider_stake);
+        let proof_record = ProofSubmissionRecord {
+            last_tick_proven: last_tick_provider_submitted_proof,
+            next_tick_to_submit_proof_for: last_tick_provider_submitted_proof + challenge_period,
+        };
+        ProviderToProofSubmissionRecord::<T>::insert(&provider_id, proof_record);
 
         // Set Provider's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.

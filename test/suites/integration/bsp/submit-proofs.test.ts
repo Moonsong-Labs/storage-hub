@@ -222,7 +222,7 @@ describeBspNet(
         "fileSystem",
         "BspConfirmStoppedStoring"
       );
-      // Wait for confiration line in docker logs.
+      // Wait for confirmation line in docker logs.
       await bspThreeApi.assert.log({
         searchString: "successfully removed from forest",
         containerName: "sh-bsp-three"
