@@ -40,7 +40,7 @@ describeBspNet(
       await userApi.block.seal(); // To make sure we have a finalised head
       const nextChallengeTick = await getNextChallengeHeight(userApi);
       await userApi.block.skipTo(nextChallengeTick, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID],
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID],
         finalised: true
       });
 

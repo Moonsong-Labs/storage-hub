@@ -49,13 +49,14 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    const { location, fingerprint, file_size } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
     strictEqual(location.toHuman(), destination);
     strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);

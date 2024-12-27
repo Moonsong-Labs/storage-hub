@@ -190,7 +190,7 @@ async function generateBenchmarkProofs() {
     fileKeys.push(fileMetadata.fileKey);
 
     await userApi.wait.bspVolunteer(1);
-    await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
     await userApi.wait.bspStored(1);
   }
 

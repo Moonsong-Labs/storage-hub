@@ -2,7 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import { bspKey, describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
-  "BSPNet : stop storing file and other BSPs taking the relay",
+  "BSPNet: Stop storing file and other BSPs taking the relay",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
@@ -54,7 +54,7 @@ describeBspNet(
 
       await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
 
-      // Unpause bsp three
+      // Unpause BSP Three
       await userApi.docker.resumeBspContainer({
         containerName: "sh-bsp-three"
       });
@@ -62,9 +62,12 @@ describeBspNet(
       // TODO: create an RPC to automatically execute everything below
       // TODO: everything below should be removed and replaced with other testing logic
 
+      // Request to stop storing a file with Dummy BSP
+      await userApi.wait.bspCatchUpToChainTip(bspApi);
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
       ]);
+      await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
       await userApi.sealBlock(
         bspApi.tx.fileSystem.bspRequestStopStoring(
           fileKey,

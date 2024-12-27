@@ -1270,6 +1270,7 @@ import type {
   GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
   IsStorageRequestOpenToVolunteersError,
+  LoadFileInStorageResult,
   MainStorageProviderId,
   MerklePatriciaRoot,
   Multiaddresses,
@@ -1883,6 +1884,7 @@ declare module "@polkadot/types/types/registry" {
     LegacyTransaction: LegacyTransaction;
     Limits: Limits;
     LimitsTo264: LimitsTo264;
+    LoadFileInStorageResult: LoadFileInStorageResult;
     LocalValidationData: LocalValidationData;
     LockIdentifier: LockIdentifier;
     LookupSource: LookupSource;
