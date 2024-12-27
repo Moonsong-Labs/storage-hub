@@ -123,31 +123,15 @@ export const sealBlock = async (
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
       const call = callArray[i];
+      let hash: Hash;
 
       if (call.isSigned) {
-        const txHash = await call.send();
-        results.hashes.push(txHash);
+        hash = await call.send();
       } else {
-        await call.signAndSend(
-          signer || alice,
-          { nonce: nonce.addn(i) },
-          ({ txHash, dispatchError }) => {
-            if (!results.hashes.includes(txHash)) {
-              results.hashes.push(txHash);
-            }
-            // If any included tx errored out, print the error for easier debugging
-            if (dispatchError) {
-              if (dispatchError.isModule) {
-                const decoded = api.registry.findMetaError(dispatchError.asModule);
-                const { docs, name, section } = decoded;
-                console.log(`${section}.${name}: ${docs.join(" ")}`);
-              } else {
-                console.log(dispatchError.toString());
-              }
-            }
-          }
-        );
+        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
       }
+
+      results.hashes.push(hash);
     }
   }
 
@@ -166,6 +150,21 @@ export const sealBlock = async (
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
+
+    // Print any errors in the extrinsics to console for easier debugging
+    for (const { event } of allEvents.filter(
+      ({ event }) => api.events.system.ExtrinsicFailed.is(event) && event.data
+    )) {
+      const errorEventDataBlob = api.events.system.ExtrinsicFailed.is(event) && event.data;
+      assert(errorEventDataBlob, "Must have errorEventDataBlob since array is filtered for it");
+      if (errorEventDataBlob.dispatchError.isModule) {
+        const decoded = api.registry.findMetaError(errorEventDataBlob.dispatchError.asModule);
+        const { docs, method, section } = decoded;
+        console.log(`${section}.${method}: ${docs.join(" ")}`);
+      } else {
+        console.log(errorEventDataBlob.dispatchError.toString());
+      }
+    }
 
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
