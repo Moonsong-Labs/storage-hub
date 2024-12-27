@@ -790,36 +790,6 @@ impl BlockchainService {
         current_block_hash: &H256,
         provider_id: &ProofsDealerProviderId,
     ) {
-        // Get the last tick for which the BSP submitted a proof, according to the runtime right now.
-        let last_tick_provider_submitted_proof = match self
-            .client
-            .runtime_api()
-            .get_last_tick_provider_submitted_proof(*current_block_hash, provider_id)
-        {
-            Ok(last_tick_provided_result) => match last_tick_provided_result {
-                Ok(last_tick_provided) => last_tick_provided,
-                Err(e) => match e {
-                    GetProofSubmissionRecordError::ProviderNotRegistered => {
-                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
-                        return;
-                    }
-                    GetProofSubmissionRecordError::ProviderNeverSubmittedProof => {
-                        debug!(target: LOG_TARGET, "Provider [{:?}] does not have an initialised challenge cycle", provider_id);
-                        return;
-                    }
-                    GetProofSubmissionRecordError::InternalApiError => {
-                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
-                        return;
-                    }
-                },
-            },
-            Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
-                return;
-            }
-        };
-        trace!(target: LOG_TARGET, "Last tick Provider [{:?}] submitted a proof for: {}", provider_id, last_tick_provider_submitted_proof);
-
         // Get the current challenge period for this provider.
         let challenge_period = match self
             .client
@@ -860,7 +830,16 @@ impl BlockchainService {
 
         // Advance by `challenge_period` ticks and add the seed to the list of challenge seeds.
         let mut challenge_seeds = Vec::new();
-        let mut next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
+        let mut next_challenge_tick = match Self::get_next_challenge_tick_for_provider(
+            &self,
+            provider_id,
+        ) {
+            Ok(next_challenge_tick) => next_challenge_tick,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+                return;
+            }
+        };
         while next_challenge_tick <= current_tick {
             // Get the seed for the challenge tick.
             let seed = match self
@@ -894,7 +873,7 @@ impl BlockchainService {
             next_challenge_tick += challenge_period;
         }
 
-        // Emit the `MultiNewChallengeSeeds` event.
+        // Emit the `MultipleNewChallengeSeeds` event.
         if challenge_seeds.len() > 0 {
             trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", provider_id, challenge_seeds);
             self.emit(MultipleNewChallengeSeeds {
