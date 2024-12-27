@@ -131,7 +131,7 @@ export const sealBlock = async (
         await call.signAndSend(
           signer || alice,
           { nonce: nonce.addn(i) },
-          ({ txHash, status, events, dispatchError }) => {
+          ({ txHash, dispatchError }) => {
             if (!results.hashes.includes(txHash)) {
               results.hashes.push(txHash);
             }
