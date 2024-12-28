@@ -710,8 +710,8 @@ impl Get<u32> for MaxSubmittersPerTick {
         //
         // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
         // min_weight_for_submit_proof: {
-        //   ref_time: 1,107,239,046
-        //   proof_size: 7,007
+        //   ref_time: 2,980,252,675
+        //   proof_size: 16,056
         // }
         let min_weight_for_submit_proof =
             <pallet_proofs_dealer::weights::SubstrateWeight<Runtime> as pallet_proofs_dealer::weights::WeightInfo>::submit_proof_no_checkpoint_challenges_key_proofs(1);
@@ -720,7 +720,7 @@ impl Get<u32> for MaxSubmittersPerTick {
         // With the current values, this would be:
         //
         // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
-        // 561 proof submissions per block (limited by `proof_size`)
+        // 244 proof submissions per block (limited by `proof_size`)
         let max_proof_submissions_per_tick = max_weight_for_class
             .checked_div_per_component(&min_weight_for_submit_proof)
             .unwrap_or(0);
@@ -756,11 +756,11 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
         //
         // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
         // new_challenges_round_weight: {
-        //   ref_time: 576,000,000 + N * 551,731,580
+        //   ref_time: 576,000,000 + N * 551,601,146
         //   proof_size: 8,523 + N * 3,158
         // }
         // new_checkpoint_challenge_round_max_weight: {
-        //   ref_time: 587,196,278 + ChallengesQueueLength * 233,584 = 610,554,678
+        //   ref_time: 587,205,208 + ChallengesQueueLength * 225,083 = 610,554,678
         //   proof_size: 4,787
         // }
         // check_spamming_condition_weight: {
@@ -770,7 +770,7 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
         //
         // For `N` = 1000, this would be:
         // max_on_poll_weight: {
-        //   ref_time: 313,000,000 + 610,554,678 + 576,000,000 + N * 551,731,580 ≈ 553,231,134,678
+        //   ref_time: 313,000,000 + 610,554,678 + 576,000,000 + N * 551,601,146 ≈ 553,100,700,678
         //   proof_size: 6,012 + 4,787 + 8,523 + N * 3,158 ≈ 3,177,322
         // }
         //
