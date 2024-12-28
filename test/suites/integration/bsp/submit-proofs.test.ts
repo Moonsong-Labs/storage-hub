@@ -160,11 +160,10 @@ describeBspNet(
         userApi.shConsts.DUMMY_BSP_ID
       );
       assert(challengePeriodResult.isOk);
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
       strictEqual(
         lastTickBspDownSubmittedProofAfterSlashable,
-        lastTickBspDownSubmittedProof + challengePeriod,
-        "The last tick for which the BSP-Down submitted a proof should be the last tick before BSP-Down was marked as slashable plus one challenge period"
+        lastTickBspDownSubmittedProof,
+        "The last tick for which the BSP-Down submitted a proof should remain the same since the BSP went down"
       );
     });
 
