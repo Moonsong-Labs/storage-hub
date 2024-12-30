@@ -3553,6 +3553,7 @@ export default {
       pending_file_deletion_request_submit_proof: {
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
         forestProof: "SpTrieStorageProofCompactProof"
       },
@@ -4444,6 +4445,14 @@ export default {
     fileSize: "u64"
   },
   /**
+   * Lookup463: pallet_file_system::types::PendingStopStoringRequest<T>
+   **/
+  PalletFileSystemPendingStopStoringRequest: {
+    tickWhenRequested: "u32",
+    fileOwner: "AccountId32",
+    fileSize: "u64"
+  },
+  /**
    * Lookup464: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
@@ -4487,6 +4496,7 @@ export default {
       "BucketNotFound",
       "BucketNotEmpty",
       "NotBucketOwner",
+      "CollectionNotFound",
       "ProviderRootNotFound",
       "ExpectedNonInclusionProof",
       "ExpectedInclusionProof",
@@ -4519,6 +4529,7 @@ export default {
       "InvalidBucketIdFileKeyPair",
       "InconsistentStateKeyAlreadyExists",
       "FixedRatePaymentStreamNotFound",
+      "DynamicRatePaymentStreamNotFound",
       "CannotHoldDeposit",
       "FailedToQueryEarliestFileVolunteerTick",
       "FailedToGetOwnerAccount",

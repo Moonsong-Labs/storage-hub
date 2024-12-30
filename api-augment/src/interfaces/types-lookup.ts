@@ -4459,6 +4459,7 @@ declare module "@polkadot/types/lookup" {
     readonly asPendingFileDeletionRequestSubmitProof: {
       readonly user: AccountId32;
       readonly fileKey: H256;
+      readonly fileSize: u64;
       readonly bucketId: H256;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
@@ -5630,6 +5631,13 @@ declare module "@polkadot/types/lookup" {
     readonly fileSize: u64;
   }
 
+  /** @name PalletFileSystemPendingStopStoringRequest (463) */
+  interface PalletFileSystemPendingStopStoringRequest extends Struct {
+    readonly tickWhenRequested: u32;
+    readonly fileOwner: AccountId32;
+    readonly fileSize: u64;
+  }
+
   /** @name PalletFileSystemMoveBucketRequestMetadata (464) */
   interface PalletFileSystemMoveBucketRequestMetadata extends Struct {
     readonly requester: AccountId32;
@@ -5670,6 +5678,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketNotFound: boolean;
     readonly isBucketNotEmpty: boolean;
     readonly isNotBucketOwner: boolean;
+    readonly isCollectionNotFound: boolean;
     readonly isProviderRootNotFound: boolean;
     readonly isExpectedNonInclusionProof: boolean;
     readonly isExpectedInclusionProof: boolean;
@@ -5702,6 +5711,7 @@ declare module "@polkadot/types/lookup" {
     readonly isInvalidBucketIdFileKeyPair: boolean;
     readonly isInconsistentStateKeyAlreadyExists: boolean;
     readonly isFixedRatePaymentStreamNotFound: boolean;
+    readonly isDynamicRatePaymentStreamNotFound: boolean;
     readonly isCannotHoldDeposit: boolean;
     readonly isFailedToQueryEarliestFileVolunteerTick: boolean;
     readonly isFailedToGetOwnerAccount: boolean;
@@ -5743,6 +5753,7 @@ declare module "@polkadot/types/lookup" {
       | "BucketNotFound"
       | "BucketNotEmpty"
       | "NotBucketOwner"
+      | "CollectionNotFound"
       | "ProviderRootNotFound"
       | "ExpectedNonInclusionProof"
       | "ExpectedInclusionProof"
@@ -5775,6 +5786,7 @@ declare module "@polkadot/types/lookup" {
       | "InvalidBucketIdFileKeyPair"
       | "InconsistentStateKeyAlreadyExists"
       | "FixedRatePaymentStreamNotFound"
+      | "DynamicRatePaymentStreamNotFound"
       | "CannotHoldDeposit"
       | "FailedToQueryEarliestFileVolunteerTick"
       | "FailedToGetOwnerAccount"

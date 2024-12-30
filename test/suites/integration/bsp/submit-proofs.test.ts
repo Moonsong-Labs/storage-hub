@@ -169,12 +169,16 @@ describeBspNet(
     });
 
     it("BSP three stops storing last file", async () => {
+      // Wait for BSP-Three to catch up to the tip of the chain
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+
+      // Build transaction for BSP-Three to stop storing the only file it has.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileMetadata.fileKey]
       );
-      // Build transaction for BSP-Three to stop storing the only file it has.
-      await userApi.sealBlock(
+      await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
+      const blockResult = await userApi.sealBlock(
         bspThreeApi.tx.fileSystem.bspRequestStopStoring(
           fileMetadata.fileKey,
           fileMetadata.bucketId,
@@ -186,6 +190,11 @@ describeBspNet(
           inclusionForestProof.toString()
         ),
         bspThreeKey
+      );
+      assert(blockResult.extSuccess, "Extrinsic was part of the block so its result should exist.");
+      assert(
+        blockResult.extSuccess === true,
+        "Extrinsic to request stop storing should have been successful"
       );
 
       userApi.assert.fetchEvent(
@@ -322,7 +331,7 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID]
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID]
       });
 
       // Resume BSP-Two and BSP-Three.
@@ -334,7 +343,11 @@ describeBspNet(
       });
 
       // Wait for BSPs to resync.
-      await sleep(1000);
+      await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+
+      // And give some time to process proofs.
+      await sleep(3000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
@@ -376,11 +389,10 @@ describeBspNet(
 
       if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
-        await userApi.block.skipTo(nextChallengeTick);
+        await userApi.block.skipTo(nextChallengeTick, {
+          watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        });
       }
-
-      // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(500);
 
       // There should be at least one pending submit proof transaction.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
@@ -464,7 +476,7 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.block.skipTo(currentBlockNumber + deletionRequestTtl, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
       // Check for a file deletion request event.
@@ -481,7 +493,7 @@ describeBspNet(
       );
       const nextCheckpointChallengeBlock = lastCheckpointChallengeTick + checkpointChallengePeriod;
       await userApi.block.skipTo(nextCheckpointChallengeBlock, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
       // Check that the event for the priority challenge is emitted.
@@ -561,7 +573,7 @@ describeBspNet(
       if (firstBlockToAdvance !== currentBlockNumber) {
         // Advance to first next challenge block.
         await userApi.block.skipTo(firstBlockToAdvance, {
-          waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+          watchForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
         });
       }
 
@@ -617,7 +629,7 @@ describeBspNet(
         if (secondBlockToAdvance !== currentBlockNumber) {
           // Advance to second next challenge block.
           await userApi.block.skipTo(secondBlockToAdvance, {
-            waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+            watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
           });
         }
 

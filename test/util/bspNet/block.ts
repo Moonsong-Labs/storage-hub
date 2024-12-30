@@ -16,6 +16,7 @@ import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
 import * as Assertions from "../asserts";
 import { waitForLog } from "./docker";
+import { waitForTxInPool } from "./waits";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -149,6 +150,21 @@ export const sealBlock = async (
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
+
+    // Print any errors in the extrinsics to console for easier debugging
+    for (const { event } of allEvents.filter(
+      ({ event }) => api.events.system.ExtrinsicFailed.is(event) && event.data
+    )) {
+      const errorEventDataBlob = api.events.system.ExtrinsicFailed.is(event) && event.data;
+      assert(errorEventDataBlob, "Must have errorEventDataBlob since array is filtered for it");
+      if (errorEventDataBlob.dispatchError.isModule) {
+        const decoded = api.registry.findMetaError(errorEventDataBlob.dispatchError.asModule);
+        const { docs, method, section } = decoded;
+        console.log(`${section}.${method}: ${docs.join(" ")}`);
+      } else {
+        console.log(errorEventDataBlob.dispatchError.toString());
+      }
+    }
 
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
@@ -308,32 +324,6 @@ export const advanceToBlock = async (
     verbose?: boolean;
   }
 ): Promise<SealedBlock> => {
-  // If watching for BSP proofs, we need to know the blocks at which they are challenged.
-  const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
-  if (options.watchForBspProofs) {
-    for (const bspId of options.watchForBspProofs) {
-      // First we get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
-      if (lastTickResult.isErr) {
-        options.verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
-        continue;
-      }
-      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-      // Then we get the challenge period for the BSP.
-      const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);
-      assert(challengePeriodResult.isOk);
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
-      // Then we calculate the next challenge tick.
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-
-      challengeBlockNumbers.push({
-        nextChallengeBlock: nextChallengeTick,
-        challengePeriod
-      });
-    }
-  }
-
   const currentBlock = await api.rpc.chain.getBlock();
   let currentBlockNumber = currentBlock.block.header.number.toNumber();
 
@@ -359,6 +349,7 @@ export const advanceToBlock = async (
   const maxNormalBlockWeight = api.consts.system.blockWeights.perClass.normal.maxTotal.unwrap();
 
   for (let i = 0; i < blocksToAdvance; i++) {
+    // Only for spamming!
     if (options.spam && i < blocksToSpam) {
       if (options.verbose) {
         console.log(`Spamming block ${i + 1} of ${blocksToSpam}`);
@@ -395,18 +386,38 @@ export const advanceToBlock = async (
       console.log(`Current tick: ${currentTick}`);
     }
 
-    // Check if we need to wait for BSP proofs.
+    // If watching for BSP proofs, we need to know if this block is a challenge block for any of the BSPs.
     if (options.watchForBspProofs) {
-      for (const challengeBlockNumber of challengeBlockNumbers) {
-        if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
-          // Wait for the BSP to process the proof.
-          await sleep(500);
+      let txsToWaitFor = 0;
+      for (const bspId of options.watchForBspProofs) {
+        // TODO: Change this to a runtime API that gets the next challenge tick for a BSP.
+        // First we get the last tick for which the BSP submitted a proof.
+        const lastTickResult =
+          await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
+        if (lastTickResult.isErr) {
+          options.verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
+          continue;
+        }
+        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+        // Then we get the challenge period for the BSP.
+        const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);
+        assert(challengePeriodResult.isOk);
+        const challengePeriod = challengePeriodResult.asOk.toNumber();
+        // Then we calculate the next challenge tick.
+        const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
-          // Update next challenge block.
-          challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
-          break;
+        if (currentBlockNumber === nextChallengeTick) {
+          txsToWaitFor++;
         }
       }
+
+      // Wait for all corresponding BSPs to have submitted their proofs.
+      await waitForTxInPool(api, {
+        module: "proofsDealer",
+        method: "submitProof",
+        checkQuantity: txsToWaitFor,
+        strictQuantity: false
+      });
     }
 
     if (options.waitBetweenBlocks) {
