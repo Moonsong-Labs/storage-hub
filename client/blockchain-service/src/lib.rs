@@ -23,13 +23,19 @@ pub async fn spawn_blockchain_service(
     rpc_handlers: Arc<RpcHandlers>,
     keystore: KeystorePtr,
     rocksdb_root_path: impl Into<PathBuf>,
+    notify_period: Option<u32>,
 ) -> ActorHandle<BlockchainService> {
     let task_spawner = task_spawner
         .with_name("blockchain-service")
         .with_group("network");
 
-    let blockchain_service =
-        BlockchainService::new(client, rpc_handlers, keystore, rocksdb_root_path);
+    let blockchain_service = BlockchainService::new(
+        client,
+        rpc_handlers,
+        keystore,
+        rocksdb_root_path,
+        notify_period,
+    );
 
     task_spawner.spawn_actor(blockchain_service)
 }

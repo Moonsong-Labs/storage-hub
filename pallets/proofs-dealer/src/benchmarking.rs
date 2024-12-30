@@ -38,7 +38,8 @@ mod benchmarks {
     use frame_system::{pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, RawOrigin};
     use pallet_storage_providers::types::ProviderIdFor;
     use shp_traits::{
-        ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation,
+        PaymentStreamsInterface, ProofsDealerInterface, ReadChallengeableProvidersInterface,
+        TrieRemoveMutation,
     };
     use sp_runtime::{
         traits::{Hash, One, Zero},
@@ -49,15 +50,18 @@ mod benchmarks {
 
     use super::*;
     use crate::{
-        benchmark_proofs::{fetch_challenges, fetch_proof, get_provider_id, get_root, get_seed},
+        benchmark_proofs::{
+            fetch_challenges, fetch_proof, get_provider_id, get_root, get_seed, get_user_account,
+        },
         pallet,
         types::{
             ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, KeyFor,
-            MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProvidersPalletFor,
+            MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProofSubmissionRecord,
+            ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Config, Event,
-        LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor,
-        NotFullBlocksCount, Pallet, PastBlocksWeight, SlashableProviders, TickToChallengesSeed,
+        LastCheckpointTick, LastDeletedTick, NotFullBlocksCount, Pallet, PastBlocksWeight,
+        ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
         TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
         ValidProofSubmittersLastTicks,
     };
@@ -107,25 +111,43 @@ mod benchmarks {
     /// [`T::MaxCustomChallengesPerBlock`] * 2 file key proofs, depending on the Forest of the BSP and
     /// where the challenges fall within it. Additionally, in the worst case scenario for this amount
     /// of file key proofs, there can be [`T::MaxCustomChallengesPerBlock`] more file keys proven in the
-    /// forest proof, that correspond to an exact match of a challenge with TrieRemoveMutation.
+    /// forest proof, that correspond to an exact match of a challenge with [`TrieRemoveMutation`].
     /// File keys that would be removed from the Forest, are not meant to also send a file key proof, and
-    /// that is the case for an exact match of a custom challenge with TrieRemoveMutation.
+    /// that is the case for an exact match of a custom challenge with [`TrieRemoveMutation`].
     #[benchmark]
     fn submit_proof_no_checkpoint_challenges_key_proofs(
         n: Linear<1, { T::MaxCustomChallengesPerBlock::get() }>,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, provider_id, challenged_tick, proof) =
+        let (caller, user, provider_id, challenged_tick, proof) =
             setup_submit_proof::<T>(file_key_proofs_count)?;
+
+        // Payment stream should exist before calling the extrinsic, to account for the worst-case scenario
+        // of having to update it.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_before = maybe_payment_stream_amount_provided.unwrap();
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
 
+        // Check that the payment stream still exists but the amount provided has decreased.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_after = maybe_payment_stream_amount_provided.unwrap();
+        assert!(amount_provided_after < amount_provided_before);
+
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
             Event::ProofAccepted {
-                provider: provider_id,
+                provider_id,
                 proof,
                 last_tick_proven: challenged_tick,
             }
@@ -148,11 +170,11 @@ mod benchmarks {
     /// have [`T::MaxCustomChallengesPerBlock`] file keys proven to be removed from the Forest. For example,
     /// if {[`T::MaxCustomChallengesPerBlock`] = 10} and there are 21 file key proofs, then at least one of those
     /// file keys proven is a consequence of a checkpoint challenge either not falling exactly in an existing
-    /// leaf, or not having a TrieRemoveMutation. So the worst case scenario for 21 file keys proven is
-    /// another 9 file keys proven with a TrieRemoveMutation. For 22 file keys proven, the worst case scenario
-    /// is also 9 file keys proven with a TrieRemoveMutation. For 23, 8 file keys proven with a TrieRemoveMutation.
-    /// For 24, also 8 file keys proven with a TrieRemoveMutation. It continues like this until with 40 file keys
-    /// proven, the worst case scenario is 0 file keys proven with a TrieRemoveMutation. Basically, with 40 file
+    /// leaf, or not having a [`TrieRemoveMutation`]. So the worst case scenario for 21 file keys proven is
+    /// another 9 file keys proven with a [`TrieRemoveMutation`]. For 22 file keys proven, the worst case scenario
+    /// is also 9 file keys proven with a [`TrieRemoveMutation`]. For 23, 8 file keys proven with a [`TrieRemoveMutation`].
+    /// For 24, also 8 file keys proven with a [`TrieRemoveMutation`]. It continues like this until with 40 file keys
+    /// proven, the worst case scenario is 0 file keys proven with a [`TrieRemoveMutation`]. Basically, with 40 file
     /// keys proven, it means that there are 2 file keys proven for every random and checkpoint challenge, so no
     /// checkpoint challenge fell exactly in an existing leaf.
     #[benchmark]
@@ -163,17 +185,39 @@ mod benchmarks {
         >,
     ) -> Result<(), BenchmarkError> {
         let file_key_proofs_count: u32 = n.into();
-        let (caller, provider_id, challenged_tick, proof) =
+        let (caller, user, provider_id, challenged_tick, proof) =
             setup_submit_proof::<T>(file_key_proofs_count)?;
+
+        // Payment stream should exist before calling the extrinsic, to account for the worst-case scenario
+        // of having to update it.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_before = maybe_payment_stream_amount_provided.unwrap();
 
         // Call some extrinsic.
         #[extrinsic_call]
         Pallet::submit_proof(RawOrigin::Signed(caller.clone()), proof.clone(), None);
 
+        // Check that the payment stream still exists but the amount provided has decreased if there was a trie remove mutation.
+        let maybe_payment_stream_amount_provided = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
+			&provider_id,
+			&user,
+		);
+        assert!(maybe_payment_stream_amount_provided.is_some());
+        let amount_provided_after = maybe_payment_stream_amount_provided.unwrap();
+        if file_key_proofs_count < T::MaxCustomChallengesPerBlock::get() * 2 - 1 {
+            assert!(amount_provided_after < amount_provided_before);
+        } else {
+            assert!(amount_provided_after == amount_provided_before);
+        }
+
         // Check that the proof submission was successful.
         frame_system::Pallet::<T>::assert_last_event(
             Event::ProofAccepted {
-                provider: provider_id,
+                provider_id,
                 proof,
                 last_tick_proven: challenged_tick,
             }
@@ -490,7 +534,9 @@ mod benchmarks {
         <Pallet<T> as ProofsDealerInterface>::initialise_challenge_cycle(&provider_id)?;
 
         // Check that the last tick the Provider submitted a proof for so far is the current block.
-        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+        let ProofSubmissionRecord {
+            last_tick_proven, ..
+        } = ProviderToProofSubmissionRecord::<T>::get(provider_id)
             .expect("Provider should have a last tick it submitted a proof for.");
         assert_eq!(last_tick_proven, frame_system::Pallet::<T>::block_number());
 
@@ -502,7 +548,9 @@ mod benchmarks {
         Pallet::<T>::force_initialise_challenge_cycle(RawOrigin::Root, provider_id);
 
         // Check that the last tick the Provider submitted a proof for, is the new current block.
-        let last_tick_proven = LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+        let ProofSubmissionRecord {
+            last_tick_proven, ..
+        } = ProviderToProofSubmissionRecord::<T>::get(provider_id)
             .expect("Provider should have a last tick it submitted a proof for.");
         assert_eq!(last_tick_proven, current_block);
 
@@ -535,7 +583,7 @@ mod benchmarks {
             crate::mock::Test,
     }
 
-    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
+    fn setup_submit_proof<T>(n: u32) -> Result<(T::AccountId, T::AccountId, ProviderIdFor<T>, BlockNumberFor<T>, Proof<T>), BenchmarkError>
     where
     // Runtime `T` implements, `pallet_balances::Config` `pallet_storage_providers::Config` and this pallet's `Config`.
         T: pallet_balances::Config + pallet_storage_providers::Config + crate::Config,
@@ -567,6 +615,18 @@ mod benchmarks {
             provider_balance,
         ));
 
+        // Set up an account with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
         // Register caller as a Provider in Providers pallet.
         let encoded_provider_id = get_provider_id();
         let provider_id =
@@ -576,11 +636,13 @@ mod benchmarks {
             &caller,
             provider_id,
         );
+        let used_capacity: u32 = 1024 * 1024 * 1024; // One gigabyte
+        let total_capacity: u32 = used_capacity * 2; // Two gigabytes
         pallet_storage_providers::BackupStorageProviders::<T>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
-                capacity: Default::default(),
-                capacity_used: Default::default(),
+                capacity: total_capacity.into(),
+                capacity_used: used_capacity.into(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
@@ -591,12 +653,14 @@ mod benchmarks {
                 sign_up_block: Default::default(),
             },
         );
+        pallet_storage_providers::UsedBspsCapacity::<T>::set(used_capacity.into());
 
         // Hold some of the Provider's balance so it simulates it having a stake.
+        let provider_stake = provider_balance / 100u32.into();
         assert_ok!(<T as crate::Config>::NativeBalance::hold(
             &pallet_storage_providers::HoldReason::StorageProviderDeposit.into(),
             &caller,
-            provider_balance / 100u32.into(),
+            provider_stake,
         ));
 
         // Set Provider's root to be the one that matches the proofs that will be submitted.
@@ -610,10 +674,12 @@ mod benchmarks {
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<T>::get();
         let last_tick_provider_submitted_proof = current_tick;
-        LastTickProviderSubmittedAProofFor::<T>::insert(
-            &provider_id,
-            last_tick_provider_submitted_proof,
-        );
+        let challenge_period = crate::Pallet::<T>::stake_to_challenge_period(provider_stake);
+        let proof_record = ProofSubmissionRecord {
+            last_tick_proven: last_tick_provider_submitted_proof,
+            next_tick_to_submit_proof_for: last_tick_provider_submitted_proof + challenge_period,
+        };
+        ProviderToProofSubmissionRecord::<T>::insert(&provider_id, proof_record);
 
         // Set Provider's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
@@ -667,7 +733,14 @@ mod benchmarks {
         // Check that the proof has the expected number of file key proofs.
         assert_eq!(proof.key_proofs.len() as u32, n);
 
-        Ok((caller, provider_id, challenge_block, proof))
+        // Create a dynamic-rate payment stream between the user and the provider.
+        let amount_provided: u32 = 1024 * 1024 * 1024; // One gigabyte
+        let payment_stream_creation_result = <<T as pallet_storage_providers::Config>::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(&provider_id,
+			&user_account,
+			&amount_provided.into());
+        assert_ok!(payment_stream_creation_result);
+
+        Ok((caller, user_account, provider_id, challenge_block, proof))
     }
 
     fn generate_challenges<T: Config>(

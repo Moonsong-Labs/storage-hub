@@ -1,4 +1,14 @@
 const FILE_SYSTEM_V1 = {
+  is_storage_request_open_to_volunteers: {
+    description: "Check if a storage request is open to volunteers.",
+    params: [
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<bool, IsStorageRequestOpenToVolunteersError>"
+  },
   query_earliest_file_volunteer_tick: {
     description: "Query the earliest tick number that a BSP can volunteer for a file.",
     params: [
@@ -51,7 +61,17 @@ const PROOFS_DEALER_V1 = {
         type: "ProviderId"
       }
     ],
-    type: "Result<BlockNumber, GetLastTickProviderSubmittedProofError>"
+    type: "Result<BlockNumber, GetProofSubmissionRecordError>"
+  },
+  get_next_tick_to_submit_proof_for: {
+    description: "Get the next tick for which the submitter should submit a proof.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<BlockNumber, GetProofSubmissionRecordError>"
   },
   get_last_checkpoint_challenge_tick: {
     description: "Get the last checkpoint challenge tick.",
@@ -236,6 +256,16 @@ const STORAGE_PROVIDERS_V1 = {
       }
     ],
     type: "Vec<ValuePropositionWithId>"
+  },
+  can_delete_provider: {
+    description: "Check if a provider can be deleted.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "bool"
   }
 };
 const PAYMENT_STREAMS_V1 = {

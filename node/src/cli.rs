@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use clap::{Parser, ValueEnum};
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::command::{IndexerOptions, ProviderOptions};
+use crate::command::ProviderOptions;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -109,6 +109,13 @@ pub struct ProviderConfigurations {
     /// Extrinsic retry timeout in seconds.
     #[clap(long, default_value = "60")]
     pub extrinsic_retry_timeout: u64,
+
+    /// MSP charging fees period (in blocks).
+    /// Setting it to 600 with a block every 6 seconds will charge user every hour.
+    #[clap(long, required_if_eq_any([
+        ("provider_type", "msp"),
+    ]))]
+    pub msp_charging_period: Option<u32>,
 }
 
 impl ProviderConfigurations {
@@ -128,6 +135,7 @@ impl ProviderConfigurations {
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
             extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+            msp_charging_period: self.msp_charging_period,
         }
     }
 }
@@ -147,18 +155,6 @@ pub struct IndexerConfigurations {
     /// environment variable is not set, the node will abort.
     #[arg(long)]
     pub database_url: Option<String>,
-}
-
-impl IndexerConfigurations {
-    pub fn indexer_options(&self) -> Option<IndexerOptions> {
-        if self.indexer {
-            Some(IndexerOptions {
-                database_url: self.database_url.clone(),
-            })
-        } else {
-            None
-        }
-    }
 }
 
 /// Block authoring scheme to be used by the dev service.

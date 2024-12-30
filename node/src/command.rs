@@ -15,12 +15,6 @@ use crate::{
     service::new_partial,
 };
 
-#[derive(Debug, Clone)]
-pub struct IndexerOptions {
-    /// Database URL.
-    pub database_url: Option<String>,
-}
-
 // TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
 /// Configuration for the provider.
 #[derive(Debug, Clone)]
@@ -37,6 +31,8 @@ pub struct ProviderOptions {
     pub jump_capacity: Option<StorageDataUnit>,
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
+    /// MSP charging fees frequency.
+    pub msp_charging_period: Option<u32>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
@@ -255,8 +251,6 @@ pub fn run() -> Result<()> {
                 None
             };
 
-            let indexer_options = cli.indexer_config.indexer_options();
-
             runner.run_node_until_exit(|config| async move {
 				let hwbench = (!cli.no_hardware_benchmarks)
 					.then_some(config.database.path().map(|database_path| {
@@ -280,7 +274,7 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::NetworkWorker<_, _>>(
 								config,
 								provider_options,
-								indexer_options,
+								cli.indexer_config,
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -302,7 +296,7 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								indexer_options,
+								cli.indexer_config,
 								id,
 								hwbench,
 							)
@@ -316,7 +310,7 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::Litep2pNetworkBackend>(
 								config,
 								provider_options,
-								indexer_options,
+								cli.indexer_config,
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -338,7 +332,7 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								indexer_options,
+								cli.indexer_config,
 								id,
 								hwbench,
 							)

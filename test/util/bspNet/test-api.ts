@@ -20,6 +20,28 @@ import type { BspNetApi, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 
 /**
+ * Options for the waitForTxInPool method.
+ * @param module - The module name of the event.
+ * @param method - The method name of the event.
+ * @param checkQuantity - Optional. The number of expected extrinsics.
+ * @param shouldSeal - Optional. Whether to seal a block after waiting for the transaction.
+ * @param expectedEvent - Optional. The expected event to wait for.
+ * @param iterations - Optional. The number of iterations to wait for the transaction.
+ * @param delay - Optional. The delay between iterations.
+ * @param timeout - Optional. The timeout for the wait.
+ */
+export interface WaitForTxOptions {
+  module: string;
+  method: string;
+  checkQuantity?: number;
+  strictQuantity?: boolean;
+  shouldSeal?: boolean;
+  expectedEvent?: string;
+  timeout?: number;
+  verbose?: boolean;
+}
+
+/**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
 export class BspNetTestApi implements AsyncDisposable {
@@ -223,12 +245,11 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspStored(this._api, expectedExts, bspAccount),
 
       /**
-       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
+       * A generic utility to wait for a transaction to be in the tx pool.
+       * @param options - Options for the wait.
+       * @returns A promise that resolves when the transaction is in the tx pool.
        */
-      mspResponseInTxPool: (expectedExts?: number) =>
-        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
+      waitForTxInPool: (options: WaitForTxOptions) => Waits.waitForTxInPool(this._api, options),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
@@ -239,12 +260,12 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
 
       /**
-       * Waits for a BSP to complete storing a file key.
+       * Waits for a Storage Provider to complete storing a file key.
        * @param fileKey - Param to specify the file key to wait for.
        * @returns A promise that resolves when a BSP has completed to store a file.
        */
-      bspFileStorageComplete: (fileKey: H256 | string) =>
-        Waits.waitForBspFileStorageComplete(this._api, fileKey),
+      fileStorageComplete: (fileKey: H256 | string) =>
+        Waits.waitForFileStorageComplete(this._api, fileKey),
 
       /**
        * Waits for a BSP to complete deleting a file from its forest.
@@ -260,7 +281,40 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when a BSP has caught up to the tip of the chain
        */
       bspCatchUpToChainTip: (bspBehindApi: ApiPromise) =>
-        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi)
+        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi),
+
+      /**
+       * Waits for a node to have imported a block.
+       * @param blockHash - The hash of the block to wait for.
+       * @returns A promise that resolves when the block is imported.
+       */
+      blockImported: (blockHash: string) => Waits.waitForBlockImported(this._api, blockHash),
+
+      // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
+      /**
+       * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
+       */
+      mspResponseInTxPool: (expectedExts?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
+
+      /**
+       * Waits for a block where the given address has no pending extrinsics.
+       *
+       * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
+       * without risking it clashing with another transaction with the same nonce already in the pool. For example,
+       * BSP nodes are often sending transactions, so if you want to send a transaction using one of the BSP keys,
+       * you should wait for the BSP to have no pending extrinsics before sending the transaction.
+       *
+       * IMPORTANT: As long as the address keeps having pending extrinsics, this function will keep waiting and building
+       * blocks to include such transactions.
+       *
+       * @param address - The address of the account to wait for.
+       * @returns A promise that resolves when the address has no pending extrinsics.
+       */
+      waitForAvailabilityToSendTx: (address: string) =>
+        Waits.waitForAvailabilityToSendTx(this._api, address)
     };
 
     /**
@@ -313,7 +367,8 @@ export class BspNetTestApi implements AsyncDisposable {
         bucketName: string,
         valuePropId?: HexString | null,
         msp_id?: HexString | null,
-        owner?: KeyringPair
+        owner?: KeyringPair | null,
+        replicationTarget?: number | null
       ) =>
         Files.createBucketAndSendNewStorageRequest(
           this._api,
@@ -322,7 +377,8 @@ export class BspNetTestApi implements AsyncDisposable {
           bucketName,
           valuePropId,
           msp_id,
-          owner
+          owner,
+          replicationTarget
         )
     };
 
@@ -361,7 +417,11 @@ export class BspNetTestApi implements AsyncDisposable {
          *  e.g. true
          */
         verbose?: boolean;
-      }) => BspNetBlock.extendFork(this._api, { ...options, verbose: options.verbose ?? false }),
+      }) =>
+        BspNetBlock.extendFork(this._api, {
+          ...options,
+          verbose: options.verbose ?? false
+        }),
       /**
        * Seals a block with optional extrinsics.
        * @param options - Options for sealing the block, including calls, signer, and whether to finalize.
@@ -395,7 +455,7 @@ export class BspNetTestApi implements AsyncDisposable {
         blockNumber: number,
         options?: {
           waitBetweenBlocks?: number | boolean;
-          waitForBspProofs?: string[];
+          watchForBspProofs?: string[];
           finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;
@@ -407,14 +467,30 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
+       * Finalises a block (and therefore all of its predecessors) in the blockchain.
+       *
+       * @param api - The ApiPromise instance.
+       * @param hashToFinalise - The hash of the block to finalise.
+       * @returns A Promise that resolves when the chain reorganization is complete.
+       */
+      finaliseBlock: (hasshToFinalise: string) =>
+        BspNetBlock.finaliseBlock(this._api, hasshToFinalise),
+      /**
        * Causes a chain re-org by creating a finalised block on top of the last finalised block.
        * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       *
+       * IMPORTANT! Finality is not a network-wide synced state. Each node will have its
+       * own finalised head, as far as it knows. So for this reorg to happen in all nodes,
+       * all nodes must be made aware of the new finalised head.
+       *
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
       /**
        * Causes a chain re-org by creating a longer forked chain.
        * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       *
+       * @param startingBlockHash - Optional. The hash of the block to start the fork from.
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithLongerChain: (startingBlockHash?: string) =>

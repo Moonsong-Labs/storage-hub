@@ -5,16 +5,19 @@ use jsonrpsee::{
     proc_macros::rpc,
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
 };
-use log::{debug, error};
+use log::{debug, error, info};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use shc_common::types::{
-    BlockNumber, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof, KeyProofs, Proven, ProviderId,
-    RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, TrieRemoveMutation,
-    BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        BlockNumber, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof, KeyProofs,
+        ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
+        StorageProofsMerkleTrieLayout, TrieRemoveMutation, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+    },
 };
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -28,6 +31,12 @@ const LOG_TARGET: &str = "storage-hub-client-rpc";
 pub struct CheckpointChallenge {
     pub file_key: H256,
     pub should_remove_file: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoadFileInStorageResult {
+    pub file_key: H256,
+    pub file_metadata: FileMetadata,
 }
 
 pub struct StorageHubClientRpcConfig<FL, FSH> {
@@ -99,7 +108,7 @@ pub trait StorageHubClientApi {
         location: String,
         owner: AccountId32,
         bucket_id: H256,
-    ) -> RpcResult<FileMetadata>;
+    ) -> RpcResult<LoadFileInStorageResult>;
 
     #[method(name = "saveFileToDisk")]
     async fn save_file_to_disk(
@@ -197,7 +206,7 @@ where
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
         Block,
-        ProviderId,
+        ProofsDealerProviderId,
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,
@@ -212,7 +221,7 @@ where
         location: String,
         owner: AccountId32,
         bucket_id: H256,
-    ) -> RpcResult<FileMetadata> {
+    ) -> RpcResult<LoadFileInStorageResult> {
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
 
@@ -279,7 +288,14 @@ where
             .insert_file_with_data(file_key, file_metadata.clone(), file_data_trie)
             .map_err(into_rpc_error)?;
 
-        Ok(file_metadata)
+        let result = LoadFileInStorageResult {
+            file_key,
+            file_metadata,
+        };
+
+        info!(target: LOG_TARGET, "File loaded successfully: {:?}", result);
+
+        Ok(result)
     }
 
     async fn save_file_to_disk(
@@ -336,7 +352,10 @@ where
     }
 
     async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         // return None if not found
         let fs = match self.forest_storage_handler.get(&forest_key).await {
@@ -350,7 +369,10 @@ where
     }
 
     async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         let fs = self
             .forest_storage_handler
@@ -411,7 +433,10 @@ where
         forest_key: Option<H256>,
         file_key: H256,
     ) -> RpcResult<Option<FileMetadata>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         let fs = self
             .forest_storage_handler
@@ -432,7 +457,10 @@ where
         forest_key: Option<H256>,
         challenged_file_keys: Vec<H256>,
     ) -> RpcResult<Vec<u8>> {
-        let forest_key = FSH::Key::from(forest_key.unwrap_or_default().as_ref().to_vec());
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
 
         let fs = self
             .forest_storage_handler
@@ -645,7 +673,7 @@ async fn generate_key_proof<FL, C, Block>(
     file_storage: Arc<RwLock<FL>>,
     file_key: H256,
     seed: RandomnessOutput,
-    provider_id: ProviderId,
+    provider_id: ProofsDealerProviderId,
     at: Option<Block::Hash>,
 ) -> RpcResult<KeyProof>
 where
@@ -653,7 +681,7 @@ where
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
         Block,
-        ProviderId,
+        ProofsDealerProviderId,
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,

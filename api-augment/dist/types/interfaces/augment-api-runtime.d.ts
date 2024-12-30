@@ -45,9 +45,10 @@ import type {
   GetChallengePeriodError,
   GetChallengeSeedError,
   GetCheckpointChallengesError,
-  GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
+  GetProofSubmissionRecordError,
   GetUsersWithDebtOverThresholdError,
+  IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
   Multiaddresses,
   ProviderId,
@@ -247,6 +248,15 @@ declare module "@polkadot/api-base/types/calls" {
     };
     /** 0xb9e7717ace5b45cd/1 */
     fileSystemApi: {
+      /**
+       * Check if a storage request is open to volunteers.
+       **/
+      isStorageRequestOpenToVolunteers: AugmentedCall<
+        ApiType,
+        (
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>
+      >;
       /**
        * Query the chunks that a BSP needs to prove to confirm that it is storing a file.
        **/
@@ -478,7 +488,7 @@ declare module "@polkadot/api-base/types/calls" {
         ApiType,
         (
           providerId: ProviderId | string | Uint8Array
-        ) => Observable<Result<BlockNumber, GetLastTickProviderSubmittedProofError>>
+        ) => Observable<Result<BlockNumber, GetProofSubmissionRecordError>>
       >;
       /**
        * Get the next deadline tick.
@@ -488,6 +498,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<BlockNumber, GetNextDeadlineTickError>>
+      >;
+      /**
+       * Get the next tick for which the submitter should submit a proof.
+       **/
+      getNextTickToSubmitProofFor: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<BlockNumber, GetProofSubmissionRecordError>>
       >;
       /**
        * Generic call
@@ -519,6 +538,13 @@ declare module "@polkadot/api-base/types/calls" {
     };
     /** 0x966604ffe78eb092/1 */
     storageProvidersApi: {
+      /**
+       * Check if a provider can be deleted.
+       **/
+      canDeleteProvider: AugmentedCall<
+        ApiType,
+        (providerId: ProviderId | string | Uint8Array) => Observable<bool>
+      >;
       /**
        * Get the BSP info for a given BSP ID.
        **/

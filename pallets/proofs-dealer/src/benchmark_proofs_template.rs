@@ -13,6 +13,8 @@
 //!
 //! The `generateBenchmarkProofs.ts` script should run, and it should automatically regenerate this file.
 
+use sp_core::crypto::Ss58Codec;
+use sp_runtime::AccountId32;
 use sp_std::{vec, vec::Vec};
 
 #[rustfmt::skip]
@@ -28,6 +30,11 @@ pub fn get_provider_id() -> Vec<u8> {
 #[rustfmt::skip]
 pub fn get_root() -> Vec<u8> {
     {{root}}
+}
+
+#[rustfmt::skip]
+pub fn get_user_account() -> AccountId32 {
+	{{user_account}}
 }
 
 #[rustfmt::skip]

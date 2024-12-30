@@ -286,6 +286,9 @@ mod runtime {
     pub type PaymentStreams = pallet_payment_streams;
     #[runtime::pallet_index(45)]
     pub type BucketNfts = pallet_bucket_nfts;
+    // TODO: Add `pallet_cr_randomness` to the runtime when it's ready.
+    // #[runtime::pallet_index(46)]
+    // pub type CrRandomness = pallet_cr_randomness;
 
     // Miscellaneous
     #[runtime::pallet_index(50)]
@@ -312,6 +315,7 @@ mod benches {
         [pallet_proofs_dealer, ProofsDealer]
         [pallet_storage_providers, Providers]
         [pallet_randomness, Randomness]
+        [pallet_file_system, FileSystem]
     );
 }
 

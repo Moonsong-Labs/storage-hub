@@ -1,26 +1,29 @@
 use anyhow::anyhow;
-use log::{error, info, trace};
-use pallet_storage_providers::types::StorageProviderId;
 use std::time::Duration;
 
+use pallet_storage_providers::types::StorageProviderId;
+use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
         LastChargeableInfoUpdated, ProcessStopStoringForInsolventUserRequest,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    types::StopStoringForInsolventUserRequest,
+    types::{StopStoringForInsolventUserRequest, Tip},
 };
-use shc_common::types::{MaxUsersToCharge, ProviderId};
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{MaxUsersToCharge, ProofsDealerProviderId},
+};
+use shc_forest_manager::traits::ForestStorage;
 use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
 
-use shc_forest_manager::traits::ForestStorage;
-
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT, NoKey};
+use crate::{
+    services::handler::StorageHubHandler,
+    tasks::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
 const MIN_DEBT: Balance = 0;
@@ -142,11 +145,14 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.who;
 
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
         // Check if we are storing any file for this user.
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -186,11 +192,14 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.owner;
 
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
         // Check if we are storing any file for this user.
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -248,11 +257,14 @@ where
             }
         };
 
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
         // Get the forest storage.
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -371,10 +383,11 @@ where
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
         {
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -390,7 +403,7 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
+    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler
@@ -408,10 +421,11 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 

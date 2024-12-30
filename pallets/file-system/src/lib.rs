@@ -29,8 +29,12 @@
 
 pub use pallet::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmarking;
+
 pub mod types;
 mod utils;
+pub mod weights;
 
 #[cfg(test)]
 mod mock;
@@ -43,7 +47,7 @@ mod tests;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::types::*;
+    use super::{types::*, weights::WeightInfo};
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResult,
@@ -51,7 +55,7 @@ pub mod pallet {
         sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
             fungible::*,
-            nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
+            nonfungibles_v2::{Create, Destroy, Inspect as NonFungiblesInspect},
         },
         Blake2_128Concat,
     };
@@ -65,11 +69,15 @@ pub mod pallet {
         },
         BoundedVec,
     };
+    use sp_weights::WeightMeter;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// The trait for reading and mutating Storage Provider and Bucket data.
         type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
@@ -112,6 +120,11 @@ pub mod pallet {
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
         >
         + shp_traits::MutatePricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
+
+        /// The trait to initialise a Provider's randomness commit-reveal cycle.
+        type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
+            ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+        >;
 
         type UpdateStoragePrice: shp_traits::UpdateStoragePrice<
             Price = BalanceOf<Self>,
@@ -216,7 +229,8 @@ pub mod pallet {
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
-            + Create<Self::AccountId, CollectionConfigFor<Self>>;
+            + Create<Self::AccountId, CollectionConfigFor<Self>>
+            + Destroy<Self::AccountId>;
 
         /// Collection inspector
         type CollectionInspector: shp_traits::InspectCollections<
@@ -286,6 +300,10 @@ pub mod pallet {
         /// Deposit held from the User when creating a new storage request
         #[pallet::constant]
         type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
+
+        /// Default replication target
+        #[pallet::constant]
+        type DefaultReplicationTarget: Get<ReplicationTargetType<Self>>;
     }
 
     #[pallet::pallet]
@@ -375,32 +393,33 @@ pub mod pallet {
     pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
-    /// A pointer to the starting block to clean up expired storage requests.
+    /// A pointer to the starting block to clean up expired items.
     ///
     /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to accelerate this block pointer as close to or up to the current block number. This
+    /// attempt to advance this block pointer as close to or up to the current block number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+    /// A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        BoundedVec<(MerkleHash<T>, BucketIdFor<T>), T::MaxUserPendingDeletionRequests>,
+        BoundedVec<PendingFileDeletionRequest<T>, T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
 
     /// Pending file stop storing requests.
     ///
-    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
-    /// and the proven size of the file.
+    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened,
+    /// the proven size of the file and the owner of the file.
     /// The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
     /// of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+    /// The owner is to be able to update the payment stream between the user and the BSP.
     #[pallet::storage]
     pub type PendingStopStoringRequests<T: Config> = StorageDoubleMap<
         _,
@@ -408,7 +427,7 @@ pub mod pallet {
         ProviderIdFor<T>,
         Blake2_128Concat,
         MerkleHash<T>,
-        (BlockNumberFor<T>, StorageData<T>),
+        PendingStopStoringRequest<T>,
     >;
 
     /// Pending move bucket requests.
@@ -430,11 +449,11 @@ pub mod pallet {
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
-    /// Number of BSPs required to fulfill a storage request
-    ///
-    /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
+    // TODO: add this to pallet params instead of a storage element
+    /// Maximum number replication target allowed to be set for a storage request to be fulfilled.
     #[pallet::storage]
-    pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
+    pub type MaxReplicationTarget<T: Config> =
+        StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
     /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
@@ -442,20 +461,21 @@ pub mod pallet {
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
-        pub replication_target: ReplicationTargetType<T>,
+        pub max_replication_target: ReplicationTargetType<T>,
         pub tick_range_to_maximum_threshold: TickNumber<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
-            let replication_target = 1u32.into();
+            // TODO: Find a better default value for this.
+            let max_replication_target = 10u32.into();
             let tick_range_to_maximum_threshold = 10u32.into();
 
-            ReplicationTarget::<T>::put(replication_target);
+            MaxReplicationTarget::<T>::put(max_replication_target);
             TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
 
             Self {
-                replication_target,
+                max_replication_target,
                 tick_range_to_maximum_threshold,
             }
         }
@@ -464,7 +484,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            ReplicationTarget::<T>::put(self.replication_target);
+            MaxReplicationTarget::<T>::put(self.max_replication_target);
             TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
         }
     }
@@ -664,7 +684,9 @@ pub mod pallet {
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
-        BspsRequiredExceedsTarget,
+        ReplicationTargetExceedsMaximum,
+        /// Max replication target cannot be smaller than default replication target.
+        MaxReplicationTargetSmallerThanDefault,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
@@ -718,6 +740,8 @@ pub mod pallet {
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
+        /// Collection ID was not found.
+        CollectionNotFound,
         /// Root of the provider not found.
         ProviderRootNotFound,
         /// Failed to verify proof: required to provide a proof of non-inclusion.
@@ -782,6 +806,8 @@ pub mod pallet {
         InconsistentStateKeyAlreadyExists,
         /// Failed to fetch the rate for the payment stream.
         FixedRatePaymentStreamNotFound,
+        /// Failed to fetch the dynamic-rate payment stream.
+        DynamicRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
         /// Failed to query earliest volunteer tick
@@ -792,6 +818,10 @@ pub mod pallet {
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
         RootNotUpdated,
+        /// Privacy update results in no change
+        NoPrivacyChange,
+        /// Operations not allowed for insolvent provider
+        OperationNotAllowedForInsolventProvider,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -810,7 +840,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_bucket())]
         pub fn create_bucket(
             origin: OriginFor<T>,
             msp_id: Option<ProviderIdFor<T>>,
@@ -952,7 +982,7 @@ pub mod pallet {
 
         /// Issue a new storage request for a file
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::issue_storage_request())]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -961,6 +991,7 @@ pub mod pallet {
             size: StorageData<T>,
             msp_id: Option<ProviderIdFor<T>>,
             peer_ids: PeerIds<T>,
+            replication_target: Option<ReplicationTargetType<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -973,7 +1004,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 msp_id,
-                None,
+                replication_target,
                 Some(peer_ids.clone()),
             )?;
 
@@ -1252,6 +1283,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
@@ -1261,6 +1293,7 @@ pub mod pallet {
                 who.clone(),
                 user.clone(),
                 file_key,
+                file_size,
                 bucket_id,
                 forest_proof,
             )?;
@@ -1280,19 +1313,24 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn set_global_parameters(
             origin: OriginFor<T>,
-            replication_target: Option<T::ReplicationTargetType>,
+            new_max_replication_target: Option<T::ReplicationTargetType>,
             tick_range_to_maximum_threshold: Option<TickNumber<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
 
-            if let Some(replication_target) = replication_target {
+            if let Some(new_max_replication_target) = new_max_replication_target {
                 ensure!(
-                    replication_target > T::ReplicationTargetType::zero(),
+                    new_max_replication_target > T::ReplicationTargetType::zero(),
                     Error::<T>::ReplicationTargetCannotBeZero
                 );
 
-                ReplicationTarget::<T>::put(replication_target);
+                ensure!(
+                    new_max_replication_target >= T::DefaultReplicationTarget::get(),
+                    Error::<T>::MaxReplicationTargetSmallerThanDefault
+                );
+
+                MaxReplicationTarget::<T>::put(new_max_replication_target);
             }
 
             if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {
@@ -1309,10 +1347,7 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
-    where
-        u32: TryFrom<BlockNumberFor<T>>,
-    {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
@@ -1320,11 +1355,22 @@ pub mod pallet {
         }
 
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
-            let mut remaining_weight = remaining_weight;
+            let mut meter = WeightMeter::with_limit(remaining_weight);
+            Self::do_on_idle(current_block, &mut meter);
 
-            Self::do_on_idle(current_block, &mut remaining_weight);
+            meter.consumed()
+        }
 
-            remaining_weight
+        /// Any code located in this hook is placed in an auto-generated test, and generated as a part
+        /// of crate::construct_runtime's expansion.
+        /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
+        fn integrity_test() {
+            let default_replication_target = T::DefaultReplicationTarget::get();
+
+            assert!(
+                default_replication_target > T::ReplicationTargetType::zero(),
+                "Default replication target cannot be zero."
+            );
         }
     }
 }

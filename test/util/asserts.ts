@@ -2,7 +2,7 @@ import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import type { IsEvent } from "@polkadot/types/metadata/decorate/types";
 import type { AnyTuple, IEvent } from "@polkadot/types/types";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import { sealBlock, waitForLog } from "./bspNet";
 import { sleep } from "./timer";
 
@@ -23,6 +23,8 @@ export type AssertExtrinsicOptions = {
   ignoreParamCheck?: boolean;
   /** If provided, asserts that the number of extrinsics found matches this value. */
   assertLength?: number;
+  /** If false, the number of extrinsics can be equal or greater than the number of expected extrinsics. */
+  exactLength?: boolean;
   /** If provided, will not throw until this timeout is reached. */
   timeout?: number;
   /** Provide more logs */
@@ -51,13 +53,13 @@ export const assertExtrinsicPresent = async (
   const timeoutMs = options.timeout || 10000; // Default timeout of 10 seconds
   const iterations = Math.floor(timeoutMs / 100);
 
-  // Perform invariant checks outside the loop to fail fast on critical errors
+  // Perform assert checks outside the loop to fail fast on critical errors
   if (options.ignoreParamCheck !== true) {
-    invariant(
+    assert(
       options.module in api.tx,
       `Module ${options.module} not found in API metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
     );
-    invariant(
+    assert(
       options.method in api.tx[options.module],
       `Method ${options.module}.${options.method} not found in metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
     );
@@ -97,10 +99,17 @@ export const assertExtrinsicPresent = async (
 
       if (matches.length > 0) {
         if (options?.assertLength !== undefined) {
-          invariant(
-            matches.length === options.assertLength,
-            `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
-          );
+          if (options?.exactLength === false) {
+            assert(
+              matches.length >= options.assertLength,
+              `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
+            );
+          } else {
+            assert(
+              matches.length === options.assertLength,
+              `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
+            );
+          }
         }
 
         if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {
@@ -140,12 +149,12 @@ export const assertEventPresent = (
   method: string,
   events?: EventRecord[]
 ) => {
-  invariant(events && events.length > 0, "No events emitted in block");
+  assert(events && events.length > 0, "No events emitted in block");
 
   const event = events.find((e) => e.event.section === module && e.event.method === method);
-  invariant(event !== undefined, `No events matching ${module}.${method}`);
+  assert(event !== undefined, `No events matching ${module}.${method}`);
 
-  invariant(
+  assert(
     api.events[module][method].is(event.event),
     "Event doesn't match, should be caught by assert"
   );
@@ -169,10 +178,10 @@ export const assertEventMany = (
   method: string,
   events?: EventRecord[]
 ) => {
-  invariant(events && events.length > 0, "No events emitted in block");
+  assert(events && events.length > 0, "No events emitted in block");
   const matchingEvents = events.filter((event) => api.events[module][method].is(event.event));
 
-  invariant(matchingEvents.length !== 0, `No events matching ${module}.${method} found`);
+  assert(matchingEvents.length !== 0, `No events matching ${module}.${method} found`);
 
   return matchingEvents;
 };
@@ -181,11 +190,11 @@ export const fetchEvent = <T extends AnyTuple, N = unknown>(
   matcher: IsEvent<T, N>,
   events?: EventRecord[]
 ): IEvent<T, N> => {
-  invariant(events && events.length > 0, "No events emitted in block");
+  assert(events && events.length > 0, "No events emitted in block");
 
   const eventRecord = events.find((e) => matcher.is(e.event));
 
-  invariant(eventRecord !== undefined, `No event found for matcher, ${matcher.meta.name}`);
+  assert(eventRecord !== undefined, `No event found for matcher, ${matcher.meta.name}`);
   return eventRecord.event as unknown as IEvent<T, N>;
 };
 
@@ -211,7 +220,7 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
 
       break;
     } catch {
-      invariant(
+      assert(
         i < iterations - 1,
         `Failed to detect slash extrinsic in txPool after ${(i * delay) / 1000}s`
       );
@@ -223,7 +232,7 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
   const {
     data: { providerId: provider }
   } = fetchEvent(api.events.providers.Slashed, await api.query.system.events());
-  invariant(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
+  assert(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
 }
 
 export const assertDockerLog = async (

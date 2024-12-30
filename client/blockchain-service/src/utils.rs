@@ -1,23 +1,22 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use codec::Encode;
 use cumulus_primitives_core::BlockT;
-use log::{debug, error, info, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
-    ProofsDealerApi,
+    GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
-use pallet_storage_providers::types::StorageProviderId;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{
-        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProviderId, BCSV_KEY_TYPE,
+        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProofsDealerProviderId,
+        StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 use sp_api::ProvideRuntimeApi;
@@ -33,11 +32,11 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use crate::{
     events::{
-        ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
-        ProcessConfirmStoringRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
-        ProcessSubmitProofRequestData,
+        ForestWriteLockTaskData, MultipleNewChallengeSeeds, NotifyPeriod,
+        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
+        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     state::{
@@ -107,6 +106,13 @@ impl BlockchainService {
         }
     }
 
+    /// From a [`BlockImportNotification`], gets the imported block, and checks if:
+    /// 1. The block is not the new best block. For example, it could be a block from a non-best fork branch.
+    ///     - If so, it returns [`NewNonBestBlock`].
+    /// 2. The block is the new best block, and its parent is the previous best block.
+    ///     - If so, it registers it as the new best block and returns [`NewBestBlock`].
+    /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
+    ///     - If so, it registers it as the new best block and returns [`Reorg`].
     pub(crate) fn register_best_block_and_check_reorg<Block>(
         &mut self,
         block_import_notification: &BlockImportNotification<Block>,
@@ -114,7 +120,7 @@ impl BlockchainService {
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let last_best_block = self.best_block.clone();
+        let last_best_block = self.best_block;
         let new_block_info: BestBlockInfo = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
@@ -138,8 +144,8 @@ impl BlockchainService {
             .as_ref()
             .expect("Tree route should exist, it was just checked to be `Some`; qed")
             .clone();
-        info!(target: LOG_TARGET, "New best block caused a reorg: {:?}", new_block_info);
-        info!(target: LOG_TARGET, "Tree route: {:?}", tree_route);
+        info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
+        info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
             old_best_block: last_best_block,
             new_best_block: new_block_info,
@@ -161,32 +167,52 @@ impl BlockchainService {
         }
     }
 
-    /// Get all the provider IDs linked to keys in this node's keystore.
+    /// Get the Provider ID linked to the [`BCSV_KEY_TYPE`] key in this node's keystore.
     ///
-    /// The provider IDs found are added to the [`BlockchainService`]'s list of provider IDs.
-    pub(crate) fn get_provider_ids(&mut self, block_hash: &H256) {
+    /// IMPORTANT! If there is more than one [`BCSV_KEY_TYPE`] key in this node's keystore, linked to
+    /// different Provider IDs, this function will panic. In other words, this node doesn't support
+    /// managing multiple Providers at once.
+    pub(crate) fn get_provider_id(&mut self, block_hash: &H256) {
+        let mut provider_ids_found = Vec::new();
         for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
-            self.client
+            let maybe_provider_id = match self
+                .client
                 .runtime_api()
                 .get_storage_provider_id(*block_hash, &key.into())
-                .map(|provider_id| {
-                    if let Some(provider_id) = provider_id {
-                        match provider_id {
-                            StorageProviderId::BackupStorageProvider(bsp_id) => {
-                                self.provider_ids.insert(bsp_id);
-                            }
-                            StorageProviderId::MainStorageProvider(msp_id) => {
-                                self.provider_ids.insert(msp_id);
-                            }
-                        }
-                    } else {
-                        warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", key);
-                    }
-                })
-                .unwrap_or_else(|_| {
-                    warn!(target: LOG_TARGET, "Failed to get provider ID for key: {:?}.", key);
-                });
+            {
+                Ok(provider_id) => provider_id,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Runtime API error while getting Provider ID for key: {:?}. Error: {:?}", key, e);
+                    continue;
+                }
+            };
+
+            match maybe_provider_id {
+                Some(provider_id) => {
+                    provider_ids_found.push(provider_id);
+                }
+                None => {
+                    debug!(target: LOG_TARGET, "There is no Provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no Provider ID.", key);
+                }
+            };
         }
+
+        // Case: There is no Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
+        // This is expected, if this node starts up before the Provider has been registered.
+        if provider_ids_found.is_empty() {
+            warn!(target: LOG_TARGET, "🔑 There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
+            return;
+        }
+
+        // Case: There is more than one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
+        // This is unexpected, and should never happen.
+        if provider_ids_found.len() > 1 {
+            panic!("There are more than one BCSV keys linked to Provider IDs in this node's keystore. Managing multiple Providers at once is not supported.");
+        }
+
+        // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
+        let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
+        self.provider_id = Some(provider_id);
     }
 
     /// Send an extrinsic to this node using an RPC call.
@@ -420,7 +446,7 @@ impl BlockchainService {
     pub(crate) fn should_provider_submit_proof(
         &self,
         block_hash: &H256,
-        provider_id: &ProviderId,
+        provider_id: &ProofsDealerProviderId,
         current_tick: &BlockNumber,
     ) -> bool {
         // Get the last tick for which the BSP submitted a proof.
@@ -432,15 +458,15 @@ impl BlockchainService {
             Ok(last_tick_provided_result) => match last_tick_provided_result {
                 Ok(last_tick_provided) => last_tick_provided,
                 Err(e) => match e {
-                    GetLastTickProviderSubmittedProofError::ProviderNotRegistered => {
+                    GetProofSubmissionRecordError::ProviderNotRegistered => {
                         debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
                         return false;
                     }
-                    GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
+                    GetProofSubmissionRecordError::ProviderNeverSubmittedProof => {
                         debug!(target: LOG_TARGET, "Provider [{:?}] does not have an initialised challenge cycle", provider_id);
                         return false;
                     }
-                    GetLastTickProviderSubmittedProofError::InternalApiError => {
+                    GetProofSubmissionRecordError::InternalApiError => {
                         error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
                         return false;
                     }
@@ -490,8 +516,18 @@ impl BlockchainService {
         (current_tick_minus_last_submission % provider_challenge_period) == 0
     }
 
-    /// Check if there are any pending requests to update the forest root on the runtime, and process them.
-    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest` over `StopStoringForInsolventUserRequest`.
+    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
+    ///
+    /// If this node is managing a BSP, the priority is given by:
+    /// 1. `SubmitProofRequest` over...
+    /// 2. `ConfirmStoringRequest`.
+    ///
+    /// If this node is managing a MSP, the priority is given by:
+    /// 1. `RespondStorageRequest`.
+    ///
+    /// For both BSPs and MSPs, the last priority is given to:
+    /// 1. `StopStoringForInsolventUserRequest`.
+    ///
     /// This function is called every time a new block is imported and after each request is queued.
     pub(crate) fn check_pending_forest_root_writes(&mut self) {
         if let Some(mut rx) = self.forest_root_write_lock.take() {
@@ -501,7 +537,7 @@ impl BlockchainService {
                 Err(TryRecvError::Empty) => {
                     // If we have a task writing to the runtime, we don't want to start another one.
                     self.forest_root_write_lock = Some(rx);
-                    trace!(target: LOG_TARGET, "Waiting for current forest root write task to finish");
+                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
                     return;
                 }
                 Ok(_) => {
@@ -539,23 +575,45 @@ impl BlockchainService {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data = None;
 
-        // If we have a submit proof request, prioritise it.
-        // This is a BSP only operation, since MSPs don't have to submit proofs.
-        while let Some(request) = self.pending_submit_proof_requests.pop_first() {
-            // Check if the proof is still the next one to be submitted.
-            let provider_id = request.provider_id;
-            let next_challenge_tick = match self.get_next_challenge_tick_for_provider(&provider_id)
-            {
-                Ok(next_challenge_tick) => next_challenge_tick,
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
-                    break;
-                }
-            };
+        if self.provider_id.is_none() {
+            // If there's no Provider being managed, there's no point in checking for pending requests.
+            return;
+        }
 
-            // This is to avoid starting a new task if the proof is not the next one to be submitted.
-            if next_challenge_tick == request.tick {
+        if let StorageProviderId::BackupStorageProvider(_) = self
+            .provider_id
+            .expect("Just checked that this node is managing a Provider; qed")
+        {
+            // If we have a submit proof request, prioritise it.
+            // This is a BSP only operation, since MSPs don't have to submit proofs.
+            while let Some(request) = self.pending_submit_proof_requests.pop_first() {
+                // Check if the proof is still the next one to be submitted.
+                let provider_id = request.provider_id;
+                let next_challenge_tick = match self
+                    .get_next_challenge_tick_for_provider(&provider_id)
+                {
+                    Ok(next_challenge_tick) => next_challenge_tick,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+
+                        // If this is the case, no reason to continue to the next pending proof request.
+                        // We can just break the loop.
+                        break;
+                    }
+                };
+
+                // This is to avoid starting a new task if the proof is not the next one to be submitted.
+                if next_challenge_tick != request.tick {
+                    // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
+                    trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
+                    self.pending_submit_proof_requests.remove(&request);
+
+                    // Continue to the next pending proof request.
+                    continue;
+                }
+
                 // If the proof is still the next one to be submitted, we can process it.
+                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
                 next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
                     ProcessSubmitProofRequestData {
                         seed: request.seed,
@@ -565,73 +623,76 @@ impl BlockchainService {
                         checkpoint_challenges: request.checkpoint_challenges,
                     },
                 ));
-                break;
-            } else {
-                // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
-                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
-                self.pending_submit_proof_requests.remove(&request);
-            }
-        }
 
-        // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
-        // This is a BSP only operation, since MSPs don't have to confirm storing.
-        if next_event_data.is_none() {
-            let max_batch_confirm =
+                // Exit the loop since we have found the next proof to be submitted.
+                break;
+            }
+
+            // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+            // This is a BSP only operation, since MSPs don't have to confirm storing.
+            if next_event_data.is_none() {
+                let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
                     u32,
                 >>::get();
 
-            // Batch multiple confirm file storing taking the runtime maximum.
-            let mut confirm_storing_requests = Vec::new();
-            for _ in 0..max_batch_confirm {
-                if let Some(request) = state_store_context
-                    .pending_confirm_storing_request_deque()
-                    .pop_front()
-                {
-                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
-                    confirm_storing_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 confirm storing request, send the process event.
-            if confirm_storing_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessConfirmStoringRequestData {
-                        confirm_storing_requests,
+                // Batch multiple confirm file storing taking the runtime maximum.
+                let mut confirm_storing_requests = Vec::new();
+                for _ in 0..max_batch_confirm {
+                    if let Some(request) = state_store_context
+                        .pending_confirm_storing_request_deque()
+                        .pop_front()
+                    {
+                        trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
+                        confirm_storing_requests.push(request);
+                    } else {
+                        break;
                     }
-                    .into(),
-                );
+                }
+
+                // If we have at least 1 confirm storing request, send the process event.
+                if confirm_storing_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessConfirmStoringRequestData {
+                            confirm_storing_requests,
+                        }
+                        .into(),
+                    );
+                }
             }
         }
 
-        // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
-        // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
-        if next_event_data.is_none() {
-            let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
+        if let StorageProviderId::MainStorageProvider(_) = self
+            .provider_id
+            .expect("Just checked that this node is managing a Provider; qed")
+        {
+            // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
+            // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
+            if next_event_data.is_none() {
+                let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
 
-            // Batch multiple respond storing requests up to the runtime configured maximum.
-            let mut respond_storage_requests = Vec::new();
-            for _ in 0..max_batch_respond {
-                if let Some(request) = state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .pop_front()
-                {
-                    respond_storage_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 respond storing request, send the process event.
-            if respond_storage_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessMspRespondStoringRequestData {
-                        respond_storing_requests: respond_storage_requests,
+                // Batch multiple respond storing requests up to the runtime configured maximum.
+                let mut respond_storage_requests = Vec::new();
+                for _ in 0..max_batch_respond {
+                    if let Some(request) = state_store_context
+                        .pending_msp_respond_storage_request_deque()
+                        .pop_front()
+                    {
+                        respond_storage_requests.push(request);
+                    } else {
+                        break;
                     }
-                    .into(),
-                );
+                }
+
+                // If we have at least 1 respond storing request, send the process event.
+                if respond_storage_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessMspRespondStoringRequestData {
+                            respond_storing_requests: respond_storage_requests,
+                        }
+                        .into(),
+                    );
+                }
             }
         }
 
@@ -727,38 +788,8 @@ impl BlockchainService {
     pub(crate) fn proof_submission_catch_up(
         &self,
         current_block_hash: &H256,
-        provider_id: &ProviderId,
+        provider_id: &ProofsDealerProviderId,
     ) {
-        // Get the last tick for which the BSP submitted a proof, according to the runtime right now.
-        let last_tick_provider_submitted_proof = match self
-            .client
-            .runtime_api()
-            .get_last_tick_provider_submitted_proof(*current_block_hash, provider_id)
-        {
-            Ok(last_tick_provided_result) => match last_tick_provided_result {
-                Ok(last_tick_provided) => last_tick_provided,
-                Err(e) => match e {
-                    GetLastTickProviderSubmittedProofError::ProviderNotRegistered => {
-                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
-                        return;
-                    }
-                    GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
-                        debug!(target: LOG_TARGET, "Provider [{:?}] does not have an initialised challenge cycle", provider_id);
-                        return;
-                    }
-                    GetLastTickProviderSubmittedProofError::InternalApiError => {
-                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
-                        return;
-                    }
-                },
-            },
-            Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
-                return;
-            }
-        };
-        trace!(target: LOG_TARGET, "Last tick Provider [{:?}] submitted a proof for: {}", provider_id, last_tick_provider_submitted_proof);
-
         // Get the current challenge period for this provider.
         let challenge_period = match self
             .client
@@ -799,7 +830,16 @@ impl BlockchainService {
 
         // Advance by `challenge_period` ticks and add the seed to the list of challenge seeds.
         let mut challenge_seeds = Vec::new();
-        let mut next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
+        let mut next_challenge_tick = match Self::get_next_challenge_tick_for_provider(
+            &self,
+            provider_id,
+        ) {
+            Ok(next_challenge_tick) => next_challenge_tick,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+                return;
+            }
+        };
         while next_challenge_tick <= current_tick {
             // Get the seed for the challenge tick.
             let seed = match self
@@ -833,7 +873,7 @@ impl BlockchainService {
             next_challenge_tick += challenge_period;
         }
 
-        // Emit the `MultiNewChallengeSeeds` event.
+        // Emit the `MultipleNewChallengeSeeds` event.
         if challenge_seeds.len() > 0 {
             trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", provider_id, challenge_seeds);
             self.emit(MultipleNewChallengeSeeds {
@@ -845,80 +885,31 @@ impl BlockchainService {
 
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: &ProviderId,
-    ) -> Result<BlockNumber> {
+        provider_id: &ProofsDealerProviderId,
+    ) -> Result<BlockNumber, GetProofSubmissionRecordError> {
         // Get the current block hash.
         let current_block_hash = self.client.info().best_hash;
 
-        // Get the last tick for which the provider submitted a proof.
-        let last_tick_provider_submitted_proof = match self
+        // Get the next tick for which the provider should submit a proof.
+        match self
             .client
             .runtime_api()
-            .get_last_tick_provider_submitted_proof(current_block_hash, provider_id)
+            .get_next_tick_to_submit_proof_for(current_block_hash, provider_id)
         {
-            Ok(last_tick_provided_result) => match last_tick_provided_result {
-                Ok(last_tick_provided) => last_tick_provided,
-                Err(e) => match e {
-                    GetLastTickProviderSubmittedProofError::ProviderNotRegistered => {
-                        return Err(anyhow!("Provider [{:?}] is not registered", provider_id));
-                    }
-                    GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
-                        return Err(anyhow!(
-                            "Provider [{:?}] does not have an initialised challenge cycle",
-                            provider_id
-                        ));
-                    }
-                    GetLastTickProviderSubmittedProofError::InternalApiError => {
-                        return Err(anyhow!(
-                            "Internal API error while getting last tick Provider [{:?}] submitted a proof for: {:?}",
-                            provider_id, e
-                        ));
-                    }
-                },
-            },
+            Ok(next_tick_to_prove_result) => next_tick_to_prove_result,
             Err(e) => {
-                return Err(anyhow!(
-                    "Runtime API error while getting last tick Provider [{:?}] submitted a proof for: {:?}",
-                    provider_id,
-                    e
-                ));
+                error!(target: LOG_TARGET, "Runtime API error while getting next tick to submit proof for Provider [{:?}]: {:?}", provider_id, e);
+                Err(GetProofSubmissionRecordError::InternalApiError)
             }
-        };
+        }
+    }
 
-        // Get the challenge period for the provider.
-        let challenge_period = match self
-            .client
-            .runtime_api()
-            .get_challenge_period(current_block_hash, provider_id)
-        {
-            Ok(challenge_period_result) => match challenge_period_result {
-                Ok(challenge_period) => challenge_period,
-                Err(e) => match e {
-                    GetChallengePeriodError::ProviderNotRegistered => {
-                        return Err(anyhow!("Provider [{:?}] is not registered", provider_id));
-                    }
-                    GetChallengePeriodError::InternalApiError => {
-                        return Err(anyhow!(
-                            "Internal API error while getting challenge period for Provider [{:?}]",
-                            provider_id
-                        ));
-                    }
-                },
-            },
-            Err(e) => {
-                return Err(anyhow!(
-                    "Runtime API error while getting challenge period for Provider [{:?}]: {:?}",
-                    provider_id,
-                    e
-                ));
+    pub(crate) fn check_for_notify(&self, block_number: &BlockNumber) {
+        if let Some(np) = self.notify_period {
+            if block_number % np == 0 {
+                self.emit(NotifyPeriod {});
             }
-        };
-
-        // Calculate the next challenge tick.
-        let next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
-
-        // Check if the current tick is a tick this provider should submit a proof for.
-        Ok(next_challenge_tick)
+        }
     }
 }
 

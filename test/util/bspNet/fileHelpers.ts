@@ -4,7 +4,7 @@ import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
 import * as ShConsts from "./consts";
 import { sealBlock } from "./block";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import type { HexString } from "@polkadot/util/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces";
@@ -18,7 +18,7 @@ export const sendNewStorageRequest = async (
   owner?: KeyringPair,
   mspId?: HexString
 ): Promise<FileMetadata> => {
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
     ShConsts.NODE_INFOS.user.AddressId,
@@ -35,7 +35,8 @@ export const sendNewStorageRequest = async (
       fileMetadata.fingerprint,
       fileMetadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
-      [ShConsts.NODE_INFOS.user.expectedPeerId]
+      [ShConsts.NODE_INFOS.user.expectedPeerId],
+      null
     ),
     issueOwner
   );
@@ -52,7 +53,7 @@ export const sendNewStorageRequest = async (
     api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
-  invariant(newStorageRequestEventDataBlob, "Event doesn't match Type");
+  assert(newStorageRequestEventDataBlob, "Event doesn't match Type");
 
   return {
     fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
@@ -71,38 +72,38 @@ export const createBucketAndSendNewStorageRequest = async (
   bucketName: string,
   valuePropId?: HexString | null,
   mspId?: HexString | null,
-  owner?: KeyringPair
+  owner?: KeyringPair | null,
+  replicationTarget?: number | null
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
-  let localMspId = mspId;
+  let localOwner = owner;
 
-  if (localMspId === undefined) {
-    localMspId = ShConsts.DUMMY_MSP_ID;
-  }
-
-  if (localValuePropId === undefined) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(localMspId);
-
+  if (!localValuePropId && mspId) {
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
     localValuePropId = valueProps[0].id;
+
+    if (!localValuePropId) {
+      throw new Error("No value proposition found");
+    }
   }
 
-  if (localValuePropId === undefined) {
-    throw new Error("No value proposition found");
+  if (!localOwner) {
+    localOwner = shUser;
   }
 
   const newBucketEventEvent = await createBucket(
     api,
     bucketName,
     localValuePropId,
-    localMspId,
-    owner
+    mspId,
+    localOwner
   );
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-  invariant(newBucketEventDataBlob, "Event doesn't match Type");
+  assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
     ShConsts.NODE_INFOS.user.AddressId,
@@ -116,8 +117,9 @@ export const createBucketAndSendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      localMspId,
-      [ShConsts.NODE_INFOS.user.expectedPeerId]
+      mspId ?? null,
+      [ShConsts.NODE_INFOS.user.expectedPeerId],
+      replicationTarget ?? null
     ),
     owner ?? shUser
   );
@@ -132,7 +134,7 @@ export const createBucketAndSendNewStorageRequest = async (
     api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
-  invariant(newStorageRequestEventDataBlob, "Event doesn't match Type");
+  assert(newStorageRequestEventDataBlob, "Event doesn't match Type");
 
   return {
     fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
@@ -149,7 +151,7 @@ export const createBucket = async (
   bucketName: string,
   valuePropId?: HexString | null,
   mspId: HexString | null = ShConsts.DUMMY_MSP_ID,
-  owner: KeyringPair = shUser
+  owner: KeyringPair | null = shUser
 ) => {
   let localValuePropId = valuePropId;
 
@@ -168,7 +170,7 @@ export const createBucket = async (
   const createBucketResult = await sealBlock(
     api,
     api.tx.fileSystem.createBucket(mspId, bucketName, false, localValuePropId),
-    owner
+    owner ?? undefined
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 

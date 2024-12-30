@@ -1,14 +1,6 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import {
-  bob,
-  describeBspNet,
-  fetchEvent,
-  ShConsts,
-  sleep,
-  type EnrichedBspApi
-} from "../../../util";
-import invariant from "tiny-invariant";
+import { bob, describeBspNet, fetchEvent, ShConsts, type EnrichedBspApi } from "../../../util";
 import { BN } from "@polkadot/util";
 
 describeBspNet(
@@ -23,7 +15,7 @@ describeBspNet(
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
-      invariant(
+      assert(
         launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
         "BSPNet failed to initialise with required ports"
       );
@@ -100,11 +92,9 @@ describeBspNet(
       // Calculate how many blocks to advance until next challenge tick.
       let currentBlock = await userApi.rpc.chain.getBlock();
       let currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const blocksToAdvance = nextChallengeTick - currentBlockNumber;
-
-      // Advance blocksToAdvance blocks.
-      for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+      if (nextChallengeTick > currentBlockNumber) {
+        // Advance to the next challenge tick if needed
+        await userApi.block.skipTo(nextChallengeTick);
       }
 
       await userApi.assert.extrinsicPresent({
@@ -260,12 +250,14 @@ describeBspNet(
         "test/cloud.jpg",
         "bucket-1",
         null,
-        null
+        null,
+        null,
+        3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
-      await bspApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
-      await bspTwoApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
-      await bspThreeApi.wait.bspFileStorageComplete(cloudFileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
+      await bspTwoApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
       const adolphusFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -273,12 +265,14 @@ describeBspNet(
         "test/adolphus.jpg",
         "bucket-3",
         null,
-        null
+        null,
+        null,
+        3 // There are 3 running BSPs to fulfil the storage request
       );
       await userApi.wait.bspVolunteer(3);
-      await bspApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
-      await bspTwoApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
-      await bspThreeApi.wait.bspFileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspTwoApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
+      await bspThreeApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
       await userApi.wait.bspStored(3);
 
       // Check the payment stream info after adding the new files
@@ -492,7 +486,6 @@ describeBspNet(
 
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.sealBlock();
-      await sleep(500);
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");

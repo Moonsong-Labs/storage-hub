@@ -187,10 +187,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
       /**
-       * BSPs required for storage request cannot exceed the maximum allowed.
-       **/
-      BspsRequiredExceedsTarget: AugmentedError<ApiType>;
-      /**
        * Action not allowed while the bucket is being moved.
        **/
       BucketIsBeingMoved: AugmentedError<ApiType>;
@@ -211,9 +207,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Collection ID was not found.
+       **/
+      CollectionNotFound: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
+      /**
+       * Failed to fetch the dynamic-rate payment stream.
+       **/
+      DynamicRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Failed to verify proof: required to provide a proof of inclusion.
        **/
@@ -296,6 +300,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
       /**
+       * Max replication target cannot be smaller than default replication target.
+       **/
+      MaxReplicationTargetSmallerThanDefault: AugmentedError<ApiType>;
+      /**
        * Max number of user pending deletion requests reached.
        **/
       MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
@@ -328,6 +336,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
       /**
+       * Privacy update results in no change
+       **/
+      NoPrivacyChange: AugmentedError<ApiType>;
+      /**
        * Account is not a BSP.
        **/
       NotABsp: AugmentedError<ApiType>;
@@ -352,6 +364,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NotSelectedMsp: AugmentedError<ApiType>;
       /**
+       * Operations not allowed for insolvent provider
+       **/
+      OperationNotAllowedForInsolventProvider: AugmentedError<ApiType>;
+      /**
        * Pending stop storing request already exists.
        **/
       PendingStopStoringRequestAlreadyExists: AugmentedError<ApiType>;
@@ -367,6 +383,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Replication target cannot be zero.
        **/
       ReplicationTargetCannotBeZero: AugmentedError<ApiType>;
+      /**
+       * BSPs required for storage request cannot exceed the maximum allowed.
+       **/
+      ReplicationTargetExceedsMaximum: AugmentedError<ApiType>;
       /**
        * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
        **/
@@ -755,6 +775,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ProviderInconsistencyError: AugmentedError<ApiType>;
       /**
+       * Error thrown when a charge is attempted when the provider is marked as insolvent
+       **/
+      ProviderInsolvent: AugmentedError<ApiType>;
+      /**
        * Error thrown when trying to create a new fixed-rate payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_fixed_rate_payment_stream instead)
        **/
       RateCantBeZero: AugmentedError<ApiType>;
@@ -1052,6 +1076,12 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Failed to delete a provider due to conditions not being met.
+       *
+       * Call `can_delete_provider` runtime API to check if the provider can be deleted.
+       **/
+      DeleteProviderConditionsNotMet: AugmentedError<ApiType>;
+      /**
        * Deposit too low to determine capacity.
        **/
       DepositTooLow: AugmentedError<ApiType>;
@@ -1075,6 +1105,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a Provider tries to remove the last MultiAddress from its account.
        **/
       LastMultiAddressCantBeRemoved: AugmentedError<ApiType>;
+      /**
+       * Congratulations, you either lived long enough or were born late enough to see this error.
+       **/
+      MaxBlockNumberReached: AugmentedError<ApiType>;
       /**
        * Error thrown when changing the MSP of a bucket to the same assigned MSP.
        **/
@@ -1131,6 +1165,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Operation not allowed for insolvent provider
+       **/
+      OperationNotAllowedForInsolventProvider: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to update a payment stream that does not exist.
        **/

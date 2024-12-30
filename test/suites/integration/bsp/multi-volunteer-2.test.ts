@@ -18,8 +18,18 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
   });
 
   it("multiple BSPs race to volunteer for single file", async () => {
-    // Replicate to 1 BSPs, 1 block to maxthreshold (i.e. instant acceptance)
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, 1)));
+    // Set default replication target to 1
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 1]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
+
+    // 1 block to maxthreshold (i.e. instant acceptance)
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
 
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,

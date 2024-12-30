@@ -288,18 +288,20 @@ pub mod pallet {
         (),
     >;
 
-    /// A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
-    /// If for a Provider `p`, `LastTickProviderSubmittedAProofFor[p]` is `n`, then the
-    /// Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
+    /// A mapping from a Provider to its [`ProofSubmissionRecord`], which stores the last tick
+    /// the Provider submitted a proof for, and the next tick the Provider should submit a proof for.
     ///
-    /// This gets updated when a Provider submits a proof successfully and is used to determine the
-    /// next tick for which the Provider should submit a proof, and it's deadline.
+    /// Normally the difference between these two ticks is equal to the Provider's challenge period,
+    /// but if the Provider's period is changed, this change only affects the next cycle. In other words,
+    /// for one cycle, `next_tick_to_submit_proof_for - last_tick_proven ≠ provider_challenge_period`.
     ///
-    /// If the Provider fails to submit a proof in time and is slashed, this will still get updated
-    /// to the tick it should have submitted a proof for.
+    /// If a Provider submits a proof successfully, both fields are updated.
+    ///
+    /// If the Provider fails to submit a proof in time and is slashed, only `next_tick_to_submit_proof_for`
+    /// is updated.
     #[pallet::storage]
-    pub type LastTickProviderSubmittedAProofFor<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>>;
+    pub type ProviderToProofSubmissionRecord<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ProofSubmissionRecord<T>>;
 
     /// A queue of keys that have been challenged manually.
     ///
@@ -438,7 +440,7 @@ pub mod pallet {
 
         /// A proof was accepted.
         ProofAccepted {
-            provider: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             proof: Proof<T>,
             last_tick_proven: BlockNumberFor<T>,
         },
@@ -621,19 +623,23 @@ pub mod pallet {
         /// is provided, the proof submitter is considered to be the Provider.
         /// Relies on a Providers pallet to get the root for the Provider.
         /// Validates that the proof corresponds to a challenge that was made in the past,
-        /// by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
-        /// Provider should have submitted a proof is calculated based on the last tick they
-        /// submitted a proof for ([`LastTickProviderSubmittedAProofFor`]), and the proving period for
-        /// that Provider, which is a function of their stake.
+        /// by checking the [`TickToChallengesSeed`] StorageMap. The challenge tick that the
+        /// Provider should be submitting a proof for is retrieved from [`ProviderToProofSubmissionRecord`],
+        /// and it was calculated based on the last tick they submitted a proof for, and the challenge
+        /// period for that Provider, at the time of the previous proof submission or when it was
+        /// marked as slashable.
+        ///
         /// This extrinsic also checks that there hasn't been a checkpoint challenge round
         /// in between the last time the Provider submitted a proof for and the tick
         /// for which the proof is being submitted. If there has been, the Provider is
-        /// subject to slashing.
+        /// expected to include responses to the checkpoint challenges in the proof.
         ///
         /// If valid:
         /// - Pushes forward the Provider in the [`TickToProvidersDeadlines`] StorageMap a number
         /// of ticks corresponding to the stake of the Provider.
-        /// - Registers this tick as the last tick in which the Provider submitted a proof.
+        /// - Registers the last tick for which the Provider submitted a proof for in
+        /// [`ProviderToProofSubmissionRecord`], as well as the next tick for which the Provider
+        /// should submit a proof for.
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
@@ -679,7 +685,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::ProofAccepted {
-                provider,
+                provider_id: provider,
                 proof,
                 last_tick_proven,
             });
@@ -805,9 +811,9 @@ pub mod pallet {
             let min_stake = T::ProvidersPallet::get_min_stake();
             let max_period = Self::stake_to_challenge_period(min_stake);
 
-            // Check that `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
+            // Check that `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have plus the tolerance.
             assert!(
-                T::CheckpointChallengePeriod::get() >= max_period,
+                T::CheckpointChallengePeriod::get() > max_period + T::ChallengeTicksTolerance::get(),
                 "CheckpointChallengePeriod ({:?}) const in ProofsDealer pallet should be greater or equal than the longest period a Provider can have ({:?}).",
                 T::CheckpointChallengePeriod::get(),
                 max_period

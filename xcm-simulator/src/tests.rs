@@ -1172,6 +1172,7 @@ mod users {
     use pallet_file_system::types::MaxFilePathSize;
     use pallet_file_system::types::MaxNumberOfPeerIds;
     use pallet_file_system::types::MaxPeerIdSize;
+    use pallet_file_system::types::PendingFileDeletionRequest;
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
@@ -1311,9 +1312,10 @@ mod users {
                     bucket_id: bucket_id.clone(),
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
-                    size: size,
+                    size,
                     msp_id: Some(alice_msp_id.clone()),
                     peer_ids: parachain_peer_id,
+                    replication_target: None,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1422,10 +1424,16 @@ mod users {
                 1
             );
             let mut file_deletion_requests_vec: BoundedVec<
-                (H256, H256),
+                PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
             > = BoundedVec::new();
-            file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
+            let pending_file_deletion_request = PendingFileDeletionRequest {
+                user: parachain_account_in_sh.clone(),
+                file_key: file_key.clone(),
+                file_size: size,
+                bucket_id: bucket_id.clone(),
+            };
+            file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
                 pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     parachain_account_in_sh.clone()
@@ -1676,9 +1684,10 @@ mod users {
                     bucket_id: bucket_id.clone(),
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
-                    size: size,
+                    size,
                     msp_id: Some(alice_msp_id.clone()),
                     peer_ids: parachain_peer_id,
+                    replication_target: None,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1809,10 +1818,16 @@ mod users {
                 1
             );
             let mut file_deletion_requests_vec: BoundedVec<
-                (H256, H256),
+                PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
             > = BoundedVec::new();
-            file_deletion_requests_vec.force_push((file_key.clone(), bucket_id.clone()));
+            let pending_file_deletion_request = PendingFileDeletionRequest {
+                user: charlie_parachain_account_in_sh.clone(),
+                file_key: file_key.clone(),
+                file_size: size,
+                bucket_id: bucket_id.clone(),
+            };
+            file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
                 pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
                     charlie_parachain_account_in_sh.clone()

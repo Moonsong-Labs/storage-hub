@@ -3,7 +3,7 @@ import fs from "node:fs";
 import tmp from "tmp";
 import * as compose from "docker-compose";
 import yaml from "yaml";
-import invariant from "tiny-invariant";
+import assert from "node:assert";
 import {
   addBsp,
   BspNetTestApi,
@@ -32,6 +32,7 @@ import {
 import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
 import { spawn, spawnSync } from "node:child_process";
+import { DUMMY_MSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -48,19 +49,19 @@ export class NetworkLauncher {
   ) {}
 
   private loadComposeFile() {
-    invariant(this.type, "Network type has not been set yet");
+    assert(this.type, "Network type has not been set yet");
     const composeFiles = {
       bspnet: "bspnet-base-template.yml",
       fullnet: "fullnet-base-template.yml"
     } as const;
 
     // if (this.config.noisy && this.type === "fullnet") {
-    //   invariant(false, "Noisy fullnet not supported");
+    //   assert(false, "Noisy fullnet not supported");
     // }
 
     const file = this.type === "fullnet" ? composeFiles.fullnet : composeFiles.bspnet;
 
-    invariant(file, `Compose file not found for ${this.type} network`);
+    assert(file, `Compose file not found for ${this.type} network`);
 
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
@@ -71,8 +72,8 @@ export class NetworkLauncher {
   }
 
   public async getPeerId(serviceName: string) {
-    invariant(this.entities, "Entities have not been populated yet, run populateEntities() first");
-    invariant(
+    assert(this.entities, "Entities have not been populated yet, run populateEntities() first");
+    assert(
       Object.values(this.entities)
         .map(({ name }) => name)
         .includes(serviceName),
@@ -80,32 +81,26 @@ export class NetworkLauncher {
     );
 
     const port = this.entities.find((entity) => entity.name === serviceName)?.port;
-    invariant(port, `Port for service ${serviceName} not found in compose file`);
+    assert(port, `Port for service ${serviceName} not found in compose file`);
     return getContainerPeerId(`http://127.0.0.1:${port}`);
   }
 
   private populateEntities() {
-    invariant(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const shServices: ShEntity[] = Object.entries(this.composeYaml.services)
       .filter(([_serviceName, service]: [string, any]) => service.image === "storage-hub:local")
       .map(([serviceName, _service]: [string, any]) => ({
         port: this.getPort(serviceName),
         name: serviceName
       }));
-    invariant(shServices.length > 0, "No storage-hub services found in compose file");
+    assert(shServices.length > 0, "No storage-hub services found in compose file");
     this.entities = shServices;
     return this;
   }
 
   // TODO: Turn this into a submodule system with separate handlers for each option
   private remapComposeYaml() {
-    invariant(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
 
     const composeYaml = this.composeYaml;
 
@@ -137,7 +132,7 @@ export class NetworkLauncher {
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
       );
       if (this.type === "fullnet") {
-        composeYaml.services["sh-msp"].command.push(
+        composeYaml.services["sh-msp-1"].command.push(
           `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
         );
       }
@@ -159,6 +154,14 @@ export class NetworkLauncher {
       composeYaml.services["sh-user"].command.push(
         "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
       );
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
+        composeYaml.services["sh-msp-2"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
+      }
     }
 
     const cwd = path.resolve(process.cwd(), "..", "docker");
@@ -252,7 +255,7 @@ export class NetworkLauncher {
             : mspService === "sh-msp-2"
               ? ShConsts.NODE_INFOS.msp2.nodeKey
               : undefined;
-        invariant(
+        assert(
           nodeKey,
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
@@ -263,7 +266,7 @@ export class NetworkLauncher {
             : mspService === "sh-msp-2"
               ? ShConsts.DUMMY_MSP_ID_2
               : undefined;
-        invariant(
+        assert(
           mspId,
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
@@ -313,10 +316,10 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
-    invariant(this.config.indexer, "Indexer must be enabled to run migrations");
+    assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
-    invariant(
+    assert(
       dieselCheck.status === 0,
       "Error running Diesel CLI. Visit https://diesel.rs/guides/getting-started for install instructions."
     );
@@ -350,15 +353,12 @@ export class NetworkLauncher {
   }
 
   private getPort(serviceName: string) {
-    invariant(
-      this.composeYaml,
-      "Compose file has not been selected yet, run loadComposeFile() first"
-    );
+    assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const service = this.composeYaml.services[serviceName];
-    invariant(service, `Service ${serviceName} not found in compose file`);
+    assert(service, `Service ${serviceName} not found in compose file`);
 
     const ports = service.ports;
-    invariant(Array.isArray(ports), `Ports for service ${serviceName} is in unexpected format.`);
+    assert(Array.isArray(ports), `Ports for service ${serviceName} is in unexpected format.`);
 
     for (const portMapping of ports) {
       const [external, internal] = portMapping.split(":");
@@ -421,7 +421,8 @@ export class NetworkLauncher {
           this.config.capacity || ShConsts.CAPACITY_512,
           // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
           [multiAddressMsp],
-          1,
+          // The MSP will charge 100 UNITS per GigaUnit of data per block.
+          100 * 1024 * 1024,
           "Terms of Service...",
           9999999,
           who
@@ -440,6 +441,23 @@ export class NetworkLauncher {
     //     StakeToChallengePeriod: [null, {VALUE_YOU_WANT}],
     //     CheckpointChallengePeriod: [null, {VALUE_YOU_WANT}],
     //     MinChallengePeriod: [null, {VALUE_YOU_WANT}],
+    //     SystemUtilisationLowerThresholdPercentage: [null, {VALUE_YOU_WANT}],
+    //     SystemUtilisationUpperThresholdPercentage: [null, {VALUE_YOU_WANT}],
+    //     MostlyStablePrice: [null, {VALUE_YOU_WANT}],
+    //     MaxPrice: [null, {VALUE_YOU_WANT}],
+    //     MinPrice: [null, {VALUE_YOU_WANT}],
+    //     UpperExponentFactor: [null, {VALUE_YOU_WANT}],
+    //     LowerExponentFactor: [null, {VALUE_YOU_WANT}],
+    //     ZeroSizeBucketFixedRate: [null, {VALUE_YOU_WANT}],
+    //     IdealUtilisationRate: [null, {VALUE_YOU_WANT}],
+    //     DecayRate: [null, {VALUE_YOU_WANT}],
+    //     MinimumTreasuryCut: [null, {VALUE_YOU_WANT}],
+    //     MaximumTreasuryCut: [null, {VALUE_YOU_WANT}],
+    //     BspStopStoringFilePenalty: [null, {VALUE_YOU_WANT}],
+    //     ProviderTopUpTtl: [null, {VALUE_YOU_WANT}],
+    //     DefaultReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     MinSeedPeriod: [null, {VALUE_YOU_WANT}],
+    //     StakeToSeedPeriod: [null, {VALUE_YOU_WANT}],
     //   }
     // }
     const slashAmountPerMaxFileSizeRuntimeParameter = {
@@ -474,6 +492,14 @@ export class NetworkLauncher {
     await api.sealBlock(
       api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))
     );
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 3]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
   }
 
   public async execDemoTransfer() {
@@ -485,7 +511,11 @@ export class NetworkLauncher {
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
       source,
       destination,
-      bucketName
+      bucketName,
+      null,
+      DUMMY_MSP_ID,
+      shUser,
+      1
     );
 
     if (this.type === "bspnet") {
@@ -507,7 +537,16 @@ export class NetworkLauncher {
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(5, 1)));
+    const defaultReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        DefaultReplicationTarget: [null, 4]
+      }
+    };
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+    );
+
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.
@@ -517,6 +556,7 @@ export class NetworkLauncher {
       bspKeySeed: bspDownSeed,
       bspId: ShConsts.BSP_DOWN_ID,
       bspStartingWeight: this.config.capacity,
+      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(api, bspTwoKey, {
@@ -525,6 +565,7 @@ export class NetworkLauncher {
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       bspStartingWeight: this.config.capacity,
+      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(api, bspThreeKey, {
@@ -533,6 +574,7 @@ export class NetworkLauncher {
       bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
       bspStartingWeight: this.config.capacity,
+      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 
@@ -601,7 +643,7 @@ export class NetworkLauncher {
     console.log(`sh-user Peer ID: ${userPeerId}`);
 
     const bspContainerName = launchedNetwork.composeYaml.services["sh-bsp"].container_name;
-    invariant(bspContainerName, "BSP container name not found in compose file");
+    assert(bspContainerName, "BSP container name not found in compose file");
     const bspIp = await getContainerIp(
       launchedNetwork.config.noisy ? "toxiproxy" : bspContainerName
     );
@@ -628,7 +670,7 @@ export class NetworkLauncher {
       );
       for (const service of mspServices) {
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
-        invariant(mspContainerName, "MSP container name not found in compose file");
+        assert(mspContainerName, "MSP container name not found in compose file");
         const mspIp = await getContainerIp(mspContainerName);
         const mspPeerId = await launchedNetwork.getPeerId(service);
         const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
@@ -640,7 +682,7 @@ export class NetworkLauncher {
             : service === "sh-msp-2"
               ? mspTwoKey.address
               : undefined;
-        invariant(
+        assert(
           mspAddress,
           `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
@@ -651,7 +693,7 @@ export class NetworkLauncher {
             : service === "sh-msp-2"
               ? ShConsts.DUMMY_MSP_ID_2
               : undefined;
-        invariant(
+        assert(
           mspId,
           `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
         );

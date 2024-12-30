@@ -14,13 +14,16 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SubmitProofRequest},
     BlockchainService,
 };
-use shc_common::types::{
-    BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
-    TrieRemoveMutation,
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    types::{
+        BlockNumber, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
+        RandomnessOutput, StorageProof, TrieRemoveMutation,
+    },
 };
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::services::handler::StorageHubHandler;
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
@@ -29,14 +32,14 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 /// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
 /// The flow includes the following steps:
-/// - **MultipleNewChallengeSeeds Event:**
+/// - **[`MultipleNewChallengeSeeds`] Event:**
 ///   - Triggered by the on-chain generation of a new challenge seed.
 ///   - For each seed:
 ///     - Derives forest challenges from the seed.
 ///     - Checks for any checkpoint challenges and adds them to the forest challenges.
 ///     - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
 ///
-/// - **ProcessSubmitProofRequest Event:**
+/// - **[`ProcessSubmitProofRequest`] Event:**
 ///   - Triggered when the Blockchain Service detects that the Forest write lock has been released.
 ///   - Generates proofs for the queued challenges derived from the seed in the [`MultipleNewChallengeSeeds`] event.
 ///   - Constructs key proofs for each file key involved in the challenges.
@@ -44,7 +47,7 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
 ///   - Verifies that the new Forest root matches the one recorded on-chain to ensure consistency.
 ///
-/// - **FinalisedTrieRemoveMutationsApplied Event:**
+/// - **[`FinalisedTrieRemoveMutationsApplied`] Event:**
 ///   - Triggered when mutations applied to the Merkle Trie have been finalized, indicating that certain keys should be removed.
 ///   - Iterates over each file key that was part of the finalised mutations.
 ///   - Checks if the file key is still present in the Forest Storage:
@@ -83,7 +86,7 @@ where
     }
 }
 
-/// Handles the `MultipleNewChallengeSeeds` event.
+/// Handles the [`MultipleNewChallengeSeeds`] event.
 ///
 /// This event is triggered when catching up to proof submissions, and there are multiple new challenge seeds
 /// that have to be responded in order. It queues the proof submissions for the given seeds.
@@ -116,7 +119,7 @@ where
     }
 }
 
-/// Handles the `ProcessSubmitProofRequest` event.
+/// Handles the [`ProcessSubmitProofRequest`] event.
 ///
 /// This event is triggered when the Blockchain Service realises that the Forest write lock has been released,
 /// giving this task the opportunity to generate proofs and submit them to the runtime.
@@ -139,11 +142,8 @@ where
             event.data
         );
 
-        // Check if this proof is the next one to be submitted.
-        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
-        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
-        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
-
+        // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
+        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -154,13 +154,22 @@ where
             }
         };
 
+        // Check if this proof is the next one to be submitted.
+        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
+        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
+        Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
+
+        // Get the current Forest key of the Provider running this node.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+
+        // Generate the Forest proof, i.e. the proof that some file keys belong to this Provider's Forest.
         let proven_file_keys = {
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
 
             let p = fs
                 .read()
@@ -237,17 +246,62 @@ where
             .saturating_mul(event.data.forest_challenges.len() as u128)
             .saturating_mul(2u32.into());
 
-        let cloned_blockchain = Arc::new(self.storage_hub_handler.blockchain.clone());
+        // Get necessary data for the retry check.
+        let cloned_sh_handler = Arc::new(self.storage_hub_handler.clone());
         let cloned_event = Arc::new(event.clone());
+        let cloned_forest_root = {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&current_forest_key)
+                .await
+                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+            let root = fs.read().await.root();
+            root
+        };
 
+        // This function is a check to see if we should continue to retry the submission of the proof.
+        // If this proof submission is invalid, we should not retry it, and release the forest write lock.
         let should_retry = move || {
-            let cloned_blockchain = Arc::clone(&cloned_blockchain);
+            let cloned_sh_handler = Arc::clone(&cloned_sh_handler);
             let cloned_event = Arc::clone(&cloned_event);
+            let cloned_forest_root = Arc::new(cloned_forest_root);
 
+            // Check:
+            // - If the proof is outdated.
+            // - If the Forest root of the BSP has changed.
             Box::pin(async move {
-                Self::check_if_proof_is_outdated(&cloned_blockchain, &cloned_event)
-                    .await
-                    .is_ok()
+                let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+                let is_proof_outdated =
+                    Self::check_if_proof_is_outdated(&cloned_sh_handler.blockchain, &cloned_event)
+                        .await
+                        .is_err();
+                let has_forest_root_changed = {
+                    let fs = cloned_sh_handler
+                        .forest_storage_handler
+                        .get(&current_forest_key)
+                        .await;
+
+                    match fs {
+                        Some(fs) => fs.read().await.root() != *cloned_forest_root,
+                        None => {
+                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get forest storage.");
+                            true
+                        }
+                    }
+                };
+
+                // If the proof is outdated, or the Forest root has changed, we should not retry.
+                if is_proof_outdated {
+                    warn!(target: LOG_TARGET, "❌ Proof to submit is outdated. Stop retrying.");
+                    return false;
+                };
+                if has_forest_root_changed {
+                    warn!(target: LOG_TARGET, "❌ Forest root has changed. Stop retrying.");
+                    return false;
+                };
+
+                true
             }) as Pin<Box<dyn Future<Output = bool> + Send>>
         };
 
@@ -259,21 +313,23 @@ where
                 RetryStrategy::default()
                     .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
                     .with_max_tip(max_tip as f64)
-                    .with_timeout(Duration::from_secs(self.storage_hub_handler.provider_config.extrinsic_retry_timeout))
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    ))
                     .with_should_retry(Some(Box::new(should_retry))),
-                false
+                false,
             )
             .await
             .map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to submit proof after {} attempts: {}", MAX_PROOF_SUBMISSION_ATTEMPTS, e);
-                anyhow!(
-                    "Failed to submit proof after {} attempts",
-                    MAX_PROOF_SUBMISSION_ATTEMPTS
-                )
+                error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
+                anyhow!("Failed to submit proof due to: {}", e)
             })?;
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
+        // TODO: Don't do this in this task any more.
         // Apply mutations, if any.
         let mut mutations_applied = false;
         for (file_key, maybe_mutation) in &event.data.checkpoint_challenges {
@@ -312,7 +368,7 @@ where
     }
 }
 
-/// Handles the `FinalisedTrieRemoveMutationsApplied` event.
+/// Handles the [`FinalisedTrieRemoveMutationsApplied`] event.
 ///
 /// This event is triggered when mutations applied to the Forest of this BSP have been finalised,
 /// signalling that certain keys (representing files) should be removed from the File Storage if they are
@@ -346,12 +402,13 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
             if read_fs.read().await.contains_file_key(&file_key.into())? {
                 warn!(
                     target: LOG_TARGET,
@@ -376,7 +433,7 @@ where
 {
     async fn queue_submit_proof_request(
         &self,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         tick: BlockNumber,
         seed: RandomnessOutput,
     ) -> anyhow::Result<()> {
@@ -410,7 +467,7 @@ where
     async fn derive_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<Vec<H256>> {
         Ok(self
             .storage_hub_handler
@@ -421,10 +478,10 @@ where
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
-        let last_tick_provided_submitted_proof = self
+        let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
             .query_last_tick_provider_submitted_proof(provider_id)
@@ -435,15 +492,25 @@ where
                     e
                 )
             })?;
+
         let last_checkpoint_tick = self
             .storage_hub_handler
             .blockchain
             .query_last_checkpoint_challenge_tick()
             .await?;
 
+        let challenges_tick = self
+            .storage_hub_handler
+            .blockchain
+            .get_next_challenge_tick_for_provider(provider_id)
+            .await
+            .map_err(|e| anyhow!("Failed to get next challenge tick for provider: {:?}", e))?;
+
         // If there were checkpoint challenges since the last tick this provider submitted a proof for,
         // get the checkpoint challenges.
-        if last_tick_provided_submitted_proof <= last_checkpoint_tick {
+        if last_tick_provider_submitted_proof_for < last_checkpoint_tick
+            && last_checkpoint_tick <= challenges_tick
+        {
             let checkpoint_challenges = self
                 .storage_hub_handler
                 .blockchain
@@ -469,7 +536,8 @@ where
         // Get the next challenge tick for this provider.
         let next_challenge_tick = blockchain
             .get_next_challenge_tick_for_provider(event.data.provider_id)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to get next challenge tick for provider, to see if the proof is outdated: {:?}", e))?;
 
         if next_challenge_tick != event.data.tick {
             warn!(target: LOG_TARGET, "The proof for tick [{:?}] is not the next one to be submitted. Next challenge tick is [{:?}]", event.data.tick, next_challenge_tick);
@@ -486,7 +554,7 @@ where
         &self,
         file_key: H256,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> anyhow::Result<KeyProof> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -533,12 +601,13 @@ where
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
         {
+            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&NoKey)
+                .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
 
             fs.write().await.delete_file_key(file_key).map_err(|e| {
                 error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
@@ -568,7 +637,7 @@ where
         Ok(())
     }
 
-    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
+    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self
             .storage_hub_handler
@@ -586,12 +655,13 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&NoKey)
+            .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
 
         let root = { fs.read().await.root() };
 

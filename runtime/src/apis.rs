@@ -330,6 +330,10 @@ impl_runtime_apis! {
     }
 
     impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+        fn is_storage_request_open_to_volunteers(file_key: H256) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
+            FileSystem::is_storage_request_open_to_volunteers(file_key)
+        }
+
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError> {
             FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key)
         }
@@ -356,8 +360,12 @@ impl_runtime_apis! {
     }
 
     impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProofsDealerProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
-        fn get_last_tick_provider_submitted_proof(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
+        fn get_last_tick_provider_submitted_proof(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetProofSubmissionRecordError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
+        }
+
+        fn get_next_tick_to_submit_proof_for(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetProofSubmissionRecordError> {
+            ProofsDealer::get_next_tick_to_submit_proof_for(provider_id)
         }
 
         fn get_last_checkpoint_challenge_tick() -> BlockNumber {
@@ -443,6 +451,10 @@ impl_runtime_apis! {
 
         fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
             Providers::get_bsp_stake(bsp_id)
+        }
+
+        fn can_delete_provider(provider_id: &ProviderIdFor<Runtime>) -> bool {
+            Providers::can_delete_provider(provider_id)
         }
     }
 }

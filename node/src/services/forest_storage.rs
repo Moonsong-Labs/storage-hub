@@ -46,6 +46,7 @@ impl ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>> {
 impl
     ForestStorageSingle<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>
 {
+    #[allow(dead_code)]
     pub fn new(storage_path: String) -> Self {
         let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(storage_path.clone())
             .expect("Failed to create RocksDB");
@@ -79,7 +80,7 @@ impl ForestStorageHandler
         Some(self.fs_instance.clone())
     }
 
-    async fn insert(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let fs: InMemoryForestStorage<sp_trie::LayoutV1<polkadot_primitives::BlakeTwo256>> =
             InMemoryForestStorage::new();
 
@@ -112,7 +113,7 @@ impl ForestStorageHandler
         Some(self.fs_instance.clone())
     }
 
-    async fn insert(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(
             self.storage_path
                 .clone()
@@ -205,7 +206,7 @@ where
         self.fs_instances.read().await.get(key).cloned()
     }
 
-    async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
         // Return potentially existing instance since we waited for the lock.
@@ -268,7 +269,7 @@ where
         self.fs_instances.read().await.get(key).cloned()
     }
 
-    async fn insert(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
+    async fn create(&mut self, key: &Self::Key) -> Arc<RwLock<Self::FS>> {
         let mut fs_instances = self.fs_instances.write().await;
 
         // Return potentially existing instance since we waited for the lock.
@@ -323,6 +324,10 @@ where
         let src = format!("{}_{:?}", storage_path, src_key);
         let dest = format!("{}_{:?}", storage_path, dest_key);
 
+        // Read-lock the source Forest Storage.
+        let src_fs = fs_instances.get(src_key)?.read().await;
+
+        // Copy the full source Forest Storage files to the destination Forest Storage.
         let underlying_db = match rocksdb::copy_db(src, dest) {
             Ok(db) => db,
             Err(e) => {
@@ -331,11 +336,13 @@ where
             }
         };
 
+        // Release the lock on the source Forest Storage.
+        drop(src_fs);
+
+        // Create and insert new Forest Storage instance for the destination Forest Storage.
         let forest_storage =
             RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");
-
         let forest_storage = Arc::new(RwLock::new(forest_storage));
-
         fs_instances.insert(dest_key.clone(), forest_storage.clone());
 
         Some(forest_storage)

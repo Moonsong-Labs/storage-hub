@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::{
@@ -8,23 +7,30 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated,
-        MultipleNewChallengeSeeds, NewStorageRequest, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     BlockchainService,
 };
+use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_indexer_db::DbPool;
+use storage_hub_runtime::StorageDataUnit;
 
 use crate::tasks::{
-    bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
+    bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
+    bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
     bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-    msp_delete_bucket::MspStoppedStoringTask, msp_upload_file::MspUploadFileTask,
+    msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
+    msp_move_bucket::MspMoveBucketTask, msp_upload_file::MspUploadFileTask,
     sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
     BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
@@ -62,6 +68,8 @@ where
     pub forest_storage_handler: FSH,
     /// The configuration parameters for the provider.
     pub provider_config: ProviderConfig,
+    /// The indexer database pool.
+    pub indexer_db_pool: Option<DbPool>,
 }
 
 impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
@@ -77,6 +85,7 @@ where
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
             provider_config: self.provider_config.clone(),
+            indexer_db_pool: self.indexer_db_pool.clone(),
         }
     }
 }
@@ -93,6 +102,7 @@ where
         file_storage: Arc<RwLock<FL>>,
         forest_storage_handler: FSH,
         provider_config: ProviderConfig,
+        indexer_db_pool: Option<DbPool>,
     ) -> Self {
         Self {
             task_spawner,
@@ -101,6 +111,7 @@ where
             file_storage,
             forest_storage_handler,
             provider_config,
+            indexer_db_pool,
         }
     }
 
@@ -168,6 +179,25 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         finalised_msp_stopped_storing_bucket_event_bus_listener.start();
+
+        // MspMoveBucketTask handles events for moving buckets to a new MSP.
+        let msp_move_bucket_task = MspMoveBucketTask::new(self.clone());
+        // Subscribing to MoveBucketRequestedForNewMsp event from the FileTransferService.
+        let move_bucket_requested_for_new_msp_event_bus_listener: EventBusListener<
+            MoveBucketRequestedForNewMsp,
+            _,
+        > = msp_move_bucket_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_requested_for_new_msp_event_bus_listener.start();
+        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
+
+        // Subscribing to NewStorageRequest event from the BlockchainService.
+        let notify_period_event_bus_listener: EventBusListener<NotifyPeriod, _> =
+            msp_charge_fees_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        notify_period_event_bus_listener.start();
     }
 }
 
@@ -176,8 +206,21 @@ where
     FL: FileStorageT,
     FSH: BspForestStorageHandlerT,
 {
+    pub async fn initialise_bsp(&mut self) {
+        // Create an empty Forest Storage instance.
+        // A BSP is expected to always have at least one empty Forest Storage instance.
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        self.forest_storage_handler
+            .create(&current_forest_key)
+            .await;
+    }
+
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
+
+        // TODO: When `pallet-cr-randomness` is integrated to the runtime we should also spawn the task that
+        // manages the randomness commit-reveal cycle for BSPs here.
+        // The task that manages this should be added to the `tasks` folder (name suggestion: `bsp_cr_randomness`).
 
         // BspUploadFileTask is triggered by a NewStorageRequest event, to which it responds by
         // volunteering to store the file. Then it waits for RemoteUploadRequest events, which
@@ -282,5 +325,52 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         sp_stop_storing_insolvent_user_event_bus_listener.start();
+
+        // BspMoveBucketTask handles events for moving buckets to a new MSP.
+        let bsp_move_bucket_task = BspMoveBucketTask::new(self.clone());
+        // Subscribing to MoveBucketRequested event from the BlockchainService.
+        let move_bucket_requested_event_bus_listener: EventBusListener<MoveBucketRequested, _> =
+            bsp_move_bucket_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_requested_event_bus_listener.start();
+
+        // Subscribing to MoveBucketAccepted event from the BlockchainService.
+        let move_bucket_accepted_event_bus_listener: EventBusListener<MoveBucketAccepted, _> =
+            bsp_move_bucket_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_accepted_event_bus_listener.start();
+
+        // Subscribing to MoveBucketRejected event from the BlockchainService.
+        let move_bucket_rejected_event_bus_listener: EventBusListener<MoveBucketRejected, _> =
+            bsp_move_bucket_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_rejected_event_bus_listener.start();
+
+        // Subscribing to MoveBucketExpired event from the BlockchainService.
+        let move_bucket_expired_event_bus_listener: EventBusListener<MoveBucketExpired, _> =
+            bsp_move_bucket_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_expired_event_bus_listener.start();
+
+        // Task that listen for `BspConfirmStoppedStoring` to delete file and update forest root.
+        let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
+        let bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
+            BspConfirmStoppedStoring,
+            _,
+        > = bsp_delete_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        bsp_confirm_stopped_storing_event_bus_listener.start();
+        let finalised_bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
+            FinalisedBspConfirmStoppedStoring,
+            _,
+        > = bsp_delete_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        finalised_bsp_confirm_stopped_storing_event_bus_listener.start();
     }
 }

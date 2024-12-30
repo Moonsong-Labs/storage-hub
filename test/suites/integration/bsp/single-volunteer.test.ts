@@ -31,62 +31,18 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       throw new Error("Event doesn't match Type");
     }
 
-    const { location, fingerprint, file_size } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
     strictEqual(location.toHuman(), destination);
     strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
     strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
-  });
-
-  it("issueStorageRequest sent correctly", async () => {
-    // const source = "res/smile.jpg";
-    const destination = "test/smile.jpg";
-    const bucketName = "nothingmuch-1";
-
-    const newBucketEventEvent = await userApi.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
-
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        destination,
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
-      ),
-      shUser
-    );
-    await sleep(500); // wait for the bsp to volunteer
-
-    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
-
-    const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
-
-    if (!dataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
-
-    strictEqual(dataBlob.who.toString(), userApi.shConsts.NODE_INFOS.user.AddressId);
-    strictEqual(dataBlob.location.toHuman(), destination);
-    strictEqual(
-      dataBlob.fingerprint.toString(),
-      userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint
-    );
-    strictEqual(dataBlob.size_.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size);
-    strictEqual(dataBlob.peerIds.length, 1);
-    strictEqual(dataBlob.peerIds[0].toHuman(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
   });
 
   it("bsp volunteers when issueStorageRequest sent", async () => {
@@ -105,17 +61,16 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-    const { fingerprint, file_size, location } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
     await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
@@ -124,10 +79,13 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         fingerprint,
         file_size,
         userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+        null
       ),
       shUser
     );
+
+    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     await userApi.assert.extrinsicPresent({
       module: "fileSystem",
@@ -210,6 +168,11 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
   });
 
   it("bsp volunteers multiple files properly", async () => {
+    // 1 block to maxthreshold (i.e. instant acceptance)
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
+    );
+
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
     const bucketName = "something-3";
@@ -218,19 +181,18 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    assert(newBucketEventDataBlob, "Event doesn't match Type");
 
     const txs = [];
     for (let i = 0; i < source.length; i++) {
-      const { fingerprint, file_size, location } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source[i],
-          destination[i],
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
+      const {
+        file_metadata: { location, fingerprint, file_size }
+      } = await userApi.rpc.storagehubclient.loadFileInStorage(
+        source[i],
+        destination[i],
+        userApi.shConsts.NODE_INFOS.user.AddressId,
+        newBucketEventDataBlob.bucketId
+      );
 
       txs.push(
         userApi.tx.fileSystem.issueStorageRequest(
@@ -239,7 +201,8 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
           fingerprint,
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         )
       );
     }
@@ -266,7 +229,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     // Wait for the BSP to receive and store all files
     for (let i = 0; i < source.length; i++) {
       const fileKey = fileKeys[i];
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
     }
 
     // The first file to be completed will immediately acquire the forest write lock

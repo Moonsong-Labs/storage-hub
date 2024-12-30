@@ -55,8 +55,8 @@ where
     T: TrieLayout,
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
-    let src_path: &Path = Path::new(&src);
-    let dest_path: &Path = Path::new(&dest);
+    let src_path = Path::new(&src);
+    let dest_path = Path::new(&dest);
 
     // Copying all the files from the source directory to the destination directory.
     copy_dir_all(src_path, dest_path).map_err(|e| {

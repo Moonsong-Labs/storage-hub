@@ -8,6 +8,10 @@ export const ALL_TYPES: RegistryTypes = {
     file_size: "u64",
     fingerprint: "[u8; 32]"
   },
+  LoadFileInStorageResult: {
+    file_key: "H256",
+    file_metadata: "FileMetadata"
+  },
   IncompleteFileStatus: {
     file_metadata: "FileMetadata",
     stored_chunks: "u64",
@@ -68,7 +72,7 @@ export const ALL_TYPES: RegistryTypes = {
       MainStorageProvider: "MainStorageProviderId"
     }
   },
-  GetLastTickProviderSubmittedProofError: {
+  GetProofSubmissionRecordError: {
     _enum: {
       ProviderNotRegistered: null,
       ProviderNeverSubmittedProof: null,
@@ -106,6 +110,12 @@ export const ALL_TYPES: RegistryTypes = {
       ProviderNotRegistered: null,
       ProviderNotInitialised: null,
       ArithmeticOverflow: null,
+      InternalApiError: null
+    }
+  },
+  IsStorageRequestOpenToVolunteersError: {
+    _enum: {
+      StorageRequestNotFound: null,
       InternalApiError: null
     }
   },

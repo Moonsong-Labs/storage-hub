@@ -37,6 +37,7 @@ import type {
   PalletCollatorSelectionCandidateInfo,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
+  PalletFileSystemPendingStopStoringRequest,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -53,10 +54,12 @@ import type {
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsFixedRatePaymentStream,
   PalletPaymentStreamsProviderLastChargeableInfo,
+  PalletProofsDealerProofSubmissionRecord,
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
   PalletStorageProvidersSignUpRequest,
+  PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletTransactionPaymentReleases,
@@ -314,6 +317,11 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * Maximum number replication target allowed to be set for a storage request to be fulfilled.
+       **/
+      maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A map of blocks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
@@ -356,10 +364,10 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the starting block to clean up expired storage requests.
+       * A pointer to the starting block to clean up expired items.
        *
        * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-       * attempt to accelerate this block pointer as close to or up to the current block number. This
+       * attempt to advance this block pointer as close to or up to the current block number. This
        * will execute provided that there is enough remaining weight to do so.
        **/
       nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
@@ -376,11 +384,13 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file deletion requests.
        *
-       * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+       * A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
        **/
       pendingFileDeletionRequests: AugmentedQuery<
         ApiType,
-        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>,
+        (
+          arg: AccountId32 | string | Uint8Array
+        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
@@ -402,27 +412,21 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file stop storing requests.
        *
-       * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
-       * and the proven size of the file.
+       * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened,
+       * the proven size of the file and the owner of the file.
        * The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
        * of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+       * The owner is to be able to update the payment stream between the user and the BSP.
        **/
       pendingStopStoringRequests: AugmentedQuery<
         ApiType,
         (
           arg1: H256 | string | Uint8Array,
           arg2: H256 | string | Uint8Array
-        ) => Observable<Option<ITuple<[u32, u64]>>>,
+        ) => Observable<Option<PalletFileSystemPendingStopStoringRequest>>,
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
-      /**
-       * Number of BSPs required to fulfill a storage request
-       *
-       * This is also used as a default value if the BSPs required are not specified when creating a storage request.
-       **/
-      replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
@@ -1117,8 +1121,9 @@ declare module "@polkadot/api-base/types/storage" {
        * can stop providing services to them.
        *
        * This storage is updated in:
-       * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which emits a `UserWithoutFunds` event and sets the user's entry in this map if it does not
-       * have enough funds, and clears the entry if it was set and the user has enough funds.
+       * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which emits a `UserWithoutFunds` event and sets the user's entry in this map
+       * to that moment's tick number if it does not have enough funds.
+       * - [clear_insolvent_flag](crate::utils::clear_insolvent_flag), which clears the user's entry in this map if the cooldown period has passed and the user has paid all its outstanding debt.
        **/
       usersWithoutFunds: AugmentedQuery<
         ApiType,
@@ -1377,23 +1382,6 @@ declare module "@polkadot/api-base/types/storage" {
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
-       * If for a Provider `p`, `LastTickProviderSubmittedAProofFor[p]` is `n`, then the
-       * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
-       *
-       * This gets updated when a Provider submits a proof successfully and is used to determine the
-       * next tick for which the Provider should submit a proof, and it's deadline.
-       *
-       * If the Provider fails to submit a proof in time and is slashed, this will still get updated
-       * to the tick it should have submitted a proof for.
-       **/
-      lastTickProviderSubmittedAProofFor: AugmentedQuery<
-        ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
-        [H256]
-      > &
-        QueryableStorageEntry<ApiType, [H256]>;
-      /**
        * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
        *
        * This is used to check if the network is presumably under a spam attack.
@@ -1430,6 +1418,27 @@ declare module "@polkadot/api-base/types/storage" {
         []
       > &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * A mapping from a Provider to its [`ProofSubmissionRecord`], which stores the last tick
+       * the Provider submitted a proof for, and the next tick the Provider should submit a proof for.
+       *
+       * Normally the difference between these two ticks is equal to the Provider's challenge period,
+       * but if the Provider's period is changed, this change only affects the next cycle. In other words,
+       * for one cycle, `next_tick_to_submit_proof_for - last_tick_proven ≠ provider_challenge_period`.
+       *
+       * If a Provider submits a proof successfully, both fields are updated.
+       *
+       * If the Provider fails to submit a proof in time and is slashed, only `next_tick_to_submit_proof_for`
+       * is updated.
+       **/
+      providerToProofSubmissionRecord: AugmentedQuery<
+        ApiType,
+        (
+          arg: H256 | string | Uint8Array
+        ) => Observable<Option<PalletProofsDealerProofSubmissionRecord>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
       slashableProviders: AugmentedQuery<
         ApiType,
         (arg: H256 | string | Uint8Array) => Observable<Option<u32>>,
@@ -1548,19 +1557,36 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
-       * Storage providers currently awaited for to top up their deposit. This storage holds the current amount that the provider was
-       * slashed for.
+       * Storage providers currently awaited for to top up their deposit (providers whom have been slashed and as
+       * a result have a capacity deficit, i.e. their capacity is below their used capacity).
        *
-       * This is primarily used to lookup providers, restrict certain operations while they are in this state.
+       * This is primarily used to lookup providers and restrict certain operations while they are in this state.
+       *
+       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
+       * As a result, their provider account would be cleared from this storage.
+       *
+       * The `on_idle` hook will process every provider in this storage and mark them as insolvent.
+       * If a provider is marked as insolvent, the network (e.g users, other providers) can call `issue_storage_request`
+       * with a replication target of 1 to fill a slot with another BSP if the provider who was marked as insolvent is in fact a BSP.
+       * If it was an MSP, the user can decide to move their buckets to another MSP or delete their buckets (as they normally can).
        **/
       awaitingTopUpFromProviders: AugmentedQuery<
         ApiType,
         (
-          arg: H256 | string | Uint8Array
+          arg:
+            | PalletStorageProvidersStorageProviderId
+            | {
+                BackupStorageProvider: any;
+              }
+            | {
+                MainStorageProvider: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Option<PalletStorageProvidersTopUpMetadata>>,
-        [H256]
+        [PalletStorageProvidersStorageProviderId]
       > &
-        QueryableStorageEntry<ApiType, [H256]>;
+        QueryableStorageEntry<ApiType, [PalletStorageProvidersStorageProviderId]>;
       /**
        * The mapping from a BackupStorageProviderId to a BackupStorageProvider.
        *
@@ -1614,28 +1640,27 @@ declare module "@polkadot/api-base/types/storage" {
       globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * Providers whom have been slashed and as a result have a capacity deficit (i.e. their capacity is below their used capacity).
+       * A map of insolvent providers who have failed to top up their deposit before the end of the expiration.
        *
-       * Providers can optionally call the `top_up_deposit` during the grace period to top up their held deposit to cover the capacity deficit.
-       * As a result, their provider account would be cleared from this storage and [`AwaitingTopUpFromProviders`].
-       *
-       * The `on_pool` hook will process every grace period's slashed providers and attempt to top up their required deposit before
-       * marking them as insolvent. If a provider is marked as insolvent, the network (e.g users, other providers) can issue
-       * `add_redundancy` requests to replicate the data loss if it was a BSP. If it was an MSP, the user can decide to move their
-       * buckets to another MSP or delete their buckets (as they normally can).
-       *
-       * The relay chain block is used to ensure we have a predictable way to determine how much time we allocate to the provider to
-       * top up their deposit.
+       * Providers are marked insolvent by the `on_idle` hook.
        **/
-      gracePeriodToSlashedProviders: AugmentedQuery<
+      insolventProviders: AugmentedQuery<
         ApiType,
         (
-          arg1: u32 | AnyNumber | Uint8Array,
-          arg2: H256 | string | Uint8Array
+          arg:
+            | PalletStorageProvidersStorageProviderId
+            | {
+                BackupStorageProvider: any;
+              }
+            | {
+                MainStorageProvider: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Option<Null>>,
-        [u32, H256]
+        [PalletStorageProvidersStorageProviderId]
       > &
-        QueryableStorageEntry<ApiType, [u32, H256]>;
+        QueryableStorageEntry<ApiType, [PalletStorageProvidersStorageProviderId]>;
       /**
        * The double mapping from a MainStorageProviderId to a BucketIds.
        *
@@ -1699,6 +1724,43 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       mspCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the earliest available Storage Hub tick to insert a new provider top up expiration item.
+       *
+       * This should always be greater or equal than `current_sh_tick` + [`Config::ProviderTopUpTtl`].
+       **/
+      nextAvailableProviderTopUpExpirationShTick: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the starting Storage Hub tick number to clean up expired items.
+       *
+       * If this Storage Hub tick is behind the one, the cleanup algorithm in `on_idle` will
+       * attempt to advance this tick pointer as close to or up to the current one. This
+       * will execute provided that there is enough remaining weight to do so.
+       **/
+      nextStartingShTickToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A map of Storage Hub tick numbers to expired provider top up expired items.
+       *
+       * Processed in the `on_idle` hook.
+       *
+       * Provider top up expiration items are ignored and cleared if the provider is not found in the [`AwaitingTopUpFromProviders`] storage.
+       * Providers are removed from [`AwaitingTopUpFromProviders`] storage when they have successfully topped up their deposit.
+       * If they are still part of the [`AwaitingTopUpFromProviders`] storage after the expiration period, they are marked as insolvent.
+       **/
+      providerTopUpExpirations: AugmentedQuery<
+        ApiType,
+        (
+          arg: u32 | AnyNumber | Uint8Array
+        ) => Observable<Vec<PalletStorageProvidersStorageProviderId>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
       /**
        * The mapping from an AccountId that requested to sign up to a tuple of the metadata with type of the request, and the block
        * number when the request was made.

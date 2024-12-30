@@ -15,8 +15,8 @@ import { sleep } from "../timer";
 import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
 import * as Assertions from "../asserts";
-import invariant from "tiny-invariant";
 import { waitForLog } from "./docker";
+import { waitForTxInPool } from "./waits";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -150,6 +150,21 @@ export const sealBlock = async (
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
+
+    // Print any errors in the extrinsics to console for easier debugging
+    for (const { event } of allEvents.filter(
+      ({ event }) => api.events.system.ExtrinsicFailed.is(event) && event.data
+    )) {
+      const errorEventDataBlob = api.events.system.ExtrinsicFailed.is(event) && event.data;
+      assert(errorEventDataBlob, "Must have errorEventDataBlob since array is filtered for it");
+      if (errorEventDataBlob.dispatchError.isModule) {
+        const decoded = api.registry.findMetaError(errorEventDataBlob.dispatchError.asModule);
+        const { docs, method, section } = decoded;
+        console.log(`${section}.${method}: ${docs.join(" ")}`);
+      } else {
+        console.log(errorEventDataBlob.dispatchError.toString());
+      }
+    }
 
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
@@ -309,38 +324,12 @@ export const advanceToBlock = async (
     verbose?: boolean;
   }
 ): Promise<SealedBlock> => {
-  // If watching for BSP proofs, we need to know the blocks at which they are challenged.
-  const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
-  if (options.watchForBspProofs) {
-    for (const bspId of options.watchForBspProofs) {
-      // First we get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
-      if (lastTickResult.isErr) {
-        options.verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
-        continue;
-      }
-      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-      // Then we get the challenge period for the BSP.
-      const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);
-      assert(challengePeriodResult.isOk);
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
-      // Then we calculate the next challenge tick.
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-
-      challengeBlockNumbers.push({
-        nextChallengeBlock: nextChallengeTick,
-        challengePeriod
-      });
-    }
-  }
-
   const currentBlock = await api.rpc.chain.getBlock();
   let currentBlockNumber = currentBlock.block.header.number.toNumber();
 
   let blockResult = null;
 
-  invariant(
+  assert(
     options.blockNumber > currentBlockNumber,
     `Block number ${options.blockNumber} is lower than current block number ${currentBlockNumber}`
   );
@@ -360,6 +349,7 @@ export const advanceToBlock = async (
   const maxNormalBlockWeight = api.consts.system.blockWeights.perClass.normal.maxTotal.unwrap();
 
   for (let i = 0; i < blocksToAdvance; i++) {
+    // Only for spamming!
     if (options.spam && i < blocksToSpam) {
       if (options.verbose) {
         console.log(`Spamming block ${i + 1} of ${blocksToSpam}`);
@@ -396,18 +386,32 @@ export const advanceToBlock = async (
       console.log(`Current tick: ${currentTick}`);
     }
 
-    // Check if we need to wait for BSP proofs.
+    // If watching for BSP proofs, we need to know if this block is a challenge block for any of the BSPs.
     if (options.watchForBspProofs) {
-      for (const challengeBlockNumber of challengeBlockNumbers) {
-        if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
-          // Wait for the BSP to process the proof.
-          await sleep(500);
+      let txsToWaitFor = 0;
+      for (const bspId of options.watchForBspProofs) {
+        // Get the next challenge tick.
+        const nextChallengeTickResult =
+          await api.call.proofsDealerApi.getNextTickToSubmitProofFor(bspId);
 
-          // Update next challenge block.
-          challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
-          break;
+        if (nextChallengeTickResult.isErr) {
+          options.verbose && console.log(`Failed to get next challenge tick for BSP ${bspId}`);
+          continue;
+        }
+
+        const nextChallengeTick = nextChallengeTickResult.asOk.toNumber();
+        if (currentBlockNumber === nextChallengeTick) {
+          txsToWaitFor++;
         }
       }
+
+      // Wait for all corresponding BSPs to have submitted their proofs.
+      await waitForTxInPool(api, {
+        module: "proofsDealer",
+        method: "submitProof",
+        checkQuantity: txsToWaitFor,
+        strictQuantity: false
+      });
     }
 
     if (options.waitBetweenBlocks) {
@@ -419,20 +423,31 @@ export const advanceToBlock = async (
     }
   }
 
-  invariant(blockResult, "Block wasn't sealed");
+  assert(blockResult, "Block wasn't sealed");
 
   return blockResult;
 };
 
 /**
- * Performs a chain reorganization by creating a finalized block on top of the parent block.
+ * Finalises a block (and therefore all of its predecessors) in the blockchain.
+ *
+ * @param api - The ApiPromise instance.
+ * @param hashToFinalise - The hash of the block to finalise.
+ * @returns A Promise that resolves when the chain reorganization is complete.
+ */
+export async function finaliseBlock(api: ApiPromise, hashToFinalise: string): Promise<void> {
+  await api.rpc.engine.finalizeBlock(hashToFinalise);
+}
+
+/**
+ * Performs a chain reorganisation by creating a finalised block on top of the parent block.
  *
  * This function is used to simulate network forks and test the system's ability to handle
  * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
  * in face of potential consensus issues.
  *
  * @param api - The ApiPromise instance.
- * @throws Will throw an error if the head block is already finalized.
+ * @throws Will throw an error if the head block is already finalised.
  * @returns A Promise that resolves when the chain reorganization is complete.
  */
 export async function reOrgWithFinality(api: ApiPromise): Promise<void> {
@@ -450,7 +465,7 @@ export async function reOrgWithFinality(api: ApiPromise): Promise<void> {
 }
 
 /**
- * Performs a chain reorganization by creating a longer forked chain.
+ * Performs a chain reorganisation by creating a longer forked chain.
  * If no parent starting block is provided, the chain will start the fork from the last
  * finalised block.
  *

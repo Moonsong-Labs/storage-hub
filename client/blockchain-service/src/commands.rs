@@ -1,15 +1,18 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
+use sc_network::Multiaddr;
 use serde_json::Number;
+use sp_api::ApiError;
+use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetProofSubmissionRecordError,
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
@@ -17,19 +20,18 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, Multiaddresses, ProviderId,
-    RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber, TrieRemoveMutation,
+    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProofsDealerProviderId,
+    ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
+    TrieRemoveMutation,
 };
-use sp_api::ApiError;
-use sp_core::H256;
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest, RetryStrategy,
-        StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
+        BestBlockInfo, ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest,
+        RetryStrategy, StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
     },
 };
 
@@ -51,6 +53,9 @@ pub enum BlockchainServiceCommand {
         subscription_id: Number,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
+    GetBestBlockInfo {
+        callback: tokio::sync::oneshot::Sender<BestBlockInfo>,
+    },
     WaitForBlock {
         block_number: BlockNumber,
         callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
@@ -59,6 +64,10 @@ pub enum BlockchainServiceCommand {
         tick_number: TickNumber,
         callback:
             tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), ApiError>>>,
+    },
+    IsStorageRequestOpenToVolunteers {
+        file_key: H256,
+        callback: tokio::sync::oneshot::Sender<Result<bool, IsStorageRequestOpenToVolunteersError>>,
     },
     QueryFileEarliestVolunteerTick {
         bsp_id: ProviderId,
@@ -76,14 +85,14 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
     },
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: ProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
     },
     QueryMspConfirmChunksToProveForFile {
-        msp_id: ProviderId,
+        msp_id: ProofsDealerProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>,
@@ -92,7 +101,7 @@ pub enum BlockchainServiceCommand {
     QueryProviderMultiaddresses {
         provider_id: ProviderId,
         callback:
-            tokio::sync::oneshot::Sender<Result<Multiaddresses, QueryProviderMultiaddressesError>>,
+            tokio::sync::oneshot::Sender<Result<Vec<Multiaddr>, QueryProviderMultiaddressesError>>,
     },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
@@ -112,28 +121,26 @@ pub enum BlockchainServiceCommand {
     },
     QueryChallengesFromSeed {
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         count: u32,
         callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
     QueryForestChallengesFromSeed {
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
     QueryLastTickProviderSubmittedProof {
-        provider_id: ProviderId,
-        callback: tokio::sync::oneshot::Sender<
-            Result<BlockNumber, GetLastTickProviderSubmittedProofError>,
-        >,
+        provider_id: ProofsDealerProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetProofSubmissionRecordError>>,
     },
     QueryChallengePeriod {
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetChallengePeriodError>>,
     },
     QueryNextChallengeTickForProvider {
-        provider_id: ProviderId,
-        callback: tokio::sync::oneshot::Sender<Result<BlockNumber>>,
+        provider_id: ProofsDealerProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetProofSubmissionRecordError>>,
     },
     QueryLastCheckpointChallengeTick {
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber, ApiError>>,
@@ -216,10 +223,16 @@ pub trait BlockchainServiceInterface {
     /// Wait for a tick number.
     async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError>;
 
+    /// Determine if a storage request is still open to volunteers.
+    async fn is_storage_request_open_to_volunteers(
+        &self,
+        file_key: H256,
+    ) -> Result<bool, IsStorageRequestOpenToVolunteersError>;
+
     /// Query the earliest tick number that a file was volunteered for storage.
     async fn query_file_earliest_volunteer_tick(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerTickError>;
 
@@ -234,22 +247,22 @@ pub trait BlockchainServiceInterface {
     /// Query the chunks that a BSP needs to confirm for a file.
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 
     /// Query the chunks that a MSP needs to confirm for a file.
     async fn query_msp_confirm_chunks_to_prove_for_file(
         &self,
-        msp_id: ProviderId,
+        msp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
 
-    /// Query the MSP multiaddresses.
+    /// Query the a Provider's multiaddresses.
     async fn query_provider_multiaddresses(
         &self,
-        msp_id: ProviderId,
-    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError>;
+        provider_id: ProviderId,
+    ) -> Result<Vec<Multiaddr>, QueryProviderMultiaddressesError>;
 
     /// Queue a SubmitProofRequest to be processed.
     async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
@@ -271,7 +284,7 @@ pub trait BlockchainServiceInterface {
     async fn query_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         count: u32,
     ) -> Result<Vec<ForestLeaf>, ApiError>;
 
@@ -282,26 +295,26 @@ pub trait BlockchainServiceInterface {
     async fn query_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<Vec<ForestLeaf>, ApiError>;
 
     /// Query the last tick that a Provider submitted a proof for.
     async fn query_last_tick_provider_submitted_proof(
         &self,
-        provider_id: ProviderId,
-    ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
+        provider_id: ProofsDealerProviderId,
+    ) -> Result<BlockNumber, GetProofSubmissionRecordError>;
 
     /// Query the challenge period for a given Provider.
     async fn query_challenge_period(
         &self,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber, GetChallengePeriodError>;
 
     /// Query the next challenge tick for a given Provider.
     async fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: ProviderId,
-    ) -> Result<BlockNumber>;
+        provider_id: ProofsDealerProviderId,
+    ) -> Result<BlockNumber, GetProofSubmissionRecordError>;
 
     /// Query the last checkpoint tick.
     async fn query_last_checkpoint_challenge_tick(&self) -> Result<BlockNumber, ApiError>;
@@ -368,7 +381,7 @@ pub trait BlockchainServiceInterface {
         bucket_id: BucketId,
     ) -> Result<Option<MainStorageProviderId>, QueryMspIdOfBucketIdError>;
 
-    /// Helper function to release the forest root write lock.
+    /// Helper function to release the Forest root write lock.
     async fn release_forest_root_write_lock(
         &self,
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
@@ -446,6 +459,18 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to wait for tick")
     }
 
+    async fn is_storage_request_open_to_volunteers(
+        &self,
+        file_key: H256,
+    ) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message =
+            BlockchainServiceCommand::IsStorageRequestOpenToVolunteers { file_key, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
     async fn query_file_earliest_volunteer_tick(
         &self,
         bsp_id: ProviderId,
@@ -484,7 +509,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: ProviderId,
+        bsp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -500,7 +525,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_msp_confirm_chunks_to_prove_for_file(
         &self,
-        msp_id: ProviderId,
+        msp_id: ProofsDealerProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -517,7 +542,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_provider_multiaddresses(
         &self,
         provider_id: ProviderId,
-    ) -> Result<Multiaddresses, QueryProviderMultiaddressesError> {
+    ) -> Result<Vec<Multiaddr>, QueryProviderMultiaddressesError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryProviderMultiaddresses {
             provider_id,
@@ -565,7 +590,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
         count: u32,
     ) -> Result<Vec<ForestLeaf>, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -583,7 +608,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<Vec<ForestLeaf>, ApiError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryForestChallengesFromSeed {
@@ -597,8 +622,8 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_last_tick_provider_submitted_proof(
         &self,
-        provider_id: ProviderId,
-    ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
+        provider_id: ProofsDealerProviderId,
+    ) -> Result<BlockNumber, GetProofSubmissionRecordError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastTickProviderSubmittedProof {
             provider_id,
@@ -610,7 +635,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_challenge_period(
         &self,
-        provider_id: ProviderId,
+        provider_id: ProofsDealerProviderId,
     ) -> Result<BlockNumber, GetChallengePeriodError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryChallengePeriod {
@@ -623,8 +648,8 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: ProviderId,
-    ) -> Result<BlockNumber> {
+        provider_id: ProofsDealerProviderId,
+    ) -> Result<BlockNumber, GetProofSubmissionRecordError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryNextChallengeTickForProvider {
             provider_id,
@@ -795,7 +820,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
             match result {
                 Ok(maybe_events) => {
-                    debug!(target: LOG_TARGET, "Transaction succeeded");
+                    debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", transaction.hash());
                     return Ok(maybe_events);
                 }
                 Err(err) => {
@@ -807,7 +832,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
                         }
                     }
 
-                    warn!(target: LOG_TARGET, "Failed to submit transaction, attempt #{}", retry_count + 1);
+                    warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", transaction.hash(), retry_count + 1);
                 }
             }
         }

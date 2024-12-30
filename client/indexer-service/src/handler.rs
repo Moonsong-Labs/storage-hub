@@ -2,6 +2,7 @@ use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
 use shc_common::types::StorageProviderId;
+use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -11,7 +12,7 @@ use sp_runtime::traits::Header;
 
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::blockchain_utils::EventsRetrievalError;
+use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
@@ -137,6 +138,9 @@ impl IndexerService {
                 self.index_providers_event(conn, event, block_hash).await?
             }
             RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
+            // TODO: We have to index the events from the CrRandomness pallet when we integrate it to the runtime,
+            // since they contain the information about the commit-reveal deadlines for Providers.
+            // RuntimeEvent::CrRandomness(event) => self.index_cr_randomness_event(conn, event).await?,
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
             // to ensure the compiler will let us know to treat future events when added.
@@ -198,7 +202,7 @@ impl IndexerService {
                     conn,
                     msp.map(|m| m.id),
                     who.to_string(),
-                    bucket_id.to_string(),
+                    bucket_id.as_ref().to_vec(),
                     name.to_vec(),
                     collection_id.map(|id| id.to_string()),
                     *private,
@@ -208,7 +212,7 @@ impl IndexerService {
             }
             pallet_file_system::Event::MoveBucketAccepted { msp_id, bucket_id } => {
                 let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
-                Bucket::update_msp(conn, bucket_id.to_string(), msp.id).await?;
+                Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), msp.id).await?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {
                 who,
@@ -219,7 +223,7 @@ impl IndexerService {
                 Bucket::update_privacy(
                     conn,
                     who.to_string(),
-                    bucket_id.to_string(),
+                    bucket_id.as_ref().to_vec(),
                     collection_id.map(|id| id.to_string()),
                     *private,
                 )
@@ -258,7 +262,8 @@ impl IndexerService {
                 size,
                 peer_ids,
             } => {
-                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.to_string()).await?;
+                let bucket =
+                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
 
                 let mut sql_peer_ids = Vec::new();
                 for peer_id in peer_ids {
@@ -267,7 +272,7 @@ impl IndexerService {
 
                 File::create(
                     conn,
-                    who.to_string(),
+                    <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
                     file_key.as_ref().to_vec(),
                     bucket.id,
                     location.to_vec(),
@@ -317,7 +322,7 @@ impl IndexerService {
                 bucket_id,
                 maybe_collection_id: _,
             } => {
-                Bucket::delete(conn, bucket_id.to_string()).await?;
+                Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
@@ -336,7 +341,7 @@ impl IndexerService {
                 user_account,
                 amount_provided: _amount_provided,
             } => {
-                PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
+                PaymentStream::create(conn, user_account.to_string(), provider_id.to_string())
                     .await?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
@@ -348,7 +353,7 @@ impl IndexerService {
                 user_account,
                 rate: _rate,
             } => {
-                PaymentStream::create(conn, provider_id.to_string(), user_account.to_string())
+                PaymentStream::create(conn, user_account.to_string(), provider_id.to_string())
                     .await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
@@ -399,7 +404,7 @@ impl IndexerService {
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
             pallet_proofs_dealer::Event::ProofAccepted {
-                provider,
+                provider_id: provider,
                 proof: _proof,
                 last_tick_proven,
             } => {
@@ -446,9 +451,12 @@ impl IndexerService {
 
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
-                    let multiaddress_str =
-                        String::from_utf8(multiaddress.to_vec()).expect("Invalid multiaddress");
-                    sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
+                    if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
+                        sql_multiaddresses
+                            .push(MultiAddress::create(conn, multiaddr.to_vec()).await?);
+                    } else {
+                        error!(target: LOG_TARGET, "Failed to parse multiaddr");
+                    }
                 }
 
                 Bsp::create(
@@ -504,9 +512,12 @@ impl IndexerService {
             } => {
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
-                    let multiaddress_str =
-                        String::from_utf8(multiaddress.to_vec()).expect("Invalid multiaddress");
-                    sql_multiaddresses.push(MultiAddress::create(conn, multiaddress_str).await?);
+                    if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
+                        sql_multiaddresses
+                            .push(MultiAddress::create(conn, multiaddr.to_vec()).await?);
+                    } else {
+                        error!(target: LOG_TARGET, "Failed to parse multiaddr");
+                    }
                 }
 
                 // TODO: update value prop after properly defined in runtime
@@ -533,8 +544,12 @@ impl IndexerService {
                 old_root: _,
                 new_root,
             } => {
-                Bucket::update_merkle_root(conn, bucket_id.to_string(), new_root.as_ref().to_vec())
-                    .await?;
+                Bucket::update_merkle_root(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
             }
             pallet_storage_providers::Event::Slashed { .. } => {}
             pallet_storage_providers::Event::AwaitingTopUp {
@@ -556,6 +571,13 @@ impl IndexerService {
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
             pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
+            pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
+            pallet_storage_providers::Event::MspDeleted { provider_id } => {
+                Msp::delete(conn, provider_id.to_string()).await?;
+            }
+            pallet_storage_providers::Event::BspDeleted { provider_id } => {
+                Bsp::delete(conn, provider_id.to_string()).await?;
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

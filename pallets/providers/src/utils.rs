@@ -4,10 +4,7 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     sp_runtime::{
-        traits::{
-            BlockNumberProvider, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating,
-            Zero,
-        },
+        traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
         ArithmeticError, BoundedVec, DispatchError,
     },
     traits::{
@@ -27,14 +24,15 @@ use shp_traits::{
     FileMetadataInterface, MutateBucketsInterface, MutateChallengeableProvidersInterface,
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
-    ReadProvidersInterface, ReadStorageProvidersInterface, SystemMetricsInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
+    SystemMetricsInterface,
 };
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
-    Bucket, Commitment, MainStorageProvider, MainStorageProviderSignUpRequest, MultiAddress,
-    Multiaddresses, ProviderIdFor, RateDeltaParam, RelayBlockGetter, SignUpRequestSpParams,
+    Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
+    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, SignUpRequestSpParams,
     StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropIdFor,
     ValueProposition, ValuePropositionWithId,
 };
@@ -520,11 +518,25 @@ where
 
         // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
         let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // Check if MSP is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                    .is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             (
                 StorageProviderId::MainStorageProvider(msp_id),
                 Self::do_change_capacity_msp(who, msp_id, new_capacity)?,
             )
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // Check if BSP is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(bsp_id))
+                    .is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             (
                 StorageProviderId::BackupStorageProvider(bsp_id),
                 Self::do_change_capacity_bsp(who, bsp_id, new_capacity)?,
@@ -708,6 +720,13 @@ where
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Check that the account is a registered Provider and modify the Provider's storage accordingly
         let provider_id = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            // Check if MSP is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                    .is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             // If the provider is a MSP, add the new multiaddress to the MSP's storage,
             // making sure the multiaddress did not exist previously
             let mut msp =
@@ -722,6 +741,13 @@ where
             MainStorageProviders::<T>::insert(&msp_id, msp);
             msp_id
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            // Check if BSP is insolvent
+            ensure!(
+                InsolventProviders::<T>::get(StorageProviderId::<T>::BackupStorageProvider(bsp_id))
+                    .is_none(),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
             // If the provider is a BSP, add the new multiaddress to the BSP's storage,
             // making sure the multiaddress did not exist previously
             let mut bsp =
@@ -811,6 +837,18 @@ where
     /// - `AwaitingTopUp`: Emitted if there is a capacity deficit (i.e. the provider's capacity is falls below the used capacity) and therefore are required to top up their held deposit.
     /// This can be done manually by executing the `top_up_deposit` extrinsic.
     pub(crate) fn do_slash(provider_id: &ProviderIdFor<T>) -> DispatchResult {
+        let typed_provider_id = if MainStorageProviders::<T>::get(provider_id).is_some() {
+            StorageProviderId::MainStorageProvider(*provider_id)
+        } else {
+            StorageProviderId::BackupStorageProvider(*provider_id)
+        };
+
+        // Check if the provider is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(&typed_provider_id).is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
         let (account_id, _capacity, used_capacity) = Self::get_provider_details(*provider_id)?;
 
         // Calculate slashable amount for the current number of accrued failed proof submissions
@@ -877,19 +915,9 @@ where
             // Increase capacity up to the used capacity
             final_capacity = needed_capacity;
 
-            if AwaitingTopUpFromProviders::<T>::contains_key(provider_id) {
-                // Clear provider tracked storage
-                let top_up_metadata = expect_or_err!(
-                    AwaitingTopUpFromProviders::<T>::take(provider_id),
-                    "Top up metadata should exist when there is a capacity deficit",
-                    Error::<T>::TopUpNotRequired
-                );
-
-                GracePeriodToSlashedProviders::<T>::remove(
-                    top_up_metadata.end_block_grace_period,
-                    provider_id,
-                );
-            }
+            // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
+            // they will not be slashed
+            AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
 
             Self::deposit_event(Event::<T>::TopUpFulfilled {
                 provider_id: *provider_id,
@@ -897,16 +925,22 @@ where
             });
         } else {
             // Cannot hold enough balance, start tracking grace period and awaited top up
-            let end_block_grace_period = RelayBlockGetter::<T>::current_block_number()
-                .saturating_add(T::TopUpGracePeriod::get());
 
-            GracePeriodToSlashedProviders::<T>::insert(end_block_grace_period, provider_id, ());
+            // Queue provider top up expiration
+            let block_number_expiry = Self::enqueue_expiration_item(
+                ExpirationItem::ProviderTopUp(typed_provider_id.clone()),
+            )?;
 
             let top_up_metadata = TopUpMetadata {
-                end_block_grace_period,
+                started_at:
+                    <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::current_tick(),
+                end_block_grace_period: block_number_expiry,
             };
 
-            AwaitingTopUpFromProviders::<T>::insert(provider_id, top_up_metadata.clone());
+            AwaitingTopUpFromProviders::<T>::insert(
+                typed_provider_id.clone(),
+                top_up_metadata.clone(),
+            );
 
             // Signal to the provider that they need to top up their held deposit to match the current used capacity
             Self::deposit_event(Event::<T>::AwaitingTopUp {
@@ -916,12 +950,19 @@ where
         }
 
         // Update the provider's capacity
-        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
-            provider.capacity = final_capacity;
-            MainStorageProviders::<T>::set(provider_id, Some(provider));
-        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
-            provider.capacity = final_capacity;
-            BackupStorageProviders::<T>::set(provider_id, Some(provider));
+        match &typed_provider_id {
+            StorageProviderId::MainStorageProvider(provider_id) => {
+                let mut provider =
+                    MainStorageProviders::<T>::get(provider_id).ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = final_capacity;
+                MainStorageProviders::<T>::insert(provider_id, provider);
+            }
+            StorageProviderId::BackupStorageProvider(provider_id) => {
+                let mut provider = BackupStorageProviders::<T>::get(provider_id)
+                    .ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = final_capacity;
+                BackupStorageProviders::<T>::insert(*provider_id, provider);
+            }
         }
 
         Ok(())
@@ -937,6 +978,18 @@ where
         let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
             .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
             .ok_or(Error::<T>::NotRegistered)?;
+
+        let typed_provider_id = if MainStorageProviders::<T>::get(&provider_id).is_some() {
+            StorageProviderId::MainStorageProvider(provider_id)
+        } else {
+            StorageProviderId::BackupStorageProvider(provider_id)
+        };
+
+        // Check if the provider is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(&typed_provider_id).is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         let (account_id, _capacity, used_capacity) = Self::get_provider_details(provider_id)?;
 
@@ -976,26 +1029,24 @@ where
         )?;
 
         // Update the provider's capacity in storage
-        if let Some(mut provider) = MainStorageProviders::<T>::get(provider_id) {
-            provider.capacity = needed_capacity;
-            MainStorageProviders::<T>::set(provider_id, Some(provider));
-        } else if let Some(mut provider) = BackupStorageProviders::<T>::get(provider_id) {
-            provider.capacity = needed_capacity;
-            BackupStorageProviders::<T>::set(provider_id, Some(provider));
+        match typed_provider_id {
+            StorageProviderId::MainStorageProvider(provider_id) => {
+                let mut provider =
+                    MainStorageProviders::<T>::get(provider_id).ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = needed_capacity;
+                MainStorageProviders::<T>::insert(provider_id, provider);
+            }
+            StorageProviderId::BackupStorageProvider(provider_id) => {
+                let mut provider = BackupStorageProviders::<T>::get(provider_id)
+                    .ok_or(Error::<T>::NotRegistered)?;
+                provider.capacity = needed_capacity;
+                BackupStorageProviders::<T>::insert(provider_id, provider);
+            }
         }
 
-        let top_up_metadata = expect_or_err!(
-            AwaitingTopUpFromProviders::<T>::get(provider_id),
-            "Top up metadata should exist when there is a capacity deficit",
-            Error::<T>::TopUpNotRequired
-        );
-
-        // Clear provider tracked storage
-        GracePeriodToSlashedProviders::<T>::remove(
-            top_up_metadata.end_block_grace_period,
-            provider_id,
-        );
-        AwaitingTopUpFromProviders::<T>::remove(provider_id);
+        // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
+        // they will not be slashed
+        AwaitingTopUpFromProviders::<T>::remove(typed_provider_id);
 
         // Signal that the slashed amount has been topped up
         Self::deposit_event(Event::<T>::TopUpFulfilled {
@@ -1014,6 +1065,13 @@ where
     ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check if MSP is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                .is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         let value_prop = ValueProposition::<T>::new(
             price_per_giga_unit_of_data_per_block,
@@ -1051,6 +1109,83 @@ where
                 Ok(msp_id)
             },
         )
+    }
+
+    pub(crate) fn do_delete_provider(provider_id: &ProviderIdFor<T>) -> Result<(), DispatchError> {
+        ensure!(
+            Self::can_delete_provider(provider_id),
+            Error::<T>::DeleteProviderConditionsNotMet
+        );
+
+        // Delete provider data
+        if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+            InsolventProviders::<T>::remove(StorageProviderId::<T>::MainStorageProvider(
+                *provider_id,
+            ));
+            MainStorageProviders::<T>::remove(&provider_id);
+            AccountIdToMainStorageProviderId::<T>::remove(msp.owner_account);
+            MspCount::<T>::mutate(|n| {
+                let new_amount_of_msps = n.checked_sub(&T::SpCount::one());
+                match new_amount_of_msps {
+                    Some(new_amount_of_msps) => {
+                        *n = new_amount_of_msps;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
+            MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
+
+            Self::deposit_event(Event::<T>::MspDeleted {
+                provider_id: *provider_id,
+            });
+        } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
+            InsolventProviders::<T>::remove(StorageProviderId::<T>::BackupStorageProvider(
+                *provider_id,
+            ));
+            BackupStorageProviders::<T>::remove(&provider_id);
+            AccountIdToBackupStorageProviderId::<T>::remove(bsp.owner_account);
+            BspCount::<T>::mutate(|n| {
+                let new_amount_of_bsps = n.checked_sub(&T::SpCount::one());
+                match new_amount_of_bsps {
+                    Some(new_amount_of_bsps) => {
+                        *n = new_amount_of_bsps;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            TotalBspsCapacity::<T>::mutate(|n| {
+                let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
+                match new_total_bsp_capacity {
+                    Some(new_total_bsp_capacity) => {
+                        *n = new_total_bsp_capacity;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            UsedBspsCapacity::<T>::mutate(|n| {
+                let new_used_bsp_capacity = n.checked_sub(&bsp.capacity_used);
+                match new_used_bsp_capacity {
+                    Some(new_used_bsp_capacity) => {
+                        *n = new_used_bsp_capacity;
+                        Ok(())
+                    }
+                    None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+                }
+            })?;
+            GlobalBspsReputationWeight::<T>::mutate(|n| {
+                *n = n.saturating_sub(bsp.reputation_weight);
+            });
+
+            Self::deposit_event(Event::<T>::BspDeleted {
+                provider_id: *provider_id,
+            });
+        }
+
+        Ok(())
     }
 
     fn hold_balance(
@@ -1137,185 +1272,197 @@ where
     /// Adjust the fixed rate payment stream between a user and an MSP based on the [`RateDeltaParam`].
     ///
     /// Handles creating, updating, or deleting the fixed rate payment stream storage.
-    fn apply_delta_fixed_rate_payment_stream(
+    pub fn apply_delta_fixed_rate_payment_stream(
         msp_id: &MainStorageProviderId<T>,
         bucket_id: &BucketId<T>,
         user_id: &T::AccountId,
         delta: RateDeltaParam<T>,
     ) -> Result<(), DispatchError> {
-        let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
-            &msp_id,
-            &user_id,
-        )
-        .unwrap_or_default();
-
-        let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-
-        ensure!(
-            bucket.value_prop_id.is_some(),
-            Error::<T>::BucketHasNoValueProposition
-        );
-
-        let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-            &msp_id,
-            &bucket.value_prop_id.unwrap(),
-        )
-        .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
-        let zero_sized_bucket_rate = T::ZeroSizeBucketFixedRate::get();
-
-        match delta {
-            RateDeltaParam::NewBucket => {
-                // Get the rate of the new bucket to add.
-                // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
-                // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
-                // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
-                // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
-                let bucket_rate = if bucket.size.is_zero() {
-                    zero_sized_bucket_rate
-                } else {
-                    value_prop
-                        .price_per_giga_unit_of_data_per_block
-                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
-                        .ok_or(ArithmeticError::Overflow)?
-                        .checked_add(&zero_sized_bucket_rate)
-                        .ok_or(ArithmeticError::Overflow)?
-                };
-
-                let new_rate = current_rate
-                    .checked_add(&bucket_rate)
-                    .ok_or(ArithmeticError::Overflow)?;
-
-                if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+        // If the user in insolvent (inactive in the system), proceed to delete the payment stream if it still exists
+        if <T::PaymentStreams as ReadUserSolvencyInterface>::is_user_insolvent(&user_id) {
+            if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
+                &msp_id, &user_id,
+            ) {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
                     &msp_id, &user_id,
-                ) {
-                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                    &msp_id,
-                    &user_id,
-                    new_rate,
                 )?;
-                } else {
-                    <T::PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &msp_id,
-                        &user_id,
-                        new_rate,
-                    )?;
-                }
             }
-            RateDeltaParam::RemoveBucket => {
-                // Get the current rate of the bucket to remove.
-                // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
-                // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
-                // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
-                // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
-                let bucket_rate = if bucket.size.is_zero() {
-                    zero_sized_bucket_rate
-                } else {
-                    value_prop
-                        .price_per_giga_unit_of_data_per_block
-                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
-                        .ok_or(ArithmeticError::Overflow)?
-                        .checked_add(&zero_sized_bucket_rate)
-                        .ok_or(ArithmeticError::Overflow)?
-                };
+        } else {
+            // If the user is solvent (active in the system), we can proceed with the rate adjustment
+            let current_rate = <T::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(
+					&msp_id,
+					&user_id,
+				)
+				.unwrap_or_default();
 
-                let new_rate = current_rate.saturating_sub(bucket_rate);
+            let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-                if new_rate.is_zero() {
-                    <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
-                    &msp_id,
-                    &user_id,
-                )?;
-                } else {
-                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                        &msp_id,
-                        &user_id,
-                        new_rate,
-                    )?;
-                }
-            }
-            RateDeltaParam::Increase(delta) => {
-                // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
-                let bucket_rate = value_prop
-                    .price_per_giga_unit_of_data_per_block
-                    .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
-                    .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&zero_sized_bucket_rate)
-                    .ok_or(ArithmeticError::Overflow)?;
+            ensure!(
+                bucket.value_prop_id.is_some(),
+                Error::<T>::BucketHasNoValueProposition
+            );
 
-                // Calculate the new bucket's size.
-                let new_bucket_size = bucket
-                    .size
-                    .checked_add(&delta)
-                    .ok_or(ArithmeticError::Overflow)?;
+            let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
+                &msp_id,
+                &bucket.value_prop_id.unwrap(),
+            )
+            .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-                // Ensure the new bucket size does not exceed the bucket data limit of associated value proposition
-                ensure!(
-                    new_bucket_size <= value_prop.bucket_data_limit,
-                    Error::<T>::BucketSizeExceedsLimit
-                );
+            let zero_sized_bucket_rate = T::ZeroSizeBucketFixedRate::get();
 
-                // Calculate what would be the new bucket rate with the new size.
-                let new_bucket_rate = value_prop
-                    .price_per_giga_unit_of_data_per_block
-                    .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
-                    .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&zero_sized_bucket_rate)
-                    .ok_or(ArithmeticError::Overflow)?;
+            match delta {
+                RateDeltaParam::NewBucket => {
+                    // Get the rate of the new bucket to add.
+                    // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
+                    // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
+                    // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
+                    // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
+                    let bucket_rate = if bucket.size.is_zero() {
+                        zero_sized_bucket_rate
+                    } else {
+                        value_prop
+                            .price_per_giga_unit_of_data_per_block
+                            .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                            .ok_or(ArithmeticError::Overflow)?
+                            .checked_add(&zero_sized_bucket_rate)
+                            .ok_or(ArithmeticError::Overflow)?
+                    };
 
-                // Get the delta rate, which is the difference between the old and new rates for this bucket.
-                let delta_rate = new_bucket_rate
-                    .checked_sub(&bucket_rate)
-                    .ok_or(ArithmeticError::Underflow)?;
-
-                // If the rate has changed, update the payment stream.
-                if !delta_rate.is_zero() {
-                    // Since this is an increase, add the delta rate to the current rate.
                     let new_rate = current_rate
-                        .checked_add(&delta_rate)
+                        .checked_add(&bucket_rate)
                         .ok_or(ArithmeticError::Overflow)?;
 
-                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                    &msp_id, &user_id, new_rate,
-                	)?;
+                    if <T::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+							&msp_id, &user_id,
+						) {
+							<T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+							&msp_id,
+							&user_id,
+							new_rate,
+						)?;
+						} else {
+							<T::PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+								&msp_id,
+								&user_id,
+								new_rate,
+							)?;
+						}
                 }
-            }
-            RateDeltaParam::Decrease(delta) => {
-                // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
-                let bucket_rate = value_prop
-                    .price_per_giga_unit_of_data_per_block
-                    .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
-                    .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&zero_sized_bucket_rate)
-                    .ok_or(ArithmeticError::Overflow)?;
+                RateDeltaParam::RemoveBucket => {
+                    // Get the current rate of the bucket to remove.
+                    // If the bucket size is zero, the rate is the fixed rate of a zero sized bucket.
+                    // Otherwise, the rate is the fixed rate of a zero sized bucket plus the rate according to the bucket size.
+                    // Since the value proposition is in price per giga unit of data per block, we need to convert the price to price per unit of data per block
+                    // and that could mean that, since it's an integer division, the rate could be zero. In that case, we saturate to the zero sized bucket rate.
+                    let bucket_rate = if bucket.size.is_zero() {
+                        zero_sized_bucket_rate
+                    } else {
+                        value_prop
+                            .price_per_giga_unit_of_data_per_block
+                            .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                            .ok_or(ArithmeticError::Overflow)?
+                            .checked_add(&zero_sized_bucket_rate)
+                            .ok_or(ArithmeticError::Overflow)?
+                    };
 
-                // Calculate the new bucket's size.
-                let new_bucket_size = bucket
-                    .size
-                    .checked_sub(&delta)
-                    .ok_or(ArithmeticError::Underflow)?;
+                    let new_rate = current_rate.saturating_sub(bucket_rate);
 
-                // Calculate what would be the new bucket rate with the new size.
-                let new_bucket_rate = value_prop
-                    .price_per_giga_unit_of_data_per_block
-                    .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
-                    .ok_or(ArithmeticError::Overflow)?
-                    .checked_add(&zero_sized_bucket_rate)
-                    .ok_or(ArithmeticError::Overflow)?;
+                    if new_rate.is_zero() {
+                        <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+							&msp_id,
+							&user_id,
+						)?;
+                    } else {
+                        <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+								&msp_id,
+								&user_id,
+								new_rate,
+							)?;
+                    }
+                }
+                RateDeltaParam::Increase(delta) => {
+                    // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
+                    let bucket_rate = value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?;
 
-                // Get the delta rate, which is the difference between the old and new rates for this bucket.
-                let delta_rate = bucket_rate
-                    .checked_sub(&new_bucket_rate)
-                    .ok_or(ArithmeticError::Underflow)?;
+                    // Calculate the new bucket's size.
+                    let new_bucket_size = bucket
+                        .size
+                        .checked_add(&delta)
+                        .ok_or(ArithmeticError::Overflow)?;
 
-                // If the rate has changed, update the payment stream.
-                if !delta_rate.is_zero() {
-                    // Since this is a decrease, subtract the delta rate from the current rate.
-                    let new_rate = current_rate.saturating_sub(delta_rate);
+                    // Ensure the new bucket size does not exceed the bucket data limit of associated value proposition
+                    ensure!(
+                        new_bucket_size <= value_prop.bucket_data_limit,
+                        Error::<T>::BucketSizeExceedsLimit
+                    );
 
-                    <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
-                    &msp_id, &user_id, new_rate,
-                	)?;
+                    // Calculate what would be the new bucket rate with the new size.
+                    let new_bucket_rate = value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?;
+
+                    // Get the delta rate, which is the difference between the old and new rates for this bucket.
+                    let delta_rate = new_bucket_rate
+                        .checked_sub(&bucket_rate)
+                        .ok_or(ArithmeticError::Underflow)?;
+
+                    // If the rate has changed, update the payment stream.
+                    if !delta_rate.is_zero() {
+                        // Since this is an increase, add the delta rate to the current rate.
+                        let new_rate = current_rate
+                            .checked_add(&delta_rate)
+                            .ok_or(ArithmeticError::Overflow)?;
+
+                        <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+							&msp_id, &user_id, new_rate,
+							)?;
+                    }
+                }
+                RateDeltaParam::Decrease(delta) => {
+                    // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
+                    let bucket_rate = value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?;
+
+                    // Calculate the new bucket's size.
+                    let new_bucket_size = bucket
+                        .size
+                        .checked_sub(&delta)
+                        .ok_or(ArithmeticError::Underflow)?;
+
+                    // Calculate what would be the new bucket rate with the new size.
+                    let new_bucket_rate = value_prop
+                        .price_per_giga_unit_of_data_per_block
+                        .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .ok_or(ArithmeticError::Overflow)?
+                        .checked_add(&zero_sized_bucket_rate)
+                        .ok_or(ArithmeticError::Overflow)?;
+
+                    // Get the delta rate, which is the difference between the old and new rates for this bucket.
+                    let delta_rate = bucket_rate
+                        .checked_sub(&new_bucket_rate)
+                        .ok_or(ArithmeticError::Underflow)?;
+
+                    // If the rate has changed, update the payment stream.
+                    if !delta_rate.is_zero() {
+                        // Since this is a decrease, subtract the delta rate from the current rate.
+                        let new_rate = current_rate.saturating_sub(delta_rate);
+
+                        <T::PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
+							&msp_id, &user_id, new_rate,
+							)?;
+                    }
                 }
             }
         }
@@ -1719,27 +1866,25 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult {
-        let (msp_id, user_id) = Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // First, try to update the fixed rate payment stream with the new rate, since
+            // this function uses the current bucket size to calculate it
+            if let Some(msp_id) = bucket.msp_id {
+                Self::apply_delta_fixed_rate_payment_stream(
+                    &msp_id,
+                    bucket_id,
+                    &bucket.user_id,
+                    RateDeltaParam::Increase(delta),
+                )?;
+            }
+
+            // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_add(delta);
 
-            Ok::<_, DispatchError>((
-                bucket
-                    .msp_id
-                    .ok_or(Error::<T>::BucketMustHaveMspForOperation)?,
-                bucket.user_id.clone(),
-            ))
-        })?;
-
-        Self::apply_delta_fixed_rate_payment_stream(
-            &msp_id,
-            bucket_id,
-            &user_id,
-            RateDeltaParam::Increase(delta),
-        )?;
-
-        Ok(())
+            Ok(())
+        })
     }
 
     fn decrease_bucket_size(
@@ -1749,8 +1894,8 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            bucket.size = bucket.size.saturating_sub(delta);
-
+            // First, try to update the fixed rate payment stream with the new rate, since
+            // this function uses the current bucket size to calculate it
             if let Some(msp_id) = bucket.msp_id {
                 Self::apply_delta_fixed_rate_payment_stream(
                     &msp_id,
@@ -1759,6 +1904,9 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                     RateDeltaParam::Decrease(delta),
                 )?;
             }
+
+            // Then, if that was successful, update the bucket size
+            bucket.size = bucket.size.saturating_sub(delta);
 
             Ok(())
         })
@@ -1990,6 +2138,28 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             || MainStorageProviders::<T>::contains_key(&who)
             || Buckets::<T>::contains_key(&who)
     }
+
+    fn is_provider_insolvent(who: Self::ProviderId) -> bool {
+        let is_provider_insolvent =
+            InsolventProviders::<T>::get(&StorageProviderId::<T>::MainStorageProvider(who))
+                .is_some()
+                || InsolventProviders::<T>::get(&StorageProviderId::<T>::BackupStorageProvider(
+                    who,
+                ))
+                .is_some();
+
+        // While provider is being awaited for top up, it is still considered insolvent, it's just that
+        // it can get out of this state.
+        let is_provider_awaiting_topup =
+            AwaitingTopUpFromProviders::<T>::get(&StorageProviderId::<T>::MainStorageProvider(who))
+                .is_some()
+                || AwaitingTopUpFromProviders::<T>::get(
+                    &StorageProviderId::<T>::BackupStorageProvider(who),
+                )
+                .is_some();
+
+        is_provider_insolvent || is_provider_awaiting_topup
+    }
 }
 
 /// Implement the MutateProvidersInterface for the Storage Providers pallet.
@@ -2125,19 +2295,40 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
         // Decrease the used capacity of the provider
         Self::decrease_capacity_used(provider_id, file_size)?;
 
-        // Update the provider's payment stream with the user
-        let previous_amount_provided =
+        // If the user is insolvent, delete the payment stream between the user and the provider if it still exists.
+        if <T::PaymentStreams as ReadUserSolvencyInterface>::is_user_insolvent(&owner) {
+            if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
+                &provider_id,
+                &owner,
+            ) {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                    &provider_id,
+                    &owner,
+                )?;
+            }
+        } else {
+            // If the user is solvent, update the payment stream between the user and the provider.
+            // If the new amount provided would be zero, delete it instead.
+            let previous_amount_provided =
             <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(
                 provider_id,
                 &owner,
             )
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
-        let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
-        <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-            provider_id,
-            &owner,
-            &new_amount_provided,
-        )?;
+            let new_amount_provided = previous_amount_provided.saturating_sub(file_size);
+            if new_amount_provided.is_zero() {
+                <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                    provider_id,
+                    &owner,
+                )?;
+            } else {
+                <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+                    provider_id,
+                    &owner,
+                    &new_amount_provided,
+                )?;
+            }
+        }
 
         Ok(())
     }
@@ -2266,5 +2457,203 @@ where
             &bsp.owner_account,
         );
         Ok(stake)
+    }
+
+    /// Determines if a provider can be deleted based on the following criteria:
+    ///
+    /// - Provider must be marked as insolvent
+    /// - Provider must not have any payment streams
+    pub fn can_delete_provider(provider_id: &ProviderIdFor<T>) -> bool {
+        // Provider must be insolvent
+        if !InsolventProviders::<T>::contains_key(StorageProviderId::<T>::MainStorageProvider(
+            *provider_id,
+        )) && !InsolventProviders::<T>::contains_key(
+            StorageProviderId::<T>::BackupStorageProvider(*provider_id),
+        ) {
+            return false;
+        }
+
+        // Provider must not have any payment streams
+        if <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream(provider_id) {
+            return false;
+        }
+
+        true
+    }
+
+    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
+    ///
+    /// This function attempts to insert a the expiration item at the next available block starting from
+    /// the current next available block.
+    pub(crate) fn enqueue_expiration_item(
+        expiration_item: ExpirationItem<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let expiration_block = expiration_item.get_next_expiration_block()?;
+        let new_expiration_block = expiration_item.try_append(expiration_block)?;
+        expiration_item.set_next_expiration_block(new_expiration_block)?;
+
+        Ok(new_expiration_block)
+    }
+}
+
+mod hooks {
+    use crate::{
+        pallet,
+        types::{ShTickGetter, StorageHubTickNumber},
+        utils::StorageProviderId,
+        AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
+        MainStorageProviders, NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
+    };
+
+    use frame_support::{
+        traits::{
+            fungible::{InspectHold, MutateHold},
+            tokens::{Fortitude, Precision, Restriction},
+            Get,
+        },
+        weights::WeightMeter,
+    };
+    use shp_traits::StorageHubTickGetter;
+    use sp_runtime::{
+        traits::{One, Zero},
+        Saturating,
+    };
+
+    impl<T: pallet::Config> Pallet<T> {
+        pub(crate) fn do_on_idle(mut meter: &mut WeightMeter) -> &mut WeightMeter {
+            let db_weight = T::DbWeight::get();
+            let current_sh_tick = ShTickGetter::<T>::get_current_tick();
+            let mut sh_tick_to_clean = NextStartingShTickToCleanUp::<T>::get();
+
+            while sh_tick_to_clean <= current_sh_tick && !meter.remaining().is_zero() {
+                Self::process_block_expired_items(&mut sh_tick_to_clean, &mut meter);
+
+                if meter.remaining().is_zero() {
+                    break;
+                }
+
+                sh_tick_to_clean.saturating_accrue(StorageHubTickNumber::<T>::one());
+            }
+
+            // Update the next starting block for cleanup
+            if sh_tick_to_clean > NextStartingShTickToCleanUp::<T>::get() {
+                NextStartingShTickToCleanUp::<T>::put(sh_tick_to_clean);
+                meter.consume(db_weight.writes(1));
+            }
+
+            meter
+        }
+
+        fn process_block_expired_items(
+            tick_to_process: &mut StorageHubTickNumber<T>,
+            meter: &mut WeightMeter,
+        ) {
+            let db_weight = T::DbWeight::get();
+            let minimum_required_weight_processing_expired_items = db_weight.reads_writes(2, 1);
+
+            // Check if there is enough remaining weight to process expired move bucket requests
+            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
+                return;
+            }
+
+            // Remove expired move bucket requests if any existed and process them.
+            let mut provider_top_up_expirations =
+                ProviderTopUpExpirations::<T>::take(*tick_to_process);
+            meter.consume(minimum_required_weight_processing_expired_items);
+
+            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
+            // TODO: process all the expired move bucket requests. If not, we should return early.
+            while let Some(typed_provider_id) = provider_top_up_expirations.pop() {
+                Self::process_expired_provider_top_up_period(typed_provider_id, meter);
+            }
+
+            // If there are remaining items which were not processed, put them back in storage
+            if !provider_top_up_expirations.is_empty() {
+                ProviderTopUpExpirations::<T>::insert(tick_to_process, provider_top_up_expirations);
+                meter.consume(db_weight.writes(1));
+            }
+        }
+
+        fn process_expired_provider_top_up_period(
+            typed_provider_id: StorageProviderId<T>,
+            meter: &mut WeightMeter,
+        ) {
+            let db_weight = T::DbWeight::get();
+            let potential_weight = db_weight.reads_writes(0, 2);
+
+            if !meter.can_consume(potential_weight) {
+                return;
+            }
+
+            // Clear awaiting top up storage
+            let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
+
+            // Mark the provider as insolvent if it was awaiting a top up
+            // If the provider was not awaiting a top up, it means they already topped up either via an
+            // automatic top up or a manual top up.
+            if maybe_awaiting_top_up.is_some() {
+                InsolventProviders::<T>::insert(typed_provider_id.clone(), ());
+
+                Self::deposit_event(Event::ProviderInsolvent {
+                    provider_id: *typed_provider_id.inner(),
+                });
+
+                let account_id = if let Some(bsp) =
+                    BackupStorageProviders::<T>::get(&typed_provider_id.inner())
+                {
+                    bsp.owner_account
+                } else if let Some(msp) = MainStorageProviders::<T>::get(&typed_provider_id.inner())
+                {
+                    msp.owner_account
+                } else {
+                    log::error!(
+                        target: "runtime::providers",
+                        "Could not slash any potentially remaining deposit for provider {:?} as it does not exist.",
+                        typed_provider_id
+                    );
+                    return;
+                };
+
+                let held_deposit = T::NativeBalance::balance_on_hold(
+                    &HoldReason::StorageProviderDeposit.into(),
+                    &account_id,
+                );
+
+                if !held_deposit.is_zero() {
+                    // Transfer all held deposit to treasury
+                    if let Err(e) = T::NativeBalance::transfer_on_hold(
+                        &HoldReason::StorageProviderDeposit.into(),
+                        &account_id,
+                        &T::Treasury::get(),
+                        held_deposit,
+                        Precision::BestEffort,
+                        Restriction::Free,
+                        Fortitude::Force,
+                    ) {
+                        log::error!(
+                            target: "runtime::providers",
+                            "Could not slash remaining deposit for provider {:?} due to error: {:?}",
+                            typed_provider_id,
+                            e
+                        );
+                    }
+                }
+
+                if let Err(e) =
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
+                        &typed_provider_id.inner(),
+                    )
+                {
+                    log::error!(
+                        target: "runtime::providers",
+                        "Could not stop challenge cycle for provider {:?} due to error: {:?}",
+                        typed_provider_id,
+                        e
+                    );
+                }
+            }
+
+            meter.consume(potential_weight);
+        }
     }
 }

@@ -1,22 +1,19 @@
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import invariant from "tiny-invariant";
 
 describeMspNet(
   "Single MSP rejecting storage request",
   { initialised: true },
-  ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
+  ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMspApi();
-      if (maybeMspApi) {
-        mspApi = maybeMspApi;
-      } else {
-        throw new Error("MSP API not available");
-      }
+      const maybeMspApi = await createMsp1Api();
+
+      assert(maybeMspApi, "MSP API not available");
+      mspApi = maybeMspApi;
     });
 
     it("Network launches and can be queried", async () => {
@@ -33,11 +30,9 @@ describeMspNet(
       const initialised = await getLaunchResponse();
       const bucketId = initialised?.fileMetadata.bucketId;
 
-      invariant(bucketId, "Bucket ID not found");
+      assert(bucketId, "Bucket ID not found");
 
-      const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
-        bucketId.toString()
-      );
+      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 
       await userApi.sealBlock(
         userApi.tx.fileSystem.issueStorageRequest(
@@ -46,7 +41,8 @@ describeMspNet(
           userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
           userApi.shConsts.TEST_ARTEFACTS[source].size,
           userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
         ),
         shUser
       );
@@ -89,16 +85,14 @@ describeMspNet(
         userApi.events.fileSystem.StorageRequestRejected.is(storageRequestRejectedEvent) &&
         storageRequestRejectedEvent.data;
 
-      if (!storageRequestRejectedDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
+      assert(storageRequestRejectedDataBlob, "Event doesn't match Type");
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);
 
       // Check that the MSP has not updated the local forest root of the bucket
       strictEqual(
-        local_bucket_root.toString(),
+        localBucketRoot.toString(),
         (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).toString()
       );
     });

@@ -1,6 +1,5 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use log::{debug, trace, warn};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
@@ -12,22 +11,19 @@ use sc_client_api::{
 };
 use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
-use sc_tracing::tracing::{error, info};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{
-    traits::{Header, Zero},
-    AccountId32, SaturatedConversion,
-};
+use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
-    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetProofSubmissionRecordError,
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
@@ -37,12 +33,11 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
-    blockchain_utils::convert_raw_multiaddresses_to_multiaddr,
-    types::{BlockNumber, ParachainClient, ProviderId},
-};
-use shc_common::{
-    blockchain_utils::get_events_at_block,
-    types::{Fingerprint, TickNumber, BCSV_KEY_TYPE},
+    blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
+    types::{
+        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
+        TickNumber, BCSV_KEY_TYPE,
+    },
 };
 use shp_file_metadata::FileKey;
 use storage_hub_runtime::RuntimeEvent;
@@ -50,27 +45,33 @@ use storage_hub_runtime::RuntimeEvent;
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
-        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
-        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
+        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
+        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BestBlockInfo, NewBlockNotificationKind, StopStoringForInsolventUserRequest,
-        SubmitProofRequest,
+        BestBlockInfo, ForestStorageSnapshotInfo, NewBlockNotificationKind,
+        StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
-};
-use crate::{
-    events::FinalisedMspStoppedStoringBucket, state::OngoingProcessMspRespondStorageRequestCf,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
-// TODO: Define properly the number of blocks to come out of sync mode
+
+/// The minimum number of blocks behind the current best block to consider the node out of sync.
+///
+/// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
+/// continuing to process incoming events.
+///
+/// TODO: Define properly the number of blocks to come out of sync mode
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// The BlockchainService actor.
@@ -87,7 +88,10 @@ pub struct BlockchainService {
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
     pub(crate) rpc_handlers: Arc<RpcHandlers>,
-    /// The hash and number of the current best block.
+    /// The hash and number of the last best block processed by the BlockchainService.
+    ///
+    /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
+    /// run some initialisation tasks. Also used to detect reorgs.
     pub(crate) best_block: BestBlockInfo,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
@@ -97,25 +101,34 @@ pub struct BlockchainService {
     /// A registry of waiters for a tick number.
     pub(crate) wait_for_tick_request_by_number:
         BTreeMap<TickNumber, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
-    /// A list of Provider IDs that this node has to pay attention to submit proofs for.
-    /// This could be a BSP or a list of buckets that an MSP has.
-    pub(crate) provider_ids: BTreeSet<ProviderId>,
-    /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
+    /// The Provider ID that this node is managing.
+    ///
+    /// Can be a BSP or an MSP.
+    /// This is initialised when the node is in sync.
+    pub(crate) provider_id: Option<StorageProviderId>,
+    /// A map of [`EitherBucketOrBspId`] to the Forest Storage snapshots.
+    ///
+    /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
+    /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
+    /// Each BSP or Bucket can have multiple Forest Storage snapshots.
+    /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
+    #[allow(dead_code)]
+    pub(crate) forest_root_snapshots:
+        BTreeMap<EitherBucketOrBspId, BTreeSet<ForestStorageSnapshotInfo>>,
+    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    ///
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
+    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    /// The last block number that was processed by the BlockchainService.
-    /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
-    /// run some initialisation tasks.
-    /// TODO: Consider if this should be removed in favour of the BestBlockInfo.
-    pub(crate) last_block_processed: BlockNumber,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node, all originating from the "dynamic" way of
     /// computing the next challenges tick. This case is handled separately.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
+    /// Notify period value to know when to trigger the NotifyPeriod event.
+    pub(crate) notify_period: Option<u32>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -144,7 +157,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "BlockchainService starting up!");
+        info!(target: LOG_TARGET, "💾 StorageHub's Blockchain Service starting up!");
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -289,6 +302,17 @@ impl Actor for BlockchainService {
                         }
                     }
                 },
+                BlockchainServiceCommand::GetBestBlockInfo { callback } => {
+                    let best_block_info = self.best_block;
+                    match callback.send(best_block_info) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Best block info sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send best block info: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::WaitForBlock {
                     block_number,
                     callback,
@@ -392,6 +416,29 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send earliest block to change capacity: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::IsStorageRequestOpenToVolunteers {
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let is_open = self
+                        .client
+                        .runtime_api()
+                        .is_storage_request_open_to_volunteers(current_block_hash, file_key)
+                        .unwrap_or_else(|_| {
+                            Err(IsStorageRequestOpenToVolunteersError::InternalError)
+                        });
+
+                    match callback.send(is_open) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Storage request open to volunteers result sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send storage request open to volunteers: {:?}", e);
                         }
                     }
                 }
@@ -503,7 +550,8 @@ impl Actor for BlockchainService {
                         .unwrap_or_else(|_| {
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
-                        });
+                        })
+                        .map(convert_raw_multiaddresses_to_multiaddr);
 
                     match callback.send(multiaddresses) {
                         Ok(_) => {
@@ -570,9 +618,7 @@ impl Actor for BlockchainService {
                         .client
                         .runtime_api()
                         .get_last_tick_provider_submitted_proof(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| {
-                            Err(GetLastTickProviderSubmittedProofError::InternalApiError)
-                        });
+                        .unwrap_or_else(|_| Err(GetProofSubmissionRecordError::InternalApiError));
 
                     match callback.send(last_tick) {
                         Ok(_) => {
@@ -938,6 +984,7 @@ impl BlockchainService {
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
         rocksdb_root_path: impl Into<PathBuf>,
+        notify_period: Option<u32>,
     ) -> Self {
         Self {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -948,11 +995,12 @@ impl BlockchainService {
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
-            provider_ids: BTreeSet::new(),
+            provider_id: None,
+            forest_root_snapshots: BTreeMap::new(),
             forest_root_write_lock: None,
-            last_block_processed: Zero::zero(),
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
+            notify_period,
         }
     }
 
@@ -962,6 +1010,7 @@ impl BlockchainService {
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
+        let last_block_processed = self.best_block.number;
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
         let BestBlockInfo {
             number: block_number,
@@ -978,14 +1027,16 @@ impl BlockchainService {
             }
         };
 
-        info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.pre_block_processing_checks(&block_hash);
 
         // If this is the first block import notification, we might need to catch up.
         // Check if we just came out of syncing mode.
-        if block_number - self.last_block_processed < SYNC_MODE_MIN_BLOCKS_BEHIND {
+        // We use saturating_sub because in a reorg, there is a potential scenario where the last
+        // block processed is higher than the current block number.
+        if block_number.saturating_sub(last_block_processed) > SYNC_MODE_MIN_BLOCKS_BEHIND {
             self.handle_initial_sync(notification).await;
         }
 
@@ -997,11 +1048,11 @@ impl BlockchainService {
         // and update our internal counter if it's smaller than the result.
         self.check_nonce(&block_hash);
 
-        // Get provider IDs linked to keys in this node's keystore.
-        self.get_provider_ids(&block_hash);
+        // Get Provider ID linked to keys in this node's keystore.
+        self.get_provider_id(&block_hash);
     }
 
-    /// Handle the first time this node syncs with the chain.
+    /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
     async fn handle_initial_sync<Block>(&mut self, notification: BlockImportNotification<Block>)
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
@@ -1010,7 +1061,7 @@ impl BlockchainService {
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
         // If this is the first block import notification, we might need to catch up.
-        info!(target: LOG_TARGET, "First block import notification (synced to #{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
 
         // Check if there was an ongoing process confirm storing task.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
@@ -1066,14 +1117,25 @@ impl BlockchainService {
 
         state_store_context.commit();
 
-        // Catch up to proofs that this node might have missed.
-        for provider_id in self.provider_ids.clone() {
-            self.proof_submission_catch_up(&block_hash, &provider_id);
+        // Initialise the Provider.
+        match self.provider_id {
+            Some(StorageProviderId::BackupStorageProvider(bsp_id)) => {
+                self.proof_submission_catch_up(&block_hash, &bsp_id);
+                // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
+                // TODO: Catch up to Forest root writes in the BSP Forest.
+            }
+            Some(StorageProviderId::MainStorageProvider(_msp_id)) => {
+                // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
+                // TODO: Catch up to Forest root writes in the Bucket's Forests.
+            }
+            None => {
+                warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
+            }
         }
     }
 
     async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
-        info!(target: LOG_TARGET, "Processing block import #{}: {}", block_number, block_hash);
+        trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Notify all tasks waiting for this block number (or lower).
         self.notify_import_block_number(&block_number);
@@ -1085,8 +1147,12 @@ impl BlockchainService {
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
 
+        // Check that trigger an event every X amount of blocks (specified in config).
+        self.check_for_notify(&block_number);
+
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
+        // TODO: Handle the `pallet-cr-randomness` events here.
         match get_events_at_block(&self.client, block_hash) {
             Ok(block_events) => {
                 // Process the events.
@@ -1128,8 +1194,27 @@ impl BlockchainService {
                                         .to_vec();
                                 if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
                                     // If so, add the Provider ID to the list of Providers that this node is monitoring.
-                                    info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
-                                    self.provider_ids.insert(provider_id);
+                                    info!(target: LOG_TARGET, "🔑 New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
+
+                                    // Managing more than one Provider is not supported, so if this node is already managing another Provider, emit a warning
+                                    // and stop managing it, in favour of the new Provider.
+                                    if let Some(managed_provider) = &self.provider_id {
+                                        let managed_provider_id = match managed_provider {
+                                            StorageProviderId::BackupStorageProvider(bsp_id) => {
+                                                bsp_id
+                                            }
+                                            StorageProviderId::MainStorageProvider(msp_id) => {
+                                                msp_id
+                                            }
+                                        };
+                                        if managed_provider_id != &provider_id {
+                                            warn!(target: LOG_TARGET, "🔄 This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
+                                        }
+                                    }
+
+                                    // Only BSPs can be challenged, therefore this is a BSP.
+                                    self.provider_id =
+                                        Some(StorageProviderId::BackupStorageProvider(provider_id));
                                 }
                             }
                         }
@@ -1140,17 +1225,19 @@ impl BlockchainService {
                                 seed: _,
                             },
                         ) => {
-                            // For each Provider ID this node monitors...
-                            for provider_id in &self.provider_ids {
-                                // ...check if the challenges tick is one that this provider has to submit a proof for.
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
+                                &self.provider_id
+                            {
+                                // Check if the challenges tick is one that this BSP has to submit a proof for.
                                 if self.should_provider_submit_proof(
                                     &block_hash,
-                                    provider_id,
+                                    bsp_id,
                                     &challenges_ticker,
                                 ) {
-                                    self.proof_submission_catch_up(&block_hash, provider_id);
+                                    self.proof_submission_catch_up(&block_hash, bsp_id);
                                 } else {
-                                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
+                                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", bsp_id);
                                 }
                             }
                         }
@@ -1172,12 +1259,20 @@ impl BlockchainService {
                                 last_chargeable_price_index,
                             },
                         ) => {
-                            if self.provider_ids.contains(&provider_id) {
-                                self.emit(LastChargeableInfoUpdated {
-                                    provider_id: provider_id,
-                                    last_chargeable_tick: last_chargeable_tick,
-                                    last_chargeable_price_index: last_chargeable_price_index,
-                                })
+                            if let Some(managed_provider_id) = &self.provider_id {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                // It's irrelevant if the Provider ID is a MSP or a BSP.
+                                let managed_provider_id = match managed_provider_id {
+                                    StorageProviderId::BackupStorageProvider(bsp_id) => bsp_id,
+                                    StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                                };
+                                if provider_id == *managed_provider_id {
+                                    self.emit(LastChargeableInfoUpdated {
+                                        provider_id: provider_id,
+                                        last_chargeable_tick: last_chargeable_tick,
+                                        last_chargeable_price_index: last_chargeable_price_index,
+                                    })
+                                }
                             }
                         }
                         // A user has been flagged as without funds in the runtime
@@ -1196,17 +1291,102 @@ impl BlockchainService {
                                 new_root,
                             },
                         ) => {
-                            if self.provider_ids.contains(&sp_id) {
-                                self.emit(SpStopStoringInsolventUser {
-                                    sp_id,
-                                    file_key: file_key.into(),
-                                    owner,
-                                    location,
-                                    new_root,
-                                })
+                            if let Some(managed_provider_id) = &self.provider_id {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                // It's irrelevant if the Provider ID is a MSP or a BSP.
+                                let managed_provider_id = match managed_provider_id {
+                                    StorageProviderId::BackupStorageProvider(bsp_id) => bsp_id,
+                                    StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                                };
+                                if sp_id == *managed_provider_id {
+                                    self.emit(SpStopStoringInsolventUser {
+                                        sp_id,
+                                        file_key: file_key.into(),
+                                        owner,
+                                        location,
+                                        new_root,
+                                    })
+                                }
                             }
                         }
-                        // This event should only be of any use if a node is run by as a user.
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequested {
+                                who: _,
+                                bucket_id,
+                                new_msp_id,
+                            },
+                        ) => {
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketRequested {
+                                        bucket_id,
+                                        new_msp_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the event only if this node is the new MSP.
+                                Some(StorageProviderId::MainStorageProvider(msp_id))
+                                    if msp_id == new_msp_id =>
+                                {
+                                    self.emit(MoveBucketRequestedForNewMsp { bucket_id });
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketRejected { bucket_id, msp_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted { bucket_id, msp_id },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketAccepted { bucket_id, msp_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequestExpired {
+                                bucket_id,
+                                msp_id,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketExpired { bucket_id, msp_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(BspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
+                                }
+                            }
+                        }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
                                 bsp_id,
@@ -1220,27 +1400,30 @@ impl BlockchainService {
                         ) if owner
                             == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
                         {
-                            log::info!(
-                                target: LOG_TARGET,
-                                "AcceptedBspVolunteer event for BSP ID: {:?}",
-                                bsp_id
-                            );
+                            // This event should only be of any use if a node is run by as a user.
+                            if self.provider_id.is_none() {
+                                log::info!(
+                                    target: LOG_TARGET,
+                                    "AcceptedBspVolunteer event for BSP ID: {:?}",
+                                    bsp_id
+                                );
 
-                            // We try to convert the types coming from the runtime into our expected types.
-                            let fingerprint: Fingerprint = fingerprint.as_bytes().into();
+                                // We try to convert the types coming from the runtime into our expected types.
+                                let fingerprint: Fingerprint = fingerprint.as_bytes().into();
 
-                            let multiaddress_vec: Vec<Multiaddr> =
-                                convert_raw_multiaddresses_to_multiaddr(multiaddresses);
+                                let multiaddress_vec: Vec<Multiaddr> =
+                                    convert_raw_multiaddresses_to_multiaddr(multiaddresses);
 
-                            self.emit(AcceptedBspVolunteer {
-                                bsp_id,
-                                bucket_id,
-                                location,
-                                fingerprint,
-                                multiaddresses: multiaddress_vec,
-                                owner,
-                                size,
-                            })
+                                self.emit(AcceptedBspVolunteer {
+                                    bsp_id,
+                                    bucket_id,
+                                    location,
+                                    fingerprint,
+                                    multiaddresses: multiaddress_vec,
+                                    owner,
+                                    size,
+                                })
+                            }
                         }
                         // Ignore all other events.
                         _ => {}
@@ -1271,7 +1454,7 @@ impl BlockchainService {
         let block_hash: H256 = notification.hash;
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
-        debug!(target: LOG_TARGET, "Finality notification #{}: {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
         match get_events_at_block(&self.client, &block_hash) {
@@ -1282,18 +1465,23 @@ impl BlockchainService {
                         // New storage request event coming from pallet-file-system.
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::MutationsApplied {
-                                provider,
+                                provider: provider_id,
                                 mutations,
                                 new_root,
                             },
                         ) => {
-                            // Check if the provider ID is one of the provider IDs this node is tracking.
-                            if self.provider_ids.contains(&provider) {
-                                self.emit(FinalisedTrieRemoveMutationsApplied {
-                                    provider_id: provider,
-                                    mutations: mutations.clone().into(),
-                                    new_root,
-                                })
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                if provider_id == *managed_bsp_id {
+                                    self.emit(FinalisedTrieRemoveMutationsApplied {
+                                        provider_id,
+                                        mutations: mutations.clone().into(),
+                                        new_root,
+                                    })
+                                }
                             }
                         }
                         RuntimeEvent::FileSystem(
@@ -1303,12 +1491,37 @@ impl BlockchainService {
                                 bucket_id,
                             },
                         ) => {
-                            if self.provider_ids.contains(&msp_id) {
-                                self.emit(FinalisedMspStoppedStoringBucket {
-                                    msp_id,
-                                    owner,
-                                    bucket_id,
-                                })
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                if msp_id == *managed_msp_id {
+                                    self.emit(FinalisedMspStoppedStoringBucket {
+                                        msp_id,
+                                        owner,
+                                        bucket_id,
+                                    })
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(FinalisedBspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
+                                }
                             }
                         }
                         // Ignore all other events.

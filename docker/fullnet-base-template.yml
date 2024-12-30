@@ -53,6 +53,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
+        "--msp-charging-period=12",
       ]
   sh-msp-2:
     image: storage-hub:local
@@ -62,7 +63,7 @@ services:
       - "9778:9944"
       - "30556:30350"
     volumes:
-      - ./dev-keystores/msp:/keystore:rw
+      - ./dev-keystores/msp-two:/keystore:rw
     command:
       [
         "--dev",
@@ -81,6 +82,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
+        "--msp-charging-period=12",
       ]
   sh-user:
     image: storage-hub:local

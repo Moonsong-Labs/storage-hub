@@ -2141,9 +2141,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofAccepted: AugmentedEvent<
         ApiType,
-        [provider: H256, proof: PalletProofsDealerProof, lastTickProven: u32],
+        [providerId: H256, proof: PalletProofsDealerProof, lastTickProven: u32],
         {
-          provider: H256;
+          providerId: H256;
           proof: PalletProofsDealerProof;
           lastTickProven: u32;
         }
@@ -2175,6 +2175,16 @@ declare module "@polkadot/api-base/types/events" {
         {
           providerId: H256;
           topUpMetadata: PalletStorageProvidersTopUpMetadata;
+        }
+      >;
+      /**
+       * Event emitted when a BSP has been deleted.
+       **/
+      BspDeleted: AugmentedEvent<
+        ApiType,
+        [providerId: H256],
+        {
+          providerId: H256;
         }
       >;
       /**
@@ -2252,6 +2262,16 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when an MSP has been deleted.
+       **/
+      MspDeleted: AugmentedEvent<
+        ApiType,
+        [providerId: H256],
+        {
+          providerId: H256;
+        }
+      >;
+      /**
        * Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
        * that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.
        **/
@@ -2317,6 +2337,19 @@ declare module "@polkadot/api-base/types/events" {
         {
           providerId: H256;
           removedMultiaddress: Bytes;
+        }
+      >;
+      /**
+       * Event emitted when a provider has been marked as insolvent.
+       *
+       * This happens when the provider hasn't topped up their deposit within the grace period after being slashed
+       * and they have a capacity deficit (i.e. their capacity based on their stake is below their used capacity by the files it stores).
+       **/
+      ProviderInsolvent: AugmentedEvent<
+        ApiType,
+        [providerId: H256],
+        {
+          providerId: H256;
         }
       >;
       /**
