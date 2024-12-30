@@ -20,504 +20,504 @@
 name: Storage Hub Parachain CI/CD
 
 on:
-    pull_request:
-    push:
-        branches: [main]
-    workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-    setup:
-        runs-on: ubuntu-latest
-        outputs:
-            node_changed: ${{ steps.node_check.outputs.changed }}
-            image-tag: ${{ steps.set-tag.outputs.tag }}
-        env:
-            SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-            - name: Check if Parachain Node needs rebuild
-              id: node_check
-              run: |
-                  BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
-                  HEAD_SHA="${{ github.sha }}"
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      node_changed: ${{ steps.node_check.outputs.changed }}
+      image-tag: ${{ steps.set-tag.outputs.tag }}
+    env:
+      SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check if Parachain Node needs rebuild
+        id: node_check
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
 
-                  if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(client|node|pallets|runtime)/|^Cargo\.toml$'; then
-                    echo "changed=true" >> $GITHUB_OUTPUT
-                  else
-                    echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
-                    echo "changed=false" >> $GITHUB_OUTPUT
-                  fi
-            - name: Set tag name
-              id: set-tag
-              run: |
-                  if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
-                    echo "tag=latest" >> $GITHUB_OUTPUT
-                  else
-                    echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
-                  fi
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(client|node|pallets|runtime)/|^Cargo\.toml$'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Set tag name
+        id: set-tag
+        run: |
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
+          fi
 
-    build_image:
-        needs: [setup]
+  build_image:
+    needs: [setup]
+    if: needs.setup.outputs.node_changed == 'true'
+    name: "Build node image"
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: false
+      - uses: rui314/setup-mold@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
+      # Install libpq-dev
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+      - name: Build All
+        # TODO: Make this only build the parachain node project
+        run: cargo build --release
+      - name: Check Built By Mold
+        run: readelf -p .comment target/release/storage-hub-node
+      - name: Prepare artefacts
+        run: |
+          mkdir -p runtimes
+          mkdir -p build
+          cp target/release/storage-hub-node build/
+          cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node
+          path: build/storage-hub-node
+          if-no-files-found: error
+      - name: Prepare
+        id: prep
+        run: |
+          DOCKER_IMAGE=moonsonglabs/storage-hub
+          TAGS="${DOCKER_IMAGE}:${{ needs.setup.outputs.image-tag }}"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/storage-hub-node.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.prep.outputs.tags }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.description=${{ github.event.repository.description }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
+
+  # zombie_test_k8:
+  #   needs: [build_image, setup]
+  #   if: always()
+  #   name: "Test Simple Network"
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
+  #   defaults:
+  #     run:
+  #       working-directory: test
+  #   steps:
+  #     - uses: actions/checkout@v4
+  # - uses: ./.github/workflow-templates/setup-pnpm
+  #     - name: Pull Docker image
+  #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
+  #     - name: Start local k8 cluster
+  #       uses: medyagh/setup-minikube@latest
+  #       with:
+  #         cache: true
+  #         driver: docker
+  #         cpus: 4
+  #         memory: 12000
+  #     - name: Run Zombienet Test!
+  #       run: |
+  #         pnpm  install
+  #         pnpm  zombienet test configs/simple.zndsl
+
+  network_test:
+    needs: [build_image, setup]
+    if: always()
+    name: "Run Para & Relay Network Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
-        name: "Build node image"
-        runs-on: ubuntu-latest
-        env:
-            SCCACHE_GHA_ENABLED: "true"
-            RUSTC_WRAPPER: "sccache"
-            CARGO_INCREMENTAL: "0"
-        steps:
-            - uses: actions/checkout@v4
-            - name: Run sccache-cache
-              uses: mozilla-actions/sccache-action@v0.0.4
-            - uses: actions-rust-lang/setup-rust-toolchain@v1.8
-              with:
-                  cache: false
-            - uses: rui314/setup-mold@v1
-            - uses: ./.github/workflow-templates/setup-pnpm
-            # Install libpq-dev
-            - name: Install libpq-dev
-              run: sudo apt-get update && sudo apt-get install -y libpq-dev
-            - name: Install Protoc
-              uses: arduino/setup-protoc@v3
-            - name: Build All
-              # TODO: Make this only build the parachain node project
-              run: cargo build --release
-            - name: Check Built By Mold
-              run: readelf -p .comment target/release/storage-hub-node
-            - name: Prepare artefacts
-              run: |
-                  mkdir -p runtimes
-                  mkdir -p build
-                  cp target/release/storage-hub-node build/
-                  cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
-            - uses: actions/upload-artifact@v4
-              with:
-                  name: node
-                  path: build/storage-hub-node
-                  if-no-files-found: error
-            - name: Prepare
-              id: prep
-              run: |
-                  DOCKER_IMAGE=moonsonglabs/storage-hub
-                  TAGS="${DOCKER_IMAGE}:${{ needs.setup.outputs.image-tag }}"
-                  echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-                  echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
-            - name: Set up QEMU
-              uses: docker/setup-qemu-action@v3
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
-            - name: Cache Docker layers
-              uses: actions/cache@v4
-              with:
-                  path: /tmp/.buildx-cache
-                  key: ${{ runner.os }}-buildx-${{ github.sha }}
-                  restore-keys: |
-                      ${{ runner.os }}-buildx-
-            - name: Login to Docker Hub
-              uses: docker/login-action@v3
-              with:
-                  username: ${{ secrets.DOCKER_USERNAME }}
-                  password: ${{ secrets.DOCKER_TOKEN }}
-            - name: Build and push
-              uses: docker/build-push-action@v5
-              with:
-                  context: .
-                  file: ./docker/storage-hub-node.Dockerfile
-                  push: true
-                  platforms: linux/amd64
-                  tags: ${{ steps.prep.outputs.tags }}
-                  cache-from: type=local,src=/tmp/.buildx-cache
-                  cache-to: type=local,dest=/tmp/.buildx-cache-new
-                  labels: |
-                      org.opencontainers.image.title=${{ github.event.repository.name }}
-                      org.opencontainers.image.description=${{ github.event.repository.description }}
-                      org.opencontainers.image.url=${{ github.event.repository.html_url }}
-                      org.opencontainers.image.source=${{ github.event.repository.clone_url }}
-                      org.opencontainers.image.revision=${{ github.sha }}
-                      org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Run Zombienet network
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm  install
+          pnpm  zombie:run:full:native &
 
-    # zombie_test_k8:
-    #   needs: [build_image, setup]
-    #   if: always()
-    #   name: "Test Simple Network"
-    #   runs-on: ubuntu-latest
-    #   env:
-    #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
-    #   defaults:
-    #     run:
-    #       working-directory: test
-    #   steps:
-    #     - uses: actions/checkout@v4
-    # - uses: ./.github/workflow-templates/setup-pnpm
-    #     - name: Pull Docker image
-    #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
-    #     - name: Start local k8 cluster
-    #       uses: medyagh/setup-minikube@latest
-    #       with:
-    #         cache: true
-    #         driver: docker
-    #         cpus: 4
-    #         memory: 12000
-    #     - name: Run Zombienet Test!
-    #       run: |
-    #         pnpm  install
-    #         pnpm  zombienet test configs/simple.zndsl
+          sleep 60
+      - name: Setup
+        run: |
+          cd test
+          pnpm zombie:setup:native
+      - name: Run Zombienet Test!
+        run: |
+          cd test
+          pnpm test:full
 
-    network_test:
-        needs: [build_image, setup]
-        if: always()
-        name: "Run Para & Relay Network Test"
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        steps:
-            - uses: actions/checkout@v4
-            - uses: ./.github/workflow-templates/setup-pnpm
-            - run: mkdir -p target/release/
-            - name: Get Node Binary if changed
-              if: needs.setup.outputs.node_changed == 'true'
-              uses: actions/download-artifact@v4
-              with:
-                  name: node
-                  path: target/release/
-            - name: Get Latest Node Binary if not changed
-              if: needs.setup.outputs.node_changed == 'false'
-              run: |
-                  docker pull moonsonglabs/storage-hub:latest
-                  docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-                  docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-                  docker rm temp_storage_hub
-            - name: Run Zombienet network
-              run: |
-                  chmod +x target/release/storage-hub-node
-                  chmod -R 777 docker/dev-keystores
-                  cd test
-                  pnpm  install
-                  pnpm  zombie:run:full:native &
+  zombie_test:
+    needs: [build_image, setup]
+    if: always()
+    name: "Run Zombienet Tests"
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Run Zombienet setup
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm  install
+          pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
+      - name: Run Zombienet Test!
+        run: |
+          cd test
+          pnpm  zombienet test --provider native configs/simpleNative.zndsl
 
-                  sleep 60
-            - name: Setup
-              run: |
-                  cd test
-                  pnpm zombie:setup:native
-            - name: Run Zombienet Test!
-              run: |
-                  cd test
-                  pnpm test:full
+  dev_node_test:
+    needs: [build_image, setup]
+    timeout-minutes: 30
+    if: always()
+    name: "Run Dev Node Tests"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - name: Run Dev Node Tests
+        run: |
+          cd test
+          node --import tsx                         \
+               --test                               \
+               --test-reporter=@reporters/github    \
+               --test-reporter-destination=stdout   \
+               --test-reporter=spec                 \
+               --test-reporter-destination=stdout   \
+               --test-concurrency=1                 \
+               --test-shard=${{ matrix.shard }}/2   \
+               ./suites/solo-node/**/**.test.ts
 
-    zombie_test:
-        needs: [build_image, setup]
-        if: always()
-        name: "Run Zombienet Tests"
-        timeout-minutes: 30
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: ./.github/workflow-templates/setup-pnpm
-            - run: mkdir -p target/release/
-            - name: Get Node Binary if changed
-              if: needs.setup.outputs.node_changed == 'true'
-              uses: actions/download-artifact@v4
-              with:
-                  name: node
-                  path: target/release/
-            - name: Get Latest Node Binary if not changed
-              if: needs.setup.outputs.node_changed == 'false'
-              run: |
-                  docker pull moonsonglabs/storage-hub:latest
-                  docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-                  docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-                  docker rm temp_storage_hub
-            - name: Run Zombienet setup
-              run: |
-                  chmod +x target/release/storage-hub-node
-                  chmod -R 777 docker/dev-keystores
-                  cd test
-                  pnpm  install
-                  pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
-            - name: Run Zombienet Test!
-              run: |
-                  cd test
-                  pnpm  zombienet test --provider native configs/simpleNative.zndsl
+  full_net:
+    needs: [build_image, setup]
+    if: always()
+    name: "Run FullNet Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: diesel_cli
+      - name: Run FullNet Tests
+        id: run_tests
+        run: |
+          cd test
+          pnpm i
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
+              --test-shard=${{ matrix.shard }}/4   \
+              ./suites/integration/msp/**.test.ts
 
-    dev_node_test:
-        needs: [build_image, setup]
-        timeout-minutes: 30
-        if: always()
-        name: "Run Dev Node Tests"
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                shard: [1, 2]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: ./.github/workflow-templates/setup-pnpm
-            - run: mkdir -p target/release/
-            - name: Get Node Binary if changed
-              if: needs.setup.outputs.node_changed == 'true'
-              uses: actions/download-artifact@v4
-              with:
-                  name: node
-                  path: target/release/
-            - name: Get Latest Node Binary if not changed
-              if: needs.setup.outputs.node_changed == 'false'
-              run: |
-                  docker pull moonsonglabs/storage-hub:latest
-                  docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-                  docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-                  docker rm temp_storage_hub
-            - name: Build Local Docker Image
-              run: |
-                  chmod +x target/release/storage-hub-node
-                  chmod -R 777 docker/dev-keystores
-                  cd test
-                  pnpm install
-                  pnpm docker:build
-            - name: Run Typegen
-              run: |
-                  cd test
-                  pnpm typegen
-            - name: Run Dev Node Tests
-              run: |
-                  cd test
-                  node --import tsx                         \
-                       --test                               \
-                       --test-reporter=@reporters/github    \
-                       --test-reporter-destination=stdout   \
-                       --test-reporter=spec                 \
-                       --test-reporter-destination=stdout   \
-                       --test-concurrency=1                 \
-                       --test-shard=${{ matrix.shard }}/2   \
-                       ./suites/solo-node/**/**.test.ts
+      - name: Collect Docker Logs on Failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
 
-    full_net:
-        needs: [build_image, setup]
-        if: always()
-        name: "Run FullNet Tests"
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        strategy:
-            fail-fast: false
-            matrix:
-                shard: [1,2,3,4]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: ./.github/workflow-templates/setup-pnpm
-              with:
-                  node_version: 23
-            - run: mkdir -p target/release/
-            - name: Get Node Binary if changed
-              if: needs.setup.outputs.node_changed == 'true'
-              uses: actions/download-artifact@v4
-              with:
-                  name: node
-                  path: target/release/
-            - name: Get Latest Node Binary if not changed
-              if: needs.setup.outputs.node_changed == 'false'
-              run: |
-                  docker pull moonsonglabs/storage-hub:latest
-                  docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-                  docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-                  docker rm temp_storage_hub
-            - name: Build Local Docker Image
-              run: |
-                  chmod +x target/release/storage-hub-node
-                  chmod -R 777 docker/dev-keystores
-                  cd test
-                  pnpm install
-                  pnpm docker:build
-            - name: Run Typegen
-              run: |
-                  cd test
-                  pnpm typegen
-            - uses: taiki-e/install-action@v2
-              with:
-                  tool: diesel_cli
-            - name: Run FullNet Tests
-              id: run_tests
-              run: |
-                  cd test
-                  pnpm i
-                  node --import tsx                        \
-                      --test                               \
-                      --test-reporter=@reporters/github    \
-                      --test-reporter-destination=stdout   \
-                      --test-reporter=spec                 \
-                      --test-reporter-destination=stdout   \
-                      --test-concurrency=1                 \
-                      --test-shard=${{ matrix.shard }}/4   \
-                      ./suites/integration/msp/**.test.ts
+          mkdir -p test-logs
 
-            - name: Collect Docker Logs on Failure
-              if: failure() && steps.run_tests.outcome == 'failure'
-              run: |
-                  echo "::group::Docker Container Status"
-                  docker ps -a
-                  echo "::endgroup::"
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
 
-                  mkdir -p test-logs
+          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
 
-                  for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
-                    echo "Collecting logs from $container"
-                    docker logs $container > "test-logs/${container}.log" 2>&1
-                  done
+          if [ ! -z "$SP_LOGS_DIR" ]; then
+            echo "Found logs directory: $BSP_LOGS_DIR"
+            cp -r $SP_LOGS_DIR/* test-logs/ || true
+          else
+            echo "No sp-logs directory found in /tmp"
+          fi
 
-                  SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+          echo "Collected log files:"
+          ls -la test-logs/
 
-                  if [ ! -z "$SP_LOGS_DIR" ]; then
-                    echo "Found logs directory: $BSP_LOGS_DIR"
-                    cp -r $SP_LOGS_DIR/* test-logs/ || true
-                  else
-                    echo "No sp-logs directory found in /tmp"
-                  fi
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp-test-logs-shard-${{ matrix.shard }}
+          path: test-logs/
+          retention-days: 5
+          if-no-files-found: warn
 
-                  echo "Collected log files:"
-                  ls -la test-logs/
+  bsp_net:
+    needs: [build_image, setup]
+    if: always()
+    name: "Run BSPNet Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - name: Run BSPNet Tests
+        id: run_tests
+        run: |
+          cd test
+          pnpm i
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
+              --test-shard=${{ matrix.shard }}/5   \
+              ./suites/integration/bsp/**.test.ts
 
-            - name: Upload logs as artifact
-              if: failure() && steps.run_tests.outcome == 'failure'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: sp-test-logs-shard-${{ matrix.shard }}
-                  path: test-logs/
-                  retention-days: 5
-                  if-no-files-found: warn
+      - name: Collect Docker Logs on Failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
 
-    bsp_net:
-        needs: [build_image, setup]
-        if: always()
-        name: "Run BSPNet Tests"
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        strategy:
-            fail-fast: false
-            matrix:
-                shard: [1, 2, 3, 4]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: ./.github/workflow-templates/setup-pnpm
-              with:
-                  node_version: 23
-            - run: mkdir -p target/release/
-            - name: Get Node Binary if changed
-              if: needs.setup.outputs.node_changed == 'true'
-              uses: actions/download-artifact@v4
-              with:
-                  name: node
-                  path: target/release/
-            - name: Get Latest Node Binary if not changed
-              if: needs.setup.outputs.node_changed == 'false'
-              run: |
-                  docker pull moonsonglabs/storage-hub:latest
-                  docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-                  docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-                  docker rm temp_storage_hub
-            - name: Build Local Docker Image
-              run: |
-                  chmod +x target/release/storage-hub-node
-                  chmod -R 777 docker/dev-keystores
-                  cd test
-                  pnpm install
-                  pnpm docker:build
-            - name: Run Typegen
-              run: |
-                  cd test
-                  pnpm typegen
-            - name: Run BSPNet Tests
-              id: run_tests
-              run: |
-                  cd test
-                  pnpm i
-                  node --import tsx                        \
-                      --test                               \
-                      --test-reporter=@reporters/github    \
-                      --test-reporter-destination=stdout   \
-                      --test-reporter=spec                 \
-                      --test-reporter-destination=stdout   \
-                      --test-concurrency=1                 \
-                      --test-shard=${{ matrix.shard }}/4   \
-                      ./suites/integration/bsp/**.test.ts
+          mkdir -p test-logs
 
-            - name: Collect Docker Logs on Failure
-              if: failure() && steps.run_tests.outcome == 'failure'
-              run: |
-                  echo "::group::Docker Container Status"
-                  docker ps -a
-                  echo "::endgroup::"
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
 
-                  mkdir -p test-logs
+          BSP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
 
-                  for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
-                    echo "Collecting logs from $container"
-                    docker logs $container > "test-logs/${container}.log" 2>&1
-                  done
+          if [ ! -z "$BSP_LOGS_DIR" ]; then
+            echo "Found logs directory: $BSP_LOGS_DIR"
+            cp -r $BSP_LOGS_DIR/* test-logs/ || true
+          else
+            echo "No bsp-logs directory found in /tmp"
+          fi
 
-                  BSP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+          echo "Collected log files:"
+          ls -la test-logs/
 
-                  if [ ! -z "$BSP_LOGS_DIR" ]; then
-                    echo "Found logs directory: $BSP_LOGS_DIR"
-                    cp -r $BSP_LOGS_DIR/* test-logs/ || true
-                  else
-                    echo "No bsp-logs directory found in /tmp"
-                  fi
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bsp-test-logs-shard-${{ matrix.shard }}
+          path: test-logs/
+          retention-days: 5
+          if-no-files-found: warn
 
-                  echo "Collected log files:"
-                  ls -la test-logs/
-
-            - name: Upload logs as artifact
-              if: failure() && steps.run_tests.outcome == 'failure'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: bsp-test-logs-shard-${{ matrix.shard }}
-                  path: test-logs/
-                  retention-days: 5
-                  if-no-files-found: warn
-
-    typegen_check:
-        needs: [build_image, setup]
-        if: always()
-        name: "Check Rust/TS bindings are up to date"
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: ./.github/workflow-templates/setup-pnpm
-              with:
-                  node_version: 22
-            - run: mkdir -p target/release/
-            - name: Get Node Binary if changed
-              if: needs.setup.outputs.node_changed == 'true'
-              uses: actions/download-artifact@v4
-              with:
-                  name: node
-                  path: target/release/
-            - name: Get Latest Node Binary if not changed
-              if: needs.setup.outputs.node_changed == 'false'
-              run: |
-                  docker pull moonsonglabs/storage-hub:latest
-                  docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-                  docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-                  docker rm temp_storage_hub
-            - name: Build Local Docker Image
-              run: |
-                  chmod +x target/release/storage-hub-node
-                  chmod -R 777 docker/dev-keystores
-                  cd test
-                  pnpm install
-                  pnpm docker:build
-            - name: Run Typegen
-              run: |
-                  cd test
-                  pnpm typegen
-            - name: Check for changes
-              run: |
-                  cd api-augment
-                  if [ -n "$(git status --porcelain .)" ]; then
-                    echo "Typegen produced changes. Please run 'pnpm typegen' locally and commit the changes."
-                    exit 1
-                  else
-                    echo "No changes"
-                    exit 0
-                  fi
+  typegen_check:
+    needs: [build_image, setup]
+    if: always()
+    name: "Check Rust/TS bindings are up to date"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 22
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - name: Check for changes
+        run: |
+          cd api-augment
+          if [ -n "$(git status --porcelain .)" ]; then
+            echo "Typegen produced changes. Please run 'pnpm typegen' locally and commit the changes."
+            exit 1
+          else
+            echo "No changes"
+            exit 0
+          fi
