@@ -65,6 +65,9 @@ impl<T: crate::Config> Debug for KeyProof<T> {
 /// ticks is equal to the Provider's challenge period, but if the Provider's period
 /// is changed, this change only affects the next cycle. In other words, for one
 /// cycle, `next_tick_to_submit_proof_for - last_tick_proven ≠ provider_challenge_period`.
+///
+/// Similarly, if the Provider is slashed, its `last_tick_proven` won't be updated, while
+/// its `next_tick_to_submit_proof_for` will be accordingly updated.
 #[derive(Debug, Encode, Decode, TypeInfo, PartialEq, Eq, Clone, MaxEncodedLen)]
 #[scale_info(skip_type_params(T))]
 pub struct ProofSubmissionRecord<T: crate::Config> {
