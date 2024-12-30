@@ -23,6 +23,8 @@ export type AssertExtrinsicOptions = {
   ignoreParamCheck?: boolean;
   /** If provided, asserts that the number of extrinsics found matches this value. */
   assertLength?: number;
+  /** If false, the number of extrinsics can be equal or greater than the number of expected extrinsics. */
+  exactLength?: boolean;
   /** If provided, will not throw until this timeout is reached. */
   timeout?: number;
   /** Provide more logs */
@@ -97,10 +99,17 @@ export const assertExtrinsicPresent = async (
 
       if (matches.length > 0) {
         if (options?.assertLength !== undefined) {
-          assert(
-            matches.length === options.assertLength,
-            `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
-          );
+          if (options?.exactLength === false) {
+            assert(
+              matches.length >= options.assertLength,
+              `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
+            );
+          } else {
+            assert(
+              matches.length === options.assertLength,
+              `Expected ${options.assertLength} extrinsics matching ${options?.module}.${options?.method}, but found ${matches.length}`
+            );
+          }
         }
 
         if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {

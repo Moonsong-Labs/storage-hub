@@ -19,7 +19,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     strictQuantity = false,
     shouldSeal = false,
     expectedEvent,
-    timeout = 1000,
+    timeout = 10000,
     verbose = false
   } = options;
   // Handle the case where the expected amount of extrinsics is 0
@@ -38,7 +38,9 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
       module,
       method,
       checkTxPool: true,
-      timeout
+      timeout,
+      assertLength: checkQuantity,
+      exactLength: strictQuantity
     });
     if (checkQuantity && strictQuantity) {
       assert(
@@ -162,7 +164,8 @@ export const waitForBspStored = async (
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true,
-        timeout: 300
+        timeout: 10000,
+        assertLength: checkQuantity
       });
       if (checkQuantity) {
         assert(

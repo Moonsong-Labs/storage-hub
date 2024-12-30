@@ -327,6 +327,8 @@ async function generateBenchmarkProofs() {
 
   const rootStr = `hex::decode("${root}").expect("Root should be a decodable hex string")`;
 
+  const userAccountStr = `<AccountId32 as Ss58Codec>::from_ss58check("${ShConsts.NODE_INFOS.user.AddressId}").expect("User account should be a decodable string")`;
+
   let proofsStr = "";
   for (const [index, proof] of proofsCases.entries()) {
     const proofVec = `hex::decode("${proof}").expect("Proof should be a decodable hex string")`;
@@ -351,6 +353,7 @@ async function generateBenchmarkProofs() {
     .replace("{{seed}}", seedStr)
     .replace("{{provider_id}}", providerIdStr)
     .replace("{{root}}", rootStr)
+    .replace("{{user_account}}", userAccountStr)
     .replace("{{proofs}}", proofsStr)
     .replace("{{challenges}}", challengesStr);
 

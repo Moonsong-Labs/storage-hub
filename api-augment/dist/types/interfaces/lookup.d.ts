@@ -3475,6 +3475,7 @@ declare const _default: {
       pending_file_deletion_request_submit_proof: {
         user: string;
         fileKey: string;
+        fileSize: string;
         bucketId: string;
         forestProof: string;
       };
@@ -4217,6 +4218,14 @@ declare const _default: {
     user: string;
     fileKey: string;
     bucketId: string;
+    fileSize: string;
+  };
+  /**
+   * Lookup463: pallet_file_system::types::PendingStopStoringRequest<T>
+   **/
+  PalletFileSystemPendingStopStoringRequest: {
+    tickWhenRequested: string;
+    fileOwner: string;
     fileSize: string;
   };
   /**
