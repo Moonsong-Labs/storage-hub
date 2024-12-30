@@ -566,6 +566,9 @@ mod delete_bucket_tests {
                     )
                 );
 
+                // Check that the associated collection was destroyed.
+                assert!(pallet_nfts::Collection::<Test>::get(&collection_id).is_none());
+
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::BucketDeleted {

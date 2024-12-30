@@ -4,7 +4,7 @@ use frame_support::{
     pallet_prelude::DispatchResult,
     traits::{
         fungible::{InspectHold, Mutate, MutateHold},
-        nonfungibles_v2::Create,
+        nonfungibles_v2::{Create, Destroy},
         tokens::{Precision, Preservation},
         Get,
     },
@@ -386,58 +386,52 @@ where
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
-        // Check if the sender is the MSP.
+        // Check if the sender is a MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
         );
 
-        // Check if the move bucket request exists for MSP and bucket.
+        // Check if the move bucket request exists for the MSP and bucket.
         let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
         ensure!(
             move_bucket_requester.is_some(),
             Error::<T>::MoveBucketRequestNotFound
         );
 
-        if response == BucketMoveRequestResponse::Rejected {
-            <PendingBucketsToMove<T>>::remove(&bucket_id);
-            <PendingMoveBucketRequests<T>>::remove(&msp_id, bucket_id);
+        if response == BucketMoveRequestResponse::Accepted {
+            let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
-            return Ok(msp_id);
-        }
+            let previous_msp_id =
+                <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
 
-        let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+            // Update the previous MSP's capacity used.
+            if let Some(msp_id) = previous_msp_id {
+                // Decrease the used capacity of the previous MSP.
+                <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                    &msp_id,
+                    bucket_size,
+                )?;
+            }
 
-        let previous_msp_id = <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
+            // Check if MSP has enough available capacity to store the bucket.
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
+                    >= bucket_size,
+                Error::<T>::InsufficientAvailableCapacity
+            );
 
-        // Update the previous MSP's capacity used.
-        if let Some(msp_id) = previous_msp_id {
-            // Decrease the used capacity of the previous MSP.
-            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            // Change the MSP that stores the bucket.
+            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
+
+            // Increase the used capacity of the new MSP.
+            <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
                 &msp_id,
                 bucket_size,
             )?;
         }
 
-        // Check if MSP has enough available capacity to store the bucket.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
-                >= bucket_size,
-            Error::<T>::InsufficientAvailableCapacity
-        );
-
-        // Change the MSP that stores the bucket.
-        <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
-
-        // Increase the used capacity of the new MSP.
-        <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
-            &msp_id,
-            bucket_size,
-        )?;
-
         <PendingBucketsToMove<T>>::remove(&bucket_id);
-
-        Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
 
         Ok(msp_id)
     }
@@ -560,6 +554,16 @@ where
 
         // Delete the bucket.
         <T::Providers as MutateBucketsInterface>::remove_root_bucket(bucket_id)?;
+
+        // Delete the collection associated with the bucket if it existed.
+        if let Some(collection_id) = maybe_collection_id.clone() {
+            let destroy_witness = expect_or_err!(
+                T::Nfts::get_destroy_witness(&collection_id),
+                "Failed to get destroy witness for collection, when it was already checked to exist",
+                Error::<T>::CollectionNotFound
+            );
+            T::Nfts::destroy(collection_id, destroy_witness, Some(sender))?;
+        }
 
         // Return the collection ID associated with the bucket, if any.
         Ok(maybe_collection_id)
