@@ -868,7 +868,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::request_move_bucket())]
         pub fn request_move_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -888,7 +888,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::msp_respond_move_bucket_request())]
         pub fn msp_respond_move_bucket_request(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -912,7 +912,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_bucket_privacy())]
         pub fn update_bucket_privacy(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -935,7 +935,7 @@ pub mod pallet {
 
         /// Create and associate a collection with a bucket.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_and_associate_collection_with_bucket())]
         pub fn create_and_associate_collection_with_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -962,7 +962,7 @@ pub mod pallet {
         ///
         /// To check if a bucket is empty, we compare its current root with the one of an empty trie.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_bucket())]
         pub fn delete_bucket(origin: OriginFor<T>, bucket_id: BucketIdFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -1084,7 +1084,7 @@ pub mod pallet {
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
         #[pallet::call_index(10)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_volunteer())]
         pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
