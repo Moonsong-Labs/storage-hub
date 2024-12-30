@@ -4498,6 +4498,7 @@ export default {
       "BucketNotFound",
       "BucketNotEmpty",
       "NotBucketOwner",
+      "CollectionNotFound",
       "ProviderRootNotFound",
       "ExpectedNonInclusionProof",
       "ExpectedInclusionProof",
