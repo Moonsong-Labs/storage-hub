@@ -134,6 +134,7 @@ import type {
   PalletProofsDealerEvent,
   PalletProofsDealerKeyProof,
   PalletProofsDealerProof,
+  PalletProofsDealerProofSubmissionRecord,
   PalletRandomnessCall,
   PalletRandomnessEvent,
   PalletSessionCall,
@@ -427,6 +428,7 @@ declare module "@polkadot/types/types/registry" {
     PalletProofsDealerEvent: PalletProofsDealerEvent;
     PalletProofsDealerKeyProof: PalletProofsDealerKeyProof;
     PalletProofsDealerProof: PalletProofsDealerProof;
+    PalletProofsDealerProofSubmissionRecord: PalletProofsDealerProofSubmissionRecord;
     PalletRandomnessCall: PalletRandomnessCall;
     PalletRandomnessEvent: PalletRandomnessEvent;
     PalletSessionCall: PalletSessionCall;

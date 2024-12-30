@@ -803,9 +803,15 @@ pub trait ProofsDealerInterface {
     /// Initialise a Provider's challenge cycle.
     ///
     /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
-    /// deadline for submitting a proof to the current tick + the Provider's period (based on its
-    /// stake) + the challenges tick tolerance.
-    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
+    /// deadline for submitting a proof:
+    /// ```ignore
+    /// last_tick_provider_submitted_proof_for = current_tick
+    ///
+    /// deadline = current_tick + provider_challenge_period + challenges_tolerance.
+    /// ```
+    ///
+    /// The Provider's challenge period is calculated based on its stake.
+    fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult;
 
     /// Get the current tick.
     ///

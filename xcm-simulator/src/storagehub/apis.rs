@@ -358,8 +358,12 @@ impl_runtime_apis! {
     }
 
     impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProofsDealerProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
-        fn get_last_tick_provider_submitted_proof(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
+        fn get_last_tick_provider_submitted_proof(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetProofSubmissionRecordError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
+        }
+
+        fn get_next_tick_to_submit_proof_for(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetProofSubmissionRecordError> {
+            ProofsDealer::get_next_tick_to_submit_proof_for(provider_id)
         }
 
         fn get_last_checkpoint_challenge_tick() -> BlockNumber {
