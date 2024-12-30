@@ -394,13 +394,14 @@ describeBspNet(
         });
       }
 
-      // There should be at least one pending submit proof transaction.
+      // There should be three pending submit proof transactions, one per active BSP.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
-        checkTxPool: true
+        checkTxPool: true,
+        assertLength: 3,
+        exactLength: true
       });
-      assert(submitProofsPending.length > 0);
 
       // Seal block and check that the transaction was successful.
       await userApi.block.seal();
