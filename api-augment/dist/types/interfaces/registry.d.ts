@@ -72,6 +72,7 @@ import type {
   PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
+  PalletFileSystemPendingStopStoringRequest,
   PalletFileSystemRejectedStorageRequest,
   PalletFileSystemRejectedStorageRequestReason,
   PalletFileSystemStorageRequestBspsMetadata,
@@ -127,6 +128,7 @@ import type {
   PalletProofsDealerEvent,
   PalletProofsDealerKeyProof,
   PalletProofsDealerProof,
+  PalletProofsDealerProofSubmissionRecord,
   PalletRandomnessCall,
   PalletRandomnessEvent,
   PalletSessionCall,
@@ -363,6 +365,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
     PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
+    PalletFileSystemPendingStopStoringRequest: PalletFileSystemPendingStopStoringRequest;
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
     PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
@@ -418,6 +421,7 @@ declare module "@polkadot/types/types/registry" {
     PalletProofsDealerEvent: PalletProofsDealerEvent;
     PalletProofsDealerKeyProof: PalletProofsDealerKeyProof;
     PalletProofsDealerProof: PalletProofsDealerProof;
+    PalletProofsDealerProofSubmissionRecord: PalletProofsDealerProofSubmissionRecord;
     PalletRandomnessCall: PalletRandomnessCall;
     PalletRandomnessEvent: PalletRandomnessEvent;
     PalletSessionCall: PalletSessionCall;

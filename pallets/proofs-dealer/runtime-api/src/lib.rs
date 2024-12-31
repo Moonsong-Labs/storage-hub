@@ -15,7 +15,8 @@ sp_api::decl_runtime_apis! {
         RandomnessOutput: codec::Codec,
         TrieRemoveMutation: codec::Codec,
     {
-        fn get_last_tick_provider_submitted_proof(provider_id: &ProviderId) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
+        fn get_last_tick_provider_submitted_proof(provider_id: &ProviderId) -> Result<BlockNumber, GetProofSubmissionRecordError>;
+        fn get_next_tick_to_submit_proof_for(provider_id: &ProviderId) -> Result<BlockNumber, GetProofSubmissionRecordError>;
         fn get_last_checkpoint_challenge_tick() -> BlockNumber;
         fn get_checkpoint_challenges(
             tick: BlockNumber
@@ -30,9 +31,9 @@ sp_api::decl_runtime_apis! {
     }
 }
 
-/// Error type for the `get_last_tick_provider_submitted_proof` runtime API call.
+/// Error type for the `get_last_tick_provider_submitted_proof` and `get_next_tick_to_submit_proof_for` runtime API calls.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum GetLastTickProviderSubmittedProofError {
+pub enum GetProofSubmissionRecordError {
     ProviderNotRegistered,
     ProviderNeverSubmittedProof,
     InternalApiError,

@@ -1265,11 +1265,12 @@ import type {
   GetChallengeSeedError,
   GetCheckpointChallengesError,
   GetFileFromFileStorageResult,
-  GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
+  GetProofSubmissionRecordError,
   GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
   IsStorageRequestOpenToVolunteersError,
+  LoadFileInStorageResult,
   MainStorageProviderId,
   MerklePatriciaRoot,
   Multiaddresses,
@@ -1762,8 +1763,8 @@ declare module "@polkadot/types/types/registry" {
     GetChallengeSeedError: GetChallengeSeedError;
     GetCheckpointChallengesError: GetCheckpointChallengesError;
     GetFileFromFileStorageResult: GetFileFromFileStorageResult;
-    GetLastTickProviderSubmittedProofError: GetLastTickProviderSubmittedProofError;
     GetNextDeadlineTickError: GetNextDeadlineTickError;
+    GetProofSubmissionRecordError: GetProofSubmissionRecordError;
     GetUsersWithDebtOverThresholdError: GetUsersWithDebtOverThresholdError;
     GiltBid: GiltBid;
     GlobalValidationData: GlobalValidationData;
@@ -1883,6 +1884,7 @@ declare module "@polkadot/types/types/registry" {
     LegacyTransaction: LegacyTransaction;
     Limits: Limits;
     LimitsTo264: LimitsTo264;
+    LoadFileInStorageResult: LoadFileInStorageResult;
     LocalValidationData: LocalValidationData;
     LockIdentifier: LockIdentifier;
     LookupSource: LookupSource;

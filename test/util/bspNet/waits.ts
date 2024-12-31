@@ -7,52 +7,61 @@ import type { Address, H256 } from "@polkadot/types/interfaces";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
- * Generic function to wait for a transaction in the pool
+ * Generic function to wait for a transaction in the pool.
+ *
+ * If the expected amount of extrinsics is 0, this function will return immediately.
  */
 export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions) => {
   const {
     module,
     method,
     checkQuantity,
+    strictQuantity = false,
     shouldSeal = false,
     expectedEvent,
-    iterations = 100,
-    delay = 100,
-    timeout = 100
+    timeout = 10000,
+    verbose = false
   } = options;
+  // Handle the case where the expected amount of extrinsics is 0
+  if (checkQuantity === 0) {
+    // If the expected amount is 0, we can return immediately
+    verbose &&
+      console.log(
+        `Expected 0 extrinsics for ${module}.${method}. Skipping wait for extrinsic in txPool.`
+      );
+    return;
+  }
 
   // To allow node time to react on chain events
-  for (let i = 0; i < iterations; i++) {
-    try {
-      await sleep(delay);
-      const matches = await assertExtrinsicPresent(api, {
-        module,
-        method,
-        checkTxPool: true,
-        timeout
-      });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
-        );
-      }
+  try {
+    const matches = await assertExtrinsicPresent(api, {
+      module,
+      method,
+      checkTxPool: true,
+      timeout,
+      assertLength: checkQuantity,
+      exactLength: strictQuantity
+    });
+    if (checkQuantity && strictQuantity) {
+      assert(
+        matches.length === checkQuantity,
+        `Expected ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
+      );
+    } else if (checkQuantity && !strictQuantity) {
+      assert(
+        matches.length >= checkQuantity,
+        `Expected at least ${checkQuantity} extrinsics, but found ${matches.length} for ${module}.${method}`
+      );
+    }
 
-      if (shouldSeal) {
-        const { events } = await sealBlock(api);
-        if (expectedEvent) {
-          assertEventPresent(api, module, expectedEvent, events);
-        }
-      }
-
-      break;
-    } catch (e) {
-      if (i === iterations - 1) {
-        throw new Error(
-          `Failed to detect ${module}.${method} extrinsic in txPool after ${(i * delay) / 1000}s`
-        );
+    if (shouldSeal) {
+      const { events } = await sealBlock(api);
+      if (expectedEvent) {
+        assertEventPresent(api, module, expectedEvent, events);
       }
     }
+  } catch (e) {
+    throw new Error(`Failed to detect ${module}.${method} extrinsic in txPool. Error: ${e}`);
   }
 };
 
@@ -155,7 +164,8 @@ export const waitForBspStored = async (
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true,
-        timeout: 300
+        timeout: 10000,
+        assertLength: checkQuantity
       });
       if (checkQuantity) {
         assert(
@@ -193,9 +203,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
     module: "fileSystem",
     method: "bspConfirmStoring",
     checkQuantity,
-    iterations: 50,
-    delay: 200,
-    timeout: 300
+    timeout: 10000
   });
 };
 
@@ -212,7 +220,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
  *
  * @throws Will throw an error if the file is not complete in the file storage after a timeout.
  */
-export const waitForBspFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
+export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 10;
   const delay = 1000;
@@ -277,8 +285,8 @@ export const waitForBspToCatchUpToChainTip = async (
   syncedApi: ApiPromise,
   bspBehindApi: ApiPromise
 ) => {
-  // To allow time for BSP to catch up to the tip of the chain (10s)
-  const iterations = 100;
+  // To allow time for BSP to catch up to the tip of the chain (30s)
+  const iterations = 300;
   const delay = 100;
   for (let i = 0; i < iterations + 1; i++) {
     try {
@@ -331,9 +339,48 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
     module: "fileSystem",
     method: "mspRespondStorageRequestsMultipleBuckets",
     checkQuantity,
-    iterations: 41,
-    delay: 50
+    timeout: 10000
   });
+};
+
+/**
+ * Waits for a block where the given address has no pending extrinsics.
+ *
+ * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
+ * without risking it clashing with another transaction with the same nonce already in the pool. For example,
+ * BSP nodes are often sending transactions, so if you want to send a transaction using one of the BSP keys,
+ * you should wait for the BSP to have no pending extrinsics before sending the transaction.
+ *
+ * IMPORTANT: As long as the address keeps having pending extrinsics, this function will keep waiting and building
+ * blocks to include such transactions.
+ *
+ * @param api - The ApiPromise instance.
+ * @param address - The address of the account to wait for.
+ */
+export const waitForAvailabilityToSendTx = async (
+  api: ApiPromise,
+  address: string,
+  iterations = 100,
+  delay = 500
+) => {
+  let isTxFromAddressPresent = false;
+  let its = iterations;
+  do {
+    await sleep(delay);
+
+    // Check if the address has pending extrinsics
+    const result = await api.rpc.author.pendingExtrinsics();
+    isTxFromAddressPresent = result.some((tx) => tx.signer.toString() === address);
+    if (isTxFromAddressPresent) {
+      // Build a block with the transactions from the address
+      await sealBlock(api);
+    }
+  } while (isTxFromAddressPresent && its-- > 0);
+
+  if (isTxFromAddressPresent) {
+    // If the address still has pending extrinsics after the maximum number of iterations, throw an error
+    throw new Error(`Failed after ${iterations} iterations and ${(iterations * delay) / 1000}s`);
+  }
 };
 
 /**

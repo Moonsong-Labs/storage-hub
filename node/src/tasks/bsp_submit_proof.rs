@@ -481,7 +481,7 @@ where
         provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
-        let last_tick_provided_submitted_proof = self
+        let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
             .query_last_tick_provider_submitted_proof(provider_id)
@@ -492,23 +492,23 @@ where
                     e
                 )
             })?;
+
         let last_checkpoint_tick = self
             .storage_hub_handler
             .blockchain
             .query_last_checkpoint_challenge_tick()
             .await?;
 
-        let challenge_period = self
+        let challenges_tick = self
             .storage_hub_handler
             .blockchain
-            .query_challenge_period(provider_id)
+            .get_next_challenge_tick_for_provider(provider_id)
             .await
-            .map_err(|e| anyhow!("Failed to query challenge period: {:?}", e))?;
-        let challenges_tick = last_tick_provided_submitted_proof + challenge_period;
+            .map_err(|e| anyhow!("Failed to get next challenge tick for provider: {:?}", e))?;
 
         // If there were checkpoint challenges since the last tick this provider submitted a proof for,
         // get the checkpoint challenges.
-        if last_tick_provided_submitted_proof <= last_checkpoint_tick
+        if last_tick_provider_submitted_proof_for < last_checkpoint_tick
             && last_checkpoint_tick <= challenges_tick
         {
             let checkpoint_challenges = self
@@ -536,7 +536,8 @@ where
         // Get the next challenge tick for this provider.
         let next_challenge_tick = blockchain
             .get_next_challenge_tick_for_provider(event.data.provider_id)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to get next challenge tick for provider, to see if the proof is outdated: {:?}", e))?;
 
         if next_challenge_tick != event.data.tick {
             warn!(target: LOG_TARGET, "The proof for tick [{:?}] is not the next one to be submitted. Next challenge tick is [{:?}]", event.data.tick, next_challenge_tick);

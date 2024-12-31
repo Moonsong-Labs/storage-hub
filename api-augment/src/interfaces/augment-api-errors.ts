@@ -215,9 +215,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
       /**
+       * Collection ID was not found.
+       **/
+      CollectionNotFound: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
+      /**
+       * Failed to fetch the dynamic-rate payment stream.
+       **/
+      DynamicRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
        * Failed to verify proof: required to provide a proof of inclusion.
        **/

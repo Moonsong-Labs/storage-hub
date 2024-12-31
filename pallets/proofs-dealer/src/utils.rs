@@ -9,7 +9,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError,
-    GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
+    GetNextDeadlineTickError, GetProofSubmissionRecordError,
 };
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
@@ -33,14 +33,14 @@ use crate::{
         CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
         KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
         MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof,
-        ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
-        RandomnessProviderFor, StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
-        TreasuryAccountFor,
+        ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+        RandomnessOutputFor, RandomnessProviderFor, StakeToChallengePeriodFor,
+        TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
-    LastDeletedTick, LastTickProviderSubmittedAProofFor, NotFullBlocksCount, Pallet,
-    PastBlocksWeight, PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed,
+    LastDeletedTick, NotFullBlocksCount, Pallet, PastBlocksWeight, PriorityChallengesQueue,
+    ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
     TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
     ValidProofSubmittersLastTicks,
 };
@@ -162,9 +162,13 @@ where
             Error::<T>::ZeroRoot
         );
 
-        // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedAProofFor::<T>::get(*submitter) {
-            Some(tick) => tick,
+        // Get last tick for which the submitter submitted a proof, as well as the tick for which
+        // now it should be submitting the proof.
+        let ProofSubmissionRecord {
+            last_tick_proven,
+            next_tick_to_submit_proof_for: challenges_tick,
+        } = match ProviderToProofSubmissionRecord::<T>::get(*submitter) {
+            Some(record) => record,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };
 
@@ -176,11 +180,6 @@ where
 
         // Check that the stake is non-zero.
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
-
-        // Compute the next tick for which the submitter should be submitting a proof.
-        let challenges_tick = last_tick_proven
-            .checked_add(&Self::stake_to_challenge_period(stake))
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Check that the challenges tick is lower than the current tick.
         let current_tick = ChallengesTicker::<T>::get();
@@ -235,7 +234,7 @@ where
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         let mut checkpoint_challenges = None;
 
-        if last_tick_proven <= last_checkpoint_tick && last_checkpoint_tick <= challenges_tick {
+        if last_tick_proven < last_checkpoint_tick && last_checkpoint_tick <= challenges_tick {
             // Add challenges from the Checkpoint Challenge block.
             checkpoint_challenges =
                 Some(expect_or_err!(
@@ -337,20 +336,24 @@ where
                 .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
         }
 
-        // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
-        // submitted a proof for.
-        LastTickProviderSubmittedAProofFor::<T>::set(*submitter, Some(challenges_tick));
-
-        // Remove the submitter from its current deadline registered in `TickToProvidersDeadlines`.
-        TickToProvidersDeadlines::<T>::remove(challenges_tick_deadline, submitter);
-
-        // Calculate the next tick for which the submitter should be submitting a proof.
+        // Calculate the next tick for which the submitter should submit a proof.
         let next_challenges_tick = challenges_tick
             .checked_add(&Self::stake_to_challenge_period(stake))
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
+        // Update `ProviderToProofSubmissionRecord` to the challenge tick the Provider has just
+        // submitted a proof for, and the next tick for which the Provider should submit a proof for.
+        let proof_submission_record = ProofSubmissionRecord {
+            last_tick_proven: challenges_tick,
+            next_tick_to_submit_proof_for: next_challenges_tick,
+        };
+        ProviderToProofSubmissionRecord::<T>::set(*submitter, Some(proof_submission_record));
+
+        // Remove the submitter from its current deadline registered in `TickToProvidersDeadlines`.
+        TickToProvidersDeadlines::<T>::remove(challenges_tick_deadline, submitter);
+
         // Add tolerance to `next_challenges_tick` to know when is the next deadline for submitting a
-        // proof, for this provider.
+        // proof, for this Provider.
         let next_challenges_tick_deadline = next_challenges_tick
             .checked_add(&T::ChallengeTicksTolerance::get())
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
@@ -458,6 +461,7 @@ where
         // However, in the extreme scenario where a large number of Providers are missing the proof submissions,
         // this is bounded by the `MaxSlashableProvidersPerTick` configuration.
         let max_slashable_providers = MaxSlashableProvidersPerTickFor::<T>::get();
+        let challenge_ticks_tolerance = T::ChallengeTicksTolerance::get();
         let mut slashable_providers_count = 0;
         while tick_to_check_for_slashable_providers <= challenges_ticker
             && slashable_providers_count < max_slashable_providers
@@ -465,40 +469,43 @@ where
             // If there are Providers left in `TickToProvidersDeadlines` for `TickToCheckedForSlashableProviders`,
             // they are marked as slashable.
             if let Some((provider, _)) = slashable_providers.next() {
+                let mut proof_submission_record =
+                    match ProviderToProofSubmissionRecord::<T>::get(provider) {
+                        Some(record) => record,
+                        None => {
+                            Self::deposit_event(Event::NoRecordOfLastSubmittedProof { provider });
+
+                            #[cfg(test)]
+                            unreachable!(
+                                "Provider should have a last tick it submitted a proof for."
+                            );
+
+                            #[allow(unreachable_code)]
+                            {
+                                // If the Provider has no record of the last tick it submitted a proof for,
+                                // we set it to the current challenges ticker, so checkpoint challenges will
+                                // not be considered in slashing it.
+                                ProofSubmissionRecord {
+                                    last_tick_proven: challenges_ticker,
+                                    next_tick_to_submit_proof_for: challenges_ticker,
+                                }
+                            }
+                        }
+                    };
+                let last_tick_proven = proof_submission_record.last_tick_proven;
+
                 // Accrue number of failed proof submission for this slashable provider.
                 // Add custom checkpoint challenges if the provider needed to respond to them.
                 SlashableProviders::<T>::mutate(provider, |slashable| {
                     let mut accrued = slashable.unwrap_or(0);
 
-                    let last_tick_provider_submitted_proof =
-                        match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
-                            Some(tick) => tick,
-                            None => {
-                                Self::deposit_event(Event::NoRecordOfLastSubmittedProof {
-                                    provider,
-                                });
-
-                                #[cfg(test)]
-                                unreachable!(
-                                    "Provider should have a last tick it submitted a proof for."
-                                );
-
-                                #[allow(unreachable_code)]
-                                {
-                                    // If the Provider has no record of the last tick it submitted a proof for,
-                                    // we set it to the current challenges ticker, so checkpoint challenges will
-                                    // not be considered in slashing it.
-                                    challenges_ticker
-                                }
-                            }
-                        };
-
                     let challenge_ticker_provider_should_have_responded_to =
-                        challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+                        challenges_ticker.saturating_sub(challenge_ticks_tolerance);
 
                     if checkpoint_challenges_count != 0
-                        && last_tick_provider_submitted_proof <= last_checkpoint_tick
-                        && last_checkpoint_tick < challenge_ticker_provider_should_have_responded_to
+                        && last_tick_proven < last_checkpoint_tick
+                        && last_checkpoint_tick
+                            <= challenge_ticker_provider_should_have_responded_to
                     {
                         accrued = accrued.saturating_add(checkpoint_challenges_count as u32);
                     }
@@ -522,10 +529,12 @@ where
                 };
 
                 // Calculate the next challenge deadline for this Provider.
-                // At this point, we are processing all providers who have reached their deadline (i.e. tolerance ticks after the tick they should provide a proof for):
+                // At this point, we are processing all providers who have reached their deadline (i.e. tolerance
+                // ticks after the tick they should provide a proof for):
                 // challenge_ticker = last_tick_provider_should_have_submitted_a_proof_for + ChallengeTicksTolerance
                 //
-                // By definition, the next deadline should be tolerance ticks after the next tick they should submit proof for (i.e. one period after the last tick they should have submitted a proof for):
+                // By definition, the next deadline should be tolerance ticks after the next tick they should submit
+                // proof for (i.e. one period after the last tick they should have submitted a proof for):
                 // next_challenge_deadline = last_tick_provider_should_have_submitted_a_proof_for + provider_period + ChallengeTicksTolerance
                 //
                 // Therefore, the next deadline is one period from now:
@@ -536,12 +545,15 @@ where
                 // Update this Provider's next challenge deadline.
                 TickToProvidersDeadlines::<T>::set(next_challenge_deadline, provider, Some(()));
 
-                // Calculate the tick for which the Provider should have submitted a proof.
-                let last_interval_tick =
-                    challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+                // Calculate the next tick for which this Provider should submit a proof for, which is equal to:
+                // next_tick_to_submit_proof_for = next_challenge_deadline - ChallengeTicksTolerance
+                let next_tick_to_submit_proof_for =
+                    next_challenge_deadline.saturating_sub(challenge_ticks_tolerance);
 
-                // Update this Provider's last interval tick for the next challenge.
-                LastTickProviderSubmittedAProofFor::<T>::set(provider, Some(last_interval_tick));
+                // Update this Provider's proof submission record.
+                proof_submission_record.next_tick_to_submit_proof_for =
+                    next_tick_to_submit_proof_for;
+                ProviderToProofSubmissionRecord::<T>::set(provider, Some(proof_submission_record));
 
                 // Emit slashable provider event.
                 Self::deposit_event(Event::SlashableProvider {
@@ -1037,13 +1049,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         let root = ProvidersPalletFor::<T>::get_root(*provider_id)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        Ok(
+        let (_, new_root, _) =
             <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                 &root, mutations, proof,
             )
-            .map_err(|_| Error::<T>::FailedToApplyDelta)?
-            .1,
-        )
+            .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+
+        Ok(new_root)
     }
 
     fn generic_apply_delta(
@@ -1067,16 +1079,10 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             return Err(Error::<T>::NotProvider.into());
         }
 
-        // Get stake for submitter.
-        let stake = ProvidersPalletFor::<T>::get_stake(*provider_id)
-            .ok_or(Error::<T>::ProviderStakeNotFound)?;
-
         // Check if this Provider previously had a challenge cycle initialised so we can delete it.
-        if let Some(last_tick_proven) = LastTickProviderSubmittedAProofFor::<T>::get(*provider_id) {
+        if let Some(record) = ProviderToProofSubmissionRecord::<T>::get(*provider_id) {
             // Compute the next tick for which the Provider should have been submitting a proof.
-            let old_next_challenge_tick = last_tick_proven
-                .checked_add(&Self::stake_to_challenge_period(stake))
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+            let old_next_challenge_tick = record.next_tick_to_submit_proof_for;
 
             // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
             let old_next_challenge_deadline = old_next_challenge_tick
@@ -1087,7 +1093,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             TickToProvidersDeadlines::<T>::remove(old_next_challenge_deadline, *provider_id);
 
             // Remove the provider from the submitted proof storage.
-            LastTickProviderSubmittedAProofFor::<T>::remove(*provider_id);
+            ProviderToProofSubmissionRecord::<T>::remove(*provider_id);
         }
 
         Ok(())
@@ -1109,13 +1115,11 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
         // Check if this Provider previously had a challenge cycle initialised.
-        if let Some(last_tick_proven) = LastTickProviderSubmittedAProofFor::<T>::get(*provider_id) {
-            // Compute the next tick for which the Provider should have been submitting a proof.
-            let old_next_challenge_tick = last_tick_proven
-                .checked_add(&Self::stake_to_challenge_period(stake))
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        if let Some(record) = ProviderToProofSubmissionRecord::<T>::get(*provider_id) {
+            let old_next_challenge_tick = record.next_tick_to_submit_proof_for;
 
-            // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+            // Calculate this Provider's deadline for submitting a proof.
+            // Should be the next challenge tick + the challenges tick tolerance.
             let old_next_challenge_deadline = old_next_challenge_tick
                 .checked_add(&ChallengeTicksToleranceFor::<T>::get())
                 .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
@@ -1124,14 +1128,20 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             TickToProvidersDeadlines::<T>::remove(old_next_challenge_deadline, *provider_id);
         }
 
-        // Set `LastTickProviderSubmittedAProofFor` to the current tick.
+        // Initialise the Provider's proof submission record.
+        // The last tick the Provider submitted a proof for will be the current tick, and
+        // the next tick the Provider should submit a proof for will be:
+        // next_tick_to_submit_proof_for = current_tick + provider_challenge_period
         let current_tick = ChallengesTicker::<T>::get();
-        LastTickProviderSubmittedAProofFor::<T>::set(*provider_id, Some(current_tick));
-
-        // Compute the next tick for which the Provider should be submitting a proof.
         let next_challenge_tick = current_tick
             .checked_add(&Self::stake_to_challenge_period(stake))
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        let proof_submission_record = ProofSubmissionRecord {
+            last_tick_proven: current_tick,
+            next_tick_to_submit_proof_for: next_challenge_tick,
+        };
+        ProviderToProofSubmissionRecord::<T>::set(*provider_id, Some(proof_submission_record));
 
         // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
         let next_challenge_deadline = next_challenge_tick
@@ -1188,14 +1198,30 @@ where
 {
     pub fn get_last_tick_provider_submitted_proof(
         provider_id: &ProviderIdFor<T>,
-    ) -> Result<BlockNumberFor<T>, GetLastTickProviderSubmittedProofError> {
+    ) -> Result<BlockNumberFor<T>, GetProofSubmissionRecordError> {
         // Check if submitter is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
-            return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
+            return Err(GetProofSubmissionRecordError::ProviderNotRegistered);
         }
 
-        LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
-            .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)
+        let record = ProviderToProofSubmissionRecord::<T>::get(provider_id)
+            .ok_or(GetProofSubmissionRecordError::ProviderNeverSubmittedProof)?;
+
+        Ok(record.last_tick_proven)
+    }
+
+    pub fn get_next_tick_to_submit_proof_for(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetProofSubmissionRecordError> {
+        // Check if submitter is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
+            return Err(GetProofSubmissionRecordError::ProviderNotRegistered);
+        }
+
+        let record = ProviderToProofSubmissionRecord::<T>::get(provider_id)
+            .ok_or(GetProofSubmissionRecordError::ProviderNeverSubmittedProof)?;
+
+        Ok(record.next_tick_to_submit_proof_for)
     }
 
     pub fn get_last_checkpoint_challenge_tick() -> BlockNumberFor<T> {
@@ -1274,17 +1300,12 @@ where
             return Err(GetNextDeadlineTickError::ProviderNotRegistered);
         }
 
-        // Get the last tick for which the submitter submitted a proof.
-        let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
-                .ok_or(GetNextDeadlineTickError::ProviderNotInitialised)?;
+        // Get this Provider's proof submission record.
+        let record = ProviderToProofSubmissionRecord::<T>::get(provider_id)
+            .ok_or(GetNextDeadlineTickError::ProviderNotInitialised)?;
 
-        // The next deadline tick is the last tick + the challenge period + the challenge tolerance.
-        let challenge_period = Self::get_challenge_period(provider_id)
-            .map_err(|_| GetNextDeadlineTickError::ProviderNotRegistered)?;
-        let next_deadline_tick = last_tick_provider_submitted_proof
-            .checked_add(&challenge_period)
-            .ok_or(GetNextDeadlineTickError::ArithmeticOverflow)?
+        let next_deadline_tick = record
+            .next_tick_to_submit_proof_for
             .checked_add(&ChallengeTicksToleranceFor::<T>::get())
             .ok_or(GetNextDeadlineTickError::ArithmeticOverflow)?;
 

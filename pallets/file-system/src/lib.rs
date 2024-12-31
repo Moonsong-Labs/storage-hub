@@ -55,7 +55,7 @@ pub mod pallet {
         sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
             fungible::*,
-            nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
+            nonfungibles_v2::{Create, Destroy, Inspect as NonFungiblesInspect},
         },
         Blake2_128Concat,
     };
@@ -229,7 +229,8 @@ pub mod pallet {
 
         /// Registry for minted NFTs.
         type Nfts: NonFungiblesInspect<Self::AccountId>
-            + Create<Self::AccountId, CollectionConfigFor<Self>>;
+            + Create<Self::AccountId, CollectionConfigFor<Self>>
+            + Destroy<Self::AccountId>;
 
         /// Collection inspector
         type CollectionInspector: shp_traits::InspectCollections<
@@ -402,22 +403,23 @@ pub mod pallet {
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+    /// A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        BoundedVec<(MerkleHash<T>, BucketIdFor<T>), T::MaxUserPendingDeletionRequests>,
+        BoundedVec<PendingFileDeletionRequest<T>, T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
 
     /// Pending file stop storing requests.
     ///
-    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
-    /// and the proven size of the file.
+    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened,
+    /// the proven size of the file and the owner of the file.
     /// The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
     /// of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+    /// The owner is to be able to update the payment stream between the user and the BSP.
     #[pallet::storage]
     pub type PendingStopStoringRequests<T: Config> = StorageDoubleMap<
         _,
@@ -425,7 +427,7 @@ pub mod pallet {
         ProviderIdFor<T>,
         Blake2_128Concat,
         MerkleHash<T>,
-        (BlockNumberFor<T>, StorageData<T>),
+        PendingStopStoringRequest<T>,
     >;
 
     /// Pending move bucket requests.
@@ -738,6 +740,8 @@ pub mod pallet {
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
+        /// Collection ID was not found.
+        CollectionNotFound,
         /// Root of the provider not found.
         ProviderRootNotFound,
         /// Failed to verify proof: required to provide a proof of non-inclusion.
@@ -802,6 +806,8 @@ pub mod pallet {
         InconsistentStateKeyAlreadyExists,
         /// Failed to fetch the rate for the payment stream.
         FixedRatePaymentStreamNotFound,
+        /// Failed to fetch the dynamic-rate payment stream.
+        DynamicRatePaymentStreamNotFound,
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
         /// Failed to query earliest volunteer tick
@@ -1279,6 +1285,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
@@ -1288,6 +1295,7 @@ pub mod pallet {
                 who.clone(),
                 user.clone(),
                 file_key,
+                file_size,
                 bucket_id,
                 forest_proof,
             )?;
@@ -1341,10 +1349,7 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
-    where
-        u32: TryFrom<BlockNumberFor<T>>,
-    {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
