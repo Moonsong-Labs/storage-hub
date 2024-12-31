@@ -7,8 +7,7 @@ use shc_blockchain_service::{
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::FileStorageT;
+use crate::services::{handler::StorageHubHandler, types::FileStorageT};
 
 const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 

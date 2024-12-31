@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     ops::Add,
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 
@@ -12,6 +13,7 @@ use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
 use sp_runtime::AccountId32;
+use tokio::sync::Mutex;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -32,12 +34,9 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
-
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{BspForestStorageHandlerT, FileStorageT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
 };
 
 const LOG_TARGET: &str = "bsp-upload-file-task";

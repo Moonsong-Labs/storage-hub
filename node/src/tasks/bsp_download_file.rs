@@ -4,9 +4,9 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteDownloadRequest,
 };
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{BspForestStorageHandlerT, FileStorageT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
 };
 
 const LOG_TARGET: &str = "bsp-download-file-task";

@@ -7,8 +7,7 @@ use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::SlashableProvider};
 use shc_forest_manager::traits::ForestStorageHandler;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::FileStorageT;
+use crate::services::{handler::StorageHubHandler, types::FileStorageT};
 
 const LOG_TARGET: &str = "slash-provider-task";
 

@@ -32,10 +32,11 @@ use crate::tasks::{
     msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
     msp_move_bucket::MspMoveBucketTask, msp_upload_file::MspUploadFileTask,
     sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
-    BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
 
-/// Configuration paramaters for Storage Providers.
+use super::types::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
+
+/// Configuration parameters for Storage Providers.
 #[derive(Clone)]
 pub struct ProviderConfig {
     /// Maximum storage capacity of the provider (bytes).

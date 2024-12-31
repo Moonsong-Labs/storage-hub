@@ -6,8 +6,10 @@ use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use sp_core::H256;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 

@@ -8,8 +8,10 @@ use shc_blockchain_service::{
 };
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-move-bucket-task";
 

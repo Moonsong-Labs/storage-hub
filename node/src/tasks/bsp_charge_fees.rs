@@ -20,9 +20,9 @@ use shc_forest_manager::traits::ForestStorage;
 use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{BspForestStorageHandlerT, FileStorageT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
 };
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";

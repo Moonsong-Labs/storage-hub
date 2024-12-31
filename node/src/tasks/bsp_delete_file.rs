@@ -1,15 +1,15 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring};
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_forest_manager::traits::ForestStorage;
 use sp_core::H256;
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{BspForestStorageHandlerT, FileStorageT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
 };
-use shc_actors_framework::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "bsp-delete-file-task";
 

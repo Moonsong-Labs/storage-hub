@@ -15,9 +15,9 @@ use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
 use shp_file_metadata::ChunkId;
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{FileStorageT, MspForestStorageHandlerT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{FileStorageT, MspForestStorageHandlerT},
 };
 
 const LOG_TARGET: &str = "msp-move-bucket-task";

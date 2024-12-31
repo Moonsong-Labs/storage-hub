@@ -8,7 +8,10 @@ use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 use storage_hub_runtime::Balance;
 
-use crate::tasks::{FileStorageT, MspForestStorageHandlerT, StorageHubHandler};
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{FileStorageT, MspForestStorageHandlerT},
+};
 
 const LOG_TARGET: &str = "msp-charge-fees-task";
 const MIN_DEBT: Balance = 0;

@@ -1,4 +1,3 @@
-use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info, warn};
 use sc_network::{PeerId, RequestFailure};
 use shc_actors_framework::event_bus::EventHandler;
@@ -11,6 +10,8 @@ use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestE
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
+
+use crate::services::{handler::StorageHubHandler, types::FileStorageT};
 
 const LOG_TARGET: &str = "user-sends-file-task";
 

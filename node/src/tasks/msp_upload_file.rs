@@ -23,9 +23,9 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{FileStorageT, MspForestStorageHandlerT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{FileStorageT, MspForestStorageHandlerT},
 };
 
 const LOG_TARGET: &str = "msp-upload-file-task";

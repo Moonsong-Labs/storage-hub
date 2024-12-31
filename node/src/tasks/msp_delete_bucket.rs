@@ -1,10 +1,12 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::FinalisedMspStoppedStoringBucket;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{FileStorageT, MspForestStorageHandlerT};
-use shc_actors_framework::event_bus::EventHandler;
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{FileStorageT, MspForestStorageHandlerT},
+};
 
 const LOG_TARGET: &str = "msp-stopped-storing-task";
 

@@ -23,8 +23,10 @@ use shc_common::{
 };
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, FileStorageT},
+};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
