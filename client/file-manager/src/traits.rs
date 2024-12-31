@@ -171,4 +171,6 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
+
+    fn is_allowed(&mut self, key: &HasherOutT<T>) -> Result<bool, FileStorageError>;
 }

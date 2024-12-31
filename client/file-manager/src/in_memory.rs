@@ -150,6 +150,7 @@ where
     pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
     pub bucket_prefix_map: HashSet<[u8; 64]>,
+    pub exclude_list: Vec<HasherOutT<T>>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T>
@@ -161,6 +162,7 @@ where
             metadata: HashMap::new(),
             file_data: HashMap::new(),
             bucket_prefix_map: HashSet::new(),
+            exclude_list: vec![],
         }
     }
 }
@@ -353,6 +355,14 @@ where
         }
 
         Ok(())
+    }
+
+    fn is_allowed(&mut self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+        if self.exclude_list.contains(key) {
+            return Ok(false);
+        }
+
+        return Ok(true);
     }
 }
 
