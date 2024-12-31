@@ -37,13 +37,14 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     const files = [];
     const txs = [];
     for (let i = 0; i < source.length; i++) {
-      const { fingerprint, file_size, location } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source[i],
-          destination[i],
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
+      const {
+        file_metadata: { location, fingerprint, file_size }
+      } = await userApi.rpc.storagehubclient.loadFileInStorage(
+        source[i],
+        destination[i],
+        userApi.shConsts.NODE_INFOS.user.AddressId,
+        newBucketEventDataBlob.bucketId
+      );
 
       files.push({ fingerprint, file_size, location });
       txs.push(
@@ -76,7 +77,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     // Wait for the BSP to volunteer
     await userApi.wait.bspVolunteer(source.length);
     for (const fileKey of fileKeys) {
-      await bspApi.wait.bspFileStorageComplete(fileKey);
+      await bspApi.wait.fileStorageComplete(fileKey);
     }
 
     // Waiting for a confirmation of the first file to be stored
@@ -172,13 +173,14 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       const files = [];
       const txs = [];
       for (let i = 0; i < source.length; i++) {
-        const { fingerprint, file_size, location } =
-          await userApi.rpc.storagehubclient.loadFileInStorage(
-            source[i],
-            destination[i],
-            userApi.shConsts.NODE_INFOS.user.AddressId,
-            newBucketEventDataBlob.bucketId
-          );
+        const {
+          file_metadata: { location, fingerprint, file_size }
+        } = await userApi.rpc.storagehubclient.loadFileInStorage(
+          source[i],
+          destination[i],
+          userApi.shConsts.NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
         files.push({ fingerprint, file_size, location });
         txs.push(
@@ -214,7 +216,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       // Wait for the BSP to volunteer
       await userApi.wait.bspVolunteer(source.length);
       for (const fileKey of fileKeys) {
-        await bspApi.wait.bspFileStorageComplete(fileKey);
+        await bspApi.wait.fileStorageComplete(fileKey);
       }
 
       // Waiting for a confirmation of the first file to be stored

@@ -51,8 +51,8 @@ import type {
   GetChallengePeriodError,
   GetChallengeSeedError,
   GetCheckpointChallengesError,
-  GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
+  GetProofSubmissionRecordError,
   GetUsersWithDebtOverThresholdError,
   IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
@@ -464,7 +464,7 @@ declare module "@polkadot/api-base/types/calls" {
         ApiType,
         (
           providerId: ProviderId | string | Uint8Array
-        ) => Observable<Result<BlockNumber, GetLastTickProviderSubmittedProofError>>
+        ) => Observable<Result<BlockNumber, GetProofSubmissionRecordError>>
       >;
       /**
        * Get the next deadline tick.
@@ -474,6 +474,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<BlockNumber, GetNextDeadlineTickError>>
+      >;
+      /**
+       * Get the next tick for which the submitter should submit a proof.
+       **/
+      getNextTickToSubmitProofFor: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<BlockNumber, GetProofSubmissionRecordError>>
       >;
       /**
        * Generic call

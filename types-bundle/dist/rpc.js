@@ -21,7 +21,7 @@ export const rpcDefinitions = {
           type: "H256"
         }
       ],
-      type: "FileMetadata"
+      type: "LoadFileInStorageResult"
     },
     saveFileToDisk: {
       description: "Save a file from the local storage to the disk.",

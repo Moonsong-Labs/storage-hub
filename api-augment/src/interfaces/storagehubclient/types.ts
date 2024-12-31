@@ -81,14 +81,6 @@ export interface GetFileFromFileStorageResult extends Enum {
   readonly type: "FileNotFound" | "FileFound" | "IncompleteFile" | "FileFoundWithInconsistency";
 }
 
-/** @name GetLastTickProviderSubmittedProofError */
-export interface GetLastTickProviderSubmittedProofError extends Enum {
-  readonly isProviderNotRegistered: boolean;
-  readonly isProviderNeverSubmittedProof: boolean;
-  readonly isInternalApiError: boolean;
-  readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
-}
-
 /** @name GetNextDeadlineTickError */
 export interface GetNextDeadlineTickError extends Enum {
   readonly isProviderNotRegistered: boolean;
@@ -100,6 +92,14 @@ export interface GetNextDeadlineTickError extends Enum {
     | "ProviderNotInitialised"
     | "ArithmeticOverflow"
     | "InternalApiError";
+}
+
+/** @name GetProofSubmissionRecordError */
+export interface GetProofSubmissionRecordError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isProviderNeverSubmittedProof: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
 }
 
 /** @name GetUsersWithDebtOverThresholdError */
@@ -135,6 +135,12 @@ export interface IsStorageRequestOpenToVolunteersError extends Enum {
 
 /** @name Key */
 export interface Key extends H256 {}
+
+/** @name LoadFileInStorageResult */
+export interface LoadFileInStorageResult extends Struct {
+  readonly file_key: H256;
+  readonly file_metadata: FileMetadata;
+}
 
 /** @name MainStorageProviderId */
 export interface MainStorageProviderId extends H256 {}

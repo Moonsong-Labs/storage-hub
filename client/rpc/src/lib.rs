@@ -5,7 +5,7 @@ use jsonrpsee::{
     proc_macros::rpc,
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
 };
-use log::{debug, error};
+use log::{debug, error, info};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
@@ -31,6 +31,12 @@ const LOG_TARGET: &str = "storage-hub-client-rpc";
 pub struct CheckpointChallenge {
     pub file_key: H256,
     pub should_remove_file: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoadFileInStorageResult {
+    pub file_key: H256,
+    pub file_metadata: FileMetadata,
 }
 
 pub struct StorageHubClientRpcConfig<FL, FSH> {
@@ -102,7 +108,7 @@ pub trait StorageHubClientApi {
         location: String,
         owner: AccountId32,
         bucket_id: H256,
-    ) -> RpcResult<FileMetadata>;
+    ) -> RpcResult<LoadFileInStorageResult>;
 
     #[method(name = "saveFileToDisk")]
     async fn save_file_to_disk(
@@ -225,7 +231,7 @@ where
         location: String,
         owner: AccountId32,
         bucket_id: H256,
-    ) -> RpcResult<FileMetadata> {
+    ) -> RpcResult<LoadFileInStorageResult> {
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
 
@@ -292,7 +298,14 @@ where
             .insert_file_with_data(file_key, file_metadata.clone(), file_data_trie)
             .map_err(into_rpc_error)?;
 
-        Ok(file_metadata)
+        let result = LoadFileInStorageResult {
+            file_key,
+            file_metadata,
+        };
+
+        info!(target: LOG_TARGET, "File loaded successfully: {:?}", result);
+
+        Ok(result)
     }
 
     async fn save_file_to_disk(

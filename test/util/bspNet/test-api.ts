@@ -34,11 +34,11 @@ export interface WaitForTxOptions {
   module: string;
   method: string;
   checkQuantity?: number;
+  strictQuantity?: boolean;
   shouldSeal?: boolean;
   expectedEvent?: string;
-  iterations?: number;
-  delay?: number;
   timeout?: number;
+  verbose?: boolean;
 }
 
 /**
@@ -260,12 +260,12 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
 
       /**
-       * Waits for a BSP to complete storing a file key.
+       * Waits for a Storage Provider to complete storing a file key.
        * @param fileKey - Param to specify the file key to wait for.
        * @returns A promise that resolves when a BSP has completed to store a file.
        */
-      bspFileStorageComplete: (fileKey: H256 | string) =>
-        Waits.waitForBspFileStorageComplete(this._api, fileKey),
+      fileStorageComplete: (fileKey: H256 | string) =>
+        Waits.waitForFileStorageComplete(this._api, fileKey),
 
       /**
        * Waits for a BSP to complete deleting a file from its forest.
@@ -300,12 +300,21 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
 
       /**
-       * Waits for a MSP to complete storing a file key.
-       * @param fileKey - Param to specify the file key to wait for.
-       * @returns A promise that resolves when the MSP has completed to store a file.
+       * Waits for a block where the given address has no pending extrinsics.
+       *
+       * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
+       * without risking it clashing with another transaction with the same nonce already in the pool. For example,
+       * BSP nodes are often sending transactions, so if you want to send a transaction using one of the BSP keys,
+       * you should wait for the BSP to have no pending extrinsics before sending the transaction.
+       *
+       * IMPORTANT: As long as the address keeps having pending extrinsics, this function will keep waiting and building
+       * blocks to include such transactions.
+       *
+       * @param address - The address of the account to wait for.
+       * @returns A promise that resolves when the address has no pending extrinsics.
        */
-      mspFileStorageComplete: (fileKey: H256 | string) =>
-        Waits.waitForBspFileStorageComplete(this._api, fileKey)
+      waitForAvailabilityToSendTx: (address: string) =>
+        Waits.waitForAvailabilityToSendTx(this._api, address)
     };
 
     /**
@@ -450,7 +459,7 @@ export class BspNetTestApi implements AsyncDisposable {
         blockNumber: number,
         options?: {
           waitBetweenBlocks?: number | boolean;
-          waitForBspProofs?: string[];
+          watchForBspProofs?: string[];
           finalised?: boolean;
           spam?: boolean;
           verbose?: boolean;

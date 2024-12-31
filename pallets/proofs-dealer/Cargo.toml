@@ -75,7 +75,6 @@ runtime-benchmarks = [
 	"shp-file-metadata/runtime-benchmarks",
 	"shp-forest-verifier/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
-	"sp-core",
 	"sp-trie",
 ]
 std = [
