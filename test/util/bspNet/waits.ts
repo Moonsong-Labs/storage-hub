@@ -314,7 +314,7 @@ export const waitForBspToCatchUpToChainTip = async (
     } catch {
       assert(
         i !== blockBuildingIterations,
-        `Failed to detect BSP catch up after ${(i * j * delay) / 1000}s`
+        `Failed to detect BSP catch up after ${(i * iterations * delay) / 1000}s`
       );
       // If they're still not in sync, build a block to trigger gossip between the nodes.
       await syncedApi.rpc.engine.createBlock(true, true);
