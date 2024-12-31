@@ -5,15 +5,16 @@ use frame_benchmarking::v2::*;
     T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash, Providers = pallet_storage_providers::Pallet<T>>
 		+ pallet_storage_providers::Config<
 			ProviderId = <T as frame_system::Config>::Hash,
+			MerklePatriciaRoot = <T as frame_system::Config>::Hash,
 			StorageDataUnit = u64
 		>
 		+ pallet_nfts::Config
 		+ pallet_proofs_dealer::Config,
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
-        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
+        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash> + shp_traits::ReadBucketsInterface<BucketId = <T as frame_system::Config>::Hash>,
     // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers:
     <T as crate::Config>::Providers: shp_traits::ReadBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId> + shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
-	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>>,
+	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>, MerkleHash = <T as frame_system::Config>::Hash>,
 	<T as crate::Config>::Nfts: frame_support::traits::nonfungibles_v2::Inspect<<T as frame_system::Config>::AccountId, CollectionId = <T as pallet_nfts::Config>::CollectionId>,
 )]
 mod benchmarks {
@@ -27,10 +28,12 @@ mod benchmarks {
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use pallet_file_system_runtime_api::QueryFileEarliestVolunteerTickError;
     use pallet_storage_providers::types::ValueProposition;
-    use shp_traits::{ReadBucketsInterface, ReadStorageProvidersInterface};
-    use sp_core::Hasher;
-    use sp_runtime::traits::{Hash, One};
-    use sp_std::vec;
+    use shp_traits::{ProofsDealerInterface, ReadBucketsInterface, ReadStorageProvidersInterface};
+    use sp_core::{Decode, Hasher};
+    use sp_runtime::traits::{Hash, One, Zero};
+    use sp_std::{vec, vec::Vec};
+
+    use crate::benchmark_proofs::*;
 
     #[benchmark]
     fn create_bucket() -> Result<(), BenchmarkError> {
@@ -45,7 +48,7 @@ mod benchmarks {
         // Register MSP with value proposition
         let msp: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
 
         #[extrinsic_call]
         _(
@@ -80,12 +83,12 @@ mod benchmarks {
         let initial_msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(initial_msp_account.clone(), 1_000_000_000_000_000)?;
         let (initial_msp_id, initial_value_prop_id) =
-            add_msp_to_provider_storage::<T>(&initial_msp_account);
+            add_msp_to_provider_storage::<T>(&initial_msp_account, None);
 
         // Register another MSP with a value proposition
         let new_msp_account: T::AccountId = account("MSP", 0, 1);
         mint_into_account::<T>(new_msp_account.clone(), 1_000_000_000_000_000)?;
-        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account);
+        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account, None);
 
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
@@ -143,12 +146,12 @@ mod benchmarks {
         let initial_msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(initial_msp_account.clone(), 1_000_000_000_000_000)?;
         let (initial_msp_id, initial_value_prop_id) =
-            add_msp_to_provider_storage::<T>(&initial_msp_account);
+            add_msp_to_provider_storage::<T>(&initial_msp_account, None);
 
         // Register another MSP with a value proposition
         let new_msp_account: T::AccountId = account("MSP", 0, 1);
         mint_into_account::<T>(new_msp_account.clone(), 1_000_000_000_000_000)?;
-        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account);
+        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account, None);
 
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
@@ -210,7 +213,7 @@ mod benchmarks {
         // Register a MSP with a value proposition
         let msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
 
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
@@ -276,7 +279,7 @@ mod benchmarks {
         // Register a MSP with a value proposition
         let msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
 
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
@@ -341,7 +344,7 @@ mod benchmarks {
         // Register a MSP with a value proposition
         let msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
 
         // Create the bucket as private, creating the collection so it has to be deleted as well.
         Pallet::<T>::create_bucket(
@@ -407,7 +410,7 @@ mod benchmarks {
         // Register MSP with value proposition
         let msp: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
@@ -433,6 +436,226 @@ mod benchmarks {
     }
 
     #[benchmark]
+    fn msp_respond_storage_requests_multiple_buckets(
+        n: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
+        m: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
+        l: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
+    ) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get from the linear variables the amount of buckets to accept, the amount of file keys to accept per bucket and the amount to reject.
+        let amount_of_buckets_to_accept: u32 = n.into();
+        let amount_of_file_keys_to_accept_per_bucket: u32 = m.into();
+        let amount_of_file_keys_to_reject_per_bucket: u32 = l.into();
+
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        let signed_user_origin = RawOrigin::Signed(user_account.clone());
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = whitelisted_caller();
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        let mut msp_total_response: StorageRequestMspResponse<T> = BoundedVec::new();
+        // For each bucket to accept:
+        for i in 0..amount_of_buckets_to_accept {
+            // Create a bucket to store in the MSP
+            let name: BucketNameFor<T> =
+                vec![i as u8; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+                    .try_into()
+                    .unwrap();
+            Pallet::<T>::create_bucket(
+                signed_user_origin.clone().into(),
+                Some(msp_id),
+                name.clone(),
+                true,
+                Some(value_prop_id),
+            )?;
+
+            // Update the bucket's size and root to match the generated proofs
+            let bucket_id =
+                <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+                    &user_account,
+                    name.clone(),
+                );
+            let bucket_size = 2 * 1024 * 1024;
+            let encoded_bucket_root = get_bucket_root();
+            let bucket_root =
+                <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                    .expect("Bucket root should be decodable as it is a hash");
+            pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+                let bucket = bucket.as_mut().expect("Bucket should exist.");
+                bucket.size = bucket_size;
+                bucket.root = bucket_root;
+            });
+
+            // Build the reject response for this bucket:
+
+            // Create all the storage requests for the files to reject
+            let mut file_keys_to_reject: BoundedVec<
+                MerkleHash<T>,
+                MaxBatchMspRespondStorageRequests<T>,
+            > = BoundedVec::new();
+            for j in 0..amount_of_file_keys_to_reject_per_bucket {
+                let location: FileLocation<T> =
+                    vec![j as u8; MaxFilePathSize::<T>::get().try_into().unwrap()]
+                        .try_into()
+                        .unwrap();
+                let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(
+                    b"benchmark_fingerprint",
+                );
+                let size: StorageData<T> = 100;
+                let storage_request_metadata = StorageRequestMetadata::<T> {
+                    requested_at:
+                        <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+                    owner: user_account.clone(),
+                    bucket_id,
+                    location: location.clone(),
+                    fingerprint,
+                    size,
+                    msp: Some((msp_id, false)),
+                    user_peer_ids: Default::default(),
+                    bsps_required: T::DefaultReplicationTarget::get(),
+                    bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
+                    bsps_volunteered: ReplicationTargetType::<T>::zero(),
+                };
+                let file_key = Pallet::<T>::compute_file_key(
+                    user_account.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
+
+                <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
+
+                file_keys_to_reject
+                    .try_push(file_key)
+                    .expect("File key amounts is limited by the same value as the bounded vector");
+            }
+            let reject_vec = file_keys_to_reject
+                .iter()
+                .map(|file_key| {
+                    let reject_reason = RejectedStorageRequestReason::ReachedMaximumCapacity;
+                    RejectedStorageRequest {
+                        file_key: file_key.clone(),
+                        reason: reject_reason,
+                    }
+                })
+                .collect::<Vec<RejectedStorageRequest<T>>>();
+            let reject: BoundedVec<
+                RejectedStorageRequest<T>,
+                MaxBatchMspRespondStorageRequests<T>,
+            > = reject_vec
+                .try_into()
+                .expect("Reject amounts is limited by the same value as the bounded vector");
+
+            // Build the accept response for this bucket:
+
+            // Get the file keys to accept from the generated proofs.
+            let mut file_keys_and_proofs: BoundedVec<
+                FileKeyWithProof<T>,
+                <T as Config>::MaxBatchMspRespondStorageRequests,
+            > = BoundedVec::new();
+            let encoded_file_keys_to_accept =
+                fetch_file_keys_to_accept(amount_of_file_keys_to_accept_per_bucket);
+            let file_keys_to_accept = encoded_file_keys_to_accept
+                .iter()
+                .map(|encoded_file_key| {
+                    let file_key =
+                        <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+                            .expect("File key should be decodable as it is a hash");
+                    file_key
+                })
+                .collect::<Vec<<T as frame_system::Config>::Hash>>();
+
+            // For each file key to accept...
+            for j in 0..file_keys_to_accept.len() {
+                // Create the storage request for it:
+                let location: FileLocation<T> =
+                    vec![j as u8; MaxFilePathSize::<T>::get().try_into().unwrap()]
+                        .try_into()
+                        .unwrap();
+                let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(
+                    b"benchmark_fingerprint",
+                );
+                let size: StorageData<T> = 100;
+                let storage_request_metadata = StorageRequestMetadata::<T> {
+                    requested_at:
+                        <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+                    owner: user_account.clone(),
+                    bucket_id,
+                    location: location.clone(),
+                    fingerprint,
+                    size,
+                    msp: Some((msp_id, false)),
+                    user_peer_ids: Default::default(),
+                    bsps_required: T::DefaultReplicationTarget::get(),
+                    bsps_confirmed: T::DefaultReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
+                    bsps_volunteered: ReplicationTargetType::<T>::zero(),
+                };
+                <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
+                <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
+
+                // Get its file key proof from the generated proofs.
+                let encoded_file_key_proof = fetch_file_key_proof(j as u32);
+                let file_key_proof = <KeyProof<T>>::decode(&mut encoded_file_key_proof.as_ref())
+                    .expect("File key proof should be decodable");
+
+                // Create the FileKeyWithProof object
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key: file_keys_to_accept[j],
+                    proof: file_key_proof,
+                };
+
+                // Push it to the file keys and proofs bounded vector
+                file_keys_and_proofs
+                    .try_push(file_key_with_proof)
+                    .expect("File key amounts is limited by the same value as the bounded vector");
+            }
+
+            // Get the non-inclusion forest proof for this amount of file keys
+            let encoded_non_inclusion_forest_proof =
+                fetch_non_inclusion_proof(amount_of_file_keys_to_accept_per_bucket);
+            let non_inclusion_forest_proof =
+                <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                    &mut encoded_non_inclusion_forest_proof.as_ref(),
+                )
+                .expect("Non-inclusion forest proof should be decodable");
+
+            let accept = StorageRequestMspAcceptedFileKeys {
+                file_keys_and_proofs,
+                non_inclusion_forest_proof,
+            };
+
+            // Finally, build the response for this bucket and push it to the responses bounded vector
+            let response = StorageRequestMspBucketResponse {
+                bucket_id,
+                accept: Some(accept),
+                reject,
+            };
+
+            msp_total_response.try_push(response).expect(
+                "Amount of buckets to accept is limited by the same value as the bounded vector",
+            );
+        }
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(RawOrigin::Signed(msp_account.clone()), msp_total_response);
+
+        /*********** Post-benchmark checks: ***********/
+        Ok(())
+    }
+
+    #[benchmark]
     fn bsp_volunteer() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Get a user account and mint some tokens into it
@@ -443,7 +666,7 @@ mod benchmarks {
         // Register a MSP with a value proposition
         let msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
 
         // Register the BSP which will volunteer for the file
         let bsp_account: T::AccountId = account("BSP", 0, 0);
@@ -707,7 +930,10 @@ mod benchmarks {
         Ok(())
     }
 
-    fn add_msp_to_provider_storage<T>(msp: &T::AccountId) -> (ProviderIdFor<T>, ValuePropId<T>)
+    fn add_msp_to_provider_storage<T>(
+        msp: &T::AccountId,
+        msp_id: Option<ProviderIdFor<T>>,
+    ) -> (ProviderIdFor<T>, ValuePropId<T>)
     where
         T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash>,
         T: pallet_storage_providers::Config<
@@ -721,7 +947,11 @@ mod benchmarks {
             ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId,
         >,
     {
-        let msp_hash = T::Hashing::hash_of(&msp);
+        let msp_hash = if msp_id.is_some() {
+            msp_id.unwrap()
+        } else {
+            T::Hashing::hash_of(&msp)
+        };
 
         let capacity: StorageData<T> = 1024 * 1024 * 1024;
         let capacity_used: StorageData<T> = 0;

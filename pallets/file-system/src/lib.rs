@@ -30,6 +30,8 @@
 pub use pallet::*;
 
 #[cfg(feature = "runtime-benchmarks")]
+pub mod benchmark_proofs;
+#[cfg(feature = "runtime-benchmarks")]
 pub mod benchmarking;
 
 pub mod types;
