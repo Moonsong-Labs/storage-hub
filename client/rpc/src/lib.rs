@@ -154,6 +154,16 @@ pub trait StorageHubClientApi {
         checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>>;
 
+    // Note: this RPC method returns a Vec<u8> because the `KeyProof` struct is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateFileKeyProof")]
+    async fn generate_file_key_proof(
+        &self,
+        file_key: H256,
+        seed: H256,
+        provider_id: ProofsDealerProviderId,
+    ) -> RpcResult<Vec<u8>>;
+
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
 
@@ -588,6 +598,24 @@ where
         };
 
         Ok(proof.encode())
+    }
+
+    async fn generate_file_key_proof(
+        &self,
+        file_key: H256,
+        seed: H256,
+        provider_id: ProofsDealerProviderId,
+    ) -> RpcResult<Vec<u8>> {
+        let key_proof = generate_key_proof(
+            self.client.clone(),
+            self.file_storage.clone(),
+            file_key,
+            seed,
+            provider_id,
+            None,
+        )
+        .await?;
+        Ok(key_proof.encode())
     }
 
     // If a seed is provided, we manually generate and persist it into the file system.

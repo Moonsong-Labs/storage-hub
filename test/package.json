@@ -28,6 +28,7 @@
 		"docker:stop:fullnet": "docker compose -f ../docker/fullnet-base-template.yml down --remove-orphans && docker volume prune -f",
 		"docker:stop:bspnet": "docker compose -f ../docker/bspnet-base-template.yml down --remove-orphans && docker volume prune -f",
 		"docker:stop:generateProofsDealerBenchmarkProofs": "docker compose -f ../docker/local-dev-bsp-compose.yml down --remove-orphans && docker volume prune -f",
+		"docker:stop:generateFileSystemBenchmarkProofs": "docker compose -f ../docker/local-dev-bsp-compose.yml down --remove-orphans && docker volume prune -f",
 		"zombie:run:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet spawn configs/simple.toml",
 		"zombie:run:local": "DOCKER_BUILDKIT=0  SH_IMAGE=storage-hub:local pnpm zombienet spawn configs/simple.toml",
 		"zombie:run:native": "pnpm  tsx scripts/downloadPolkadot.ts 1.9.0  && pnpm zombienet spawn configs/simpleNative.toml",

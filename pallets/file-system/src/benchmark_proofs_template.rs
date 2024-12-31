@@ -18,18 +18,13 @@ use sp_runtime::AccountId32;
 use sp_std::{vec, vec::Vec};
 
 #[rustfmt::skip]
-pub fn get_seed() -> Vec<u8> {
-    {{seed}}
+pub fn get_msp_id() -> Vec<u8> {
+    {{msp_id}}
 }
 
 #[rustfmt::skip]
-pub fn get_provider_id() -> Vec<u8> {
-    {{provider_id}}
-}
-
-#[rustfmt::skip]
-pub fn get_root() -> Vec<u8> {
-    {{root}}
+pub fn get_bucket_root() -> Vec<u8> {
+    {{bucket_root}}
 }
 
 #[rustfmt::skip]
@@ -38,23 +33,55 @@ pub fn get_user_account() -> AccountId32 {
 }
 
 #[rustfmt::skip]
-pub fn fetch_proof(number_of_challenges: u32) -> Vec<u8> {
-    match number_of_challenges {
-        {{proofs}}
-        _ => panic!(
-            "Number of challenges ({}) is not supported",
-            number_of_challenges
-        ),
-    }
+pub fn fetch_non_inclusion_proof(number_of_file_keys_to_accept: u32) -> Vec<u8> {
+	match number_of_file_keys_to_accept {
+		{{non_inclusion_proofs}}
+		_ => panic!(
+			"Number of file keys to accept ({}) is not supported",
+			number_of_file_keys_to_accept
+		),
+	}
 }
 
 #[rustfmt::skip]
-pub fn fetch_challenges(number_of_challenges: u32) -> Vec<Vec<u8>> {
-    match number_of_challenges {
-        {{challenges}}
-        _ => panic!(
-            "Number of challenges ({}) is not supported",
-            number_of_challenges
-        ),
-    }
+pub fn fetch_file_keys_to_accept(number_of_file_keys_to_accept: u32) -> Vec<Vec<u8>> {
+	match number_of_file_keys_to_accept {
+		{{file_keys_to_accept}}
+		_ => panic!(
+			"Number of file keys to accept ({}) is not supported",
+			number_of_file_keys_to_accept
+		),
+	}
 }
+
+#[rustfmt::skip]
+pub fn fetch_file_key_proof(file_key_index: u32) -> Vec<u8> {
+	match file_key_index {
+		{{file_key_proofs}}
+		_ => panic!(
+			"File key index ({}) is not supported",
+			file_key_index
+		),
+	}
+}
+
+#[rustfmt::skip]
+pub fn get_bsp_id() -> Vec<u8> {
+    {{bsp_id}}
+}
+
+#[rustfmt::skip]
+pub fn get_bsp_root() -> Vec<u8> {
+    {{bsp_root}}
+}
+
+#[rustfmt::skip]
+pub fn fetch_inclusion_proof() -> Vec<u8> {
+	{{inclusion_proof}}
+}
+
+#[rustfmt::skip]
+pub fn fetch_file_key_for_inclusion_proof() -> Vec<u8> {
+	{{file_key_inclusion_proof}}
+}
+

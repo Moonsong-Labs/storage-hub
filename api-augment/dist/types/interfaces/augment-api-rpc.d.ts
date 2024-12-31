@@ -1070,6 +1070,16 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
+       * Generate a SCALE-encoded proof for a file key.
+       **/
+      generateFileKeyProof: AugmentedRpc<
+        (
+          file_key: H256 | string | Uint8Array,
+          seed: H256 | string | Uint8Array,
+          provider_id: H256 | string | Uint8Array
+        ) => Observable<Bytes>
+      >;
+      /**
        * Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.
        **/
       generateForestProof: AugmentedRpc<

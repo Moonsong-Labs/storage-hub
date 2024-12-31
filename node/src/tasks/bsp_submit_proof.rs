@@ -142,6 +142,11 @@ where
             event.data
         );
 
+        if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
+            warn!(target: LOG_TARGET, "No challenges to respond to. Skipping proof submission.");
+            return Ok(());
+        }
+
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
         // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {

@@ -121,6 +121,24 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       ],
       type: "Vec<u8>"
     },
+    generateFileKeyProof: {
+      description: "Generate a SCALE-encoded proof for a file key.",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        },
+        {
+          name: "seed",
+          type: "H256"
+        },
+        {
+          name: "provider_id",
+          type: "H256"
+        }
+      ],
+      type: "Vec<u8>"
+    },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [
