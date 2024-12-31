@@ -15,7 +15,10 @@ use sc_tracing::tracing::{debug, error, info, trace, warn};
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
+use sp_runtime::{
+    traits::{Header, Zero},
+    AccountId32, SaturatedConversion,
+};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -73,6 +76,10 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 ///
 /// TODO: Define properly the number of blocks to come out of sync mode
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
+
+/// On blocks that are multiples of this number, the blockchain service will trigger the catch
+/// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
+pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
 
 /// The BlockchainService actor.
 ///
@@ -1136,6 +1143,14 @@ impl BlockchainService {
 
     async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
+
+        // Trigger catch up of proofs if the block is a multiple of `CHECK_FOR_PENDING_PROOFS_PERIOD`.
+        // This is only relevant if this node is managing a BSP.
+        if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) = &self.provider_id {
+            if block_number % CHECK_FOR_PENDING_PROOFS_PERIOD == BlockNumber::zero() {
+                self.proof_submission_catch_up(block_hash, bsp_id);
+            }
+        }
 
         // Notify all tasks waiting for this block number (or lower).
         self.notify_import_block_number(&block_number);

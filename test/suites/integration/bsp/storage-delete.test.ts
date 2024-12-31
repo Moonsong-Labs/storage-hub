@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
+import { bspKey, describeBspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
@@ -58,12 +58,20 @@ describeBspNet(
       await userApi.docker.resumeBspContainer({
         containerName: "sh-bsp-three"
       });
+      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // TODO: create an RPC to automatically execute everything below
       // TODO: everything below should be removed and replaced with other testing logic
 
+      // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
+      await waitFor({
+        lambda: async () => {
+          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          return isFileInForest.isTrue;
+        }
+      });
+
       // Request to stop storing a file with Dummy BSP
-      await userApi.wait.bspCatchUpToChainTip(bspApi);
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
       ]);
