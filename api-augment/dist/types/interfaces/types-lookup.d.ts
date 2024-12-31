@@ -5443,6 +5443,7 @@ declare module "@polkadot/types/lookup" {
     readonly isRootNotUpdated: boolean;
     readonly isNoPrivacyChange: boolean;
     readonly isOperationNotAllowedForInsolventProvider: boolean;
+    readonly isUsedCapacityShouldBeZero: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5515,7 +5516,8 @@ declare module "@polkadot/types/lookup" {
       | "NoFileKeysToConfirm"
       | "RootNotUpdated"
       | "NoPrivacyChange"
-      | "OperationNotAllowedForInsolventProvider";
+      | "OperationNotAllowedForInsolventProvider"
+      | "UsedCapacityShouldBeZero";
   }
   /** @name PalletProofsDealerError (471) */
   interface PalletProofsDealerError extends Enum {
