@@ -1919,22 +1919,23 @@ where
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
 
         if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
-            // If it doesn't store any files we stop the challenge cycle.
+            // If it doesn't store any files we stop the challenge cycle and stop its randomness cycle.
             if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
             {
+                ensure!(
+                    <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
+                        == Zero::zero(),
+                    Error::<T>::UsedCapacityShouldBeZero,
+                );
+
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
                     &sp_id,
                 )?;
-            };
 
-            // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
-            if <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
-                == Zero::zero()
-            {
                 <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(
                     &sp_id,
                 )?;
-            }
+            };
         };
 
         Ok((sp_id, new_root))
