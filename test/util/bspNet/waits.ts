@@ -274,6 +274,8 @@ export const waitForBspFileDeletionComplete = async (api: ApiPromise, fileKey: H
  * This function performs the following steps:
  * 1. Waits for a longer period to allow for the BSP to catch up.
  * 2. Checks for the best block to make sure it matches the chain tip.
+ * 3. Attempts to trigger gossip between the nodes by building a few additional blocks
+ *    after some time has passed.
  *
  * @param syncedApi - The ApiPromise that is already synced to the top of the chain.
  * @param bspBehindApi - The ApiPromise instance that is behind the chain tip.
@@ -285,22 +287,35 @@ export const waitForBspToCatchUpToChainTip = async (
   syncedApi: ApiPromise,
   bspBehindApi: ApiPromise
 ) => {
-  // To allow time for BSP to catch up to the tip of the chain (30s)
-  const iterations = 300;
+  // To allow time for BSP to catch up to the tip of the chain (40s)
+  // We wait for 10s for the two nodes to sync to the same block, and if by that time they
+  // haven't caught up, we build a block to trigger gossip between the nodes.
+  // This is because in some edge cases, the latest block from the synced node might not have
+  // been gossiped to the "behind" node, before it went into syncing mode.
+  const blockBuildingIterations = 4;
+  const iterations = 100;
   const delay = 100;
-  for (let i = 0; i < iterations + 1; i++) {
-    try {
-      await sleep(delay);
-      const syncedBestBlock = await syncedApi.rpc.chain.getHeader();
-      const bspBehindBestBlock = await bspBehindApi.rpc.chain.getHeader();
-      assert(
-        syncedBestBlock.hash.toString() === bspBehindBestBlock.hash.toString(),
-        "BSP did not catch up to the chain tip"
-      );
-      break;
-    } catch {
-      assert(i !== iterations, `Failed to detect BSP catch up after ${(i * delay) / 1000}s`);
+  for (let i = 0; i < blockBuildingIterations + 1; i++) {
+    for (let j = 0; j < iterations + 1; j++) {
+      try {
+        await sleep(delay);
+        const syncedBestBlock = await syncedApi.rpc.chain.getHeader();
+        const bspBehindBestBlock = await bspBehindApi.rpc.chain.getHeader();
+        assert(
+          syncedBestBlock.hash.toString() === bspBehindBestBlock.hash.toString(),
+          "BSP did not catch up to the chain tip"
+        );
+        break;
+      } catch {
+        assert(
+          i !== blockBuildingIterations,
+          `Failed to detect BSP catch up after ${(i * j * delay) / 1000}s`
+        );
+      }
     }
+
+    // Build a block to trigger gossip between the nodes.
+    await syncedApi.rpc.engine.createBlock(true, true);
   }
 };
 
