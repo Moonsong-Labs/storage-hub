@@ -7825,6 +7825,7 @@ dependencies = [
  "serde",
  "shp-constants",
  "shp-data-price-updater",
+ "shp-file-key-verifier",
  "shp-file-metadata",
  "shp-traits",
  "shp-treasury-funding",
@@ -13911,6 +13912,7 @@ dependencies = [
  "array-bytes",
  "jsonrpsee",
  "log",
+ "pallet-file-system-runtime-api",
  "pallet-proofs-dealer-runtime-api",
  "serde",
  "shc-common",
@@ -13960,6 +13962,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "frame-support 38.0.0",
+ "log",
  "num-bigint",
  "parity-scale-codec",
  "rand",

@@ -13,8 +13,9 @@ use frame_benchmarking::v2::*;
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
         + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash> + shp_traits::ReadBucketsInterface<BucketId = <T as frame_system::Config>::Hash>,
     // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers:
-    <T as crate::Config>::Providers: shp_traits::ReadBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId> + shp_traits::MutateBucketsInterface<ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId>,
-	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>, MerkleHash = <T as frame_system::Config>::Hash>,
+    <T as crate::Config>::Providers: shp_traits::ReadBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId>
+									+ shp_traits::MutateBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash ,ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId, BucketId = <T as frame_system::Config>::Hash>,
+	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>, MerkleHash = <T as frame_system::Config>::Hash, KeyProof = shp_file_key_verifier::types::FileKeyProof<{shp_constants::H_LENGTH}, {shp_constants::FILE_CHUNK_SIZE}, {shp_constants::FILE_SIZE_TO_CHALLENGES}>>,
 	<T as crate::Config>::Nfts: frame_support::traits::nonfungibles_v2::Inspect<<T as frame_system::Config>::AccountId, CollectionId = <T as pallet_nfts::Config>::CollectionId>,
 )]
 mod benchmarks {
@@ -28,7 +29,10 @@ mod benchmarks {
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use pallet_file_system_runtime_api::QueryFileEarliestVolunteerTickError;
     use pallet_storage_providers::types::ValueProposition;
-    use shp_traits::{ProofsDealerInterface, ReadBucketsInterface, ReadStorageProvidersInterface};
+    use shp_traits::{
+        MutateBucketsInterface, ProofsDealerInterface, ReadBucketsInterface,
+        ReadStorageProvidersInterface,
+    };
     use sp_core::{Decode, Hasher};
     use sp_runtime::traits::{Hash, One, Zero};
     use sp_std::{vec, vec::Vec};
@@ -437,8 +441,8 @@ mod benchmarks {
 
     #[benchmark]
     fn msp_respond_storage_requests_multiple_buckets(
-        n: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
         m: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
+        n: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
         l: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
@@ -447,10 +451,14 @@ mod benchmarks {
         let amount_of_file_keys_to_accept_per_bucket: u32 = m.into();
         let amount_of_file_keys_to_reject_per_bucket: u32 = l.into();
 
+        log::info!(target: "runtime::file_system::benchmarking", "Executing benchmark instance:");
+        log::info!(target: "runtime::file_system::benchmarking", "Amount of buckets to accept: {:?}", amount_of_buckets_to_accept);
+        log::info!(target: "runtime::file_system::benchmarking", "Amount of file keys to accept per bucket: {:?}", amount_of_file_keys_to_accept_per_bucket);
+        log::info!(target: "runtime::file_system::benchmarking", "Amount of file keys to reject per bucket: {:?}", amount_of_file_keys_to_reject_per_bucket);
+
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
         let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
-        let signed_user_origin = RawOrigin::Signed(user_account.clone());
         mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000)?;
 
         // Register an account as a MSP with the specific MSP ID from the generated proofs
@@ -461,39 +469,34 @@ mod benchmarks {
             .expect("Failed to decode provider ID from bytes.");
         let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
 
+        // Create the bucket to store in the MSP
+        let encoded_bucket_id = get_bucket_id();
+        let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
+            .expect("Bucket ID should be decodable as it is a hash");
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Update the bucket's size and root to match the generated proofs
+        let bucket_size = 2 * 1024 * 1024;
+        let encoded_bucket_root = get_bucket_root();
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.size = bucket_size;
+            bucket.root = bucket_root;
+        });
+
         let mut msp_total_response: StorageRequestMspResponse<T> = BoundedVec::new();
         // For each bucket to accept:
-        for i in 0..amount_of_buckets_to_accept {
-            // Create a bucket to store in the MSP
-            let name: BucketNameFor<T> =
-                vec![i as u8; BucketNameLimitFor::<T>::get().try_into().unwrap()]
-                    .try_into()
-                    .unwrap();
-            Pallet::<T>::create_bucket(
-                signed_user_origin.clone().into(),
-                Some(msp_id),
-                name.clone(),
-                true,
-                Some(value_prop_id),
-            )?;
-
-            // Update the bucket's size and root to match the generated proofs
-            let bucket_id =
-                <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
-                    &user_account,
-                    name.clone(),
-                );
-            let bucket_size = 2 * 1024 * 1024;
-            let encoded_bucket_root = get_bucket_root();
-            let bucket_root =
-                <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
-                    .expect("Bucket root should be decodable as it is a hash");
-            pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
-                let bucket = bucket.as_mut().expect("Bucket should exist.");
-                bucket.size = bucket_size;
-                bucket.root = bucket_root;
-            });
-
+        for _ in 0..amount_of_buckets_to_accept {
             // Build the reject response for this bucket:
 
             // Create all the storage requests for the files to reject
@@ -578,22 +581,25 @@ mod benchmarks {
 
             // For each file key to accept...
             for j in 0..file_keys_to_accept.len() {
+                // Get its file key proof from the generated proofs.
+                let encoded_file_key_proof = fetch_file_key_proof(j as u32);
+                let file_key_proof = <KeyProof<T>>::decode(&mut encoded_file_key_proof.as_ref())
+                    .expect("File key proof should be decodable");
+
                 // Create the storage request for it:
-                let location: FileLocation<T> =
-                    vec![j as u8; MaxFilePathSize::<T>::get().try_into().unwrap()]
-                        .try_into()
-                        .unwrap();
-                let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(
-                    b"benchmark_fingerprint",
-                );
-                let size: StorageData<T> = 100;
+                let location = file_key_proof.file_metadata.location.clone();
+                let fingerprint_hash = file_key_proof.file_metadata.fingerprint.clone().as_hash();
+                let fingerprint =
+                    <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
+                        .expect("Fingerprint should be decodable as it is a hash");
+                let size = file_key_proof.file_metadata.file_size;
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
                     owner: user_account.clone(),
                     bucket_id,
-                    location: location.clone(),
-                    fingerprint,
+                    location: location.clone().try_into().unwrap(),
+                    fingerprint: fingerprint.into(),
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
@@ -603,11 +609,7 @@ mod benchmarks {
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
-
-                // Get its file key proof from the generated proofs.
-                let encoded_file_key_proof = fetch_file_key_proof(j as u32);
-                let file_key_proof = <KeyProof<T>>::decode(&mut encoded_file_key_proof.as_ref())
-                    .expect("File key proof should be decodable");
+                log::info!(target: "runtime::file_system::benchmarking", "Processing file key to accept: {:?}", file_keys_to_accept[j]);
 
                 // Create the FileKeyWithProof object
                 let file_key_with_proof = FileKeyWithProof {
@@ -981,9 +983,9 @@ mod benchmarks {
         .try_into()
         .unwrap();
 
-        let value_prop_storage: StorageData<T> = 1000;
+        let bucket_data_limit: StorageData<T> = capacity;
         // Use One::one() or a conversion that matches the expected balance type:
-        let value_prop = ValueProposition::<T>::new(One::one(), commitment, value_prop_storage);
+        let value_prop = ValueProposition::<T>::new(One::one(), commitment, bucket_data_limit);
         let value_prop_id = value_prop.derive_id();
 
         pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<T>::insert(

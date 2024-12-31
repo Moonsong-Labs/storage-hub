@@ -23,6 +23,11 @@ pub fn get_msp_id() -> Vec<u8> {
 }
 
 #[rustfmt::skip]
+pub fn get_bucket_id() -> Vec<u8> {
+	{{bucket_id}}
+}
+
+#[rustfmt::skip]
 pub fn get_bucket_root() -> Vec<u8> {
     {{bucket_root}}
 }

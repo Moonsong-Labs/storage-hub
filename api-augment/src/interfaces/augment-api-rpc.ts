@@ -1029,13 +1029,21 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
-       * Generate a SCALE-encoded proof for a file key.
+       * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
        **/
-      generateFileKeyProof: AugmentedRpc<
+      generateFileKeyProofBspConfirm: AugmentedRpc<
         (
-          file_key: H256 | string | Uint8Array,
-          seed: H256 | string | Uint8Array,
-          provider_id: H256 | string | Uint8Array
+          bsp_id: H256 | string | Uint8Array,
+          file_key: H256 | string | Uint8Array
+        ) => Observable<Bytes>
+      >;
+      /**
+       * Generate a SCALE-encoded proof for a file key to allow a MSP to accept storing it.
+       **/
+      generateFileKeyProofMspAccept: AugmentedRpc<
+        (
+          msp_id: H256 | string | Uint8Array,
+          file_key: H256 | string | Uint8Array
         ) => Observable<Bytes>
       >;
       /**

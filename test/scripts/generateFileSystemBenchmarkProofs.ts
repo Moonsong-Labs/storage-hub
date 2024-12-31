@@ -162,8 +162,8 @@ async function generateBenchmarkProofs() {
     await userApi.wait.bspVolunteerInTxPool(1);
     await userApi.wait.mspResponseInTxPool(1);
     await userApi.sealBlock();
-    await mspApi.wait.mspFileStorageComplete(fileMetadata.fileKey);
-    await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
+    await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
     await userApi.wait.bspStored(1);
   }
 
@@ -197,7 +197,7 @@ async function generateBenchmarkProofs() {
     nonStoredFileKeys.push(fileMetadata.fileKey);
 
     await userApi.wait.bspVolunteer(1);
-    await bspApi.wait.bspFileStorageComplete(fileMetadata.fileKey);
+    await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
     await userApi.wait.bspStored(1);
   }
 
@@ -260,10 +260,9 @@ async function generateBenchmarkProofs() {
     // Then, generate the file key proofs for each one of the file keys.
     const fileKeyProofs = [];
     for (const fileKey of fileKeysToAccept) {
-      const fileKeyProof = await bspApi.rpc.storagehubclient.generateFileKeyProof(
-        fileKey,
-        fileKey,
-        ShConsts.DUMMY_MSP_ID
+      const fileKeyProof = await bspApi.rpc.storagehubclient.generateFileKeyProofMspAccept(
+        ShConsts.DUMMY_MSP_ID,
+        fileKey
       );
       fileKeyProofs.push(fileKeyProof);
     }
@@ -337,6 +336,8 @@ async function generateBenchmarkProofs() {
 
   const mspIdStr = `hex::decode("${ShConsts.DUMMY_MSP_ID.slice(2)}").expect("MSP ID should be a decodable hex string")`;
 
+  const bucketIdStr = `hex::decode("${bucketId.toString().slice(2)}").expect("Bucket ID should be a decodable hex string")`;
+
   const bucketRootStr = `hex::decode("${bucketRoot}").expect("Bucket root should be a decodable hex string")`;
 
   const userAccountStr = `<AccountId32 as Ss58Codec>::from_ss58check("${ShConsts.NODE_INFOS.user.AddressId}").expect("User account should be a decodable string")`;
@@ -377,6 +378,7 @@ async function generateBenchmarkProofs() {
   const rustCode = template
     .replace("{{date}}", new Date().toISOString())
     .replace("{{msp_id}}", mspIdStr)
+    .replace("{{bucket_id}}", bucketIdStr)
     .replace("{{bucket_root}}", bucketRootStr)
     .replace("{{user_account}}", userAccountStr)
     .replace("{{non_inclusion_proofs}}", proofsStr)
