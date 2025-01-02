@@ -173,4 +173,11 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 
     fn is_allowed(&mut self, key: &HasherOutT<T>) -> Result<bool, FileStorageError>;
+
+    fn add_file_to_exclude_list(&mut self, key: HasherOutT<T>) -> Result<(), FileStorageError>;
+
+    fn remove_file_from_exclude_list(
+        &mut self,
+        key: &HasherOutT<T>,
+    ) -> Result<(), FileStorageError>;
 }

@@ -150,7 +150,7 @@ where
     pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
     pub bucket_prefix_map: HashSet<[u8; 64]>,
-    pub exclude_list: Vec<HasherOutT<T>>,
+    pub exclude_list: HashSet<HasherOutT<T>>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T>
@@ -162,7 +162,7 @@ where
             metadata: HashMap::new(),
             file_data: HashMap::new(),
             bucket_prefix_map: HashSet::new(),
-            exclude_list: vec![],
+            exclude_list: HashSet::new(),
         }
     }
 }
@@ -363,6 +363,21 @@ where
         }
 
         return Ok(true);
+    }
+
+    fn add_file_to_exclude_list(&mut self, key: HasherOutT<T>) -> Result<(), FileStorageError> {
+        self.exclude_list.insert(key);
+
+        Ok(())
+    }
+
+    fn remove_file_from_exclude_list(
+        &mut self,
+        key: &HasherOutT<T>,
+    ) -> Result<(), FileStorageError> {
+        self.exclude_list.remove(key);
+
+        Ok(())
     }
 }
 
