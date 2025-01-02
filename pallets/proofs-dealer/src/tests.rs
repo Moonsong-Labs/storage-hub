@@ -833,10 +833,9 @@ fn proofs_dealer_trait_stop_challenge_cycle_success() {
             provider_id
         ));
 
-        let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id).unwrap();
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&provider_id).unwrap();
         let current_tick = ChallengesTicker::<Test>::get();
-        assert_eq!(last_tick_provider_submitted_proof, current_tick);
+        assert_eq!(proof_record.last_tick_proven, current_tick);
 
         let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
             provider_id,
@@ -845,7 +844,7 @@ fn proofs_dealer_trait_stop_challenge_cycle_success() {
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
-        let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
+        let prev_deadline = proof_record.last_tick_proven + challenge_period_plus_tolerance;
         let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
@@ -856,8 +855,8 @@ fn proofs_dealer_trait_stop_challenge_cycle_success() {
         // Call stop cycle.
         assert_ok!(ProofsDealer::stop_challenge_cycle(&provider_id));
 
-        let last_tick = LastTickProviderSubmittedAProofFor::<Test>::get(provider_id);
-        assert_eq!(last_tick, None);
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&provider_id);
+        assert_eq!(proof_record, None);
 
         let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, &provider_id);
         assert_eq!(deadline, None);
