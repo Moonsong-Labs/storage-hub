@@ -2,7 +2,6 @@ use async_channel::Receiver;
 use async_trait::async_trait;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
-use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
@@ -14,122 +13,36 @@ use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
 use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
-use shc_forest_manager::{
-    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorageHandler,
-};
+use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::StorageHubClientRpcConfig;
 
 const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
 
 use super::{
-    forest_storage::{ForestStorageCaching, ForestStorageSingle},
     handler::{ProviderConfig, StorageHubHandler},
-    types::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT},
+    types::{
+        BspForestStorageHandlerT, BspProvider, InMemoryStorageLayer, MspForestStorageHandlerT,
+        MspProvider, NoStorageLayer, RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer,
+        UserRole,
+    },
 };
-
-/// Supported roles used in the StorageHub system implement this trait.
-///
-/// Currently supported roles are:
-/// - [`BspProvider`]
-/// - [`MspProvider`]
-/// - [`UserRole`] (only for testing)
-/// TODO: CHANGE NAME TO `SHRole`
-pub trait RoleSupport {}
-
-/// Backup Storage Provider (BSP) role. Implements the [`RoleSupport`] trait.
-pub struct BspProvider;
-impl RoleSupport for BspProvider {}
-
-/// Main Storage Provider (MSP) role. Implements the [`RoleSupport`] trait.
-pub struct MspProvider;
-impl RoleSupport for MspProvider {}
-
-/// User role. Implements the [`RoleSupport`] trait.
-/// Only used for testing.
-pub struct UserRole;
-impl RoleSupport for UserRole {}
-
-/// Storage layers supported by the StorageHub system.
-///
-/// Currently supported storage layers are:
-/// - [`RocksDbStorageLayer`]
-/// - [`InMemoryStorageLayer`]
-/// - [`NoStorageLayer`]
-/// TODO: CHANGE NAME TO `SHStorageLayer`
-pub trait StorageLayerSupport {}
-
-/// RocksDB storage layer. Implements the [`StorageLayerSupport`] trait.
-///
-/// Stores data in a RocksDB key-value database. Efficient for Merkle Patricia Trie (MPT) data.
-pub struct RocksDbStorageLayer;
-impl StorageLayerSupport for RocksDbStorageLayer {}
-
-/// In-memory storage layer. Implements the [`StorageLayerSupport`] trait.
-/// Used for testing. Stored data is lost when the node is stopped.
-pub struct InMemoryStorageLayer;
-impl StorageLayerSupport for InMemoryStorageLayer {}
-
-/// No storage layer. Implements the [`StorageLayerSupport`] trait.
-/// Used for testing alongside the [`UserRole`].
-pub struct NoStorageLayer;
-impl StorageLayerSupport for NoStorageLayer {}
-
-/// Abstraction over the [`FileStorage`](shc_file_manager::traits::FileStorage) and [`ForestStorageHandler`] used based on a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
-pub trait StorageTypes {
-    type FL: FileStorageT;
-    type FSH: ForestStorageHandler + Clone + Send + Sync + 'static;
-}
-
-impl StorageTypes for (BspProvider, InMemoryStorageLayer) {
-    type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
-    type FSH = ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
-}
-
-impl StorageTypes for (BspProvider, RocksDbStorageLayer) {
-    type FL = RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
-    type FSH = ForestStorageCaching<
-        Vec<u8>,
-        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
-    >;
-}
-
-impl StorageTypes for (MspProvider, InMemoryStorageLayer) {
-    type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
-    type FSH = ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
-}
-
-impl StorageTypes for (MspProvider, RocksDbStorageLayer) {
-    type FL = RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
-    type FSH = ForestStorageCaching<
-        Vec<u8>,
-        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
-    >;
-}
-
-// TODO: Implement default empty implementations for the forest storage handler since the user role only needs the file storage.
-/// There is no default empty implementation for [`FileStorageT`] and [`ForestStorageHandler`] so
-/// we use the in-memory storage layers which won't be used by the user role.
-impl StorageTypes for (UserRole, NoStorageLayer) {
-    type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
-    type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
-}
 
 /// Builder for the [`StorageHubHandler`].
 ///
-/// Abstracted over [`RoleSupport`] `R` and [`StorageLayerSupport`] `S` to avoid any callers from having to know the internals of the
+/// Abstracted over [`ShRole`] `R` and [`ShStorageLayer`] `S` to avoid any callers from having to know the internals of the
 /// StorageHub system, such as the right storage layers to use for a given role.
 pub struct StorageHubBuilder<R, S>
 where
-    R: RoleSupport,
-    S: StorageLayerSupport,
-    (R, S): StorageTypes,
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
-    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as StorageTypes>::FSH>>>,
+    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH>>>,
     storage_path: Option<String>,
-    file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
-    forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
+    file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
+    forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
     max_storage_capacity: Option<StorageDataUnit>,
     jump_capacity: Option<StorageDataUnit>,
     extrinsic_retry_timeout: u64,
@@ -137,10 +50,10 @@ where
     notify_period: Option<u32>,
 }
 
-/// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
-impl<R: RoleSupport, S: StorageLayerSupport> StorageHubBuilder<R, S>
+/// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
+impl<R: ShRole, S: ShStorageLayer> StorageHubBuilder<R, S>
 where
-    (R, S): StorageTypes,
+    (R, S): ShNodeType,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
         Self {
@@ -158,6 +71,7 @@ where
         }
     }
 
+    /// Spawn the File Transfer Service.
     pub async fn with_file_transfer(
         &mut self,
         file_transfer_request_receiver: Receiver<IncomingRequest>,
@@ -178,6 +92,10 @@ where
         self
     }
 
+    /// Set the maximum storage capacity.
+    ///
+    /// The node will not increase its on-chain capacity above this value.
+    /// This is meant to reflect the actual physical storage capacity of the node.
     pub fn with_max_storage_capacity(
         &mut self,
         max_storage_capacity: Option<StorageDataUnit>,
@@ -186,25 +104,40 @@ where
         self
     }
 
+    /// Set the jump capacity.
+    ///
+    /// The jump capacity is the amount of storage that the node will increase in its on-chain
+    /// capacity by adding more stake. For example, if the jump capacity is set to 1k, and the
+    /// node needs 100 units of storage more to store a file, the node will automatically increase
+    /// its on-chain capacity by 1k units.
     pub fn with_jump_capacity(&mut self, jump_capacity: Option<StorageDataUnit>) -> &mut Self {
         self.jump_capacity = jump_capacity;
         self
     }
 
+    /// Set the timeout for retrying extrinsics.
+    ///
+    /// The default value is `60` seconds.
     pub fn with_retry_timeout(&mut self, extrinsic_retry_timeout: u64) -> &mut Self {
         self.extrinsic_retry_timeout = extrinsic_retry_timeout;
         self
     }
 
-    // Add an alert notification for every X blocks to the blockchain service. Cannot be added if the service has already been spawn.
-    pub fn with_notify_period(&mut self, notify_period: u32) -> &mut Self {
+    /// Add an alert notification for every X blocks to the Blockchain Service.
+    ///
+    /// Cannot be added if the Blockchain Service has already been spawned.
+    pub fn with_notify_period(&mut self, notify_period: Option<u32>) -> &mut Self {
         if self.blockchain.is_some() {
-            panic!("`with_notify_period` should be called after starting the blockchain service. Use `with_blockchain` first.");
+            panic!("`with_notify_period` should be called before starting the Blockchain Service. Use `with_blockchain` after calling `with_notify_period`.");
         }
-        self.notify_period = Some(notify_period);
+        self.notify_period = notify_period;
         self
     }
 
+    /// Spawn the Blockchain Service.
+    ///
+    /// Cannot be called before setting the Forest Storage Handler.
+    /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
     pub async fn with_blockchain(
         &mut self,
         client: Arc<ParachainClient>,
@@ -222,7 +155,7 @@ where
             .forest_storage_handler
             .clone()
             .expect("Just checked that this is not None; qed");
-        let blockchain_service_handle = spawn_blockchain_service::<<(R, S) as StorageTypes>::FSH>(
+        let blockchain_service_handle = spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH>(
             self.task_spawner
                 .as_ref()
                 .expect("Task spawner is not set."),
@@ -239,27 +172,57 @@ where
         self
     }
 
-    pub fn with_indexer_db_pool(&mut self, indexer_db_pool: DbPool) -> &mut Self {
-        self.indexer_db_pool = Some(indexer_db_pool);
+    /// Set the database pool for the Indexer Service.
+    ///
+    /// The Indexer Service is used by MSP nodes to retrieve information about files
+    /// they are not storing, like which are the BSPs storing them.
+    pub fn with_indexer_db_pool(&mut self, indexer_db_pool: Option<DbPool>) -> &mut Self {
+        self.indexer_db_pool = indexer_db_pool;
+        self
+    }
+
+    /// Create the RPC configuration needed to initialise the RPC methods of the StorageHub client.
+    ///
+    /// This method is meant to be called after the Storage Layer has been set up.
+    /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
+    pub fn create_rpc_config(
+        &self,
+        keystore: KeystorePtr,
+    ) -> StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH> {
+        StorageHubClientRpcConfig::new(
+            self.file_storage
+                .clone()
+                .expect("File Storage not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
+            self.forest_storage_handler
+                .clone()
+                .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
+            keystore,
+        )
+    }
+}
+
+/// Abstraction trait to build the Storage Layer of a [`ShNodeType`].
+///
+/// Each [`ShNodeType`] depends on a specific combination of [`ShRole`] and [`ShStorageLayer`],
+/// and each of this combinations has a different way of building their Storage Layer.
+///
+/// This trait is implemented for `StorageHubBuilder<R, S>` where `R` is a [`ShRole`] and `S` is a [`ShStorageLayer`].
+pub trait StorageLayerBuilder {
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
+}
+
+impl StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer> {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        self.forest_storage_handler =
+            Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType>::FSH::new());
+
         self
     }
 }
 
-/// Abstraction over the [`StorageTypes`] used based on a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
-pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>);
-}
-
-impl StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer> {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
-        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(BspProvider, InMemoryStorageLayer) as StorageTypes>::FSH::new());
-    }
-}
-
 impl StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer> {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) {
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         self.storage_path = storage_path.clone();
 
         let storage_path = storage_path.expect("Storage path not set");
@@ -270,20 +233,24 @@ impl StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer>
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
         self.forest_storage_handler =
-            Some(<(BspProvider, RocksDbStorageLayer) as StorageTypes>::FSH::new(storage_path));
+            Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType>::FSH::new(storage_path));
+
+        self
     }
 }
 
 impl StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemoryStorageLayer> {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler =
-            Some(<(MspProvider, InMemoryStorageLayer) as StorageTypes>::FSH::new());
+            Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType>::FSH::new());
+
+        self
     }
 }
 
 impl StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer> {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) {
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
         self.storage_path = Some(storage_path.clone());
 
@@ -293,324 +260,110 @@ impl StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer>
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
         self.forest_storage_handler =
-            Some(<(MspProvider, RocksDbStorageLayer) as StorageTypes>::FSH::new(storage_path));
+            Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType>::FSH::new(storage_path));
+
+        self
     }
 }
 
 impl StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer> {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(UserRole, NoStorageLayer) as StorageTypes>::FSH::new());
+        self.forest_storage_handler = Some(<(UserRole, NoStorageLayer) as ShNodeType>::FSH::new());
+
+        self
     }
 }
 
-pub trait RpcConfigBuilder<FL, FSH> {
-    fn create_rpc_config(&self, keystore: KeystorePtr) -> StorageHubClientRpcConfig<FL, FSH>;
-}
-
-impl<R: RoleSupport, S: StorageLayerSupport>
-    RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-    for StorageHubBuilder<R, S>
-where
-    (R, S): StorageTypes,
-{
-    fn create_rpc_config(
-        &self,
-        keystore: KeystorePtr,
-    ) -> StorageHubClientRpcConfig<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-    {
-        StorageHubClientRpcConfig::new(
-            self.file_storage
-                .clone()
-                .expect("File Storage not initialized"),
-            self.forest_storage_handler
-                .clone()
-                .expect("Forest Storage Handler not initialized"),
-            keystore,
-        )
-    }
-}
-
-impl<S: StorageLayerSupport> StorageHubBuilder<BspProvider, S>
-where
-    (BspProvider, S): StorageTypes,
-    <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
-{
-    fn build_handler(
-        &self,
-    ) -> StorageHubHandler<
-        <(BspProvider, S) as StorageTypes>::FL,
-        <(BspProvider, S) as StorageTypes>::FSH,
-    > {
-        StorageHubHandler::new(
-            self.task_spawner
-                .as_ref()
-                .expect("Task Spawner not set")
-                .clone(),
-            self.file_transfer
-                .as_ref()
-                .expect("File Transfer not set.")
-                .clone(),
-            self.blockchain
-                .as_ref()
-                .expect("Blockchain Service not set.")
-                .clone(),
-            self.file_storage
-                .as_ref()
-                .expect("File Storage not set.")
-                .clone(),
-            self.forest_storage_handler
-                .as_ref()
-                .expect("Forest Storage Handler not set.")
-                .clone(),
-            ProviderConfig {
-                max_storage_capacity: self
-                    .max_storage_capacity
-                    .expect("Max Storage Capacity not set"),
-                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-            },
-            self.indexer_db_pool.clone(),
-        )
-    }
-}
-
-impl<S: StorageLayerSupport> StorageHubBuilder<MspProvider, S>
-where
-    (MspProvider, S): StorageTypes,
-    <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
-{
-    fn build_handler(
-        &self,
-    ) -> StorageHubHandler<
-        <(MspProvider, S) as StorageTypes>::FL,
-        <(MspProvider, S) as StorageTypes>::FSH,
-    > {
-        StorageHubHandler::new(
-            self.task_spawner
-                .as_ref()
-                .expect("Task Spawner not set")
-                .clone(),
-            self.file_transfer
-                .as_ref()
-                .expect("File Transfer not set.")
-                .clone(),
-            self.blockchain
-                .as_ref()
-                .expect("Blockchain Service not set.")
-                .clone(),
-            self.file_storage
-                .as_ref()
-                .expect("File Storage not set.")
-                .clone(),
-            self.forest_storage_handler
-                .as_ref()
-                .expect("Forest Storage Handler not set.")
-                .clone(),
-            ProviderConfig {
-                max_storage_capacity: self
-                    .max_storage_capacity
-                    .expect("Max Storage Capacity not set"),
-                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-            },
-            self.indexer_db_pool.clone(),
-        )
-    }
-}
-
-impl StorageHubBuilder<UserRole, NoStorageLayer>
-where
-    (UserRole, NoStorageLayer): StorageTypes,
-    <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
-        ForestStorageHandler + Clone + Send + Sync + 'static,
-{
-    fn build_handler(
-        &self,
-    ) -> StorageHubHandler<
-        <(UserRole, NoStorageLayer) as StorageTypes>::FL,
-        <(UserRole, NoStorageLayer) as StorageTypes>::FSH,
-    > {
-        StorageHubHandler::new(
-            self.task_spawner
-                .as_ref()
-                .expect("Task Spawner not set")
-                .clone(),
-            self.file_transfer
-                .as_ref()
-                .expect("File Transfer not set.")
-                .clone(),
-            self.blockchain
-                .as_ref()
-                .expect("Blockchain Service not set.")
-                .clone(),
-            self.file_storage
-                .as_ref()
-                .expect("File Storage not set.")
-                .clone(),
-            // Not used by the user role
-            <(UserRole, NoStorageLayer) as StorageTypes>::FSH::new(),
-            // Not used by the user role
-            ProviderConfig {
-                max_storage_capacity: 0,
-                jump_capacity: 0,
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-            },
-            self.indexer_db_pool.clone(),
-        )
-    }
-}
-
-pub trait RequiredStorageProviderSetup {
-    fn setup(
-        &mut self,
-        storage_path: Option<String>,
-        max_storage_capacity: Option<StorageDataUnit>,
-        jump_capacity: Option<StorageDataUnit>,
-        extrinsic_retry_timeout: u64,
-    );
-}
-
-impl RequiredStorageProviderSetup for StorageHubBuilder<BspProvider, InMemoryStorageLayer>
-where
-    (BspProvider, InMemoryStorageLayer): StorageTypes,
-    Self: StorageLayerBuilder,
-{
-    fn setup(
-        &mut self,
-        storage_path: Option<String>,
-        max_storage_capacity: Option<StorageDataUnit>,
-        jump_capacity: Option<StorageDataUnit>,
-        extrinsic_retry_timeout: u64,
-    ) {
-        self.setup_storage_layer(storage_path);
-        if max_storage_capacity.is_none() {
-            panic!("Max storage capacity not set");
-        }
-
-        self.with_max_storage_capacity(max_storage_capacity);
-        self.with_jump_capacity(jump_capacity);
-        self.with_retry_timeout(extrinsic_retry_timeout);
-    }
-}
-
-impl RequiredStorageProviderSetup for StorageHubBuilder<BspProvider, RocksDbStorageLayer>
-where
-    (BspProvider, RocksDbStorageLayer): StorageTypes,
-    Self: StorageLayerBuilder,
-{
-    fn setup(
-        &mut self,
-        storage_path: Option<String>,
-        max_storage_capacity: Option<StorageDataUnit>,
-        jump_capacity: Option<StorageDataUnit>,
-        extrinsic_retry_timeout: u64,
-    ) {
-        if storage_path.is_none() {
-            panic!("Storage path not set");
-        }
-        self.setup_storage_layer(storage_path);
-        if max_storage_capacity.is_none() {
-            panic!("Max storage capacity not set");
-        }
-        self.with_max_storage_capacity(max_storage_capacity);
-        self.with_jump_capacity(jump_capacity);
-        self.with_retry_timeout(extrinsic_retry_timeout);
-    }
-}
-
-impl RequiredStorageProviderSetup for StorageHubBuilder<MspProvider, InMemoryStorageLayer>
-where
-    (MspProvider, InMemoryStorageLayer): StorageTypes,
-    Self: StorageLayerBuilder,
-{
-    fn setup(
-        &mut self,
-        storage_path: Option<String>,
-        max_storage_capacity: Option<StorageDataUnit>,
-        jump_capacity: Option<StorageDataUnit>,
-        extrinsic_retry_timeout: u64,
-    ) {
-        self.setup_storage_layer(storage_path);
-        if max_storage_capacity.is_none() {
-            panic!("Max storage capacity not set");
-        }
-        self.with_max_storage_capacity(max_storage_capacity);
-        self.with_jump_capacity(jump_capacity);
-        self.with_retry_timeout(extrinsic_retry_timeout);
-    }
-}
-
-impl RequiredStorageProviderSetup for StorageHubBuilder<MspProvider, RocksDbStorageLayer>
-where
-    (MspProvider, RocksDbStorageLayer): StorageTypes,
-    Self: StorageLayerBuilder,
-{
-    fn setup(
-        &mut self,
-        storage_path: Option<String>,
-        max_storage_capacity: Option<StorageDataUnit>,
-        jump_capacity: Option<StorageDataUnit>,
-        extrinsic_retry_timeout: u64,
-    ) {
-        if storage_path.is_none() {
-            panic!("Storage path not set");
-        }
-        self.setup_storage_layer(storage_path);
-        if max_storage_capacity.is_none() {
-            panic!("Max storage capacity not set");
-        }
-        self.with_max_storage_capacity(max_storage_capacity);
-        self.with_jump_capacity(jump_capacity);
-        self.with_retry_timeout(extrinsic_retry_timeout);
-    }
-}
-
-impl<S: StorageLayerSupport> RequiredStorageProviderSetup for StorageHubBuilder<UserRole, S>
-where
-    (UserRole, S): StorageTypes,
-    Self: StorageLayerBuilder,
-{
-    fn setup(
-        &mut self,
-        _storage_path: Option<String>,
-        _max_storage_capacity: Option<StorageDataUnit>,
-        _jump_capacity: Option<StorageDataUnit>,
-        extrinsic_retry_timeout: u64,
-    ) {
-        self.setup_storage_layer(None);
-        self.with_retry_timeout(extrinsic_retry_timeout);
-    }
-}
-
-/// Abstraction layer to build the [`StorageHubBuilder`] with a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
+/// Abstraction trait to build the [`StorageHubHandler`].
+///
+/// This trait is implemented by the different [`StorageHubBuilder`] variants,
+/// and build a [`StorageHubHandler`] with the required configuration for the
+/// corresponding [`ShRole`].
 #[async_trait]
 pub trait Buildable {
     async fn build(self);
 }
 
 #[async_trait]
-impl<S: StorageLayerSupport> Buildable for StorageHubBuilder<BspProvider, S>
+impl<S: ShStorageLayer> Buildable for StorageHubBuilder<BspProvider, S>
 where
-    (BspProvider, S): StorageTypes,
-    <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
+    (BspProvider, S): ShNodeType,
+    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
 {
     async fn build(self) {
-        let mut handler = self.build_handler();
+        let mut handler = StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+            },
+            self.indexer_db_pool.clone(),
+        );
         handler.initialise_bsp().await;
         handler.start_bsp_tasks();
     }
 }
 
 #[async_trait]
-impl<S: StorageLayerSupport> Buildable for StorageHubBuilder<MspProvider, S>
+impl<S: ShStorageLayer> Buildable for StorageHubBuilder<MspProvider, S>
 where
-    (MspProvider, S): StorageTypes,
-    <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
+    (MspProvider, S): ShNodeType,
+    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
 {
     async fn build(self) {
-        let handler = self.build_handler();
+        let handler = StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+            },
+            self.indexer_db_pool.clone(),
+        );
         handler.start_msp_tasks()
     }
 }
@@ -618,12 +371,38 @@ where
 #[async_trait]
 impl Buildable for StorageHubBuilder<UserRole, NoStorageLayer>
 where
-    (UserRole, NoStorageLayer): StorageTypes,
-    <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
+    (UserRole, NoStorageLayer): ShNodeType,
+    <(UserRole, NoStorageLayer) as ShNodeType>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     async fn build(self) {
-        let handler = self.build_handler();
+        let handler = StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            // Not used by the user role
+            <(UserRole, NoStorageLayer) as ShNodeType>::FSH::new(),
+            // Not used by the user role
+            ProviderConfig {
+                max_storage_capacity: 0,
+                jump_capacity: 0,
+                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+            },
+            self.indexer_db_pool.clone(),
+        );
         handler.start_user_tasks();
     }
 }

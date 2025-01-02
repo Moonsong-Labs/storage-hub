@@ -59,10 +59,12 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::{self, IndexerConfigurations, ProviderType, StorageLayer},
     command::ProviderOptions,
-    services::builder::{
-        BspProvider, Buildable, InMemoryStorageLayer, MspProvider, NoStorageLayer,
-        RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder,
-        StorageHubBuilder, StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
+    services::{
+        builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
+        types::{
+            BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer, RocksDbStorageLayer,
+            ShNodeType, ShRole, ShStorageLayer, UserRole,
+        },
     },
 };
 
@@ -197,18 +199,17 @@ async fn init_sh_builder<R, S>(
     maybe_db_pool: Option<DbPool>,
 ) -> Option<(
     StorageHubBuilder<R, S>,
-    StorageHubClientRpcConfig<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
+    StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH>,
 )>
 where
-    R: RoleSupport,
-    S: StorageLayerSupport,
-    (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
-        + StorageLayerBuilder
-        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
+    StorageHubBuilder<R, S>: StorageLayerBuilder,
 {
     match provider_options {
         Some(ProviderOptions {
+            provider_type,
             storage_path,
             max_storage_capacity,
             jump_capacity,
@@ -222,13 +223,13 @@ where
             );
 
             // Start building the StorageHubHandler, if running as a provider.
-            let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
+            let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "sh-builder");
             let mut storage_hub_builder = StorageHubBuilder::<R, S>::new(task_spawner);
 
+            // Setup and spawn the File Transfer Service.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
                 file_transfer_request_protocol
-                    .expect("FileTransfer request protocol should already be initialized.");
+                    .expect("FileTransfer request protocol should already be initialised.");
 
             storage_hub_builder
                 .with_file_transfer(
@@ -238,20 +239,21 @@ where
                 )
                 .await;
 
-            if let Some(notify_period) = msp_charging_period {
-                storage_hub_builder.with_notify_period(*notify_period);
-            }
-            storage_hub_builder.setup(
-                storage_path.clone(),
-                *max_storage_capacity,
-                *jump_capacity,
-                *extrinsic_retry_timeout,
-            );
+            // Setup the `ShStorageLayer` and additional configuration parameters.
+            storage_hub_builder
+                .setup_storage_layer(storage_path.clone())
+                .with_retry_timeout(*extrinsic_retry_timeout)
+                .with_max_storage_capacity(*max_storage_capacity)
+                .with_jump_capacity(*jump_capacity);
 
-            if let Some(indexer_db_pool) = maybe_db_pool {
-                storage_hub_builder.with_indexer_db_pool(indexer_db_pool);
+            // Setup specific configuration for the MSP node.
+            if *provider_type == ProviderType::Msp {
+                storage_hub_builder
+                    .with_notify_period(*msp_charging_period)
+                    .with_indexer_db_pool(maybe_db_pool);
             }
 
+            // Get the RPC configuration to use for this StorageHub node client.
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 
             Some((storage_hub_builder, rpc_config))
@@ -268,13 +270,10 @@ async fn finish_sh_builder_and_build<R, S>(
     rocksdb_root_path: impl Into<PathBuf>,
 ) -> Result<(), sc_service::Error>
 where
-    R: RoleSupport,
-    S: StorageLayerSupport,
-    (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
-        + StorageLayerBuilder
-        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-        + Buildable,
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable,
 {
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
@@ -302,13 +301,10 @@ async fn start_dev_impl<R, S, Network>(
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager>
 where
-    R: RoleSupport,
-    S: StorageLayerSupport,
-    (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
-        + StorageLayerBuilder
-        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-        + Buildable,
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -704,13 +700,10 @@ async fn start_node_impl<R, S, Network>(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
 where
-    R: RoleSupport,
-    S: StorageLayerSupport,
-    (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
-        + StorageLayerBuilder
-        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-        + Buildable,
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
