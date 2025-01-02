@@ -451,11 +451,6 @@ mod benchmarks {
         let amount_of_file_keys_to_accept_per_bucket: u32 = m.into();
         let amount_of_file_keys_to_reject_per_bucket: u32 = l.into();
 
-        log::info!(target: "runtime::file_system::benchmarking", "Executing benchmark instance:");
-        log::info!(target: "runtime::file_system::benchmarking", "Amount of buckets to accept: {:?}", amount_of_buckets_to_accept);
-        log::info!(target: "runtime::file_system::benchmarking", "Amount of file keys to accept per bucket: {:?}", amount_of_file_keys_to_accept_per_bucket);
-        log::info!(target: "runtime::file_system::benchmarking", "Amount of file keys to reject per bucket: {:?}", amount_of_file_keys_to_reject_per_bucket);
-
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
         let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
@@ -472,7 +467,6 @@ mod benchmarks {
         let mut msp_total_response: StorageRequestMspResponse<T> = BoundedVec::new();
         // For each bucket to accept:
         for i in 1..amount_of_buckets_to_accept + 1 {
-            log::info!(target: "runtime::file_system::benchmarking", "Processing bucket {:?}:", i);
             // Create the bucket to store in the MSP
             let encoded_bucket_id = get_bucket_id(i);
             let bucket_id =
@@ -615,7 +609,6 @@ mod benchmarks {
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
-                log::info!(target: "runtime::file_system::benchmarking", "Processing file key to accept: {:?}", file_keys_to_accept[j]);
 
                 // Create the FileKeyWithProof object
                 let file_key_with_proof = FileKeyWithProof {

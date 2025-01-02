@@ -92,20 +92,13 @@ pub fn fetch_file_key_proof(file_key_amount_per_bucket: u32, bucket_index: u32, 
 		),
 	};
 
-	// Filter them to keep only the ones for the bucket index
-	// Keep in mind that:
-	// - The bucket index is 1-based (so the first bucket has index 1)
-	// - The first proof corresponds to bucket 1, the second to bucket 2, and so on
-	// until we reach the last bucket (let's say it's bucket N). Then, the next proof
-	// corresponds to bucket 1 again, and so on.
-	// This is why we use the modulo operator to get the correct index.
-	let file_key_proofs_for_bucket = file_key_proofs.iter().enumerate().filter_map(|(i, proof)| {
-		if (i as u32) % file_key_amount_per_bucket == (bucket_index - 1) {
-			Some(proof)
-		} else {
-			None
-		}
-	}).collect::<Vec<_>>();
+	// We only need to keep the file keys that correspond to the bucket. That is:
+	// - If the bucket index is 1, we keep the first `number_of_file_keys_to_accept` file keys.
+	// - If the bucket index is 2, we keep the second `number_of_file_keys_to_accept` file keys.
+	// - Etc
+	let start_index = ((bucket_index - 1) * file_key_amount_per_bucket) as usize;
+	let end_index = start_index + file_key_amount_per_bucket as usize;
+	let file_key_proofs_for_bucket = file_key_proofs[start_index..end_index].to_vec();
 
 	// Get the file key proof we want
 	file_key_proofs_for_bucket[file_key_index as usize].clone()
