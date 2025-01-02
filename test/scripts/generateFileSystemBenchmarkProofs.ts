@@ -43,11 +43,13 @@ async function generateBenchmarkProofs() {
     `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`
   );
 
-  const storedFileKeys: string[] = [];
-  const nonStoredFileKeys: string[] = [];
+  const storedFileKeysPerBucket: string[][] = [];
+  const nonStoredFileKeysPerBucket: string[][] = [];
   const fileKeysAcceptedCases: string[][] = [];
-  const fileKeyProofsAcceptedCases: string[] = [];
-  const nonInclusionProofsCases: string[] = [];
+  const fileKeyProofsAcceptedCases: string[][] = [];
+  const nonInclusionProofsCases: string[][] = [];
+  const bucketIds: H256[] = [];
+  const bucketRoots: string[] = [];
 
   console.log(`${GREEN_TEXT}◀ ✅ BSPNet Bootstrap successful${RESET_TEXT}`);
   console.log("");
@@ -139,82 +141,103 @@ async function generateBenchmarkProofs() {
     "test/39.jpg",
     "test/40.jpg"
   ];
-  const bucketName = "benchmarking-bucket";
 
-  // Create the bucket first and get its ID.
-  const newBucketEvent = await userApi.file.newBucket(bucketName);
-  const newBucketEventDataBlob =
-    userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
-  if (!newBucketEventDataBlob) {
-    throw new Error("Failed to create new bucket");
-  }
-  const bucketId = newBucketEventDataBlob.bucketId;
+  // Create 10 buckets and upload files to them.
+  for (let i = 0; i < 10; i++) {
+    const bucketName = `benchmarking-bucket-${i}`;
+    const storedFileKeysForBucket: string[] = [];
+    const nonStoredFileKeysForBucket: string[] = [];
 
-  // Upload files to the MSP but not all since we need non-inclusion forest proofs.
-  for (let i = 0; i < sources.length / 2; i++) {
-    console.log(`Uploading file ${i + 1} of ${sources.length / 2}`);
-    const source = sources[i];
-    const destination = locations[i];
+    // Create the bucket and get its ID.
+    const newBucketEvent = await userApi.file.newBucket(bucketName);
+    const newBucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
+    if (!newBucketEventDataBlob) {
+      throw new Error("Failed to create new bucket");
+    }
+    const bucketId = newBucketEventDataBlob.bucketId;
+    // Upload files to the MSP but not all since we need non-inclusion forest proofs.
+    for (let j = 0; j < sources.length / 2; j++) {
+      console.log(`Uploading file ${j + 1} of ${sources.length / 2}`);
+      const source = sources[j];
+      const destination = locations[j];
 
-    const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
-    storedFileKeys.push(fileMetadata.fileKey);
+      const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
+      storedFileKeysForBucket.push(fileMetadata.fileKey);
 
-    await userApi.wait.bspVolunteerInTxPool(1);
-    await userApi.wait.mspResponseInTxPool(1);
-    await userApi.sealBlock();
-    await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-    await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-    await userApi.wait.bspStored(1);
-  }
+      await userApi.wait.bspVolunteerInTxPool(1);
+      await userApi.wait.mspResponseInTxPool(1);
+      await userApi.sealBlock();
+      await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
+      await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
+      await userApi.wait.bspStored(1);
+    }
 
-  // Upload the remaining files to the BSP (with another MSP), to have all file keys and to be able to get all key proofs easily.
-  // Create a new bucket first and get its ID.
-  const otherBucketName = "benchmarking-bucket-2";
-  const otherBucketEvent = await userApi.file.newBucket(
-    otherBucketName,
-    undefined,
-    undefined,
-    ShConsts.DUMMY_MSP_ID_2
-  );
-  const otherBucketEventDataBlob =
-    userApi.events.fileSystem.NewBucket.is(otherBucketEvent) && otherBucketEvent.data;
-  if (!otherBucketEventDataBlob) {
-    throw new Error("Failed to create new bucket");
-  }
-  const otherBucketId = otherBucketEventDataBlob.bucketId;
-  for (let i = sources.length / 2; i < sources.length; i++) {
-    console.log(`Uploading file ${i + 1} of ${sources.length}`);
-    const source = sources[i];
-    const destination = locations[i];
+    // Save the bucket ID for later use.
+    bucketIds.push(bucketId);
 
-    const fileMetadata = await userApi.file.newStorageRequest(
-      source,
-      destination,
-      otherBucketId,
+    // Save the stored file keys for this bucket.
+    storedFileKeysPerBucket.push(storedFileKeysForBucket);
+
+    // Upload the remaining files to the BSP (with another MSP), to have all file keys and to be able to get all key proofs easily.
+    // Create a new bucket first and get its ID.
+    const otherBucketName = `other-benchmarking-bucket-${i}`;
+    const otherBucketEvent = await userApi.file.newBucket(
+      otherBucketName,
+      undefined,
       undefined,
       ShConsts.DUMMY_MSP_ID_2
     );
-    nonStoredFileKeys.push(fileMetadata.fileKey);
+    const otherBucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(otherBucketEvent) && otherBucketEvent.data;
+    if (!otherBucketEventDataBlob) {
+      throw new Error("Failed to create new bucket");
+    }
+    const otherBucketId = otherBucketEventDataBlob.bucketId;
+    for (let j = sources.length / 2; j < sources.length; j++) {
+      console.log(`Uploading file ${j + 1} of ${sources.length}`);
+      const source = sources[j];
+      const destination = locations[j];
 
-    await userApi.wait.bspVolunteer(1);
-    await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-    await userApi.wait.bspStored(1);
+      const fileMetadata = await userApi.file.newStorageRequest(
+        source,
+        destination,
+        otherBucketId,
+        undefined,
+        ShConsts.DUMMY_MSP_ID_2
+      );
+      nonStoredFileKeysForBucket.push(fileMetadata.fileKey);
+
+      await userApi.wait.bspVolunteer(1);
+      await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
+      await userApi.wait.bspStored(1);
+    }
+
+    // Save the non-stored file keys for this bucket.
+    nonStoredFileKeysPerBucket.push(nonStoredFileKeysForBucket);
   }
 
   // Sort the stored and non-stored file keys.
-  storedFileKeys.sort();
-  verbose && console.log("Sorted stored file keys: ", storedFileKeys);
-  nonStoredFileKeys.sort();
-  verbose && console.log("Sorted non-stored file keys: ", nonStoredFileKeys);
+  for (const storedFileKeys of storedFileKeysPerBucket) {
+    storedFileKeys.sort();
+  }
+  verbose && console.log("Sorted stored file keys per bucket: ", storedFileKeysPerBucket);
+  for (const nonStoredFileKeys of nonStoredFileKeysPerBucket) {
+    nonStoredFileKeys.sort();
+  }
+  verbose && console.log("Sorted non-stored file keys per bucket: ", nonStoredFileKeysPerBucket);
 
   // Wait for the BSP to add the last confirmed file to its Forest.
   await sleep(500);
 
-  // Get the root of the Bucket's Forest after adding the 20 included files.
-  const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
-  const bucketForestRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketIdOption);
-  const bucketRoot = bucketForestRoot.toString().slice(2);
-  verbose && console.log("Bucket forest root: ", bucketForestRoot.toString());
+  // Get the root of each Bucket's Forest after adding the 20 included files.
+  for (const bucketId of bucketIds) {
+    const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
+    const bucketForestRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketIdOption);
+    const bucketRoot = bucketForestRoot.toString().slice(2);
+    verbose && console.log("Bucket forest root: ", bucketForestRoot.toString());
+    bucketRoots.push(bucketRoot);
+  }
 
   // Get the root of the BSP's forest after adding all files.
   const bspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
@@ -250,41 +273,46 @@ async function generateBenchmarkProofs() {
   // * non-inclusion proofs for the MSP since it's the same, setting the BSP root to that of the bucket.
 
   for (let i = 1; i <= 10; i++) {
-    // We generate a non-inclusion proof for i file keys of the nonStoredFileKeys array.
-    const fileKeysToAccept = nonStoredFileKeys.slice(0, i);
-    const nonInclusionProof = await mspApi.rpc.storagehubclient.generateForestProof(
-      bucketIdOption,
-      fileKeysToAccept
-    );
-
-    // Then, generate the file key proofs for each one of the file keys.
-    const fileKeyProofs = [];
-    for (const fileKey of fileKeysToAccept) {
+    // We generate a non-inclusion proof for i file keys of the nonStoredFileKeys array for each bucket.
+    const nonInclusionProofsForCase: string[] = [];
+    const allFileKeysToAccept: string[] = [];
+    const allFileKeyProofs = [];
+    for (let j = 0; j < bucketIds.length; j++) {
+      const fileKeysToAcceptForBucket = nonStoredFileKeysPerBucket[j].slice(0, i);
+      const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[j]);
+      const nonInclusionProof = await mspApi.rpc.storagehubclient.generateForestProof(
+        bucketIdOption,
+        fileKeysToAcceptForBucket
+      );
+      verbose && console.log(`\n\n Non-inclusion proof for bucket ${j}:`);
+      verbose && console.log(nonInclusionProof);
+      const nonInclusionProofHexStr = nonInclusionProof.toString().slice(2);
+      nonInclusionProofsForCase.push(nonInclusionProofHexStr);
+      allFileKeysToAccept.push(...fileKeysToAcceptForBucket);
+    }
+    // Then, generate the file key proofs for each one of the file keys to accept.
+    for (const fileKey of allFileKeysToAccept) {
       const fileKeyProof = await bspApi.rpc.storagehubclient.generateFileKeyProofMspAccept(
         ShConsts.DUMMY_MSP_ID,
         fileKey
       );
-      fileKeyProofs.push(fileKeyProof);
+      allFileKeyProofs.push(fileKeyProof);
     }
-
-    verbose && console.log("\n\n Non-inclusion proof:");
-    verbose && console.log(nonInclusionProof);
-    verbose && console.log(`\n\n ${i} file keys to accept:`);
-    verbose && console.log(fileKeysToAccept);
+    verbose && console.log(`\n\n Case ${i} file keys to accept:`);
+    verbose && console.log(allFileKeysToAccept);
     verbose && extraVerbose && console.log("File key proofs for those file keys:");
-    verbose && extraVerbose && console.log(fileKeyProofs);
+    verbose && extraVerbose && console.log(allFileKeyProofs);
 
     // Remove the 0x prefix from the proofs and the file keys. Save only the last file key proof since it's the one added from the previous iteration
-    const lastFileKeyProofHexStr = fileKeyProofs[fileKeyProofs.length - 1].toString().slice(2);
-    const nonInclusionProofHexStr = nonInclusionProof.toString().slice(2);
-    for (const i in fileKeysToAccept) {
-      fileKeysToAccept[i] = fileKeysToAccept[i].slice(2);
+    const allFileKeyProofHexStr = allFileKeyProofs.map((proof) => proof.toString().slice(2));
+    for (const i in allFileKeysToAccept) {
+      allFileKeysToAccept[i] = allFileKeysToAccept[i].slice(2);
     }
 
     // Add the file keys and proofs to the arrays.
-    fileKeysAcceptedCases.push(fileKeysToAccept);
-    fileKeyProofsAcceptedCases.push(lastFileKeyProofHexStr);
-    nonInclusionProofsCases.push(nonInclusionProofHexStr);
+    nonInclusionProofsCases.push(nonInclusionProofsForCase);
+    fileKeysAcceptedCases.push(allFileKeysToAccept);
+    fileKeyProofsAcceptedCases.push(allFileKeyProofHexStr);
   }
 
   console.log(
@@ -300,8 +328,8 @@ async function generateBenchmarkProofs() {
   // * For a Provider that wants to stop storing a file (or a user that calls delete_file), we need to generate
   // * an inclusion forest proof for the file key.
 
-  // Get the file key for which to generate the inclusion proof. Since the BSP has all file keys, we can get the first one.
-  const fileKeyForInclusionProof = storedFileKeys[0];
+  // Get the file key for which to generate the inclusion proof. Since the BSP has all file keys, we can get the first one of the non-stored ones.
+  const fileKeyForInclusionProof = nonStoredFileKeysPerBucket[0][0];
 
   // Generate the inclusion proof for that file key.
   const inclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
@@ -336,16 +364,27 @@ async function generateBenchmarkProofs() {
 
   const mspIdStr = `hex::decode("${ShConsts.DUMMY_MSP_ID.slice(2)}").expect("MSP ID should be a decodable hex string")`;
 
-  const bucketIdStr = `hex::decode("${bucketId.toString().slice(2)}").expect("Bucket ID should be a decodable hex string")`;
-
-  const bucketRootStr = `hex::decode("${bucketRoot}").expect("Bucket root should be a decodable hex string")`;
-
   const userAccountStr = `<AccountId32 as Ss58Codec>::from_ss58check("${ShConsts.NODE_INFOS.user.AddressId}").expect("User account should be a decodable string")`;
 
+  let bucketIdStr = "";
+  for (const [index, bucketId] of bucketIds.entries()) {
+    const bucketIdVec = `hex::decode("${bucketId.toString().slice(2)}").expect("Bucket ID should be a decodable hex string")`;
+    bucketIdStr += `${index + 1} => ${bucketIdVec},\n		`;
+  }
+
+  let bucketRootStr = "";
+  for (const [index, bucketRoot] of bucketRoots.entries()) {
+    const bucketRootVec = `hex::decode("${bucketRoot}").expect("Bucket root should be a decodable hex string")`;
+    bucketRootStr += `${index + 1} => ${bucketRootVec},\n		`;
+  }
+
   let proofsStr = "";
-  for (const [index, proof] of nonInclusionProofsCases.entries()) {
-    const proofVec = `hex::decode("${proof}").expect("Proof should be a decodable hex string")`;
-    proofsStr += `${index + 1} => ${proofVec},\n        `;
+  for (const [index, proofVector] of nonInclusionProofsCases.entries()) {
+    let nonInclusionProofForBucketStr = "";
+    for (const proof of proofVector) {
+      nonInclusionProofForBucketStr += `hex::decode("${proof}").expect("Proof should be a decodable hex string"),\n            `;
+    }
+    proofsStr += `${index + 1} => vec![\n            ${nonInclusionProofForBucketStr}\n        ],\n        `;
   }
 
   let fileKeysStr = "";
@@ -358,9 +397,12 @@ async function generateBenchmarkProofs() {
   }
 
   let fileKeyProofsStr = "";
-  for (const [index, fileKeyProof] of fileKeyProofsAcceptedCases.entries()) {
-    const fileKeyProofVec = `hex::decode("${fileKeyProof}").expect("File key proof should be a decodable hex string")`;
-    fileKeyProofsStr += `${index} => ${fileKeyProofVec},\n        `;
+  for (const [index, fileKeyProofs] of fileKeyProofsAcceptedCases.entries()) {
+    let fileKeysToAcceptProofsArrayStr = "";
+    for (const fileKeyProof of fileKeyProofs) {
+      fileKeysToAcceptProofsArrayStr += `hex::decode("${fileKeyProof}").expect("Proof should be a decodable hex string"),\n            `;
+    }
+    fileKeyProofsStr += `${index + 1} => vec![\n            ${fileKeysToAcceptProofsArrayStr}\n        ],\n        `;
   }
 
   const bspIdStr = `hex::decode("${ShConsts.DUMMY_BSP_ID.slice(2)}").expect("BSP ID should be a decodable hex string")`;

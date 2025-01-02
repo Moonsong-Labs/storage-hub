@@ -835,7 +835,7 @@ impl pallet_file_system::Config for Runtime {
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type MaxExpiredItemsInBlock = ConstU32<100>;
     #[cfg(feature = "runtime-benchmarks")]
-    type StorageRequestTtl = ConstU32<1000>;
+    type StorageRequestTtl = ConstU32<2000>;
     #[cfg(not(feature = "runtime-benchmarks"))]
     type StorageRequestTtl = ConstU32<40>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;

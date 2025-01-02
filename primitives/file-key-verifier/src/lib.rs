@@ -51,9 +51,9 @@ where
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Verifying proof for file key: {:?}", expected_file_key);
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Challenges for the proof are: {:?}", challenges);
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Proof to verify: {:?}", proof);
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Verifying proof for file key: {:?}", expected_file_key);
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Challenges for the proof are: {:?}", challenges);
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Proof to verify: {:?}", proof);
         // Check that `challenges` is not empty.
         if challenges.is_empty() {
             return Err("No challenges provided.".into());
@@ -63,7 +63,7 @@ where
         let file_key = proof.file_metadata.file_key::<T::Hash>();
 
         // Check that the number of challenges is proportional to the size of the file.
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the number of challenges is proportional to the size of the file.");
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the number of challenges is proportional to the size of the file.");
         let chunks_to_check = proof.file_metadata.chunks_to_check();
         if challenges.len() != chunks_to_check as usize {
             return Err(
@@ -72,7 +72,7 @@ where
         }
 
         // Check that the file key is equal to the root.
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the file key obtained from the proof is equal to the expected one.");
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the file key obtained from the proof is equal to the expected one.");
         if &file_key != expected_file_key {
             return Err(
                 "File key provided should be equal to the file key constructed from the proof."
@@ -81,14 +81,14 @@ where
         };
 
         // Convert the fingerprint from the proof to the output of the hasher.
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Converting the fingerprint from the proof to the output of the hasher.");
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Converting the fingerprint from the proof to the output of the hasher.");
         let expected_root: &[u8; H_LENGTH] = &proof.file_metadata.fingerprint.into();
         let expected_root: Self::Commitment = expected_root
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
 
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
-        //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Generating a partial trie based on the proof and checking that the root hash matches the expected root.");
+        log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Generating a partial trie based on the proof and checking that the root hash matches the expected root.");
         let (memdb, root) = proof
             .proof
             .to_memory_db(Some(&expected_root))
@@ -105,7 +105,7 @@ where
         // Iterate over the challenges, compute the modulo of the challenged hashes with the number of chunks in the file,
         // and check if the resulting leaf is in the proof.
         while let Some(challenge) = challenges_iter.next() {
-            //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Processing challenge: {:?}", challenge);
+            log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Processing challenge: {:?}", challenge);
             // Calculate the chunks of the file based on its size.
             let chunks = proof.file_metadata.chunks_count();
 
@@ -113,13 +113,13 @@ where
             let challenged_chunk = ChunkId::from_challenge(challenge.as_ref(), chunks);
 
             // Check that the chunk is in the proof.
-            //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the challenged chunk is in the proof.");
+            log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the challenged chunk is in the proof.");
             let chunk = trie
                 .get(&challenged_chunk.as_trie_key())
                 .map_err(|_| "The proof is invalid. The challenge does not exist in the trie.")?;
 
             // The chunk should be Some(leaf) for the proof to be valid.
-            //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the chunk is Some(leaf) for the proof to be valid.");
+            log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Checking that the chunk is Some(leaf) for the proof to be valid.");
             if chunk.is_none() {
                 return Err(
                     "The proof is invalid. The challenged chunk was not found in the trie, possibly because the challenged chunk has an index higher than the amount of chunks in the file. This should not be possible, provided that the size of the file (and therefore number of chunks) is correct.".into(),
@@ -127,7 +127,7 @@ where
             }
 
             // Add the challenge to the proven challenges vector.
-            //log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Adding the challenge to the proven challenges vector.");
+            log::info!(target: "runtime::primitives::file_key_verifier::verify_proof", "Adding the challenge to the proven challenges vector.");
             proven_challenges.insert(*challenge);
         }
 

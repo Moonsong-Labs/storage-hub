@@ -441,8 +441,8 @@ mod benchmarks {
 
     #[benchmark]
     fn msp_respond_storage_requests_multiple_buckets(
-        m: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
         n: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
+        m: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
         l: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
@@ -459,44 +459,46 @@ mod benchmarks {
         // Get the user account for the generated proofs and load it up with some balance.
         let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
         let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
-        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000)?;
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
 
         // Register an account as a MSP with the specific MSP ID from the generated proofs
         let msp_account: T::AccountId = whitelisted_caller();
-        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
         let encoded_msp_id = get_msp_id();
         let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
             .expect("Failed to decode provider ID from bytes.");
         let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
 
-        // Create the bucket to store in the MSP
-        let encoded_bucket_id = get_bucket_id();
-        let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
-            .expect("Bucket ID should be decodable as it is a hash");
-        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
-            user_account.clone(),
-            bucket_id,
-            false,
-            None,
-            Some(value_prop_id),
-        )?;
-
-        // Update the bucket's size and root to match the generated proofs
-        let bucket_size = 2 * 1024 * 1024;
-        let encoded_bucket_root = get_bucket_root();
-        let bucket_root =
-            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
-                .expect("Bucket root should be decodable as it is a hash");
-        pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
-            let bucket = bucket.as_mut().expect("Bucket should exist.");
-            bucket.size = bucket_size;
-            bucket.root = bucket_root;
-        });
-
         let mut msp_total_response: StorageRequestMspResponse<T> = BoundedVec::new();
         // For each bucket to accept:
-        for _ in 0..amount_of_buckets_to_accept {
+        for i in 1..amount_of_buckets_to_accept + 1 {
+            log::info!(target: "runtime::file_system::benchmarking", "Processing bucket {:?}:", i);
+            // Create the bucket to store in the MSP
+            let encoded_bucket_id = get_bucket_id(i);
+            let bucket_id =
+                <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
+                    .expect("Bucket ID should be decodable as it is a hash");
+            <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+                Some(msp_id),
+                user_account.clone(),
+                bucket_id,
+                false,
+                None,
+                Some(value_prop_id),
+            )?;
+
+            // Update the bucket's size and root to match the generated proofs
+            let bucket_size = 2 * 1024 * 1024;
+            let encoded_bucket_root = get_bucket_root(i);
+            let bucket_root =
+                <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                    .expect("Bucket root should be decodable as it is a hash");
+            pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+                let bucket = bucket.as_mut().expect("Bucket should exist.");
+                bucket.size = bucket_size;
+                bucket.root = bucket_root;
+            });
+
             // Build the reject response for this bucket:
 
             // Create all the storage requests for the files to reject
@@ -568,7 +570,7 @@ mod benchmarks {
                 <T as Config>::MaxBatchMspRespondStorageRequests,
             > = BoundedVec::new();
             let encoded_file_keys_to_accept =
-                fetch_file_keys_to_accept(amount_of_file_keys_to_accept_per_bucket);
+                fetch_file_keys_to_accept(amount_of_file_keys_to_accept_per_bucket, i as u32);
             let file_keys_to_accept = encoded_file_keys_to_accept
                 .iter()
                 .map(|encoded_file_key| {
@@ -582,7 +584,11 @@ mod benchmarks {
             // For each file key to accept...
             for j in 0..file_keys_to_accept.len() {
                 // Get its file key proof from the generated proofs.
-                let encoded_file_key_proof = fetch_file_key_proof(j as u32);
+                let encoded_file_key_proof = fetch_file_key_proof(
+                    amount_of_file_keys_to_accept_per_bucket,
+                    i as u32,
+                    j as u32,
+                );
                 let file_key_proof = <KeyProof<T>>::decode(&mut encoded_file_key_proof.as_ref())
                     .expect("File key proof should be decodable");
 
@@ -625,7 +631,7 @@ mod benchmarks {
 
             // Get the non-inclusion forest proof for this amount of file keys
             let encoded_non_inclusion_forest_proof =
-                fetch_non_inclusion_proof(amount_of_file_keys_to_accept_per_bucket);
+                fetch_non_inclusion_proofs(amount_of_file_keys_to_accept_per_bucket, i);
             let non_inclusion_forest_proof =
                 <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
                     &mut encoded_non_inclusion_forest_proof.as_ref(),

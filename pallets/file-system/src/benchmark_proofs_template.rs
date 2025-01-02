@@ -23,13 +23,25 @@ pub fn get_msp_id() -> Vec<u8> {
 }
 
 #[rustfmt::skip]
-pub fn get_bucket_id() -> Vec<u8> {
-	{{bucket_id}}
+pub fn get_bucket_id(bucket_index: u32) -> Vec<u8> {
+	match bucket_index {
+		{{bucket_id}}
+		_ => panic!(
+			"Bucket index ({}) is not supported",
+			bucket_index
+		),
+	}
 }
 
 #[rustfmt::skip]
-pub fn get_bucket_root() -> Vec<u8> {
-    {{bucket_root}}
+pub fn get_bucket_root(bucket_index: u32) -> Vec<u8> {
+	match bucket_index {
+		{{bucket_root}}
+		_ => panic!(
+			"Bucket index ({}) is not supported",
+			bucket_index
+		),
+	}
 }
 
 #[rustfmt::skip]
@@ -38,36 +50,65 @@ pub fn get_user_account() -> AccountId32 {
 }
 
 #[rustfmt::skip]
-pub fn fetch_non_inclusion_proof(number_of_file_keys_to_accept: u32) -> Vec<u8> {
-	match number_of_file_keys_to_accept {
+pub fn fetch_non_inclusion_proofs(number_of_file_keys_to_accept: u32, bucket_index: u32) -> Vec<u8> {
+	let non_inclusion_proofs = match number_of_file_keys_to_accept {
 		{{non_inclusion_proofs}}
 		_ => panic!(
 			"Number of file keys to accept ({}) is not supported",
 			number_of_file_keys_to_accept
 		),
-	}
+	};
+
+	non_inclusion_proofs[(bucket_index - 1) as usize].clone()
 }
 
 #[rustfmt::skip]
-pub fn fetch_file_keys_to_accept(number_of_file_keys_to_accept: u32) -> Vec<Vec<u8>> {
-	match number_of_file_keys_to_accept {
+pub fn fetch_file_keys_to_accept(number_of_file_keys_to_accept: u32, bucket_index: u32) -> Vec<Vec<u8>> {
+	let all_file_keys_to_accept = match number_of_file_keys_to_accept {
 		{{file_keys_to_accept}}
 		_ => panic!(
 			"Number of file keys to accept ({}) is not supported",
 			number_of_file_keys_to_accept
 		),
-	}
+	};
+
+	// We only need to keep the file keys that correspond to the bucket. That is:
+	// - If the bucket index is 1, we keep the first `number_of_file_keys_to_accept` file keys.
+	// - If the bucket index is 2, we keep the second `number_of_file_keys_to_accept` file keys.
+	// - Etc
+	let start_index = ((bucket_index - 1) * number_of_file_keys_to_accept) as usize;
+	let end_index = start_index + number_of_file_keys_to_accept as usize;
+	all_file_keys_to_accept[start_index..end_index].to_vec()
 }
 
 #[rustfmt::skip]
-pub fn fetch_file_key_proof(file_key_index: u32) -> Vec<u8> {
-	match file_key_index {
+pub fn fetch_file_key_proof(file_key_amount_per_bucket: u32, bucket_index: u32, file_key_index: u32) -> Vec<u8> {
+	// Get all file key proofs for this case
+	let file_key_proofs = match file_key_amount_per_bucket {
 		{{file_key_proofs}}
 		_ => panic!(
-			"File key index ({}) is not supported",
-			file_key_index
+			"File key amount per bucket ({}) is not supported",
+			file_key_amount_per_bucket
 		),
-	}
+	};
+
+	// Filter them to keep only the ones for the bucket index
+	// Keep in mind that:
+	// - The bucket index is 1-based (so the first bucket has index 1)
+	// - The first proof corresponds to bucket 1, the second to bucket 2, and so on
+	// until we reach the last bucket (let's say it's bucket N). Then, the next proof
+	// corresponds to bucket 1 again, and so on.
+	// This is why we use the modulo operator to get the correct index.
+	let file_key_proofs_for_bucket = file_key_proofs.iter().enumerate().filter_map(|(i, proof)| {
+		if (i as u32) % file_key_amount_per_bucket == (bucket_index - 1) {
+			Some(proof)
+		} else {
+			None
+		}
+	}).collect::<Vec<_>>();
+
+	// Get the file key proof we want
+	file_key_proofs_for_bucket[file_key_index as usize].clone()
 }
 
 #[rustfmt::skip]
