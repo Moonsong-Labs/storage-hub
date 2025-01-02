@@ -280,8 +280,8 @@ where
     sh_builder
         .with_blockchain(
             client.clone(),
-            Arc::new(rpc_handlers),
             keystore.clone(),
+            Arc::new(rpc_handlers),
             rocksdb_root_path,
         )
         .await;

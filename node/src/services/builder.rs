@@ -24,32 +24,55 @@ const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
 use super::{
     forest_storage::{ForestStorageCaching, ForestStorageSingle},
     handler::{ProviderConfig, StorageHubHandler},
+    types::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT},
 };
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
 
-/// Abstraction over the supported roles used in the StorageHub system
+/// Supported roles used in the StorageHub system implement this trait.
+///
+/// Currently supported roles are:
+/// - [`BspProvider`]
+/// - [`MspProvider`]
+/// - [`UserRole`] (only for testing)
+/// TODO: CHANGE NAME TO `SHRole`
 pub trait RoleSupport {}
 
+/// Backup Storage Provider (BSP) role. Implements the [`RoleSupport`] trait.
 pub struct BspProvider;
 impl RoleSupport for BspProvider {}
 
+/// Main Storage Provider (MSP) role. Implements the [`RoleSupport`] trait.
 pub struct MspProvider;
 impl RoleSupport for MspProvider {}
 
+/// User role. Implements the [`RoleSupport`] trait.
+/// Only used for testing.
 pub struct UserRole;
 impl RoleSupport for UserRole {}
 
-/// Abstraction over the supported storage layers used in the StorageHub system
+/// Storage layers supported by the StorageHub system.
+///
+/// Currently supported storage layers are:
+/// - [`RocksDbStorageLayer`]
+/// - [`InMemoryStorageLayer`]
+/// - [`NoStorageLayer`]
+/// TODO: CHANGE NAME TO `SHStorageLayer`
 pub trait StorageLayerSupport {}
 
-pub struct NoStorageLayer;
-impl StorageLayerSupport for NoStorageLayer {}
+/// RocksDB storage layer. Implements the [`StorageLayerSupport`] trait.
+///
+/// Stores data in a RocksDB key-value database. Efficient for Merkle Patricia Trie (MPT) data.
+pub struct RocksDbStorageLayer;
+impl StorageLayerSupport for RocksDbStorageLayer {}
 
+/// In-memory storage layer. Implements the [`StorageLayerSupport`] trait.
+/// Used for testing. Stored data is lost when the node is stopped.
 pub struct InMemoryStorageLayer;
 impl StorageLayerSupport for InMemoryStorageLayer {}
 
-pub struct RocksDbStorageLayer;
-impl StorageLayerSupport for RocksDbStorageLayer {}
+/// No storage layer. Implements the [`StorageLayerSupport`] trait.
+/// Used for testing alongside the [`UserRole`].
+pub struct NoStorageLayer;
+impl StorageLayerSupport for NoStorageLayer {}
 
 /// Abstraction over the [`FileStorage`](shc_file_manager::traits::FileStorage) and [`ForestStorageHandler`] used based on a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
 pub trait StorageTypes {
@@ -103,7 +126,7 @@ where
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
-    blockchain: Option<ActorHandle<BlockchainService>>,
+    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as StorageTypes>::FSH>>>,
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
@@ -176,9 +199,7 @@ where
     // Add an alert notification for every X blocks to the blockchain service. Cannot be added if the service has already been spawn.
     pub fn with_notify_period(&mut self, notify_period: u32) -> &mut Self {
         if self.blockchain.is_some() {
-            panic!(
-                "`with_notify_period`should never be called after starting the blockchain service."
-            );
+            panic!("`with_notify_period` should be called after starting the blockchain service. Use `with_blockchain` first.");
         }
         self.notify_period = Some(notify_period);
         self
@@ -187,17 +208,28 @@ where
     pub async fn with_blockchain(
         &mut self,
         client: Arc<ParachainClient>,
-        rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
+        rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
     ) -> &mut Self {
-        let blockchain_service_handle = spawn_blockchain_service(
+        if self.forest_storage_handler.is_none() {
+            panic!(
+                "`with_blockchain` should be called after setting up the Forest Storage Handler. Use `setup_storage_layer` first."
+            );
+        }
+
+        let forest_storage_handler = self
+            .forest_storage_handler
+            .clone()
+            .expect("Just checked that this is not None; qed");
+        let blockchain_service_handle = spawn_blockchain_service::<<(R, S) as StorageTypes>::FSH>(
             self.task_spawner
                 .as_ref()
                 .expect("Task spawner is not set."),
             client.clone(),
-            rpc_handlers.clone(),
             keystore.clone(),
+            rpc_handlers.clone(),
+            forest_storage_handler,
             rocksdb_root_path,
             self.notify_period,
         )

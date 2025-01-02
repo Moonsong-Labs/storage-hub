@@ -1,17 +1,18 @@
-use anyhow::anyhow;
-use futures::prelude::*;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
     sync::Arc,
 };
 
+use anyhow::anyhow;
+use futures::prelude::*;
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
 use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
@@ -86,7 +87,10 @@ pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
 /// For such purposes, it uses the [`ParachainClient`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
-pub struct BlockchainService {
+pub struct BlockchainService<FSH>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
@@ -95,6 +99,11 @@ pub struct BlockchainService {
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
     pub(crate) rpc_handlers: Arc<RpcHandlers>,
+    /// The Forest Storage handler.
+    ///
+    /// This is used to manage Forest Storage instances and update their roots when there are
+    /// Forest-root-changing events on-chain, for the Storage Provider managed by this service.
+    pub(crate) forest_storage_handler: FSH,
     /// The hash and number of the last best block processed by the BlockchainService.
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
@@ -135,13 +144,18 @@ pub struct BlockchainService {
     /// computing the next challenges tick. This case is handled separately.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
     /// Notify period value to know when to trigger the NotifyPeriod event.
+    ///
+    /// This is meant to be used for periodic, low priority tasks.
     pub(crate) notify_period: Option<u32>,
 }
 
 /// Event loop for the BlockchainService actor.
-pub struct BlockchainServiceEventLoop {
+pub struct BlockchainServiceEventLoop<FSH>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
-    actor: BlockchainService,
+    actor: BlockchainService<FSH>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -155,9 +169,12 @@ where
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
-impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
+impl<FSH> ActorEventLoop<BlockchainService<FSH>> for BlockchainServiceEventLoop<FSH>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     fn new(
-        actor: BlockchainService,
+        actor: BlockchainService<FSH>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
     ) -> Self {
         Self { actor, receiver }
@@ -207,9 +224,12 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
-impl Actor for BlockchainService {
+impl<FSH> Actor for BlockchainService<FSH>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     type Message = BlockchainServiceCommand;
-    type EventLoop = BlockchainServiceEventLoop;
+    type EventLoop = BlockchainServiceEventLoop<FSH>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 
     fn handle_message(
@@ -984,12 +1004,16 @@ impl Actor for BlockchainService {
     }
 }
 
-impl BlockchainService {
+impl<FSH> BlockchainService<FSH>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     /// Create a new [`BlockchainService`].
     pub fn new(
         client: Arc<ParachainClient>,
-        rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
+        rpc_handlers: Arc<RpcHandlers>,
+        forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
     ) -> Self {
@@ -998,6 +1022,7 @@ impl BlockchainService {
             client,
             keystore,
             rpc_handlers,
+            forest_storage_handler,
             best_block: BestBlockInfo::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),

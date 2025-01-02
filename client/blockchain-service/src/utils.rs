@@ -19,6 +19,7 @@ use shc_common::{
         StorageProviderId, BCSV_KEY_TYPE,
     },
 };
+use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
@@ -48,7 +49,10 @@ use crate::{
     BlockchainService,
 };
 
-impl BlockchainService {
+impl<FSH> BlockchainService<FSH>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
         let mut keys_to_remove = Vec::new();

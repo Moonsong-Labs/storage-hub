@@ -62,7 +62,7 @@ where
     /// The actor handle for the file transfer service.
     pub file_transfer: ActorHandle<FileTransferService>,
     /// The actor handle for the blockchain service.
-    pub blockchain: ActorHandle<BlockchainService>,
+    pub blockchain: ActorHandle<BlockchainService<FSH>>,
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
@@ -99,7 +99,7 @@ where
     pub fn new(
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
-        blockchain: ActorHandle<BlockchainService>,
+        blockchain: ActorHandle<BlockchainService<FSH>>,
         file_storage: Arc<RwLock<FL>>,
         forest_storage_handler: FSH,
         provider_config: ProviderConfig,

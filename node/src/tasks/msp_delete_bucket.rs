@@ -10,8 +10,6 @@ use crate::services::{
 
 const LOG_TARGET: &str = "msp-stopped-storing-task";
 
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
-
 /// [`MspStoppedStoringTask`]: Handles the event of the MSP stopping storing a bucket.
 ///
 /// - [`FinalisedMspStoppedStoringBucket`]: Handles the event of the MSP stopping storing a bucket.

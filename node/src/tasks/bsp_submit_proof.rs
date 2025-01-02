@@ -532,7 +532,7 @@ where
     }
 
     async fn check_if_proof_is_outdated(
-        blockchain: &ActorHandle<BlockchainService>,
+        blockchain: &ActorHandle<BlockchainService<FSH>>,
         event: &ProcessSubmitProofRequest,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.

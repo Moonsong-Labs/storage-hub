@@ -30,8 +30,6 @@ use crate::services::{
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
-
 /// MSP Upload File Task: Handles the whole flow of a file being uploaded to a MSP, from
 /// the MSP's perspective.
 ///
