@@ -237,11 +237,11 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       maxStorageCapacity: MAX_STORAGE_CAPACITY,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
+    await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
+
     const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
     await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
-
-    await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
 
     // stop other container
     await userApi.docker.pauseBspContainer("docker-sh-bsp-1");

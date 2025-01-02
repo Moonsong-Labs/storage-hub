@@ -345,8 +345,8 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
-      // And give some time to process proofs.
-      await sleep(3000);
+      // And give some time to process the latest blocks.
+      await sleep(1000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(

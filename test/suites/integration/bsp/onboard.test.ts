@@ -9,11 +9,11 @@ import {
 } from "../../../util";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
 
-describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it }) => {
-  let api: EnrichedBspApi;
+describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, it }) => {
+  let userApi: EnrichedBspApi;
 
   before(async () => {
-    api = await createBspApi();
+    userApi = await createUserApi();
   });
 
   it("New BSP can be created", async () => {
@@ -44,11 +44,14 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it
 
       await it("is synced with current block", async () => {
         // Give some time to the BSP to catch up
-        await api.wait.bspCatchUpToChainTip(newApi);
+        await userApi.wait.bspCatchUpToChainTip(newApi);
 
         const syncHeight = (await newApi.rpc.chain.getHeader()).number.toNumber();
-        const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+        const currentHeight = (await userApi.rpc.chain.getHeader()).number.toNumber();
+        const syncHash = (await newApi.rpc.chain.getHeader()).hash.toString();
+        const currentHash = (await userApi.rpc.chain.getHeader()).hash.toString();
         strictEqual(syncHeight, currentHeight);
+        strictEqual(syncHash, currentHash);
       });
 
       await it("is listening on the correct P2P port", async () => {
@@ -65,7 +68,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it
     await it("is peer of other nodes", async () => {
       // Give some time to nodes to connect between each other
       await sleep(500);
-      const peers = (await api.rpc.system.peers()).map(({ peerId }) => peerId.toString());
+      const peers = (await userApi.rpc.system.peers()).map(({ peerId }) => peerId.toString());
       strictEqual(peers.includes(peerId), true, `PeerId ${peerId} not found in ${peers}`);
     });
   });
