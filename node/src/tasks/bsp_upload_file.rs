@@ -509,6 +509,24 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        // First check if the file is not on our exclude list
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let is_allowed = read_file_storage
+            .is_allowed(&event.file_key.into())
+            .map_err(|e| {
+                let err_msg = format!("Failed to read exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+        dbg!(is_allowed);
+        // if !is_allowed {
+        //     info!("File is in the exclude list");
+        //     return Ok(());
+        // }
+
         // Get the current Forest key of the Provider running this node.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
 

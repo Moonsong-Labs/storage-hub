@@ -804,7 +804,7 @@ where
         Ok(())
     }
 
-    fn is_allowed(&mut self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+    fn is_allowed(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
         let find = self
             .storage
             .db

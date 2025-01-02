@@ -77,6 +77,15 @@ where
                 e
             )
         })?;
+
+        write_file_storage.add_file_to_exclude_list(file_key.clone()).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to add just deleted file to exclude list. \nError: {:?}", e);
+            anyhow!(
+                "Failed to add just deleted file to exclude list: {:?}",
+                e
+            )
+        })?;
+
         // Release the file storage write lock.
         drop(write_file_storage);
 
