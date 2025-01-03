@@ -31,7 +31,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     path.push(db_path.as_str());
     path.push("storagehub/file_storage/");
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(4);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(5);
 
     let path_str = path
         .to_str()

@@ -521,11 +521,13 @@ where
                 );
                 anyhow::anyhow!(err_msg)
             })?;
-        dbg!(is_allowed);
-        // if !is_allowed {
-        //     info!("File is in the exclude list");
-        //     return Ok(());
-        // }
+
+        drop(read_file_storage);
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+            return Ok(());
+        }
 
         // Get the current Forest key of the Provider running this node.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
