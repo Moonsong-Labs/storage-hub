@@ -733,7 +733,7 @@ pub mod pallet {
             }
 
             // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::ChallengesTickerSet { paused });
+            Self::deposit_event(Event::ChallengesTickerSet { paused });
 
             // Return a successful DispatchResultWithPostInfo.
             Ok(Pays::No.into())

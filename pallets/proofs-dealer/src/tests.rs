@@ -4323,7 +4323,7 @@ fn challenges_ticker_paused_works() {
         assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), true));
 
         // Assert event emitted.
-        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: true }.into());
+        System::assert_last_event(Event::ChallengesTickerSet { paused: true }.into());
 
         // Advance a number of blocks.
         let current_block = System::block_number();
@@ -4336,7 +4336,7 @@ fn challenges_ticker_paused_works() {
         assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), false));
 
         // Assert event emitted.
-        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: false }.into());
+        System::assert_last_event(Event::ChallengesTickerSet { paused: false }.into());
 
         // Advance a number of blocks.
         let current_block = System::block_number();

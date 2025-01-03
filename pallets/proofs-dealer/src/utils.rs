@@ -296,7 +296,7 @@ where
                 }
 
                 // Emit event of mutation applied.
-                Self::deposit_event(Event::<T>::MutationsApplied {
+                Self::deposit_event(Event::MutationsApplied {
                     provider: *submitter,
                     mutations,
                     new_root,
@@ -1147,7 +1147,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         TickToProvidersDeadlines::<T>::set(next_challenge_deadline, *provider_id, Some(()));
 
         // Emit event.
-        Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
+        Self::deposit_event(Event::NewChallengeCycleInitialised {
             current_tick,
             next_challenge_deadline,
             provider: *provider_id,
