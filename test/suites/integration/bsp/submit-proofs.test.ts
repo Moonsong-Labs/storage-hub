@@ -245,8 +245,10 @@ describeBspNet(
       );
     });
 
-    it("BSP is not challenged any more", { skip: "Not implemented yet." }, async () => {
-      // TODO: Check that BSP-Three no longer has a challenge deadline.
+    it("BSP three is not challenged any more", async () => {
+      const result = await userApi.call.proofsDealerApi.getNextDeadlineTick(ShConsts.BSP_THREE_ID);
+
+      assert(result.isErr, "BSP three doesn't have files so it shouldn't have deadline");
     });
 
     it("New storage request sent by user, to only one BSP", async () => {
@@ -408,7 +410,7 @@ describeBspNet(
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
       strictEqual(
         proofAcceptedEvents.length,
-        submitProofsPending.length - 1, // TODO: one proof submission is failing because of an empty forest for BSP 3 but we don't handle this for now
+        submitProofsPending.length,
         "All pending submit proof transactions should have been successful"
       );
     });

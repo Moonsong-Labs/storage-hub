@@ -1790,6 +1790,11 @@ where
         // Remove the pending stop storing request from storage.
         <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // We should remove the BSP from the dealer proof
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+        };
+
         Ok((bsp_id, new_root))
     }
 
@@ -1944,13 +1949,25 @@ where
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
 
-        // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
-        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
-            && <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
-                == Zero::zero()
-        {
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&sp_id)?;
-        }
+        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
+            // If it doesn't store any files we stop the challenge cycle and stop its randomness cycle.
+            if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                ensure!(
+                    <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
+                        == Zero::zero(),
+                    Error::<T>::UsedCapacityShouldBeZero,
+                );
+
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
+                    &sp_id,
+                )?;
+
+                <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(
+                    &sp_id,
+                )?;
+            };
+        };
 
         Ok((sp_id, new_root))
     }
