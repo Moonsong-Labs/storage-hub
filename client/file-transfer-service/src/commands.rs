@@ -1,5 +1,4 @@
 use anyhow::Result;
-use async_trait::async_trait;
 use prost::Message;
 use thiserror::Error;
 
@@ -117,7 +116,10 @@ pub enum RequestError {
 
 /// Allows our ActorHandle to implement
 /// the specific methods for each kind of message.
-#[async_trait]
+///
+/// `async_fn_in_trait` in trait is ignored because this trait is only meant to be used from within the
+/// StorageHub codebase.
+#[allow(async_fn_in_trait)]
 pub trait FileTransferServiceInterface {
     async fn upload_request(
         &self,
@@ -175,7 +177,6 @@ pub trait FileTransferServiceInterface {
     ) -> Vec<PeerId>;
 }
 
-#[async_trait]
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Request an upload of a file chunk to a peer.
     /// This returns after receiving a response from the network.

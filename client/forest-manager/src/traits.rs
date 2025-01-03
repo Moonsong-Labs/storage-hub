@@ -1,6 +1,5 @@
 use std::{fmt::Debug, sync::Arc};
 
-use async_trait::async_trait;
 use shc_common::types::{FileMetadata, ForestProof, HasherOutT, StorageProofsMerkleTrieLayout};
 use sp_runtime::AccountId32;
 use tokio::sync::RwLock;
@@ -41,7 +40,10 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
 /// Handler to manage file storage instances.
 ///
 /// The key is optional in all methods, allowing for a single ForestStorage instance to be managed without a key.
-#[async_trait]
+///
+/// `async_fn_in_trait` in trait is ignored because this trait is only meant to be used from within the
+/// StorageHub codebase.
+#[allow(async_fn_in_trait)]
 pub trait ForestStorageHandler {
     /// The key type used to identify forest storage instances.
     type Key: From<Vec<u8>> + Debug + Send + Sync;

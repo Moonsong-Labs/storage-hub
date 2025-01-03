@@ -103,7 +103,7 @@ where
     ///
     /// This is used to manage Forest Storage instances and update their roots when there are
     /// Forest-root-changing events on-chain, for the Storage Provider managed by this service.
-    pub(crate) forest_storage_handler: FSH,
+    pub(crate) _forest_storage_handler: FSH,
     /// The hash and number of the last best block processed by the BlockchainService.
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
@@ -1022,7 +1022,7 @@ where
             client,
             keystore,
             rpc_handlers,
-            forest_storage_handler,
+            _forest_storage_handler: forest_storage_handler,
             best_block: BestBlockInfo::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
@@ -199,7 +198,10 @@ pub enum BlockchainServiceCommand {
 }
 
 /// Interface for interacting with the BlockchainService actor.
-#[async_trait]
+///
+/// `async_fn_in_trait` in trait is ignored because this trait is only meant to be used from within the
+/// StorageHub codebase.
+#[allow(async_fn_in_trait)]
 pub trait BlockchainServiceInterface {
     /// Send an extrinsic to the runtime.
     async fn send_extrinsic(
@@ -390,7 +392,6 @@ pub trait BlockchainServiceInterface {
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
-#[async_trait]
 impl<FSH> BlockchainServiceInterface for ActorHandle<BlockchainService<FSH>>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
