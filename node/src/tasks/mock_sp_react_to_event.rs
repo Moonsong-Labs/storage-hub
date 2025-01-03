@@ -7,9 +7,8 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface, events::MultipleNewChallengeSeeds, types::Tip,
 };
-use shc_forest_manager::traits::ForestStorageHandler;
 
-use crate::services::{handler::StorageHubHandler, types::FileStorageT};
+use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 
@@ -20,42 +19,38 @@ pub type EventToReactTo = MultipleNewChallengeSeeds;
 ///
 /// This can be used for debugging purposes.
 /// The event to react to can be configured by setting the [`EventToReactTo`] type.
-pub struct SpReactToEventMockTask<FL, FSH>
+pub struct SpReactToEventMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for SpReactToEventMockTask<FL, FSH>
+impl<NT> Clone for SpReactToEventMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    fn clone(&self) -> SpReactToEventMockTask<FL, FSH> {
+    fn clone(&self) -> SpReactToEventMockTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> SpReactToEventMockTask<FL, FSH>
+impl<NT> SpReactToEventMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<FL, FSH> EventHandler<EventToReactTo> for SpReactToEventMockTask<FL, FSH>
+impl<NT> EventHandler<EventToReactTo> for SpReactToEventMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType + 'static,
 {
     async fn handle_event(&mut self, event: EventToReactTo) -> anyhow::Result<()> {
         info!(

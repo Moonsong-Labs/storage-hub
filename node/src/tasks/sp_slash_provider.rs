@@ -3,11 +3,11 @@ use std::time::Duration;
 use sc_tracing::tracing::*;
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::types::Tip;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::SlashableProvider};
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface, events::SlashableProvider, types::Tip,
+};
 
-use crate::services::{handler::StorageHubHandler, types::FileStorageT};
+use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "slash-provider-task";
 
@@ -15,32 +15,29 @@ const LOG_TARGET: &str = "slash-provider-task";
 ///
 /// This task is responsible for slashing a provider. It listens for the [`SlashableProvider`] event and sends an extrinsic
 /// to StorageHub runtime to slash the provider.
-pub struct SlashProviderTask<FL, FSH>
+pub struct SlashProviderTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for SlashProviderTask<FL, FSH>
+impl<NT> Clone for SlashProviderTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    fn clone(&self) -> SlashProviderTask<FL, FSH> {
+    fn clone(&self) -> SlashProviderTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> SlashProviderTask<FL, FSH>
+impl<NT> SlashProviderTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -50,10 +47,9 @@ where
 /// Handles the [`SlashableProvider`] event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
-impl<FL, FSH> EventHandler<SlashableProvider> for SlashProviderTask<FL, FSH>
+impl<NT> EventHandler<SlashableProvider> for SlashProviderTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType + 'static,
 {
     async fn handle_event(&mut self, event: SlashableProvider) -> anyhow::Result<()> {
         info!(
@@ -66,10 +62,9 @@ where
     }
 }
 
-impl<FL, FSH> SlashProviderTask<FL, FSH>
+impl<NT> SlashProviderTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
     async fn handle_slashable_provider_event(
         &mut self,

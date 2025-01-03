@@ -16,13 +16,13 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{MaxUsersToCharge, ProofsDealerProviderId},
 };
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
 
 use crate::services::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, FileStorageT},
+    types::{BspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
@@ -56,30 +56,30 @@ const MIN_DEBT: Balance = 0;
 /// This flow works because the result of correctly deleting a file in the handler of the [`ProcessStopStoringForInsolventUserRequest`]
 /// is the runtime event [`SpStopStoringInsolventUser`], which triggers the handler of the [`SpStopStoringInsolventUser`] event and continues
 /// the file deletion flow until no more files from that user are stored.
-pub struct BspChargeFeesTask<FL, FSH>
+pub struct BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for BspChargeFeesTask<FL, FSH>
+impl<NT> Clone for BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspChargeFeesTask<FL, FSH> {
+    fn clone(&self) -> BspChargeFeesTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<FL, FSH>
+impl<NT> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
@@ -102,7 +102,7 @@ where
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        let user_chunk_size: u32 = MaxUsersToCharge::get();
+        let user_chunk_size = <MaxUsersToCharge as Get<u32>>::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
             let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
                 pallet_payment_streams::Call::charge_multiple_users_payment_streams {
@@ -130,10 +130,10 @@ where
     }
 }
 
-impl<FL, FSH> EventHandler<UserWithoutFunds> for BspChargeFeesTask<FL, FSH>
+impl<NT> EventHandler<UserWithoutFunds> for BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
         info!(
@@ -177,10 +177,10 @@ where
     }
 }
 
-impl<FL, FSH> EventHandler<SpStopStoringInsolventUser> for BspChargeFeesTask<FL, FSH>
+impl<NT> EventHandler<SpStopStoringInsolventUser> for BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: SpStopStoringInsolventUser) -> anyhow::Result<()> {
         info!(
@@ -228,10 +228,10 @@ where
 ///
 /// This event is triggered whenever a Forest write-lock can be acquired to process a `StopStoringForInsolventUserRequest`
 /// after receiving either a `UserWithoutFunds` or `SpStopStoringInsolventUser` event.
-impl<FL, FSH> EventHandler<ProcessStopStoringForInsolventUserRequest> for BspChargeFeesTask<FL, FSH>
+impl<NT> EventHandler<ProcessStopStoringForInsolventUserRequest> for BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(
         &mut self,
@@ -368,12 +368,12 @@ where
     }
 }
 
-impl<FL, FSH> BspChargeFeesTask<FL, FSH>
+impl<NT> BspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }

@@ -34,7 +34,10 @@ use crate::tasks::{
     sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
 };
 
-use super::types::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
+use super::types::{
+    BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
+    ShStorageLayer, UserRole,
+};
 
 /// Configuration parameters for Storage Providers.
 #[derive(Clone)]
@@ -52,33 +55,31 @@ pub struct ProviderConfig {
 }
 
 /// Represents the handler for the Storage Hub service.
-pub struct StorageHubHandler<FL, FSH>
+pub struct StorageHubHandler<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
     /// The actor handle for the file transfer service.
     pub file_transfer: ActorHandle<FileTransferService>,
     /// The actor handle for the blockchain service.
-    pub blockchain: ActorHandle<BlockchainService<FSH>>,
+    pub blockchain: ActorHandle<BlockchainService<NT::FSH>>,
     /// The file storage layer which stores all files in chunks.
-    pub file_storage: Arc<RwLock<FL>>,
+    pub file_storage: Arc<RwLock<NT::FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
-    pub forest_storage_handler: FSH,
+    pub forest_storage_handler: NT::FSH,
     /// The configuration parameters for the provider.
     pub provider_config: ProviderConfig,
     /// The indexer database pool.
     pub indexer_db_pool: Option<DbPool>,
 }
 
-impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
+impl<NT> Clone for StorageHubHandler<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    fn clone(&self) -> StorageHubHandler<FL, FSH> {
+    fn clone(&self) -> StorageHubHandler<NT> {
         Self {
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
@@ -91,17 +92,16 @@ where
     }
 }
 
-impl<FL, FSH> StorageHubHandler<FL, FSH>
+impl<NT> StorageHubHandler<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
     pub fn new(
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
-        blockchain: ActorHandle<BlockchainService<FSH>>,
-        file_storage: Arc<RwLock<FL>>,
-        forest_storage_handler: FSH,
+        blockchain: ActorHandle<BlockchainService<NT::FSH>>,
+        file_storage: Arc<RwLock<NT::FL>>,
+        forest_storage_handler: NT::FSH,
         provider_config: ProviderConfig,
         indexer_db_pool: Option<DbPool>,
     ) -> Self {
@@ -115,8 +115,51 @@ where
             indexer_db_pool,
         }
     }
+}
 
-    pub fn start_user_tasks(&self) {
+/// Abstraction trait to run the [`StorageHubHandler`] tasks, according to the set configuration and role.
+///
+/// This trait is implemented by the different [`StorageHubHandler`] variants,
+/// and runs the tasks required to work as a specific [`ShRole`](super::types::ShRole).
+pub trait RunnableTasks {
+    async fn run_tasks(&mut self);
+}
+
+impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(BspProvider, S)>
+where
+    (BspProvider, S): ShNodeType + 'static,
+    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+{
+    async fn run_tasks(&mut self) {
+        self.initialise_bsp().await;
+        self.start_bsp_tasks();
+    }
+}
+
+impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(MspProvider, S)>
+where
+    (MspProvider, S): ShNodeType + 'static,
+    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+{
+    async fn run_tasks(&mut self) {
+        self.start_msp_tasks();
+    }
+}
+
+impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(UserRole, S)>
+where
+    (UserRole, S): ShNodeType + 'static,
+{
+    async fn run_tasks(&mut self) {
+        self.start_user_tasks();
+    }
+}
+
+impl<S> StorageHubHandler<(UserRole, S)>
+where
+    (UserRole, S): ShNodeType + 'static,
+{
+    fn start_user_tasks(&self) {
         log::info!("Starting User tasks.");
 
         let user_sends_file_task = UserSendsFileTask::new(self.clone());
@@ -136,12 +179,12 @@ where
     }
 }
 
-impl<FL, FSH> StorageHubHandler<FL, FSH>
+impl<S> StorageHubHandler<(MspProvider, S)>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    (MspProvider, S): ShNodeType + 'static,
+    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
 {
-    pub fn start_msp_tasks(&self) {
+    fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
 
         // MspUploadFileTask is triggered by a NewStorageRequest event which registers the user's peer address for
@@ -202,12 +245,12 @@ where
     }
 }
 
-impl<FL, FSH> StorageHubHandler<FL, FSH>
+impl<S> StorageHubHandler<(BspProvider, S)>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    (BspProvider, S): ShNodeType + 'static,
+    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
 {
-    pub async fn initialise_bsp(&mut self) {
+    async fn initialise_bsp(&mut self) {
         // Create an empty Forest Storage instance.
         // A BSP is expected to always have at least one empty Forest Storage instance.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
@@ -216,7 +259,7 @@ where
             .await;
     }
 
-    pub fn start_bsp_tasks(&self) {
+    fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
 
         // TODO: When `pallet-cr-randomness` is integrated to the runtime we should also spawn the task that

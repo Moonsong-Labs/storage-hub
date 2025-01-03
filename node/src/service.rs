@@ -61,6 +61,7 @@ use crate::{
     command::ProviderOptions,
     services::{
         builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
+        handler::{RunnableTasks, StorageHubHandler},
         types::{
             BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer, RocksDbStorageLayer,
             ShNodeType, ShRole, ShStorageLayer, UserRole,
@@ -262,7 +263,7 @@ where
     }
 }
 
-async fn finish_sh_builder_and_build<R, S>(
+async fn finish_sh_builder_and_run_tasks<R, S>(
     mut sh_builder: StorageHubBuilder<R, S>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
@@ -273,7 +274,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
+    StorageHubHandler<(R, S)>: RunnableTasks,
 {
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
@@ -285,8 +287,11 @@ where
         )
         .await;
 
-    // Call run using the Runnable trait
-    sh_builder.build().await;
+    // Build the StorageHubHandler
+    let mut sh_handler = sh_builder.build();
+
+    // Run StorageHub tasks according to the node role
+    sh_handler.run_tasks().await;
 
     Ok(())
 }
@@ -304,7 +309,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
+    StorageHubHandler<(R, S)>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -515,7 +521,7 @@ where
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(_) = provider_options {
-        finish_sh_builder_and_build(
+        finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
@@ -703,7 +709,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
+    StorageHubHandler<(R, S)>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
@@ -863,7 +870,7 @@ where
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(_) = provider_options {
-        finish_sh_builder_and_build(
+        finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,

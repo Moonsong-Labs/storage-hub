@@ -10,38 +10,38 @@ use storage_hub_runtime::Balance;
 
 use crate::services::{
     handler::StorageHubHandler,
-    types::{FileStorageT, MspForestStorageHandlerT},
+    types::{MspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "msp-charge-fees-task";
 const MIN_DEBT: Balance = 0;
 
-pub struct MspChargeFeesTask<FL, FSH>
+pub struct MspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for MspChargeFeesTask<FL, FSH>
+impl<NT> Clone for MspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    fn clone(&self) -> MspChargeFeesTask<FL, FSH> {
+    fn clone(&self) -> MspChargeFeesTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> MspChargeFeesTask<FL, FSH>
+impl<NT> MspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -54,10 +54,10 @@ where
 ///
 /// This task will:
 /// - Charge users for the MSP when triggered
-impl<FL, FSH> EventHandler<NotifyPeriod> for MspChargeFeesTask<FL, FSH>
+impl<NT> EventHandler<NotifyPeriod> for MspChargeFeesTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
         info!(

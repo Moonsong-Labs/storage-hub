@@ -1,42 +1,43 @@
 use sc_tracing::tracing::{error, trace};
 use shc_actors_framework::event_bus::EventHandler;
+use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteDownloadRequest,
 };
 
 use crate::services::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, FileStorageT},
+    types::{BspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-download-file-task";
 
-pub struct BspDownloadFileTask<FL, FSH>
+pub struct BspDownloadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for BspDownloadFileTask<FL, FSH>
+impl<NT> Clone for BspDownloadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspDownloadFileTask<FL, FSH> {
+    fn clone(&self) -> BspDownloadFileTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> BspDownloadFileTask<FL, FSH>
+impl<NT> BspDownloadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -47,10 +48,10 @@ where
 ///
 /// This will generate a proof for the chunk and send it back to the requester.
 /// If there is a bucket ID provided, this will also check that it matches the local file's bucket.
-impl<FL, FSH> EventHandler<RemoteDownloadRequest> for BspDownloadFileTask<FL, FSH>
+impl<NT> EventHandler<RemoteDownloadRequest> for BspDownloadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);

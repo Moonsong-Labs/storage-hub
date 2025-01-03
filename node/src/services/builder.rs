@@ -1,5 +1,4 @@
 use async_channel::Receiver;
-use async_trait::async_trait;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_indexer_db::DbPool;
@@ -280,19 +279,17 @@ impl StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer> {
 /// This trait is implemented by the different [`StorageHubBuilder`] variants,
 /// and build a [`StorageHubHandler`] with the required configuration for the
 /// corresponding [`ShRole`].
-#[async_trait]
-pub trait Buildable {
-    async fn build(self);
+pub trait Buildable<NT: ShNodeType> {
+    fn build(self) -> StorageHubHandler<NT>;
 }
 
-#[async_trait]
-impl<S: ShStorageLayer> Buildable for StorageHubBuilder<BspProvider, S>
+impl<S: ShStorageLayer> Buildable<(BspProvider, S)> for StorageHubBuilder<BspProvider, S>
 where
     (BspProvider, S): ShNodeType,
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
 {
-    async fn build(self) {
-        let mut handler = StorageHubHandler::new(
+    fn build(self) -> StorageHubHandler<(BspProvider, S)> {
+        StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -321,20 +318,17 @@ where
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
-        );
-        handler.initialise_bsp().await;
-        handler.start_bsp_tasks();
+        )
     }
 }
 
-#[async_trait]
-impl<S: ShStorageLayer> Buildable for StorageHubBuilder<MspProvider, S>
+impl<S: ShStorageLayer> Buildable<(MspProvider, S)> for StorageHubBuilder<MspProvider, S>
 where
     (MspProvider, S): ShNodeType,
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
 {
-    async fn build(self) {
-        let handler = StorageHubHandler::new(
+    fn build(self) -> StorageHubHandler<(MspProvider, S)> {
+        StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -363,20 +357,18 @@ where
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
-        );
-        handler.start_msp_tasks()
+        )
     }
 }
 
-#[async_trait]
-impl Buildable for StorageHubBuilder<UserRole, NoStorageLayer>
+impl Buildable<(UserRole, NoStorageLayer)> for StorageHubBuilder<UserRole, NoStorageLayer>
 where
     (UserRole, NoStorageLayer): ShNodeType,
     <(UserRole, NoStorageLayer) as ShNodeType>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    async fn build(self) {
-        let handler = StorageHubHandler::new(
+    fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer)> {
+        StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -402,7 +394,6 @@ where
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
-        );
-        handler.start_user_tasks();
+        )
     }
 }

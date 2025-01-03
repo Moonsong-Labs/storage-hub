@@ -16,17 +16,15 @@ use shc_common::types::{
     StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
     StorageRequestMspBucketResponse,
 };
-use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
+use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::services::{
-    handler::StorageHubHandler,
-    types::{FileStorageT, MspForestStorageHandlerT},
-};
+use crate::services::types::ShNodeType;
+use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -52,21 +50,21 @@ const LOG_TARGET: &str = "msp-upload-file-task";
 ///   which will emit an event that describes the final result of the batch response (i.e. all accepted,
 ///   rejected and/or failed file keys). The MSP will then apply the necessary deltas to each one of the bucket's
 ///   forest storage to reflect the result.
-pub struct MspUploadFileTask<FL, FSH>
+pub struct MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
     file_key_cleanup: Option<H256>,
 }
 
-impl<FL, FSH> Clone for MspUploadFileTask<FL, FSH>
+impl<NT> Clone for MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    fn clone(&self) -> MspUploadFileTask<FL, FSH> {
+    fn clone(&self) -> MspUploadFileTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -74,12 +72,12 @@ where
     }
 }
 
-impl<FL, FSH> MspUploadFileTask<FL, FSH>
+impl<NT> MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
@@ -95,10 +93,10 @@ where
 /// - Check if the MSP has enough storage capacity to store the file and increase it if necessary (up to a maximum).
 /// - Register the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<FL, FSH> EventHandler<NewStorageRequest> for MspUploadFileTask<FL, FSH>
+impl<NT> EventHandler<NewStorageRequest> for MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -123,10 +121,10 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the MSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<FL, FSH> EventHandler<RemoteUploadRequest> for MspUploadFileTask<FL, FSH>
+impl<NT> EventHandler<RemoteUploadRequest> for MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -385,10 +383,10 @@ where
 ///
 /// The MSP will call the `msp_respond_storage_requests_multiple_buckets` extrinsic on the FileSystem pallet to respond to the
 /// storage requests.
-impl<FL, FSH> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<FL, FSH>
+impl<NT> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessMspRespondStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -616,10 +614,10 @@ where
     }
 }
 
-impl<FL, FSH> MspUploadFileTask<FL, FSH>
+impl<NT> MspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_new_storage_request_event(
         &mut self,
