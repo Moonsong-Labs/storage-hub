@@ -77,6 +77,7 @@ where
                 e
             )
         })?;
+
         // Release the file storage write lock.
         drop(write_file_storage);
 

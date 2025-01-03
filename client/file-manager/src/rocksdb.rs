@@ -23,6 +23,7 @@ const METADATA_COLUMN: u32 = 0;
 const ROOTS_COLUMN: u32 = 1;
 const CHUNKS_COLUMN: u32 = 2;
 const BUCKET_PREFIX_COLUMN: u32 = 3;
+const EXCLUDE_COLUMN: u32 = 4;
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
@@ -30,7 +31,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     path.push(db_path.as_str());
     path.push("storagehub/file_storage/");
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(4);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(5);
 
     let path_str = path
         .to_str()
@@ -799,6 +800,51 @@ where
         for key in keys_to_delete {
             self.delete_file(&key)?;
         }
+
+        Ok(())
+    }
+
+    fn is_allowed(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+        let find = self
+            .storage
+            .db
+            .get(EXCLUDE_COLUMN, key.as_ref())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
+
+        match find {
+            Some(_) => return Ok(false),
+            None => return Ok(true),
+        }
+    }
+
+    fn add_file_to_exclude_list(&mut self, key: HasherOutT<T>) -> Result<(), FileStorageError> {
+        let mut transaction = DBTransaction::new();
+
+        transaction.put(EXCLUDE_COLUMN, key.as_ref(), &Vec::<u8>::new());
+
+        self.storage.db.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
+
+        Ok(())
+    }
+
+    fn remove_file_from_exclude_list(
+        &mut self,
+        key: &HasherOutT<T>,
+    ) -> Result<(), FileStorageError> {
+        let mut transaction = DBTransaction::new();
+
+        transaction.delete(EXCLUDE_COLUMN, key.as_ref());
+
+        self.storage.db.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
 
         Ok(())
     }

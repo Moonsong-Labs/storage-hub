@@ -71,6 +71,9 @@ describeBspNet(
         }
       });
 
+      // Add the file key to the exclude list
+      bspApi.rpc.storagehubclient.addToExcludeList(fileKey);
+
       // Request to stop storing a file with Dummy BSP
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
@@ -94,8 +97,6 @@ describeBspNet(
 
       // When requested to stop storing a file we should also receive an event new storage request
       // to replace the bsp leaving
-      // TODO: add blacklisting file keys to avoid volunteering for files that the BSP requested to stop storing
-      // TODO: add rpc to remove file key from blacklisted file keys
       // TODO: add rpc to add user to blacklisted users to skip any storage request from them
       // TODO: add rpc to add bucket to blacklisted buckets to skip any storage request from them
       await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
