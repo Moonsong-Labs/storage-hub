@@ -6,11 +6,8 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
 
-use sc_client_api::{BlockBackend, BlockchainEvents};
-use sp_core::H256;
-use sp_runtime::traits::Header;
-
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
+use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
 use shc_common::{
@@ -19,6 +16,8 @@ use shc_common::{
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
 use sp_api::ProvideRuntimeApi;
+use sp_core::H256;
+use sp_runtime::traits::Header;
 use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";

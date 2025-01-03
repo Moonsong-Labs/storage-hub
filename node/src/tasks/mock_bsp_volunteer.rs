@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::time::Duration;
 
 use log::*;
@@ -6,47 +8,49 @@ use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use sp_core::H256;
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, ShNodeType},
+};
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-pub struct BspVolunteerMockTask<FL, FSH>
+pub struct BspVolunteerMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for BspVolunteerMockTask<FL, FSH>
+impl<NT> Clone for BspVolunteerMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspVolunteerMockTask<FL, FSH> {
+    fn clone(&self) -> BspVolunteerMockTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> BspVolunteerMockTask<FL, FSH>
+impl<NT> BspVolunteerMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<FL, FSH> EventHandler<NewStorageRequest> for BspVolunteerMockTask<FL, FSH>
+impl<NT> EventHandler<NewStorageRequest> for BspVolunteerMockTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(

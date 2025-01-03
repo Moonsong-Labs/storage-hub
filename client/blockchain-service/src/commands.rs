@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
+use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -390,7 +391,10 @@ pub trait BlockchainServiceInterface {
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
 #[async_trait]
-impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
+impl<FSH> BlockchainServiceInterface for ActorHandle<BlockchainService<FSH>>
+where
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
