@@ -21,6 +21,7 @@ async-channel = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 array-bytes = { workspace = true }
 futures = { workspace = true }
 codec = { workspace = true }

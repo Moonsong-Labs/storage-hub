@@ -13668,6 +13668,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "array-bytes",
+ "async-trait",
  "cumulus-primitives-core",
  "cumulus-primitives-storage-weight-reclaim",
  "frame-metadata-hash-extension",
@@ -13778,6 +13779,7 @@ dependencies = [
  "anyhow",
  "array-bytes",
  "async-channel 1.9.0",
+ "async-trait",
  "chrono",
  "futures",
  "parity-scale-codec",
@@ -13801,6 +13803,7 @@ dependencies = [
 name = "shc-forest-manager"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bincode",
  "hash-db",
  "kvdb",

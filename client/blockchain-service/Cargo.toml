@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 tokio = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 array-bytes = { workspace = true }
 lazy-static = { workspace = true }
 log = { workspace = true }
