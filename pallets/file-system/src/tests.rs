@@ -941,12 +941,12 @@ mod request_move_bucket {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -2809,12 +2809,12 @@ mod revoke_storage_request {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -3368,12 +3368,12 @@ mod msp_respond_storage_request {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -4706,12 +4706,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NotABsp
@@ -4743,12 +4743,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
@@ -4807,12 +4807,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::BspNotVolunteered
@@ -4904,12 +4904,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -4923,12 +4923,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -4938,12 +4938,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
@@ -5030,13 +5030,11 @@ mod bsp_confirm {
                     <Test as file_system::Config>::MaxBatchConfirmStorageRequests,
                 > = file_keys
                     .into_iter()
-                    .map(|file_key| {
-                        (
-                            file_key,
-                            CompactProof {
-                                encoded_nodes: vec![file_key.as_ref().to_vec()],
-                            },
-                        )
+                    .map(|file_key| FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        },
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -5137,12 +5135,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
@@ -5212,12 +5210,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
@@ -5289,12 +5287,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5480,15 +5478,13 @@ mod bsp_confirm {
                 );
 
                 // Confirm storing for all files
-                let file_proofs: Vec<_> = file_keys
+                let file_keys_with_proofs: Vec<_> = file_keys
                     .iter()
-                    .map(|&file_key| {
-                        (
-                            file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            },
-                        )
+                    .map(|&file_key| FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        },
                     })
                     .collect();
 
@@ -5499,7 +5495,7 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(file_proofs).unwrap(),
+                    BoundedVec::try_from(file_keys_with_proofs).unwrap(),
                 ));
 
                 let successful_file_keys: Vec<_> = file_keys
@@ -5585,12 +5581,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5707,12 +5703,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5893,12 +5889,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6013,12 +6009,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6136,12 +6132,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6274,12 +6270,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6445,12 +6441,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6603,12 +6599,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6821,12 +6817,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -7055,12 +7051,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
-                        first_file_key,
-                        CompactProof {
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key: first_file_key,
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -7070,12 +7066,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
-                        second_file_key,
-                        CompactProof {
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key: second_file_key,
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -7297,12 +7293,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap()
                 ));
 
@@ -9156,12 +9152,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9345,12 +9341,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9515,12 +9511,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9751,12 +9747,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9962,12 +9958,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 

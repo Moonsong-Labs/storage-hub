@@ -38,7 +38,7 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
-        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
+        FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof,
         MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
         PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest, ProviderIdFor,
         RejectedStorageRequest, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
@@ -1146,22 +1146,20 @@ where
     pub(crate) fn do_bsp_confirm_storing(
         sender: T::AccountId,
         non_inclusion_forest_proof: ForestProof<T>,
-        file_keys_and_proofs: BoundedVec<
-            (MerkleHash<T>, KeyProof<T>),
-            T::MaxBatchConfirmStorageRequests,
-        >,
+        file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, T::MaxBatchConfirmStorageRequests>,
     ) -> DispatchResult {
+        // Get the Provider ID of the sender.
         let bsp_id =
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
-        // Check if BSP is insolvent.
+        // Check if the Provider is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(bsp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
-        // Check that the provider is indeed a BSP.
+        // Check that the Provider is indeed a BSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
@@ -1173,7 +1171,7 @@ where
                 &bsp_id,
                 file_keys_and_proofs
                     .iter()
-                    .map(|(fk, _)| *fk)
+                    .map(|file_key_with_proof| file_key_with_proof.file_key)
                     .collect::<Vec<_>>()
                     .as_slice(),
                 &non_inclusion_forest_proof,
@@ -1185,24 +1183,33 @@ where
             T::MaxBatchConfirmStorageRequests,
         > = BoundedVec::new();
 
+        // Create a set to store the keys that were already processed.
         let mut seen_keys = BTreeSet::new();
+
+        // Create a set to store the keys that were skipped.
         let mut skipped_file_keys: BoundedBTreeSet<
             MerkleHash<T>,
             T::MaxBatchConfirmStorageRequests,
         > = BoundedBTreeSet::new();
-        for file_key in file_keys_and_proofs.iter() {
+
+        // For each file key and proof, process the confirm storing request.
+        for file_key_with_proof in file_keys_and_proofs.iter() {
+            // Get the file key and the proof.
+            let file_key = file_key_with_proof.file_key;
+
             // Skip any duplicates.
-            if !seen_keys.insert(file_key.0) {
+            if !seen_keys.insert(file_key) {
                 continue;
             }
 
-            let mut storage_request_metadata = match <StorageRequests<T>>::get(&file_key.0) {
+            // Get the storage request metadata for this file key.
+            let mut storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
                 Some(metadata) if metadata.bsps_confirmed < metadata.bsps_required => metadata,
                 // Since BSPs need to race one another to confirm storage requests, it is entirely possible that a BSP confirms a storage request
                 // after the storage request has been fulfilled or the replication target has been reached (bsps_required == bsps_confirmed).
                 Some(_) | None => {
                     expect_or_err!(
-                        skipped_file_keys.try_insert(file_key.0),
+                        skipped_file_keys.try_insert(file_key),
                         "Failed to push file key to skipped_file_keys",
                         Error::<T>::TooManyStorageRequestResponses,
                         result
@@ -1213,12 +1220,12 @@ where
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
-                <StorageRequestBsps<T>>::contains_key(&file_key.0, &bsp_id),
+                <StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
                 Error::<T>::BspNotVolunteered
             );
 
             let requests = expect_or_err!(
-                <StorageRequestBsps<T>>::get(&file_key.0, &bsp_id),
+                <StorageRequestBsps<T>>::get(&file_key, &bsp_id),
                 "BSP should exist since we checked it above",
                 Error::<T>::ImpossibleFailedToGetValue
             );
@@ -1235,7 +1242,7 @@ where
                 Error::<T>::InsufficientAvailableCapacity
             );
 
-            // Increment the number of bsps confirmed.
+            // Increment the number of BSPs confirmed.
             match storage_request_metadata
                 .bsps_confirmed
                 .checked_add(&ReplicationTargetType::<T>::one())
@@ -1251,24 +1258,24 @@ where
             // Ensure that the file key IS NOT part of the BSP's forest.
             // Note: The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
             ensure!(
-                !proven_keys.contains(&file_key.0),
+                !proven_keys.contains(&file_key),
                 Error::<T>::ExpectedNonInclusionProof
             );
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 bsp_id,
-                file_key.0,
+                file_key,
                 &storage_request_metadata,
             );
 
             // Check that the key proof is valid.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
-                &file_key.0,
+                &file_key,
                 &chunk_challenges,
-                &file_key.1,
+                &file_key_with_proof.proof,
             )?;
 
-            // Add data to storage provider.
+            // Increase this Provider's capacity used.
             <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
                 &bsp_id,
                 storage_request_metadata.size,
@@ -1300,13 +1307,13 @@ where
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
             expect_or_err!(
-                file_keys_and_metadata.try_push((file_key.0, encoded_trie_value)),
+                file_keys_and_metadata.try_push((file_key, encoded_trie_value)),
                 "Failed to push file key and metadata",
                 Error::<T>::FileMetadataProcessingQueueFull,
                 result
             );
 
-            // Remove storage request if we reached the required number of bsps and the MSP has confirmed storing the file.
+            // Remove storage request if we reached the required number of BSPs and the MSP has accepted to store the file.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required
                 && storage_request_metadata
                     .msp
@@ -1314,17 +1321,17 @@ where
                     .unwrap_or(true)
             {
                 // Remove storage request metadata.
-                <StorageRequests<T>>::remove(&file_key.0);
+                <StorageRequests<T>>::remove(&file_key);
                 <BucketsWithStorageRequests<T>>::remove(
                     &storage_request_metadata.bucket_id,
-                    &file_key.0,
+                    &file_key,
                 );
 
                 // Remove storage request bsps
-                let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key.0)
+                let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
                     .fold(0, |acc, _| acc.saturating_add(One::one()));
 
-                // Make sure that the expected number of bsps were removed.
+                // Make sure that the expected number of BSPs were removed.
                 expect_or_err!(
                     storage_request_metadata.bsps_volunteered == removed.into(),
                     "Number of volunteered bsps for storage request should have been removed",
@@ -1341,15 +1348,13 @@ where
                 )?;
 
                 // Notify that the storage request has been fulfilled.
-                Self::deposit_event(Event::StorageRequestFulfilled {
-                    file_key: file_key.0,
-                });
+                Self::deposit_event(Event::StorageRequestFulfilled { file_key });
             } else {
                 // Update storage request metadata.
-                <StorageRequests<T>>::set(&file_key.0, Some(storage_request_metadata.clone()));
+                <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
 
                 // Update bsp for storage request.
-                <StorageRequestBsps<T>>::mutate(&file_key.0, &bsp_id, |bsp| {
+                <StorageRequestBsps<T>>::mutate(&file_key, &bsp_id, |bsp| {
                     if let Some(bsp) = bsp {
                         bsp.confirmed = true;
                     }
@@ -1414,7 +1419,7 @@ where
             result
         );
 
-        let file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
+        let confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
             file_keys_and_metadata
                 .into_iter()
                 .map(|(fk, _)| fk)
@@ -1428,7 +1433,7 @@ where
         Self::deposit_event(Event::BspConfirmedStoring {
             who: sender,
             bsp_id,
-            confirmed_file_keys: file_keys,
+            confirmed_file_keys,
             skipped_file_keys,
             new_root,
         });

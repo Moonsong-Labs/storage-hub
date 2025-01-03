@@ -124,3 +124,24 @@ pub fn fetch_file_key_for_inclusion_proof() -> Vec<u8> {
 	{{file_key_inclusion_proof}}
 }
 
+#[rustfmt::skip]
+pub fn fetch_file_keys_for_bsp_confirm(number_of_file_keys_to_confirm: u32) -> Vec<Vec<u8>> {
+	match number_of_file_keys_to_confirm {
+		{{file_keys_for_bsp_confirm}}
+		_ => panic!(
+			"Number of file keys to confirm ({}) is not supported",
+			number_of_file_keys_to_confirm
+		),
+	}
+}
+
+#[rustfmt::skip]
+pub fn fetch_file_key_proof_for_bsp_confirm(file_key_index: u32) -> Vec<u8> {
+	match file_key_index {
+		{{file_key_proofs_for_bsp_confirm}}
+		_ => panic!(
+			"File key index ({}) is not supported",
+			file_key_index
+		),
+	}
+}

@@ -1111,7 +1111,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             non_inclusion_forest_proof: ForestProof<T>,
             file_keys_and_proofs: BoundedVec<
-                (MerkleHash<T>, KeyProof<T>),
+                FileKeyWithProof<T>,
                 T::MaxBatchConfirmStorageRequests,
             >,
         ) -> DispatchResult {

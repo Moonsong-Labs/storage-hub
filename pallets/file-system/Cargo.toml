@@ -35,6 +35,7 @@ sp-weights = { workspace = true }
 
 # Local
 pallet-file-system-runtime-api = { workspace = true }
+pallet-payment-streams = { workspace = true, optional = true }
 pallet-proofs-dealer = { workspace = true, optional = true }
 pallet-storage-providers = { workspace = true, optional = true }
 
@@ -90,6 +91,7 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"hex",
 	"pallet-cr-randomness/runtime-benchmarks",
+	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"pallet-bucket-nfts/runtime-benchmarks",

@@ -48,6 +48,8 @@ async function generateBenchmarkProofs() {
   const fileKeysAcceptedCases: string[][] = [];
   const fileKeyProofsAcceptedCases: string[][] = [];
   const nonInclusionProofsCases: string[][] = [];
+  const fileKeysForBspConfirmCases: string[][] = [];
+  const fileKeyProofsForBspConfirmCases: string[] = [];
   const bucketIds: H256[] = [];
   const bucketRoots: string[] = [];
 
@@ -277,6 +279,8 @@ async function generateBenchmarkProofs() {
     const nonInclusionProofsForCase: string[] = [];
     const allFileKeysToAccept: string[] = [];
     const allFileKeyProofs = [];
+    const fileKeysForBsp: string[] = [];
+    const fileKeyProofsForBsp = [];
     for (let j = 0; j < bucketIds.length; j++) {
       const fileKeysToAcceptForBucket = nonStoredFileKeysPerBucket[j].slice(0, i);
       const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[j]);
@@ -289,6 +293,20 @@ async function generateBenchmarkProofs() {
       const nonInclusionProofHexStr = nonInclusionProof.toString().slice(2);
       nonInclusionProofsForCase.push(nonInclusionProofHexStr);
       allFileKeysToAccept.push(...fileKeysToAcceptForBucket);
+
+      // If we are in the first bucket, generate the file key proofs for the BSP confirm.
+      if (j === 0) {
+        for (const fileKeyToAccept of fileKeysToAcceptForBucket) {
+          fileKeysForBsp.push(fileKeyToAccept);
+        }
+        for (const fileKey of fileKeysForBsp) {
+          const fileKeyProof = await bspApi.rpc.storagehubclient.generateFileKeyProofBspConfirm(
+            ShConsts.DUMMY_BSP_ID,
+            fileKey
+          );
+          fileKeyProofsForBsp.push(fileKeyProof);
+        }
+      }
     }
     // Then, generate the file key proofs for each one of the file keys to accept.
     for (const fileKey of allFileKeysToAccept) {
@@ -303,16 +321,24 @@ async function generateBenchmarkProofs() {
     verbose && extraVerbose && console.log("File key proofs for those file keys:");
     verbose && extraVerbose && console.log(allFileKeyProofs);
 
-    // Remove the 0x prefix from the proofs and the file keys. Save only the last file key proof since it's the one added from the previous iteration
+    // Remove the 0x prefix from the proofs and the file keys.
     const allFileKeyProofHexStr = allFileKeyProofs.map((proof) => proof.toString().slice(2));
     for (const i in allFileKeysToAccept) {
       allFileKeysToAccept[i] = allFileKeysToAccept[i].slice(2);
+    }
+    const lastFileKeyProofForBspHexStr = fileKeyProofsForBsp[fileKeyProofsForBsp.length - 1]
+      .toString()
+      .slice(2);
+    for (const i in fileKeysForBsp) {
+      fileKeysForBsp[i] = fileKeysForBsp[i].slice(2);
     }
 
     // Add the file keys and proofs to the arrays.
     nonInclusionProofsCases.push(nonInclusionProofsForCase);
     fileKeysAcceptedCases.push(allFileKeysToAccept);
     fileKeyProofsAcceptedCases.push(allFileKeyProofHexStr);
+    fileKeysForBspConfirmCases.push(fileKeysForBsp);
+    fileKeyProofsForBspConfirmCases.push(lastFileKeyProofForBspHexStr);
   }
 
   console.log(
@@ -413,6 +439,21 @@ async function generateBenchmarkProofs() {
 
   const fileKeyForInclusionProofStr = `hex::decode("${fileKeyForInclusionProofHexStr}").expect("File key for inclusion proof should be a decodable hex string")`;
 
+  let fileKeysForBspStr = "";
+  for (const [index, fileKeysToConfirm] of fileKeysForBspConfirmCases.entries()) {
+    let fileKeysToConfirmArrayStr = "";
+    for (const fileKey of fileKeysToConfirm) {
+      fileKeysToConfirmArrayStr += `hex::decode("${fileKey}").expect("File key should be a decodable hex string"),\n            `;
+    }
+    fileKeysForBspStr += `${index + 1} => vec![\n            ${fileKeysToConfirmArrayStr}\n        ],\n        `;
+  }
+
+  let fileKeyProofsForBspConfirmStr = "";
+  for (const [index, fileKeyProof] of fileKeyProofsForBspConfirmCases.entries()) {
+    const fileKeyProofVec = `hex::decode("${fileKeyProof}").expect("File key proof should be a decodable hex string")`;
+    fileKeyProofsForBspConfirmStr += `${index} => ${fileKeyProofVec},\n        `;
+  }
+
   const template = fs.readFileSync(
     "../pallets/file-system/src/benchmark_proofs_template.rs",
     "utf8"
@@ -429,7 +470,9 @@ async function generateBenchmarkProofs() {
     .replace("{{bsp_id}}", bspIdStr)
     .replace("{{bsp_root}}", bspRootStr)
     .replace("{{inclusion_proof}}", inclusionProofStr)
-    .replace("{{file_key_inclusion_proof}}", fileKeyForInclusionProofStr);
+    .replace("{{file_key_inclusion_proof}}", fileKeyForInclusionProofStr)
+    .replace("{{file_keys_for_bsp_confirm}}", fileKeysForBspStr)
+    .replace("{{file_key_proofs_for_bsp_confirm}}", fileKeyProofsForBspConfirmStr);
 
   fs.writeFileSync("../pallets/file-system/src/benchmark_proofs.rs", rustCode);
 
