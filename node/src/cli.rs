@@ -44,7 +44,7 @@ pub enum Subcommand {
     Benchmark(frame_benchmarking_cli::BenchmarkCmd),
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, Eq, PartialEq)]
 pub enum ProviderType {
     /// Main Storage Provider
     Msp,

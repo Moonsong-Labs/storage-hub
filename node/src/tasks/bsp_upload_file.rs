@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     ops::Add,
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 
@@ -12,6 +13,7 @@ use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
 use sp_runtime::AccountId32;
+use tokio::sync::Mutex;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -26,19 +28,16 @@ use shc_common::{
         StorageProviderId,
     },
 };
-use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
+use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
-
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{BspForestStorageHandlerT, FileStorageT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
@@ -61,22 +60,22 @@ const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
 ///   before updating it's local Forest storage root.
-pub struct BspUploadFileTask<FL, FSH>
+pub struct BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
     file_key_cleanup: Option<H256>,
     capacity_queue: Arc<Mutex<u64>>,
 }
 
-impl<FL, FSH> Clone for BspUploadFileTask<FL, FSH>
+impl<NT> Clone for BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspUploadFileTask<FL, FSH> {
+    fn clone(&self) -> BspUploadFileTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -85,12 +84,12 @@ where
     }
 }
 
-impl<FL, FSH> BspUploadFileTask<FL, FSH>
+impl<NT> BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
@@ -106,10 +105,10 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<FL, FSH> EventHandler<NewStorageRequest> for BspUploadFileTask<FL, FSH>
+impl<NT> EventHandler<NewStorageRequest> for BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -134,10 +133,10 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<FL, FSH> EventHandler<RemoteUploadRequest> for BspUploadFileTask<FL, FSH>
+impl<NT> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -257,10 +256,10 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<FL, FSH> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FSH>
+impl<NT> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -504,10 +503,10 @@ where
     }
 }
 
-impl<FL, FSH> BspUploadFileTask<FL, FSH>
+impl<NT> BspUploadFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_new_storage_request_event(
         &mut self,

@@ -13701,6 +13701,7 @@ dependencies = [
  "serde_json",
  "shc-actors-framework",
  "shc-common",
+ "shc-forest-manager",
  "shp-file-key-verifier",
  "shp-file-metadata",
  "sp-api 34.0.0",
@@ -13850,7 +13851,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "array-bytes",
- "async-trait",
  "cumulus-primitives-core",
  "cumulus-primitives-storage-weight-reclaim",
  "diesel",

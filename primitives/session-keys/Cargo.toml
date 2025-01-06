@@ -9,6 +9,7 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+async-trait = { workspace = true }
 codec = { workspace = true, features = ["derive"] }
 scale-info = { workspace = true, features = ["derive"] }
 sp-core = { workspace = true }
@@ -16,7 +17,6 @@ sp-inherents = { workspace = true }
 sp-keystore = { workspace = true, optional = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
-async-trait = { workspace = true }
 
 [features]
 default = ["std"]

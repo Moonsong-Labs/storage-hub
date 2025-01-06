@@ -130,7 +130,9 @@ export const assertExtrinsicPresent = async (
     }
   }
 
-  throw new Error(`Failed to find matching extrinsic after ${timeoutMs}ms: ${lastError?.message}`);
+  throw new Error(
+    `Failed to find matching extrinsic after ${timeoutMs / 1000}s: ${lastError?.message}`
+  );
 };
 
 /**
