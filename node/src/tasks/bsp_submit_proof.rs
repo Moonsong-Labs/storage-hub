@@ -2,6 +2,7 @@ use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use shc_file_manager::traits::FileStorage;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
 
@@ -21,10 +22,12 @@ use shc_common::{
         RandomnessOutput, StorageProof, TrieRemoveMutation,
     },
 };
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, ShNodeType},
+};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
@@ -54,32 +57,32 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///     - If the key is still present, logs a warning, as this may indicate that the key was re-added after deletion.
 ///     - If the key is absent from the Forest Storage, safely removes the corresponding file from the File Storage.
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
-pub struct BspSubmitProofTask<FL, FSH>
+pub struct BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for BspSubmitProofTask<FL, FSH>
+impl<NT> Clone for BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspSubmitProofTask<FL, FSH> {
+    fn clone(&self) -> BspSubmitProofTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> BspSubmitProofTask<FL, FSH>
+impl<NT> BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -94,10 +97,10 @@ where
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
 /// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<FL, FSH> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<FL, FSH>
+impl<NT> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: MultipleNewChallengeSeeds) -> anyhow::Result<()> {
         info!(
@@ -130,10 +133,10 @@ where
 ///   - Retries up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] times if the submission fails.
 /// - Applies any necessary mutations to the Forest Storage (not the File Storage).
 /// - Ensures the new Forest root matches the one on-chain.
-impl<FL, FSH> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FSH>
+impl<NT> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
         info!(
@@ -381,10 +384,10 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<FL, FSH> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<FL, FSH>
+impl<NT> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(
         &mut self,
@@ -426,10 +429,10 @@ where
     }
 }
 
-impl<FL, FSH> BspSubmitProofTask<FL, FSH>
+impl<NT> BspSubmitProofTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn queue_submit_proof_request(
         &self,
@@ -481,7 +484,7 @@ where
         provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
     ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
-        let last_tick_provided_submitted_proof = self
+        let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
             .query_last_tick_provider_submitted_proof(provider_id)
@@ -492,23 +495,23 @@ where
                     e
                 )
             })?;
+
         let last_checkpoint_tick = self
             .storage_hub_handler
             .blockchain
             .query_last_checkpoint_challenge_tick()
             .await?;
 
-        let challenge_period = self
+        let challenges_tick = self
             .storage_hub_handler
             .blockchain
-            .query_challenge_period(provider_id)
+            .get_next_challenge_tick_for_provider(provider_id)
             .await
-            .map_err(|e| anyhow!("Failed to query challenge period: {:?}", e))?;
-        let challenges_tick = last_tick_provided_submitted_proof + challenge_period;
+            .map_err(|e| anyhow!("Failed to get next challenge tick for provider: {:?}", e))?;
 
         // If there were checkpoint challenges since the last tick this provider submitted a proof for,
         // get the checkpoint challenges.
-        if last_tick_provided_submitted_proof <= last_checkpoint_tick
+        if last_tick_provider_submitted_proof_for < last_checkpoint_tick
             && last_checkpoint_tick <= challenges_tick
         {
             let checkpoint_challenges = self
@@ -530,13 +533,14 @@ where
     }
 
     async fn check_if_proof_is_outdated(
-        blockchain: &ActorHandle<BlockchainService>,
+        blockchain: &ActorHandle<BlockchainService<NT::FSH>>,
         event: &ProcessSubmitProofRequest,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
         let next_challenge_tick = blockchain
             .get_next_challenge_tick_for_provider(event.data.provider_id)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to get next challenge tick for provider, to see if the proof is outdated: {:?}", e))?;
 
         if next_challenge_tick != event.data.tick {
             warn!(target: LOG_TARGET, "The proof for tick [{:?}] is not the next one to be submitted. Next challenge tick is [{:?}]", event.data.tick, next_challenge_tick);

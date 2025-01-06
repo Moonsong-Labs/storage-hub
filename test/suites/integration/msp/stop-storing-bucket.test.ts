@@ -39,7 +39,7 @@ describeMspNet(
       const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
 
       // Wait for MSP to download file from user
-      mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
+      await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
 
       // Seal block containing the MSP's transaction response to the storage request
       await userApi.wait.mspResponseInTxPool();

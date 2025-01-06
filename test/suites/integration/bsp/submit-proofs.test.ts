@@ -160,11 +160,10 @@ describeBspNet(
         userApi.shConsts.DUMMY_BSP_ID
       );
       assert(challengePeriodResult.isOk);
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
       strictEqual(
         lastTickBspDownSubmittedProofAfterSlashable,
-        lastTickBspDownSubmittedProof + challengePeriod,
-        "The last tick for which the BSP-Down submitted a proof should be the last tick before BSP-Down was marked as slashable plus one challenge period"
+        lastTickBspDownSubmittedProof,
+        "The last tick for which the BSP-Down submitted a proof should remain the same since the BSP went down"
       );
     });
 
@@ -227,7 +226,7 @@ describeBspNet(
         "fileSystem",
         "BspConfirmStoppedStoring"
       );
-      // Wait for confiration line in docker logs.
+      // Wait for confirmation line in docker logs.
       await bspThreeApi.assert.log({
         searchString: "successfully removed from forest",
         containerName: "sh-bsp-three"
@@ -346,8 +345,8 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
-      // And give some time to process proofs.
-      await sleep(3000);
+      // And give some time to process the latest blocks.
+      await sleep(1000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
@@ -594,7 +593,7 @@ describeBspNet(
           userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
         assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
 
-        return firstChallengeBlockEventDataBlob.provider.toString() === firstBspToRespond;
+        return firstChallengeBlockEventDataBlob.providerId.toString() === firstBspToRespond;
       });
       assert(atLeastOneEventBelongsToFirstBsp, "No ProofAccepted event belongs to the first BSP");
 
@@ -651,7 +650,7 @@ describeBspNet(
           userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
         assert(secondChallengeBlockEventDataBlob, "Event doesn't match Type");
 
-        return secondChallengeBlockEventDataBlob.provider.toString() === secondBspToRespond;
+        return secondChallengeBlockEventDataBlob.providerId.toString() === secondBspToRespond;
       });
       assert(atLeastOneEventBelongsToSecondBsp, "No ProofAccepted event belongs to the second BSP");
 

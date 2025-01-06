@@ -710,8 +710,8 @@ impl Get<u32> for MaxSubmittersPerTick {
         //
         // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
         // min_weight_for_submit_proof: {
-        //   ref_time: 1,132,469,305
-        //   proof_size: 35,487
+        //   ref_time: 2,980,252,675
+        //   proof_size: 16,056
         // }
         let min_weight_for_submit_proof =
             <pallet_proofs_dealer::weights::SubstrateWeight<Runtime> as pallet_proofs_dealer::weights::WeightInfo>::submit_proof_no_checkpoint_challenges_key_proofs(1);
@@ -720,7 +720,7 @@ impl Get<u32> for MaxSubmittersPerTick {
         // With the current values, this would be:
         //
         // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
-        // 110 proof submissions per block (limited by `proof_size`)
+        // 244 proof submissions per block (limited by `proof_size`)
         let max_proof_submissions_per_tick = max_weight_for_class
             .checked_div_per_component(&min_weight_for_submit_proof)
             .unwrap_or(0);
@@ -755,23 +755,23 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
         // weight that the `on_poll` hook can have, with the current benchmarking, is:
         //
         // TODO: UPDATE THIS WITH THE FINAL BENCHMARKING
-        // new_challenge_round_weight: {
-        //   ref_time: 577,000,000 + N * 553,024,845
+        // new_challenges_round_weight: {
+        //   ref_time: 576,000,000 + N * 551,601,146
         //   proof_size: 8,523 + N * 3,158
         // }
         // new_checkpoint_challenge_round_max_weight: {
-        //   ref_time: 587,562,874 + ChallengesQueueLength * 255,790 = 613,141,874
+        //   ref_time: 587,205,208 + ChallengesQueueLength * 225,083 = 610,554,678
         //   proof_size: 4,787
         // }
         // check_spamming_condition_weight: {
         //   ref_time: 313,000,000
-        //   proof_size: 6,016
+        //   proof_size: 6,012
         // }
         //
         // For `N` = 1000, this would be:
         // max_on_poll_weight: {
-        //   ref_time: 313,000,000 + 613,141,874 + 577,000,000 + N * 553,024,845 ≈ 554,527,987,000
-        //   proof_size: 6,016 + 4,787 + 8,523 + N * 3,158 ≈ 3,177,326
+        //   ref_time: 313,000,000 + 610,554,678 + 576,000,000 + N * 551,601,146 ≈ 553,100,700,678
+        //   proof_size: 6,012 + 4,787 + 8,523 + N * 3,158 ≈ 3,177,322
         // }
         //
         // Consider that the maximum block weight is:

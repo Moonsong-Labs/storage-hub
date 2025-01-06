@@ -2772,19 +2772,23 @@ declare module "@polkadot/api-base/types/submittable" {
        * is provided, the proof submitter is considered to be the Provider.
        * Relies on a Providers pallet to get the root for the Provider.
        * Validates that the proof corresponds to a challenge that was made in the past,
-       * by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
-       * Provider should have submitted a proof is calculated based on the last tick they
-       * submitted a proof for ([`LastTickProviderSubmittedAProofFor`]), and the proving period for
-       * that Provider, which is a function of their stake.
+       * by checking the [`TickToChallengesSeed`] StorageMap. The challenge tick that the
+       * Provider should be submitting a proof for is retrieved from [`ProviderToProofSubmissionRecord`],
+       * and it was calculated based on the last tick they submitted a proof for, and the challenge
+       * period for that Provider, at the time of the previous proof submission or when it was
+       * marked as slashable.
+       *
        * This extrinsic also checks that there hasn't been a checkpoint challenge round
        * in between the last time the Provider submitted a proof for and the tick
        * for which the proof is being submitted. If there has been, the Provider is
-       * subject to slashing.
+       * expected to include responses to the checkpoint challenges in the proof.
        *
        * If valid:
        * - Pushes forward the Provider in the [`TickToProvidersDeadlines`] StorageMap a number
        * of ticks corresponding to the stake of the Provider.
-       * - Registers this tick as the last tick in which the Provider submitted a proof.
+       * - Registers the last tick for which the Provider submitted a proof for in
+       * [`ProviderToProofSubmissionRecord`], as well as the next tick for which the Provider
+       * should submit a proof for.
        *
        * Execution of this extrinsic should be refunded if the proof is valid.
        **/

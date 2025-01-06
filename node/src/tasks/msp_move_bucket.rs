@@ -1,4 +1,5 @@
 use rand::seq::SliceRandom;
+use shc_file_manager::traits::FileStorage;
 use std::time::Duration;
 
 use codec::Decode;
@@ -12,12 +13,11 @@ use shc_blockchain_service::{
 };
 use shc_common::types::{FileKeyProof, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::ChunkId;
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{FileStorageT, MspForestStorageHandlerT},
+use crate::services::{
+    handler::StorageHubHandler, types::MspForestStorageHandlerT, types::ShNodeType,
 };
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
@@ -25,32 +25,32 @@ const LOG_TARGET: &str = "msp-move-bucket-task";
 const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
 
 /// [`MspMoveBucketTask`]: Handles the [`MoveBucketRequestedForNewMsp`] event.
-pub struct MspMoveBucketTask<FL, FSH>
+pub struct MspMoveBucketTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for MspMoveBucketTask<FL, FSH>
+impl<NT> Clone for MspMoveBucketTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    fn clone(&self) -> MspMoveBucketTask<FL, FSH> {
+    fn clone(&self) -> MspMoveBucketTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> MspMoveBucketTask<FL, FSH>
+impl<NT> MspMoveBucketTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -66,10 +66,10 @@ where
 ///
 /// If we accept the request, we need to start downloading the files from the bucket and insert
 /// them into our forest storage.
-impl<FL, FSH> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<FL, FSH>
+impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: MoveBucketRequestedForNewMsp) -> anyhow::Result<()> {
         info!(

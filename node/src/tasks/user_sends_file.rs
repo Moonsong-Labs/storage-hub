@@ -1,4 +1,3 @@
-use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info, warn};
 use sc_network::{PeerId, RequestFailure};
 use shc_actors_framework::event_bus::EventHandler;
@@ -7,10 +6,12 @@ use shc_blockchain_service::{
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
 use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
+use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
-use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
+
+use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
@@ -18,18 +19,16 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every [`AcceptedBspVolunteer`] from the runtime.
-pub struct UserSendsFileTask<FL, FSH>
+pub struct UserSendsFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for UserSendsFileTask<FL, FSH>
+impl<NT> Clone for UserSendsFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
     fn clone(&self) -> Self {
         Self {
@@ -38,22 +37,20 @@ where
     }
 }
 
-impl<FL, FSH> UserSendsFileTask<FL, FSH>
+impl<NT> UserSendsFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<FL, FSH> EventHandler<NewStorageRequest> for UserSendsFileTask<FL, FSH>
+impl<NT> EventHandler<NewStorageRequest> for UserSendsFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType + 'static,
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
@@ -143,10 +140,9 @@ where
     }
 }
 
-impl<FL, FSH> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<FL, FSH>
+impl<NT> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType + 'static,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
@@ -190,10 +186,9 @@ where
     }
 }
 
-impl<FL, FSH> UserSendsFileTask<FL, FSH>
+impl<NT> UserSendsFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    NT: ShNodeType,
 {
     async fn send_chunks_to_provider(
         &mut self,

@@ -390,22 +390,16 @@ export const advanceToBlock = async (
     if (options.watchForBspProofs) {
       let txsToWaitFor = 0;
       for (const bspId of options.watchForBspProofs) {
-        // TODO: Change this to a runtime API that gets the next challenge tick for a BSP.
-        // First we get the last tick for which the BSP submitted a proof.
-        const lastTickResult =
-          await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
-        if (lastTickResult.isErr) {
-          options.verbose && console.log(`Failed to get last tick for BSP ${bspId}`);
+        // Get the next challenge tick.
+        const nextChallengeTickResult =
+          await api.call.proofsDealerApi.getNextTickToSubmitProofFor(bspId);
+
+        if (nextChallengeTickResult.isErr) {
+          options.verbose && console.log(`Failed to get next challenge tick for BSP ${bspId}`);
           continue;
         }
-        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-        // Then we get the challenge period for the BSP.
-        const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);
-        assert(challengePeriodResult.isOk);
-        const challengePeriod = challengePeriodResult.asOk.toNumber();
-        // Then we calculate the next challenge tick.
-        const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
+        const nextChallengeTick = nextChallengeTickResult.asOk.toNumber();
         if (currentBlockNumber === nextChallengeTick) {
           txsToWaitFor++;
         }

@@ -72,7 +72,7 @@ export const ALL_TYPES: RegistryTypes = {
       MainStorageProvider: "MainStorageProviderId"
     }
   },
-  GetLastTickProviderSubmittedProofError: {
+  GetProofSubmissionRecordError: {
     _enum: {
       ProviderNotRegistered: null,
       ProviderNeverSubmittedProof: null,
