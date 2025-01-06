@@ -1045,7 +1045,7 @@ pub mod pallet {
         #[pallet::weight({
 			let amount_of_buckets = storage_request_msp_response.iter().count();
 			let max_amount_of_files_to_accept_for_bucket = storage_request_msp_response.iter().map(|response|
-				if let Some(accept_response) = &response.accept { 
+				if let Some(accept_response) = &response.accept {
 					accept_response.file_keys_and_proofs.len()
 				} else {
 					0
