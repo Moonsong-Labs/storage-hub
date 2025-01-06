@@ -36,7 +36,6 @@ impl<
     > CommitmentVerifier for FileKeyVerifier<T, H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
-    <<T as TrieLayout>::Hash as sp_core::Hasher>::Out: core::fmt::Debug,
 {
     type Proof = FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>;
     type Commitment = <T::Hash as sp_core::Hasher>::Out;

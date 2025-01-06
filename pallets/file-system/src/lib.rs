@@ -870,7 +870,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::request_move_bucket())]
         pub fn request_move_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -890,7 +890,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::msp_respond_move_bucket_request())]
         pub fn msp_respond_move_bucket_request(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -914,7 +914,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_bucket_privacy())]
         pub fn update_bucket_privacy(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -937,7 +937,7 @@ pub mod pallet {
 
         /// Create and associate a collection with a bucket.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_and_associate_collection_with_bucket())]
         pub fn create_and_associate_collection_with_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -964,7 +964,7 @@ pub mod pallet {
         ///
         /// To check if a bucket is empty, we compare its current root with the one of an empty trie.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_bucket())]
         pub fn delete_bucket(origin: OriginFor<T>, bucket_id: BucketIdFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -1042,7 +1042,21 @@ pub mod pallet {
         /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
         #[pallet::call_index(8)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight({
+			let amount_of_buckets = storage_request_msp_response.iter().count();
+			let max_amount_of_files_to_accept_for_bucket = storage_request_msp_response.iter().map(|response|
+				if let Some(accept_response) = &response.accept { 
+					accept_response.file_keys_and_proofs.len()
+				} else {
+					0
+				}
+			)
+			.max()
+			.unwrap_or(0);
+			let max_amount_of_files_to_reject = storage_request_msp_response.iter().map(|response| response.reject.len()).max().unwrap_or(0);
+
+			T::WeightInfo::msp_respond_storage_requests_multiple_buckets(amount_of_buckets as u32, max_amount_of_files_to_accept_for_bucket as u32, max_amount_of_files_to_reject as u32)
+		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
             storage_request_msp_response: StorageRequestMspResponse<T>,
@@ -1081,7 +1095,7 @@ pub mod pallet {
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
         #[pallet::call_index(10)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_volunteer())]
         pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -1106,7 +1120,7 @@ pub mod pallet {
 
         /// Used by a BSP to confirm they are storing data of a storage request.
         #[pallet::call_index(11)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_confirm_storing(file_keys_and_proofs.len() as u32))]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             non_inclusion_forest_proof: ForestProof<T>,
@@ -1135,7 +1149,7 @@ pub mod pallet {
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
         #[pallet::call_index(12)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_request_stop_storing())]
         pub fn bsp_request_stop_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1179,7 +1193,7 @@ pub mod pallet {
         /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
         /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
         #[pallet::call_index(13)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_confirm_stop_storing())]
         pub fn bsp_confirm_stop_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1208,7 +1222,7 @@ pub mod pallet {
         /// The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
         /// wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
         #[pallet::call_index(14)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::stop_storing_for_insolvent_user_bsp().max(T::WeightInfo::stop_storing_for_insolvent_user_msp()))]
         pub fn stop_storing_for_insolvent_user(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1246,7 +1260,12 @@ pub mod pallet {
         }
 
         #[pallet::call_index(15)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+			match maybe_inclusion_forest_proof {
+				Some(_) => T::WeightInfo::delete_file_with_inclusion_proof(),
+				None => T::WeightInfo::delete_file_without_inclusion_proof(),
+			}
+		})]
         pub fn delete_file(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -1280,7 +1299,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(16)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::pending_file_deletion_request_submit_proof())]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
             user: T::AccountId,
@@ -1312,7 +1331,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(17)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::set_global_parameters())]
         pub fn set_global_parameters(
             origin: OriginFor<T>,
             new_max_replication_target: Option<T::ReplicationTargetType>,

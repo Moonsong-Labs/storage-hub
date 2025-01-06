@@ -8159,7 +8159,6 @@ dependencies = [
  "frame-benchmarking 38.0.0",
  "frame-support 38.2.0",
  "frame-system 38.0.0",
- "log",
  "pallet-balances 39.0.0",
  "pallet-nfts",
  "pallet-payment-streams-runtime-api",
@@ -13952,7 +13951,6 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "frame-support 38.2.0",
- "log",
  "num-bigint",
  "parity-scale-codec",
  "rand",
