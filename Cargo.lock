@@ -13747,6 +13747,7 @@ dependencies = [
  "sp-trie 29.0.0",
  "storage-hub-runtime",
  "thiserror 1.0.69",
+ "toml 0.8.19",
  "trie-db 0.29.1",
 ]
 

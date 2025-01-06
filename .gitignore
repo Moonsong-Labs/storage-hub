@@ -30,3 +30,6 @@ runtimes/
 .idea/
 
 test/dist/*
+
+# Dont commit you config file
+config.toml
