@@ -477,10 +477,21 @@ pub mod pallet {
             maybe_provider_account: Option<T::AccountId>,
         },
 
-        /// A set of mutations has been applied to the Forest.
-        MutationsApplied {
-            provider: ProviderIdFor<T>,
+        /// A set of mutations has been applied to the Forest of a given Provider.
+        MutationsAppliedForProvider {
+            provider_id: ProviderIdFor<T>,
             mutations: Vec<(KeyFor<T>, TrieMutation)>,
+            old_root: KeyFor<T>,
+            new_root: KeyFor<T>,
+        },
+
+        /// A set of mutations has been applied to a given Forest.
+        /// This is the generic version of [`MutationsAppliedForProvider`](Event::MutationsAppliedForProvider)
+        /// when [`generic_apply_delta`](ProofsDealerInterface::generic_apply_delta) is used
+        /// and the root is not necessarily linked to a specific Provider.
+        MutationsApplied {
+            mutations: Vec<(KeyFor<T>, TrieMutation)>,
+            old_root: KeyFor<T>,
             new_root: KeyFor<T>,
         },
 

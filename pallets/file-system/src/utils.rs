@@ -1382,7 +1382,7 @@ where
             <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::initialise_randomness_cycle(&bsp_id)?;
 
             // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+            Self::deposit_event(Event::BspChallengeCycleInitialised {
                 who: sender.clone(),
                 bsp_id,
             });
