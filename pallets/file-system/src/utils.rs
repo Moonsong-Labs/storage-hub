@@ -2068,6 +2068,13 @@ where
                 // Decrease size of the bucket.
                 <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
+                // If the bucket has a MSP, decrease its used capacity.
+                if let Some(msp_id) = msp_id {
+                    <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                        &msp_id, size,
+                    )?;
+                }
+
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                     &file_key,
@@ -2157,6 +2164,11 @@ where
 
             // Decrease size of the bucket.
             <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, file_size)?;
+
+            // Decrease the used capacity of the MSP.
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &msp_id, file_size,
+            )?;
 
             // Initiate the priority challenge to remove the file key from all the providers.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(

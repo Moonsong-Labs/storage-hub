@@ -362,12 +362,23 @@ async function generateBenchmarkProofs() {
     fileKeyForInclusionProof
   ]);
 
+  // Get the metadata of that file key
+  const fileMetadata = (
+    await bspApi.rpc.storagehubclient.getFileMetadata(null, fileKeyForInclusionProof)
+  ).unwrap();
+
   verbose && console.log("\n\n Inclusion proof:");
   verbose && console.log(inclusionProof);
 
-  // Remove the 0x prefix from the proof and the file key.
+  // Remove the 0x prefix from the proof, the file key and the file metadata.
   const inclusionProofHexStr = inclusionProof.toString().slice(2);
   const fileKeyForInclusionProofHexStr = fileKeyForInclusionProof.slice(2);
+  const fileMetadataForInclusionProofOwnerHexStr = fileMetadata.owner.toString().slice(2);
+  const fileMetadataForInclusionProofBucketIdHexStr = fileMetadata.bucket_id.toString().slice(2);
+  const fileMetadataForInclusionProofLocationHexStr = fileMetadata.location.toString().slice(2);
+  const fileMetadataForInclusionProofFingerprintHexStr = fileMetadata.fingerprint
+    .toString()
+    .slice(2);
 
   console.log(
     `${GREEN_TEXT}◀ ✅ Generated inclusion forest proof and file key proof.${RESET_TEXT}`
@@ -439,6 +450,11 @@ async function generateBenchmarkProofs() {
 
   const fileKeyForInclusionProofStr = `hex::decode("${fileKeyForInclusionProofHexStr}").expect("File key for inclusion proof should be a decodable hex string")`;
 
+  const fileMetadataOwnerStr = `hex::decode("${fileMetadataForInclusionProofOwnerHexStr}").expect("Owner in file metadata for inclusion proof should be a decodable hex string")`;
+  const fileMetadataBucketIdStr = `hex::decode("${fileMetadataForInclusionProofBucketIdHexStr}").expect("Bucket ID in file metadata for inclusion proof should be a decodable hex string")`;
+  const fileMetadataLocationStr = `hex::decode("${fileMetadataForInclusionProofLocationHexStr}").expect("Location in file metadata for inclusion proof should be a decodable hex string")`;
+  const fileMetadataFingerprintStr = `hex::decode("${fileMetadataForInclusionProofFingerprintHexStr}").expect("Fingerprint in file metadata for inclusion proof should be a decodable hex string").as_slice().into()`;
+
   let fileKeysForBspStr = "";
   for (const [index, fileKeysToConfirm] of fileKeysForBspConfirmCases.entries()) {
     let fileKeysToConfirmArrayStr = "";
@@ -471,6 +487,11 @@ async function generateBenchmarkProofs() {
     .replace("{{bsp_root}}", bspRootStr)
     .replace("{{inclusion_proof}}", inclusionProofStr)
     .replace("{{file_key_inclusion_proof}}", fileKeyForInclusionProofStr)
+    .replace("{{file_key_metadata_inclusion_proof_owner}}", fileMetadataOwnerStr)
+    .replace("{{file_key_metadata_inclusion_proof_bucket_id}}", fileMetadataBucketIdStr)
+    .replace("{{file_key_metadata_inclusion_proof_location}}", fileMetadataLocationStr)
+    .replace("{{file_key_metadata_inclusion_proof_file_size}}", fileMetadata.file_size)
+    .replace("{{file_key_metadata_inclusion_proof_fingerprint}}", fileMetadataFingerprintStr)
     .replace("{{file_keys_for_bsp_confirm}}", fileKeysForBspStr)
     .replace("{{file_key_proofs_for_bsp_confirm}}", fileKeyProofsForBspConfirmStr);
 

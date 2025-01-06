@@ -2,6 +2,7 @@ use super::{types::*, *};
 use frame_benchmarking::v2::*;
 
 #[benchmarks(where
+	// T is the runtime which has to be comprised of the following pallets:
     T: crate::Config<Fingerprint = <T as frame_system::Config>::Hash, Providers = pallet_storage_providers::Pallet<T>>
 		+ pallet_storage_providers::Config<
 			ProviderId = <T as frame_system::Config>::Hash,
@@ -11,20 +12,28 @@ use frame_benchmarking::v2::*;
 		+ pallet_nfts::Config
 		+ pallet_proofs_dealer::Config
 		+ pallet_payment_streams::Config,
+	// The Providers element of this pallet's config has to implement the `MutateStorageProvidersInterface`, `ReadProvidersInterface`, `ReadBucketsInterface` and `MutateBucketsInterface` traits with the following types:
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
-        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash, MerkleHash = <T as frame_system::Config>::Hash> + shp_traits::ReadBucketsInterface<BucketId = <T as frame_system::Config>::Hash>,
-    // Ensure the ValuePropId from our Providers trait matches that from pallet_storage_providers:
-    <T as crate::Config>::Providers: shp_traits::ReadBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId>
-									+ shp_traits::MutateBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash ,ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId, BucketId = <T as frame_system::Config>::Hash>,
+        + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash, MerkleHash = <T as frame_system::Config>::Hash>
+		+ shp_traits::ReadBucketsInterface<BucketId = <T as frame_system::Config>::Hash, AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId>
+		+ shp_traits::MutateBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash ,ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId, BucketId = <T as frame_system::Config>::Hash>,
+    // The ProofDealer element of this pallet's config has to implement the `ProofsDealerInterface` trait with the following types:
 	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>, MerkleHash = <T as frame_system::Config>::Hash, KeyProof = shp_file_key_verifier::types::FileKeyProof<{shp_constants::H_LENGTH}, {shp_constants::FILE_CHUNK_SIZE}, {shp_constants::FILE_SIZE_TO_CHALLENGES}>>,
+	// The Nfts element of this pallet's config has to implement the `Inspect` trait with the following types:
 	<T as crate::Config>::Nfts: frame_support::traits::nonfungibles_v2::Inspect<<T as frame_system::Config>::AccountId, CollectionId = <T as pallet_nfts::Config>::CollectionId>,
+	// The ProvidersPallet element of the Payment Streams pallet's config has to implement the `ReadProvidersInterface` trait with the following types:
 	<T as pallet_payment_streams::Config>::ProvidersPallet: shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
+	// The Storage Providers pallet's `HoldReason` type must be able to be converted into the Currency's `Reason`.
+	pallet_payment_streams::HoldReason: Into<<<T as pallet::Config>::Currency as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
 )]
 mod benchmarks {
     use super::*;
     use frame_support::{
         assert_ok,
-        traits::{fungible::Mutate, Get, OnPoll},
+        traits::{
+            fungible::{Mutate, MutateHold},
+            Get, OnPoll,
+        },
         weights::WeightMeter,
         BoundedVec,
     };
@@ -860,6 +869,19 @@ mod benchmarks {
             },
         );
 
+        // Set the used capacity to the total capacity to simulate the worst-case scenario of treasury cut calculation when charging the payment stream.
+        let total_capacity = pallet_storage_providers::TotalBspsCapacity::<T>::get();
+        pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
+
+        // Update the last chargeable info of the BSP to make it actually charge the user
+        pallet_payment_streams::LastChargeableInfo::<T>::insert(
+            &bsp_id,
+            pallet_payment_streams::types::ProviderLastChargeableInfo {
+                last_chargeable_tick: frame_system::Pallet::<T>::block_number(),
+                price_index: 100u32.into(),
+            },
+        );
+
         // Get the file keys to confirm from the generated proofs.
         let mut file_keys_and_proofs: BoundedVec<
             FileKeyWithProof<T>,
@@ -997,8 +1019,1179 @@ mod benchmarks {
         Ok(())
     }
 
-    //#[benchmark]
-    //fn bsp_request_stop_storing() -> Result<(), BenchmarkError> {}
+    #[benchmark]
+    fn bsp_request_stop_storing() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Register the BSP which will request to stop storing the file
+        let bsp_account: T::AccountId = account("BSP", 0, 0);
+        mint_into_account::<T>(bsp_account.clone(), 1_000_000_000_000_000)?;
+        let encoded_bsp_id = get_bsp_id();
+        let bsp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let bsp_signed_origin = RawOrigin::Signed(bsp_account.clone());
+        add_bsp_to_provider_storage::<T>(&bsp_account, Some(bsp_id));
+
+        // Change the root of the BSP to match the inclusion forest proof.
+        let encoded_bsp_root = get_bsp_root();
+        let bsp_root = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_root.as_ref())
+            .expect("BSP root should be decodable as it is a hash");
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.root = bsp_root
+        });
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Get the file key for the BSP to request stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Get the inclusion proof for the file key
+        let encoded_inclusion_proof = fetch_inclusion_proof();
+        let inclusion_proof =
+            <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                &mut encoded_inclusion_proof.as_ref(),
+            )
+            .expect("Inclusion forest proof should be decodable");
+
+        // Worst-case scenario is for the storage request to not exist previously (so it has to be created) and for the BSP
+        // to be able to serve the file (since there's an extra write to storage):
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            bsp_signed_origin,
+            file_key,
+            file_bucket_id,
+            file_location.clone(),
+            user_account.clone(),
+            file_fingerprint,
+            file_size,
+            true,
+            inclusion_proof,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestedToStopStoring {
+                bsp_id,
+                file_key,
+                owner: user_account,
+                location: file_location,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the storage request was opened for the file key
+        assert!(StorageRequests::<T>::contains_key(&file_key));
+
+        // Ensure the BSP was added to the BSPs of the storage request
+        assert!(StorageRequestBsps::<T>::contains_key(&file_key, &bsp_id));
+
+        // Ensure the pending stop storage request was added to storage
+        assert!(PendingStopStoringRequests::<T>::contains_key(
+            &bsp_id, &file_key
+        ));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn bsp_confirm_stop_storing() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Register the BSP which will confirm to stop storing the file
+        let bsp_account: T::AccountId = account("BSP", 0, 0);
+        mint_into_account::<T>(bsp_account.clone(), 1_000_000_000_000_000)?;
+        let encoded_bsp_id = get_bsp_id();
+        let bsp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let bsp_signed_origin = RawOrigin::Signed(bsp_account.clone());
+        add_bsp_to_provider_storage::<T>(&bsp_account, Some(bsp_id));
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Increase the used capacity of the BSP to match the file size, so its challenge and randomness cycles gets reset when confirming
+        // to stop storing the file (worst-case scenario). Also, change the root of the BSP to match the inclusion forest proof.
+        let encoded_bsp_root = get_bsp_root();
+        let bsp_root = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_root.as_ref())
+            .expect("BSP root should be decodable as it is a hash");
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.root = bsp_root;
+            bsp.capacity_used += file_size;
+        });
+        // Set the used capacity to the total capacity to simulate the worst-case scenario of treasury cut calculation when charging the payment stream.
+        pallet_storage_providers::UsedBspsCapacity::<T>::set(file_size);
+        pallet_storage_providers::TotalBspsCapacity::<T>::set(file_size);
+
+        // Create the dynamic-rate payment stream between the user and the BSP to account for the worst-case scenario
+        // of deleting it in the confirm stop storing
+        pallet_payment_streams::DynamicRatePaymentStreams::<T>::insert(
+            &bsp_id,
+            &user_account,
+            DynamicRatePaymentStream {
+                amount_provided: (file_size as u32).into(), // This is so the payment stream gets deleted, worst-case scenario
+                price_index_when_last_charged: 0u32.into(),
+                user_deposit: 100u32.into(),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Hold some of the user's balance so it simulates it having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Update the last chargeable info of the BSP to make it actually charge the user
+        pallet_payment_streams::LastChargeableInfo::<T>::insert(
+            &bsp_id,
+            pallet_payment_streams::types::ProviderLastChargeableInfo {
+                last_chargeable_tick: frame_system::Pallet::<T>::block_number(),
+                price_index: 100u32.into(),
+            },
+        );
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Get the file key for the BSP to request stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Get the inclusion proof for the file key
+        let encoded_inclusion_proof = fetch_inclusion_proof();
+        let inclusion_proof =
+            <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                &mut encoded_inclusion_proof.as_ref(),
+            )
+            .expect("Inclusion forest proof should be decodable");
+
+        // The BSP requests to stop storing the file
+        Pallet::<T>::bsp_request_stop_storing(
+            bsp_signed_origin.clone().into(),
+            file_key,
+            file_bucket_id,
+            file_location.clone(),
+            user_account.clone(),
+            file_fingerprint,
+            file_size,
+            true,
+            inclusion_proof.clone(),
+        )?;
+
+        // Advance enough blocks so the BSP is allowed to confirm to stop storing the file
+        run_to_block::<T>(
+            frame_system::Pallet::<T>::block_number() + T::MinWaitForStopStoring::get(),
+        );
+
+        // Get some variables for comparison after the call
+        let previous_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+        let previous_bsp_root =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(bsp_signed_origin, file_key, inclusion_proof);
+
+        /*********** Post-benchmark checks: ***********/
+        // Get the new values after calling the extrinsic:
+        let new_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+        let new_bsp_root =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspConfirmStoppedStoring {
+                bsp_id,
+                file_key,
+                new_root: new_bsp_root,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the pending stop storage request was removed from storage
+        assert!(!PendingStopStoringRequests::<T>::contains_key(
+            &bsp_id, &file_key
+        ));
+
+        // Ensure the new capacity used of the BSP is the previous one minus the file size
+        assert_eq!(
+            new_bsp_capacity_used,
+            previous_bsp_capacity_used - file_size,
+            "BSP capacity used should be the previous one minus the file size."
+        );
+
+        // Ensure the root of the BSP was updated
+        assert_ne!(
+            new_bsp_root, previous_bsp_root,
+            "BSP root should have been updated."
+        );
+
+        // Ensure the payment stream between the user and the BSP has been deleted
+        assert!(
+            !pallet_payment_streams::DynamicRatePaymentStreams::<T>::contains_key(
+                &bsp_id,
+                &user_account
+            )
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn stop_storing_for_insolvent_user_bsp() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Register the BSP which will stop storing the file for the insolvent user
+        let bsp_account: T::AccountId = account("BSP", 0, 0);
+        mint_into_account::<T>(bsp_account.clone(), 1_000_000_000_000_000)?;
+        let encoded_bsp_id = get_bsp_id();
+        let bsp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let bsp_signed_origin = RawOrigin::Signed(bsp_account.clone());
+        add_bsp_to_provider_storage::<T>(&bsp_account, Some(bsp_id));
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Increase the used capacity of the BSP to match the file size, so its challenge and randomness cycles gets reset when confirming
+        // to stop storing the file (worst-case scenario). Also, change the root of the BSP to match the inclusion forest proof.
+        let encoded_bsp_root = get_bsp_root();
+        let bsp_root = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_root.as_ref())
+            .expect("BSP root should be decodable as it is a hash");
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.root = bsp_root;
+            bsp.capacity_used += file_size;
+        });
+        // Set the used capacity to the total capacity to simulate the worst-case scenario of treasury cut calculation when charging the payment stream.
+        pallet_storage_providers::UsedBspsCapacity::<T>::set(file_size);
+        pallet_storage_providers::TotalBspsCapacity::<T>::set(file_size);
+
+        // Create the dynamic-rate payment stream between the user and the BSP to account for the worst-case scenario
+        // of charging it and deleting it in the stop storing for insolvent user
+        pallet_payment_streams::DynamicRatePaymentStreams::<T>::insert(
+            &bsp_id,
+            &user_account,
+            DynamicRatePaymentStream {
+                amount_provided: (file_size as u32).into(),
+                price_index_when_last_charged: 0u32.into(),
+                user_deposit: 100u32.into(),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Hold some of the user's balance so it simulates it having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Update the last chargeable info of the BSP to make it actually charge the user
+        pallet_payment_streams::LastChargeableInfo::<T>::insert(
+            &bsp_id,
+            pallet_payment_streams::types::ProviderLastChargeableInfo {
+                last_chargeable_tick: frame_system::Pallet::<T>::block_number(),
+                price_index: 100u32.into(),
+            },
+        );
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Get the file key for the BSP to request stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Get the inclusion proof for the file key
+        let encoded_inclusion_proof = fetch_inclusion_proof();
+        let inclusion_proof =
+            <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                &mut encoded_inclusion_proof.as_ref(),
+            )
+            .expect("Inclusion forest proof should be decodable");
+
+        // Flag the owner of the file as insolvent
+        pallet_payment_streams::UsersWithoutFunds::<T>::insert(
+            &user_account,
+            frame_system::Pallet::<T>::block_number(),
+        );
+
+        // Get some variables for comparison after the call
+        let previous_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+        let previous_bsp_root =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        stop_storing_for_insolvent_user(
+            bsp_signed_origin.clone(),
+            file_key,
+            file_bucket_id,
+            file_location.clone(),
+            user_account.clone(),
+            file_fingerprint,
+            file_size,
+            inclusion_proof.clone(),
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Get the new values after calling the extrinsic:
+        let new_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+        let new_bsp_root =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::SpStopStoringInsolventUser {
+                sp_id: bsp_id,
+                file_key,
+                new_root: new_bsp_root,
+                owner: user_account.clone(),
+                location: file_location,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the new capacity used of the BSP is the previous one minus the file size
+        assert_eq!(
+            new_bsp_capacity_used,
+            previous_bsp_capacity_used - file_size,
+            "BSP capacity used should be the previous one minus the file size."
+        );
+
+        // Ensure the root of the BSP was updated
+        assert_ne!(
+            new_bsp_root, previous_bsp_root,
+            "BSP root should have been updated."
+        );
+
+        // Ensure the payment stream between the user and the BSP has been deleted
+        assert!(
+            !pallet_payment_streams::DynamicRatePaymentStreams::<T>::contains_key(
+                &bsp_id,
+                &user_account
+            )
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn stop_storing_for_insolvent_user_msp() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        let msp_signed_origin = RawOrigin::Signed(msp_account.clone());
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Increase the used capacity of the MSP to match the file size
+        pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+            let msp = msp.as_mut().expect("MSP should exist.");
+            msp.capacity_used += file_size;
+        });
+
+        // Update the fixed-rate payment stream between the user and the MSP to account for file being stored
+        pallet_payment_streams::FixedRatePaymentStreams::<T>::mutate(
+            &msp_id,
+            &user_account,
+            |payment_stream| {
+                let payment_stream = payment_stream
+                    .as_mut()
+                    .expect("Payment stream should exist.");
+                payment_stream.rate += 100_000u32.into();
+            },
+        );
+
+        // Hold some of the user's balance so it simulates it having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Set the bucket's root and size to match what's in the inclusion proof
+        let encoded_bucket_root = get_bsp_root();
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        pallet_storage_providers::Buckets::<T>::mutate(&file_bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.root = bucket_root;
+            bucket.size += file_size;
+        });
+
+        // Get the file key for the MSP to stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Get the inclusion proof for the file key
+        let encoded_inclusion_proof = fetch_inclusion_proof();
+        let inclusion_proof =
+            <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                &mut encoded_inclusion_proof.as_ref(),
+            )
+            .expect("Inclusion forest proof should be decodable");
+
+        // Flag the owner of the file as insolvent
+        pallet_payment_streams::UsersWithoutFunds::<T>::insert(
+            &user_account,
+            frame_system::Pallet::<T>::block_number(),
+        );
+
+        // Get some variables for comparison after the call
+        let previous_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let previous_bucket_size = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .size;
+        let previous_bucket_root = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .root;
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        stop_storing_for_insolvent_user(
+            msp_signed_origin.clone(),
+            file_key,
+            file_bucket_id,
+            file_location.clone(),
+            user_account.clone(),
+            file_fingerprint,
+            file_size,
+            inclusion_proof.clone(),
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Get the new values after calling the extrinsic:
+        let new_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let new_bucket_size = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .size;
+        let new_bucket_root = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .root;
+
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::SpStopStoringInsolventUser {
+                sp_id: msp_id,
+                file_key,
+                new_root: new_bucket_root,
+                owner: user_account.clone(),
+                location: file_location,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the new capacity used of the MSP is the previous one minus the file size
+        assert_eq!(
+            new_msp_capacity_used,
+            previous_msp_capacity_used - file_size,
+            "BSP capacity used should be the previous one minus the file size."
+        );
+
+        // Ensure the root of the Bucket was updated
+        assert_ne!(
+            new_bucket_root, previous_bucket_root,
+            "BSP root should have been updated."
+        );
+
+        // Ensure the size of the Bucket was updated to the previous size minus the file size
+        assert_eq!(
+            new_bucket_size,
+            previous_bucket_size - file_size,
+            "Bucket size should have been updated."
+        );
+
+        // Ensure the payment stream between the user and the MSP has been deleted
+        assert!(
+            !pallet_payment_streams::FixedRatePaymentStreams::<T>::contains_key(
+                &msp_id,
+                &user_account
+            )
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_file_without_inclusion_proof() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        let user_signed_origin = RawOrigin::Signed(user_account.clone());
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Increase the used capacity of the MSP to match the file size
+        pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+            let msp = msp.as_mut().expect("MSP should exist.");
+            msp.capacity_used += file_size;
+        });
+
+        // Update the fixed-rate payment stream between the user and the MSP to account for file being stored
+        pallet_payment_streams::FixedRatePaymentStreams::<T>::mutate(
+            &msp_id,
+            &user_account,
+            |payment_stream| {
+                let payment_stream = payment_stream
+                    .as_mut()
+                    .expect("Payment stream should exist.");
+                payment_stream.rate += 100_000u32.into();
+            },
+        );
+
+        // Hold some of the user's balance so it simulates it having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Set the bucket's root and size to match what's in the inclusion proof
+        let encoded_bucket_root = get_bsp_root();
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        pallet_storage_providers::Buckets::<T>::mutate(&file_bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.root = bucket_root;
+            bucket.size += file_size;
+        });
+
+        // Get the file key for the MSP to stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Fill up the BoundedVec of pending file deletion requests up to the maximum size minus one for the user to account for the worst-case scenario
+        let mut filled_up_pending_file_deletion_requests: BoundedVec<
+            PendingFileDeletionRequest<T>,
+            T::MaxUserPendingDeletionRequests,
+        > = BoundedVec::default();
+
+        for i in 0..T::MaxUserPendingDeletionRequests::get() - 1 {
+            filled_up_pending_file_deletion_requests
+                .try_push(PendingFileDeletionRequest {
+                    user: user_account.clone(),
+                    file_key: Default::default(),
+                    bucket_id: Default::default(),
+                    file_size: i.into(),
+                })
+                .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
+        }
+        PendingFileDeletionRequests::<T>::insert(
+            &user_account,
+            filled_up_pending_file_deletion_requests,
+        );
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        delete_file(
+            user_signed_origin.clone(),
+            file_bucket_id,
+            file_key,
+            file_location,
+            file_size,
+            file_fingerprint,
+            None,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::FileDeletionRequest {
+                user: user_account.clone(),
+                file_key,
+                bucket_id: file_bucket_id,
+                msp_id: Some(msp_id),
+                proof_of_inclusion: false,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the pending file deletion request for this file key is in storage
+        let pending_file_deletion_requests = PendingFileDeletionRequests::<T>::get(&user_account);
+        assert!(pending_file_deletion_requests
+            .iter()
+            .any(|request| request.file_key == file_key));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_file_with_inclusion_proof() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        let user_signed_origin = RawOrigin::Signed(user_account.clone());
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Increase the used capacity of the MSP to match the file size
+        pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+            let msp = msp.as_mut().expect("MSP should exist.");
+            msp.capacity_used += file_size;
+        });
+
+        // Update the fixed-rate payment stream between the user and the MSP to account for file being stored
+        pallet_payment_streams::FixedRatePaymentStreams::<T>::mutate(
+            &msp_id,
+            &user_account,
+            |payment_stream| {
+                let payment_stream = payment_stream
+                    .as_mut()
+                    .expect("Payment stream should exist.");
+                payment_stream.rate += 100_000u32.into();
+            },
+        );
+
+        // Hold some of the user's balance so it simulates it having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Set the bucket's root and size to match what's in the inclusion proof
+        let encoded_bucket_root = get_bsp_root();
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        pallet_storage_providers::Buckets::<T>::mutate(&file_bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.root = bucket_root;
+            bucket.size += file_size;
+        });
+
+        // Get the file key for the MSP to stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Get the inclusion proof for the file key
+        let encoded_inclusion_proof = fetch_inclusion_proof();
+        let inclusion_proof =
+            <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                &mut encoded_inclusion_proof.as_ref(),
+            )
+            .expect("Inclusion forest proof should be decodable");
+
+        // Get some variables for comparison after the call
+        let previous_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let previous_bucket_size = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .size;
+        let previous_bucket_root = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .root;
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        delete_file(
+            user_signed_origin.clone(),
+            file_bucket_id,
+            file_key,
+            file_location,
+            file_size,
+            file_fingerprint,
+            Some(inclusion_proof),
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected events were emitted.
+        let challenge_event = <T as pallet::Config>::RuntimeEvent::from(
+            Event::PriorityChallengeForFileDeletionQueued {
+                issuer: EitherAccountIdOrMspId::<T>::AccountId(user_account.clone()),
+                file_key,
+            },
+        );
+        frame_system::Pallet::<T>::assert_has_event(challenge_event.into());
+
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::FileDeletionRequest {
+                user: user_account.clone(),
+                file_key,
+                bucket_id: file_bucket_id,
+                msp_id: Some(msp_id),
+                proof_of_inclusion: true,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the used capacity of the MSP was decreased by the file size.
+        let new_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        assert_eq!(
+            new_msp_capacity_used,
+            previous_msp_capacity_used - file_size,
+            "MSP capacity used should be the previous one minus the file size."
+        );
+
+        // Ensure the size of the Bucket was updated to the previous size minus the file size
+        let new_bucket_size = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .size;
+        assert_eq!(
+            new_bucket_size,
+            previous_bucket_size - file_size,
+            "Bucket size should have been updated."
+        );
+
+        // Ensure the root of the Bucket was updated
+        let new_bucket_root = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .root;
+        assert_ne!(
+            new_bucket_root, previous_bucket_root,
+            "Bucket root should have been updated."
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn pending_file_deletion_request_submit_proof() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        let user_signed_origin = RawOrigin::Signed(user_account.clone());
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        let msp_signed_origin = RawOrigin::Signed(msp_account.clone());
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Get the file's metadata
+        let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
+        let file_fingerprint = <T as frame_system::Config>::Hash::decode(
+            &mut file_metadata.fingerprint.as_hash().as_ref(),
+        )
+        .expect("Fingerprint should be decodable as it is a hash");
+        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
+        let file_size = file_metadata.file_size;
+        let file_bucket_id =
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+                .expect("Bucket ID should be decodable as it is a hash");
+
+        // Create the bucket to store in the MSP
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            Some(msp_id),
+            user_account.clone(),
+            file_bucket_id,
+            false,
+            None,
+            Some(value_prop_id),
+        )?;
+
+        // Increase the used capacity of the MSP to match the file size
+        pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+            let msp = msp.as_mut().expect("MSP should exist.");
+            msp.capacity_used += file_size;
+        });
+
+        // Update the fixed-rate payment stream between the user and the MSP to account for file being stored
+        pallet_payment_streams::FixedRatePaymentStreams::<T>::mutate(
+            &msp_id,
+            &user_account,
+            |payment_stream| {
+                let payment_stream = payment_stream
+                    .as_mut()
+                    .expect("Payment stream should exist.");
+                payment_stream.rate += 100_000u32.into();
+            },
+        );
+
+        // Hold some of the user's balance so it simulates it having a deposit for the payment stream.
+        assert_ok!(<T as crate::Config>::Currency::hold(
+            &pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            100u32.into(),
+        ));
+
+        // Set the bucket's root and size to match what's in the inclusion proof
+        let encoded_bucket_root = get_bsp_root();
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        pallet_storage_providers::Buckets::<T>::mutate(&file_bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.root = bucket_root;
+            bucket.size += file_size;
+        });
+
+        // Get the file key for the MSP to stop storing
+        let encoded_file_key = fetch_file_key_for_inclusion_proof();
+        let file_key = <T as frame_system::Config>::Hash::decode(&mut encoded_file_key.as_ref())
+            .expect("File key should be decodable as it is a hash");
+
+        // Fill up the BoundedVec of pending file deletion requests up to the maximum size minus one for the user to account for the worst-case scenario
+        let mut filled_up_pending_file_deletion_requests: BoundedVec<
+            PendingFileDeletionRequest<T>,
+            T::MaxUserPendingDeletionRequests,
+        > = BoundedVec::default();
+
+        for i in 0..T::MaxUserPendingDeletionRequests::get() - 1 {
+            filled_up_pending_file_deletion_requests
+                .try_push(PendingFileDeletionRequest {
+                    user: user_account.clone(),
+                    file_key: Default::default(),
+                    bucket_id: Default::default(),
+                    file_size: i.into(),
+                })
+                .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
+        }
+        PendingFileDeletionRequests::<T>::insert(
+            &user_account,
+            filled_up_pending_file_deletion_requests,
+        );
+
+        // Call the `delete_file` extrinsic to add the pending file deletion request to storage
+        Pallet::<T>::delete_file(
+            user_signed_origin.clone().into(),
+            file_bucket_id,
+            file_key,
+            file_location,
+            file_size,
+            file_fingerprint,
+            None,
+        )?;
+
+        // Get the inclusion proof for the file key
+        let encoded_inclusion_proof = fetch_inclusion_proof();
+        let inclusion_proof =
+            <<<T as Config>::ProofDealer as ProofsDealerInterface>::ForestProof>::decode(
+                &mut encoded_inclusion_proof.as_ref(),
+            )
+            .expect("Inclusion forest proof should be decodable");
+
+        // Get some variables for comparison after the call
+        let previous_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let previous_bucket_size = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .size;
+        let previous_bucket_root = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .root;
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            msp_signed_origin.clone(),
+            user_account.clone(),
+            file_key,
+            file_size,
+            file_bucket_id,
+            inclusion_proof,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected events were emitted.
+        let challenge_event = <T as pallet::Config>::RuntimeEvent::from(
+            Event::PriorityChallengeForFileDeletionQueued {
+                issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
+                file_key,
+            },
+        );
+        frame_system::Pallet::<T>::assert_has_event(challenge_event.into());
+
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(
+            Event::ProofSubmittedForPendingFileDeletionRequest {
+                user: user_account.clone(),
+                file_key,
+                bucket_id: file_bucket_id,
+                msp_id,
+                proof_of_inclusion: true,
+            },
+        );
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the used capacity of the MSP was decreased by the file size.
+        let new_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        assert_eq!(
+            new_msp_capacity_used,
+            previous_msp_capacity_used - file_size,
+            "MSP capacity used should be the previous one minus the file size."
+        );
+
+        // Ensure the size of the Bucket was updated to the previous size minus the file size
+        let new_bucket_size = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .size;
+        assert_eq!(
+            new_bucket_size,
+            previous_bucket_size - file_size,
+            "Bucket size should have been updated."
+        );
+
+        // Ensure the root of the Bucket was updated
+        let new_bucket_root = pallet_storage_providers::Buckets::<T>::get(&file_bucket_id)
+            .unwrap()
+            .root;
+        assert_ne!(
+            new_bucket_root, previous_bucket_root,
+            "Bucket root should have been updated."
+        );
+
+        // Ensure the pending file deletion request was removed from storage for this file key
+        let pending_file_deletion_requests = PendingFileDeletionRequests::<T>::get(&user_account);
+        assert!(!pending_file_deletion_requests
+            .iter()
+            .any(|request| request.file_key == file_key));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn set_global_parameters() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        let new_max_replication_target: T::ReplicationTargetType =
+            T::DefaultReplicationTarget::get().saturating_add(ReplicationTargetType::<T>::one());
+        let new_tick_range_to_maximum_threshold: TickNumber<T> = One::one();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(
+            RawOrigin::Root,
+            Some(new_max_replication_target),
+            Some(new_tick_range_to_maximum_threshold),
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the max replication target was updated
+        assert_eq!(
+            pallet::MaxReplicationTarget::<T>::get(),
+            new_max_replication_target,
+            "Max replication target should have been updated."
+        );
+
+        // Ensure the tick range to maximum threshold was updated
+        assert_eq!(
+            pallet::TickRangeToMaximumThreshold::<T>::get(),
+            new_tick_range_to_maximum_threshold,
+            "Tick range to maximum threshold should have been updated."
+        );
+
+        Ok(())
+    }
 
     fn run_to_block<T: crate::Config + pallet_proofs_dealer::Config>(n: BlockNumberFor<T>) {
         assert!(
