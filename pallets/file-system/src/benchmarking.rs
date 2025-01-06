@@ -492,7 +492,7 @@ mod benchmarks {
         // Register MSP with value proposition
         let msp: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
@@ -520,7 +520,7 @@ mod benchmarks {
         for i in 0..n {
             let bsp_user: T::AccountId = account("bsp", i as u32, i as u32);
             mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
-            let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone());
+            let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
 
             StorageRequestBsps::<T>::insert(
                 file_key,
@@ -562,7 +562,7 @@ mod benchmarks {
         // Register MSP with value proposition
         let msp: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
-        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
