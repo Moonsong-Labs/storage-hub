@@ -30,3 +30,6 @@ runtimes/
 .idea/
 
 test/dist/*
+
+# cSpell settings
+cspell.json
