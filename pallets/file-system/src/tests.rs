@@ -5033,7 +5033,7 @@ mod bsp_confirm {
                     .map(|file_key| FileKeyWithProof {
                         file_key,
                         proof: CompactProof {
-                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
                         },
                     })
                     .collect::<Vec<_>>()
