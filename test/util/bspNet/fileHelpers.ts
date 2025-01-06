@@ -171,7 +171,12 @@ export const createBucket = async (
 
   const createBucketResult = await sealBlock(
     api,
-    api.tx.fileSystem.createBucket(mspId, bucketName, false, localValuePropId),
+    api.tx.fileSystem.createBucket(
+      mspId ?? ShConsts.DUMMY_MSP_ID,
+      bucketName,
+      false,
+      localValuePropId
+    ),
     owner ?? undefined
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
