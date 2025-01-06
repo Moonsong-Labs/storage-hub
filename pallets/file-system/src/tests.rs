@@ -58,7 +58,7 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        Some(H256::from_slice(&msp.as_slice())),
+                        H256::from_slice(&msp.as_slice()),
                         name,
                         true,
                         Some(ValuePropId::<Test>::default())
@@ -82,7 +82,7 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        Some(msp_id),
+                        msp_id,
                         name.clone(),
                         private,
                         Some(value_prop_id)
@@ -113,7 +113,7 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        Some(msp_id),
+                        msp_id,
                         name.clone(),
                         private,
                         Some(value_prop_id)
@@ -151,7 +151,7 @@ mod create_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin,
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -188,7 +188,7 @@ mod create_bucket_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -223,7 +223,7 @@ mod create_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin,
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -242,7 +242,7 @@ mod create_bucket_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner,
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: None,
@@ -305,7 +305,7 @@ mod delete_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     RuntimeOrigin::signed(owner.clone()),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -337,7 +337,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -350,7 +350,7 @@ mod delete_bucket_tests {
                     FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                     BlakeTwo256::hash(&b"test".to_vec()),
                     4,
-                    Some(msp_id),
+                    msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                     None
                 ));
@@ -417,7 +417,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -430,7 +430,7 @@ mod delete_bucket_tests {
                     FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                     BlakeTwo256::hash(&b"test".to_vec()),
                     4,
-                    Some(msp_id),
+                    msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                     None
                 ));
@@ -495,7 +495,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -542,7 +542,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -600,7 +600,7 @@ mod delete_bucket_tests {
 				// Create a new bucket.
 				assert_ok!(FileSystem::create_bucket(
 					origin.clone(),
-					Some(msp_id),
+					msp_id,
 					name.clone(),
 					private,
 					Some(value_prop_id)
@@ -613,7 +613,7 @@ mod delete_bucket_tests {
 					FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
 					BlakeTwo256::hash(&b"test".to_vec()),
 					4,
-					Some(msp_id),
+					msp_id,
 					BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                     None
 				));
@@ -730,7 +730,7 @@ mod request_move_bucket {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_charlie_id),
+                    msp_charlie_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -873,7 +873,7 @@ mod request_move_bucket {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_charlie_id),
+                    msp_charlie_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -1309,7 +1309,7 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1328,7 +1328,7 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -1383,7 +1383,7 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1402,7 +1402,7 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -1484,7 +1484,7 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1503,7 +1503,7 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -1620,7 +1620,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1699,7 +1699,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1733,7 +1733,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1790,7 +1790,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        Some(msp_charlie_id),
+                        msp_charlie_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1847,7 +1847,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1898,7 +1898,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         Some(0)
                     ),
@@ -1938,7 +1938,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         Some(MaxReplicationTarget::<Test>::get() + 1)
                     ),
@@ -1984,7 +1984,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -2032,7 +2032,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2124,7 +2124,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(MaxReplicationTarget::<Test>::get())
                 ),);
@@ -2162,7 +2162,7 @@ mod request_storage {
                     file_1_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2200,7 +2200,7 @@ mod request_storage {
                     file_2_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2278,7 +2278,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -2317,7 +2317,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2433,7 +2433,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -2512,7 +2512,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -2611,7 +2611,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None
                 ));
@@ -2662,7 +2662,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None
                 ));
@@ -2715,7 +2715,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2782,7 +2782,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2866,7 +2866,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2959,7 +2959,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2971,7 +2971,7 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3086,7 +3086,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_fingerprint,
                     first_size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3098,7 +3098,7 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_fingerprint,
                     second_size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3233,7 +3233,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_fingerprint,
                     first_size,
-                    Some(msp_id),
+                    msp_id,
                     first_peer_ids.clone(),
                     None
                 ));
@@ -3245,7 +3245,7 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_fingerprint,
                     second_size,
-                    Some(msp_id),
+                    msp_id,
                     second_peer_ids.clone(),
                     None
                 ));
@@ -3338,7 +3338,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -3476,7 +3476,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3544,7 +3544,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3758,7 +3758,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(expected_msp_id),
+                    expected_msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3822,7 +3822,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4050,7 +4050,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4123,7 +4123,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4197,7 +4197,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4252,7 +4252,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4312,7 +4312,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4378,7 +4378,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4444,7 +4444,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4508,7 +4508,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4590,7 +4590,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4687,7 +4687,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4785,7 +4785,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4851,7 +4851,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4994,7 +4994,7 @@ mod bsp_confirm {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         Default::default(),
                         None
                     ));
@@ -5109,7 +5109,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -5178,7 +5178,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5259,7 +5259,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5450,7 +5450,7 @@ mod bsp_confirm {
                             location.clone(),
                             fingerprint,
                             size,
-                            Some(msp_id),
+                            msp_id,
                             peer_ids.clone(),
                             Some(1)
                         ));
@@ -5555,7 +5555,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5684,7 +5684,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     new_size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5805,7 +5805,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5866,7 +5866,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5986,7 +5986,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -6109,7 +6109,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -6247,7 +6247,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -6418,7 +6418,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -6576,7 +6576,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -6788,7 +6788,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
 					None
                 ));
@@ -6999,7 +6999,7 @@ mod bsp_stop_storing {
                     first_file_location.clone(),
                     first_file_fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
 					None
                 ));
@@ -7011,7 +7011,7 @@ mod bsp_stop_storing {
                     second_file_location.clone(),
                     second_file_fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
 					None
                 ));
@@ -7270,7 +7270,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None,
                 ));
@@ -7389,7 +7389,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None,
                 ));
@@ -7905,7 +7905,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -8058,7 +8058,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -8169,7 +8169,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -8520,7 +8520,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     Some(1)
                 ));
@@ -8662,7 +8662,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -8721,7 +8721,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -8855,7 +8855,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -9126,7 +9126,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -9320,7 +9320,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -9485,7 +9485,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -9721,7 +9721,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -9932,7 +9932,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -10280,7 +10280,7 @@ fn create_bucket(
     // Dispatch a signed extrinsic.
     assert_ok!(FileSystem::create_bucket(
         origin,
-        Some(msp_id),
+        msp_id,
         name.clone(),
         false,
         Some(value_prop_id)

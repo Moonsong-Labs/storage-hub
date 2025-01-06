@@ -562,7 +562,7 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
-          mspId: Option<H256>,
+          mspId: H256,
           bucketId: H256,
           name: Bytes,
           root: H256,
@@ -572,7 +572,7 @@ declare module "@polkadot/api-base/types/events" {
         ],
         {
           who: AccountId32;
-          mspId: Option<H256>;
+          mspId: H256;
           bucketId: H256;
           name: Bytes;
           root: H256;

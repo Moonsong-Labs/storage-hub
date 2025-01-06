@@ -606,7 +606,7 @@ describeBspNet(
         method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
-        assertLength: 3
+        assertLength: 4
       });
 
       // Seal a block to allow BSPs to charge the payment stream

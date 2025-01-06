@@ -289,7 +289,7 @@ pub trait MutateBucketsInterface {
     /// If `privacy` is true, the bucket will be private and optionally the `read_access_group_id` will be used to
     /// determine the collection of NFTs that can access the bucket.
     fn add_bucket(
-        provider_id: Option<Self::ProviderId>,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,

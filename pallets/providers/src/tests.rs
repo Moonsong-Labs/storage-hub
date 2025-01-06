@@ -3861,7 +3861,7 @@ mod add_bucket {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -3872,7 +3872,7 @@ mod add_bucket {
                 // Try to add the bucket for Alice with the same bucket id
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -3897,7 +3897,7 @@ mod add_bucket {
                 // Try to add a bucket to a non-registered MSP
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        Some(MainStorageProviderId::<Test>::default()),
+                        MainStorageProviderId::<Test>::default(),
                         bucket_owner,
                         bucket_id,
                         false,
@@ -3934,7 +3934,7 @@ mod add_bucket {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4017,7 +4017,7 @@ mod add_bucket {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4109,7 +4109,7 @@ mod unassign_msp_from_bucket {
                 );
 
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4197,7 +4197,7 @@ mod assign_msp_to_bucket {
 
                 // Add bucket
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4249,7 +4249,7 @@ mod assign_msp_to_bucket {
 
                 // Add bucket
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(alice_msp_id),
+                    alice_msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4366,7 +4366,7 @@ mod remove_root_bucket {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4433,7 +4433,7 @@ mod remove_root_bucket {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4573,7 +4573,7 @@ mod increase_bucket_size {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4648,7 +4648,7 @@ mod increase_bucket_size {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4735,7 +4735,7 @@ mod decrease_bucket_size {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4840,7 +4840,7 @@ mod decrease_bucket_size {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -6172,7 +6172,7 @@ mod make_value_prop_unavailable {
                 // Try to add a bucket with an unavailable value proposition
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -6228,7 +6228,7 @@ mod delete_provider {
 
                 // Add a bucket for Alice which creates a payment stream
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
