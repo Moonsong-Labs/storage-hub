@@ -4536,7 +4536,8 @@ export default {
       "NoFileKeysToConfirm",
       "RootNotUpdated",
       "NoPrivacyChange",
-      "OperationNotAllowedForInsolventProvider"
+      "OperationNotAllowedForInsolventProvider",
+      "OperationNotAllowedWhileBucketIsNotStoredByMsp"
     ]
   },
   /**

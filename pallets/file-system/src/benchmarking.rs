@@ -50,7 +50,7 @@ mod benchmarks {
         #[extrinsic_call]
         _(
             signed_origin.clone(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -90,7 +90,7 @@ mod benchmarks {
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(initial_msp_id),
+            initial_msp_id,
             name,
             true,
             Some(initial_value_prop_id),
@@ -153,7 +153,7 @@ mod benchmarks {
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(initial_msp_id),
+            initial_msp_id,
             name,
             true,
             Some(initial_value_prop_id),
@@ -215,7 +215,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -281,7 +281,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -346,7 +346,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection so it has to be deleted as well.
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -411,7 +411,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -424,7 +424,7 @@ mod benchmarks {
             location,
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         );
@@ -475,7 +475,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -487,7 +487,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             Some(n.into()),
         )?;
@@ -545,7 +545,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -587,7 +587,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -613,7 +613,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         )?;
@@ -712,7 +712,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -738,7 +738,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
         )?;
 
