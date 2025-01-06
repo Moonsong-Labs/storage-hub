@@ -1,44 +1,45 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring};
 use shc_common::consts::CURRENT_FOREST_KEY;
-use shc_forest_manager::traits::ForestStorage;
+use shc_file_manager::traits::FileStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::H256;
 
-use crate::{
-    services::handler::StorageHubHandler,
-    tasks::{BspForestStorageHandlerT, FileStorageT},
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{BspForestStorageHandlerT, ShNodeType},
 };
-use shc_actors_framework::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "bsp-delete-file-task";
 
-pub struct BspDeleteFileTask<FL, FSH>
+pub struct BspDeleteFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for BspDeleteFileTask<FL, FSH>
+impl<NT> Clone for BspDeleteFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspDeleteFileTask<FL, FSH> {
+    fn clone(&self) -> BspDeleteFileTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> BspDeleteFileTask<FL, FSH>
+impl<NT> BspDeleteFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -85,10 +86,10 @@ where
     }
 }
 
-impl<FL, FSH> EventHandler<BspConfirmStoppedStoring> for BspDeleteFileTask<FL, FSH>
+impl<NT> EventHandler<BspConfirmStoppedStoring> for BspDeleteFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: BspConfirmStoppedStoring) -> anyhow::Result<()> {
         info!(
@@ -111,10 +112,10 @@ where
     }
 }
 
-impl<FL, FSH> EventHandler<FinalisedBspConfirmStoppedStoring> for BspDeleteFileTask<FL, FSH>
+impl<NT> EventHandler<FinalisedBspConfirmStoppedStoring> for BspDeleteFileTask<NT>
 where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(
         &mut self,
