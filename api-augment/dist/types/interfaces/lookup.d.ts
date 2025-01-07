@@ -1595,6 +1595,9 @@ declare const _default: {
         fileSize: string;
         error: string;
       };
+      UsedCapacityShouldBeZero: {
+        actualUsedCapacity: string;
+      };
     };
   };
   /**

@@ -859,6 +859,16 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event to notify of incoherencies in used capacity.
+       **/
+      UsedCapacityShouldBeZero: AugmentedEvent<
+        ApiType,
+        [actualUsedCapacity: u64],
+        {
+          actualUsedCapacity: u64;
+        }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;

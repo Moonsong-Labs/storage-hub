@@ -1793,7 +1793,7 @@ where
         if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
             let used_capacity =
                 <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
-            if used_capacity == Zero::zero() {
+            if used_capacity != Zero::zero() {
                 // Emit event if we have inconsistency. We can later monitor for those.
                 Self::deposit_event(Event::UsedCapacityShouldBeZero {
                     actual_used_capacity: used_capacity,
@@ -1962,10 +1962,9 @@ where
             && new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
         {
             // If it doesn't store any files we stop the challenge cycle and stop its randomness cycle.
-
             let used_capacity =
                 <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id);
-            if used_capacity == Zero::zero() {
+            if used_capacity != Zero::zero() {
                 // Emit event if we have inconsistency. We can later monitor for those.
                 Self::deposit_event(Event::UsedCapacityShouldBeZero {
                     actual_used_capacity: used_capacity,
