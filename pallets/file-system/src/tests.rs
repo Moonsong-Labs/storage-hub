@@ -358,10 +358,10 @@ mod delete_bucket_tests {
                 // Accept the storage request to store the file, so the bucket is not empty.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key: FileSystem::compute_file_key(
                                     owner.clone(),
                                     bucket_id,
@@ -377,7 +377,7 @@ mod delete_bucket_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -445,10 +445,10 @@ mod delete_bucket_tests {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         RuntimeOrigin::signed(msp),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: FileSystem::compute_file_key(
                                         owner.clone(),
                                         bucket_id,
@@ -464,7 +464,7 @@ mod delete_bucket_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
@@ -621,10 +621,10 @@ mod delete_bucket_tests {
 				// Accept the storage request to store the file, so the bucket is not empty.
 				assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
 					RuntimeOrigin::signed(msp),
-					bounded_vec![StorageRequestMspBucketResponse {
+					vec![StorageRequestMspBucketResponse {
 						bucket_id,
 						accept: Some(StorageRequestMspAcceptedFileKeys {
-							file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+							file_keys_and_proofs: vec![FileKeyWithProof {
 								file_key: FileSystem::compute_file_key(
 									owner.clone(),
 									bucket_id,
@@ -640,7 +640,7 @@ mod delete_bucket_tests {
 								encoded_nodes: vec![H256::default().as_ref().to_vec()],
 							},
 						}),
-						reject: bounded_vec![],
+						reject: vec![],
 					}],
 				));
 
@@ -907,10 +907,10 @@ mod request_move_bucket {
                 // This operation increases the bucket size.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp_charlie),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -920,7 +920,7 @@ mod request_move_bucket {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -2884,10 +2884,10 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -2897,7 +2897,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -2979,7 +2979,7 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request for the first file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: bounded_vec![
@@ -3000,7 +3000,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -3110,7 +3110,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3120,12 +3120,12 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         },
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3135,7 +3135,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }
                     ],
                 ));
@@ -3257,7 +3257,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3267,12 +3267,12 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         },
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3282,7 +3282,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }
                     ],
                 ));
@@ -3380,10 +3380,10 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3393,7 +3393,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -3430,10 +3430,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3443,7 +3443,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::StorageRequestNotFound
@@ -3495,10 +3495,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         not_msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3508,7 +3508,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::NotASp
@@ -3563,10 +3563,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         bsp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3576,7 +3576,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::NotAMsp
@@ -3631,10 +3631,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -3644,7 +3644,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::RequestWithoutMsp
@@ -3705,10 +3705,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -3718,7 +3718,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
@@ -3775,10 +3775,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         caller_msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3788,7 +3788,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::MspNotStoringBucket
@@ -3838,10 +3838,10 @@ mod msp_respond_storage_request {
                 // Accept storing the file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3851,7 +3851,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -3859,10 +3859,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3872,7 +3872,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::MspAlreadyConfirmed
@@ -3932,10 +3932,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         expected_msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3945,7 +3945,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::MspNotStoringBucket
@@ -4004,10 +4004,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4017,7 +4017,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::InsufficientAvailableCapacity
@@ -4067,10 +4067,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4080,7 +4080,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::ExpectedNonInclusionProof
@@ -4867,10 +4867,10 @@ mod bsp_confirm {
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4880,7 +4880,7 @@ mod bsp_confirm {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -7913,10 +7913,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -7926,7 +7926,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8066,10 +8066,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8079,7 +8079,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8177,10 +8177,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8190,7 +8190,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8528,10 +8528,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8541,7 +8541,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -9357,10 +9357,10 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -9370,7 +9370,7 @@ mod stop_storing_for_insolvent_user {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 

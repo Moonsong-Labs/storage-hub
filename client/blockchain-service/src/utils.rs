@@ -15,8 +15,7 @@ use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{
-        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, BCSV_KEY_TYPE,
+        BlockNumber, ParachainClient, ProofsDealerProviderId, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -673,23 +672,16 @@ where
             // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
-                let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
-
-                // Batch multiple respond storing requests up to the runtime configured maximum.
                 let mut respond_storage_requests = Vec::new();
-                for _ in 0..max_batch_respond {
-                    if let Some(request) = state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .pop_front()
-                    {
-                        respond_storage_requests.push(request);
-                    } else {
-                        break;
-                    }
+                while let Some(request) = state_store_context
+                    .pending_msp_respond_storage_request_deque()
+                    .pop_front()
+                {
+                    respond_storage_requests.push(request);
                 }
 
                 // If we have at least 1 respond storing request, send the process event.
-                if respond_storage_requests.len() > 0 {
+                if !respond_storage_requests.is_empty() {
                     next_event_data = Some(
                         ProcessMspRespondStoringRequestData {
                             respond_storing_requests: respond_storage_requests,
