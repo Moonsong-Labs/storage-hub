@@ -122,10 +122,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       moveBucketRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
-       * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
-       **/
-      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
-      /**
        * Deposit held from the User when creating a new storage request
        **/
       storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;

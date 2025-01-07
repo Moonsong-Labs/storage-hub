@@ -323,9 +323,6 @@ impl IndexerService {
             } => {
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
-            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
-            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

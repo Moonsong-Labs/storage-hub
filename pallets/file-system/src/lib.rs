@@ -350,16 +350,6 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// A map of blocks to expired file deletion requests.
-    #[pallet::storage]
-    pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInBlock>,
-        ValueQuery,
-    >;
-
     /// A map of blocks to expired move bucket requests.
     #[pallet::storage]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
@@ -650,28 +640,6 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
-        },
-        /// Failed to decrease bucket size for expired file deletion request
-        FailedToDecreaseBucketSize {
-            user: T::AccountId,
-            bucket_id: BucketIdFor<T>,
-            file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
-            error: DispatchError,
-        },
-        /// Failed to get the MSP owner of the bucket for an expired file deletion request
-        /// This is different from the bucket not having a MSP, which is allowed and won't error
-        FailedToGetMspOfBucket {
-            bucket_id: BucketIdFor<T>,
-            error: DispatchError,
-        },
-        /// Failed to decrease MSP's used capacity for expired file deletion request
-        FailedToDecreaseMspUsedCapacity {
-            user: T::AccountId,
-            msp_id: ProviderIdFor<T>,
-            file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
-            error: DispatchError,
         },
     }
 

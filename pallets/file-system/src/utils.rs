@@ -37,12 +37,12 @@ use crate::{
     pallet,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
-        FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof,
-        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest, ProviderIdFor,
-        RejectedStorageRequest, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
+        FileLocation, Fingerprint, ForestProof, MaxBatchMspRespondStorageRequests, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingFileDeletionRequest,
+        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
@@ -2350,16 +2350,12 @@ mod hooks {
     use crate::{
         pallet,
         types::MerkleHash,
-        utils::{
-            BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
-        },
-        Event, FileDeletionRequestExpirations, MaxReplicationTarget, NextStartingBlockToCleanUp,
-        Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
-        StorageRequestExpirations, StorageRequests,
+        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
+        Event, MaxReplicationTarget, NextStartingBlockToCleanUp, Pallet, PendingMoveBucketRequests,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
-    use shp_traits::TrieRemoveMutation;
     use sp_runtime::{
         traits::{Get, One, Zero},
         Saturating,
@@ -2434,24 +2430,6 @@ mod hooks {
                 meter.consume(db_weight.writes(1));
             }
 
-            // File deletion requests section
-            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
-                return;
-            }
-
-            let mut expired_file_deletion_requests =
-                FileDeletionRequestExpirations::<T>::take(&block);
-            meter.consume(minimum_required_weight_processing_expired_items);
-
-            while let Some(expired_file_deletion_request) = expired_file_deletion_requests.pop() {
-                Self::process_expired_pending_file_deletion(expired_file_deletion_request, meter);
-            }
-
-            if !expired_file_deletion_requests.is_empty() {
-                FileDeletionRequestExpirations::<T>::insert(&block, expired_file_deletion_requests);
-                meter.consume(db_weight.writes(1));
-            }
-
             // Move bucket requests section
             if !meter.can_consume(minimum_required_weight_processing_expired_items) {
                 return;
@@ -2520,110 +2498,6 @@ mod hooks {
                     // This should never happen.
                 }
             }
-        }
-
-        fn process_expired_pending_file_deletion(
-            expired_file_deletion_request: FileDeletionRequestExpirationItem<T>,
-            meter: &mut WeightMeter,
-        ) {
-            let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(2, 3);
-
-            if !meter.can_consume(potential_weight) {
-                return;
-            }
-
-            let requests =
-                PendingFileDeletionRequests::<T>::get(&expired_file_deletion_request.user);
-
-            // Check if the file key is still a pending deletion requests.
-            let expired_item_index =
-                match requests.iter().position(|pending_file_deletion_request| {
-                    &pending_file_deletion_request.file_key
-                        == &expired_file_deletion_request.file_key
-                }) {
-                    Some(i) => i,
-                    None => return,
-                };
-
-            // Remove the file key from the pending deletion requests.
-            PendingFileDeletionRequests::<T>::mutate(
-                &expired_file_deletion_request.user,
-                |requests| {
-                    requests.remove(expired_item_index);
-                },
-            );
-
-            let user = expired_file_deletion_request.user.clone();
-
-            // Attempt to decrease the bucket size while also reducing the fixed rate payment stream between the user and the MSP
-            if let Err(e) =
-                <T::Providers as shp_traits::MutateBucketsInterface>::decrease_bucket_size(
-                    &expired_file_deletion_request.bucket_id,
-                    expired_file_deletion_request.file_size,
-                )
-            {
-                Self::deposit_event(Event::FailedToDecreaseBucketSize {
-                    user: user.clone(),
-                    bucket_id: expired_file_deletion_request.bucket_id,
-                    file_key: expired_file_deletion_request.file_key,
-                    file_size: expired_file_deletion_request.file_size,
-                    error: e,
-                });
-
-                if !<T::Providers as shp_traits::ReadBucketsInterface>::bucket_exists(
-                    &expired_file_deletion_request.bucket_id,
-                ) {
-                    // Skip expired file deletion request if the bucket does not exist.
-                    return;
-                }
-            }
-
-            // Decrease the used capacity of the MSP.
-            if let Ok(Some(msp_id)) =
-                <T::Providers as shp_traits::ReadBucketsInterface>::get_msp_of_bucket(
-                    &expired_file_deletion_request.bucket_id,
-                )
-                .map_err(|e| {
-                    Self::deposit_event(Event::FailedToGetMspOfBucket {
-                        bucket_id: expired_file_deletion_request.bucket_id,
-                        error: e,
-                    });
-                })
-            {
-                let _ = <T::Providers as shp_traits::MutateStorageProvidersInterface>::decrease_capacity_used(
-					&msp_id,
-					expired_file_deletion_request.file_size,
-				)
-				.map_err(|e| {
-					Self::deposit_event(Event::FailedToDecreaseMspUsedCapacity {
-						user: user.clone(),
-						msp_id: msp_id.clone(),
-						file_key: expired_file_deletion_request.file_key,
-						file_size: expired_file_deletion_request.file_size,
-						error: e,
-					});
-				});
-            }
-
-            // Queue a priority challenge to remove the file key from all the providers.
-            let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &expired_file_deletion_request.file_key,
-                Some(TrieRemoveMutation),
-            )
-            .map_err(|_| {
-                Self::deposit_event(Event::FailedToQueuePriorityChallenge {
-                    user: user.clone(),
-                    file_key: expired_file_deletion_request.file_key,
-                });
-            });
-
-            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrMspId::<T>::AccountId(user.clone()),
-                file_key: expired_file_deletion_request.file_key,
-            });
-
-            meter.consume(potential_weight);
         }
 
         fn process_expired_move_bucket_request(

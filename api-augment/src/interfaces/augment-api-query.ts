@@ -315,17 +315,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A map of blocks to expired file deletion requests.
-       **/
-      fileDeletionRequestExpirations: AugmentedQuery<
-        ApiType,
-        (
-          arg: u32 | AnyNumber | Uint8Array
-        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
-        [u32]
-      > &
-        QueryableStorageEntry<ApiType, [u32]>;
-      /**
        * Maximum number replication target allowed to be set for a storage request to be fulfilled.
        **/
       maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
@@ -339,17 +328,6 @@ declare module "@polkadot/api-base/types/storage" {
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
-      /**
-       * A pointer to the earliest available block to insert a new file deletion request expiration.
-       *
-       * This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
-       **/
-      nextAvailableFileDeletionRequestExpirationBlock: AugmentedQuery<
-        ApiType,
-        () => Observable<u32>,
-        []
-      > &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * A pointer to the earliest available block to insert a new move bucket request expiration.
        *
