@@ -30,3 +30,6 @@ runtimes/
 .idea/
 
 test/dist/*
+
+# Ignore cSpell config files
+cSpell.json
