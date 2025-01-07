@@ -7869,6 +7869,8 @@ mod delete_file_and_pending_deletions_tests {
     }
 
     mod success {
+        use crate::MspsAmountOfPendingFileDeletionRequests;
+
         use super::*;
         #[test]
         fn delete_file_with_proof_of_inclusion_success() {
@@ -8078,8 +8080,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
-				// Assert that the MSP was removed from the privileged providers list.
+				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -8113,7 +8116,8 @@ mod delete_file_and_pending_deletions_tests {
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
 				assert!(new_payment_stream_rate < initial_payment_stream_rate);
 
-				// Assert that the MSP was added back to the privileged providers list.
+				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
 				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 // Assert that the correct event was deposited
@@ -8190,8 +8194,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
-				// Assert that the MSP was removed from the privileged providers list.
+				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
@@ -8208,7 +8213,8 @@ mod delete_file_and_pending_deletions_tests {
 					forest_proof
 				));
 
-				// Assert that the MSP was added back to the privileged providers list.
+				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
 				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 // Assert that the correct event was deposited
@@ -8235,6 +8241,270 @@ mod delete_file_and_pending_deletions_tests {
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
                 );
+            });
+        }
+
+        #[test]
+        fn delete_file_pending_file_deletion_request_submit_proof_does_not_add_msp_to_privileged_providers_if_it_has_more_pending_file_deletion_requests(
+        ) {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 1024 * 1024 * 1024; // One gigabyte
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+				let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+				// Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids.clone(),
+                    None
+                ));
+
+				// Issue another storage request
+				let other_fingerprint = BlakeTwo256::hash(&b"other".to_vec());
+				let other_file_key = FileSystem::compute_file_key(
+					owner_account_id.clone(),
+					bucket_id,
+					location.clone(),
+					size,
+					other_fingerprint,
+				);
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    other_fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                    None
+                ));
+
+                // Dispatch the MSP accept storing for both files
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![
+								FileKeyWithProof {
+                                	file_key,
+                                	proof: CompactProof {
+                                    	encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                	}
+                            	},
+								FileKeyWithProof {
+									file_key: other_file_key,
+									proof: CompactProof {
+										encoded_nodes: vec![H256::default().as_ref().to_vec()],
+									}
+								},
+							],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
+				// Get the initial bucket size, MSP's used capacity and payment stream rate
+				let initial_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+
+                // Request to delete the first file
+                assert_ok!(FileSystem::delete_file(
+					owner_signed.clone(),
+					bucket_id,
+					file_key,
+					location.clone(),
+					size,
+					fingerprint,
+					None,
+				));
+
+                // Assert that the pending file deletion request was added to storage
+                assert_eq!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
+                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
+                        vec![PendingFileDeletionRequest {
+							file_key,
+							user: owner_account_id.clone(),
+							bucket_id,
+							file_size: size,
+						}]
+                    )
+                        .unwrap()
+                );
+
+				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+
+				// Request to delete the second file
+				assert_ok!(FileSystem::delete_file(
+					owner_signed.clone(),
+					bucket_id,
+					other_file_key,
+					location,
+					size,
+					other_fingerprint,
+					None,
+				));
+
+				// Assert that the pending file deletion request was added to storage
+				assert!(
+					file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()).iter().any(|x| x.file_key == other_file_key)
+				);
+
+				// Assert that the MSP is still not in the privileged providers list and that it has two pending file deletion requests.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 2);
+
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                let msp_origin = RuntimeOrigin::signed(msp.clone());
+
+				// Submit an inclusion proof for the first file to be deleted
+                assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+					msp_origin.clone(),
+					owner_account_id.clone(),
+					file_key,
+					size,
+					bucket_id,
+					forest_proof
+				));
+
+				// Assert that the Bucket root was correctly updated
+				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
+				let bucket_root = bucket_info.root;
+				assert_eq!(bucket_root, file_key); // This is because our mocked apply delta sets the root as the last mutation
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size = bucket_info.size;
+				assert_eq!(new_bucket_size, initial_bucket_size - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity - size);
+
+				// Assert that the payment stream rate decreased
+				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				assert!(new_payment_stream_rate < initial_payment_stream_rate);
+
+				// Assert that the MSP was NOT added back to the privileged providers list since it still has one pending file deletion request.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::ProofSubmittedForPendingFileDeletionRequest {
+                        msp_id,
+                        user: owner_account_id.clone(),
+                        file_key,
+                        bucket_id,
+                        proof_of_inclusion: true,
+                    }
+                        .into(),
+                );
+
+                // Assert that there is a queued priority challenge for file key in proofs dealer pallet
+                assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+
+                // Assert that the pending file deletion request was removed from storage
+                assert!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone())
+						.iter()
+						.all(|x| x.file_key != file_key)
+                );
+
+				// Submit an inclusion proof for the second file to be deleted
+				let other_forest_proof = CompactProof {
+					encoded_nodes: vec![other_file_key.as_ref().to_vec()],
+				};
+				assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+					msp_origin,
+					owner_account_id.clone(),
+					other_file_key,
+					size,
+					bucket_id,
+					other_forest_proof
+				));
+
+				// Assert that the Bucket root was correctly updated
+				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
+				let bucket_root = bucket_info.root;
+				assert_eq!(bucket_root, other_file_key); // This is because our mocked apply delta sets the root as the last mutation
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size_after_second_deletion = bucket_info.size;
+				assert_eq!(new_bucket_size_after_second_deletion, new_bucket_size - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity_after_second_deletion = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity_after_second_deletion, new_msp_used_capacity - size);
+
+				// Assert that the payment stream rate decreased
+				let new_payment_stream_rate_after_second_deletion = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				assert!(new_payment_stream_rate_after_second_deletion < new_payment_stream_rate);
+
+				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
+				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+				// Assert that the correct event was deposited
+				System::assert_last_event(
+					Event::ProofSubmittedForPendingFileDeletionRequest {
+						msp_id,
+						user: owner_account_id.clone(),
+						file_key: other_file_key,
+						bucket_id,
+						proof_of_inclusion: true,
+					}
+						.into(),
+				);
+
+				// Assert that there is a queued priority challenge for file key in proofs dealer pallet
+				assert!(
+					pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+						.iter()
+						.any(|x| *x == (other_file_key, Some(TrieRemoveMutation))),
+				);
+
+				// Assert that the last pending file deletion request was removed from storage
+				assert_eq!(
+					file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
+					BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
+				);
             });
         }
     }

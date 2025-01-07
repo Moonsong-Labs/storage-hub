@@ -384,7 +384,7 @@ pub mod pallet {
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
+    /// A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
@@ -393,6 +393,15 @@ pub mod pallet {
         BoundedVec<PendingFileDeletionRequest<T>, T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
+
+    /// Mapping from MSPs to the amount of pending file deletion requests they have.
+    ///
+    /// This is used to keep track of the amount of pending file deletion requests each MSP has, so that MSPs are removed
+    /// from the privileged providers list if they have at least one, and are added back if they have none.
+    /// This is to ensure that MSPs are correctly incentivised to submit the required proofs for file deletions.
+    #[pallet::storage]
+    pub type MspsAmountOfPendingFileDeletionRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, u32, ValueQuery>;
 
     /// Pending file stop storing requests.
     ///

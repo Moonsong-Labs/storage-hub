@@ -45,9 +45,10 @@ use crate::{
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
-    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
+    BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget,
+    MspsAmountOfPendingFileDeletionRequests, Pallet, PendingBucketsToMove,
+    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -2019,9 +2020,13 @@ where
                 )
                 .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
-                // If the bucket is stored by a MSP, remove the MSP from the privileged providers list.
+                // If the bucket is stored by a MSP, remove the MSP from the privileged providers list and add one to the amount
+                // of pending file deletion requests this MSP has.
                 if let Some(msp_id) = msp_id {
                     <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
+                    MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
+                        *amount = amount.saturating_add(1)
+                    });
                 }
 
                 false
@@ -2185,10 +2190,14 @@ where
             });
         });
 
-        // Add back the MSP to the privileged providers, to allow it to charge users again.
-        <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(
-            &msp_id,
-        );
+        // Substract one from the amount of pending file deletion requests for the MSP.
+        MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
+            *amount = amount.saturating_sub(1);
+            if *amount == 0 {
+                // If the MSP has no more pending file deletion requests, add it back to the privileged providers.
+                <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
+            }
+        });
 
         Ok((file_key_included, msp_id))
     }
