@@ -1958,22 +1958,27 @@ where
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
 
-        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
-            && new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
-        {
+        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
             // If it doesn't store any files we stop the challenge cycle and stop its randomness cycle.
-            let used_capacity =
-                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id);
-            if used_capacity != Zero::zero() {
-                // Emit event if we have inconsistency. We can later monitor for those.
-                Self::deposit_event(Event::UsedCapacityShouldBeZero {
-                    actual_used_capacity: used_capacity,
-                });
+            if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                let used_capacity =
+                    <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id);
+                if used_capacity != Zero::zero() {
+                    // Emit event if we have inconsistency. We can later monitor for those.
+                    Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                        actual_used_capacity: used_capacity,
+                    });
+                }
+
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
+                    &sp_id,
+                )?;
+
+                <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(
+                    &sp_id,
+                )?;
             }
-
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&sp_id)?;
-
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&sp_id)?;
         };
 
         Ok((sp_id, new_root))
