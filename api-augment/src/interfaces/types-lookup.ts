@@ -2126,6 +2126,19 @@ declare module "@polkadot/types/lookup" {
       readonly fileSize: u64;
       readonly error: SpRuntimeDispatchError;
     } & Struct;
+    readonly isFailedToGetMspOfBucket: boolean;
+    readonly asFailedToGetMspOfBucket: {
+      readonly bucketId: H256;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
+    readonly isFailedToDecreaseMspUsedCapacity: boolean;
+    readonly asFailedToDecreaseMspUsedCapacity: {
+      readonly user: AccountId32;
+      readonly mspId: H256;
+      readonly fileKey: H256;
+      readonly fileSize: u64;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2152,7 +2165,9 @@ declare module "@polkadot/types/lookup" {
       | "MoveBucketAccepted"
       | "MoveBucketRejected"
       | "MspStoppedStoringBucket"
-      | "FailedToDecreaseBucketSize";
+      | "FailedToDecreaseBucketSize"
+      | "FailedToGetMspOfBucket"
+      | "FailedToDecreaseMspUsedCapacity";
   }
 
   /** @name PalletFileSystemRejectedStorageRequestReason (139) */

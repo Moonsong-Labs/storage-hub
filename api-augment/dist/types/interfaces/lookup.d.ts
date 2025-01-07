@@ -1595,6 +1595,17 @@ declare const _default: {
         fileSize: string;
         error: string;
       };
+      FailedToGetMspOfBucket: {
+        bucketId: string;
+        error: string;
+      };
+      FailedToDecreaseMspUsedCapacity: {
+        user: string;
+        mspId: string;
+        fileKey: string;
+        fileSize: string;
+        error: string;
+      };
     };
   };
   /**

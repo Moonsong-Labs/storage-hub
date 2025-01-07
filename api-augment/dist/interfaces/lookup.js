@@ -1608,6 +1608,17 @@ export default {
         fileKey: "H256",
         fileSize: "u64",
         error: "SpRuntimeDispatchError"
+      },
+      FailedToGetMspOfBucket: {
+        bucketId: "H256",
+        error: "SpRuntimeDispatchError"
+      },
+      FailedToDecreaseMspUsedCapacity: {
+        user: "AccountId32",
+        mspId: "H256",
+        fileKey: "H256",
+        fileSize: "u64",
+        error: "SpRuntimeDispatchError"
       }
     }
   },

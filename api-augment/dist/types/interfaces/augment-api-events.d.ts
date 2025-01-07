@@ -601,6 +601,38 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Failed to decrease MSP's used capacity for expired file deletion request
+       **/
+      FailedToDecreaseMspUsedCapacity: AugmentedEvent<
+        ApiType,
+        [
+          user: AccountId32,
+          mspId: H256,
+          fileKey: H256,
+          fileSize: u64,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          user: AccountId32;
+          mspId: H256;
+          fileKey: H256;
+          fileSize: u64;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
+       * Failed to get the MSP owner of the bucket for an expired file deletion request
+       * This is different from the bucket not having a MSP, which is allowed and won't error
+       **/
+      FailedToGetMspOfBucket: AugmentedEvent<
+        ApiType,
+        [bucketId: H256, error: SpRuntimeDispatchError],
+        {
+          bucketId: H256;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
        * Notifies that a priority challenge failed to be queued for pending file deletion.
        **/
       FailedToQueuePriorityChallenge: AugmentedEvent<
