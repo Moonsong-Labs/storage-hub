@@ -2579,6 +2579,33 @@ mod hooks {
                 }
             }
 
+            // Decrease the used capacity of the MSP.
+            if let Ok(Some(msp_id)) =
+                <T::Providers as shp_traits::ReadBucketsInterface>::get_msp_of_bucket(
+                    &expired_file_deletion_request.bucket_id,
+                )
+                .map_err(|e| {
+                    Self::deposit_event(Event::FailedToGetMspOfBucket {
+                        bucket_id: expired_file_deletion_request.bucket_id,
+                        error: e,
+                    });
+                })
+            {
+                let _ = <T::Providers as shp_traits::MutateStorageProvidersInterface>::decrease_capacity_used(
+					&msp_id,
+					expired_file_deletion_request.file_size,
+				)
+				.map_err(|e| {
+					Self::deposit_event(Event::FailedToDecreaseMspUsedCapacity {
+						user: user.clone(),
+						msp_id: msp_id.clone(),
+						file_key: expired_file_deletion_request.file_key,
+						file_size: expired_file_deletion_request.file_size,
+						error: e,
+					});
+				});
+            }
+
             // Queue a priority challenge to remove the file key from all the providers.
             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &expired_file_deletion_request.file_key,

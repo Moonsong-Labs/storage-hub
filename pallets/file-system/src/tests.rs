@@ -8081,6 +8081,7 @@ mod delete_file_and_pending_deletions_tests {
 
 				let bucket_size_after_confirm = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
 				let payment_stream_rate_after_confirm = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				let msp_used_capacity_after_confirm = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -8113,6 +8114,10 @@ mod delete_file_and_pending_deletions_tests {
 				// Assert that the Bucket's size was decreased by the file size
 				let new_bucket_size = bucket_info.size;
 				assert_eq!(new_bucket_size, bucket_size_after_confirm - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity_after_confirm - size);
 
 				// Assert that the payment stream rate decrease
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
@@ -8190,8 +8195,9 @@ mod delete_file_and_pending_deletions_tests {
                     }],
                 ));
 
-                // Query providers pallet Buckets storage
+                // Query providers pallet Buckets storage and MSP's used capacity
                 let bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
+				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -8268,6 +8274,12 @@ mod delete_file_and_pending_deletions_tests {
                     bucket_size - size
                 );
 
+				// Check that the MSP's used capacity was reduced by the file size
+				assert_eq!(
+					<<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					msp_used_capacity - size
+				);
+
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
@@ -8285,24 +8297,58 @@ mod delete_file_and_pending_deletions_tests {
                 let size = 1024 * 1024 * 1024; // One gigabyte
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
+				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-				// Increase bucket size and payment stream rate to simulate it storing the file
-				let initial_bucket_size = 2 * size;
-				assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
-				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
-
-                let file_key = FileSystem::compute_file_key(
+				let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
                     location.clone(),
                     size,
                     fingerprint,
                 );
+
+				// Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(msp_id),
+                    peer_ids,
+                    None
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
+				// Get the initial bucket size, MSP's used capacity and payment stream rate
+				let initial_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -8352,6 +8398,10 @@ mod delete_file_and_pending_deletions_tests {
 				// Assert that the Bucket's size was decreased by the file size
 				let new_bucket_size = bucket_info.size;
 				assert_eq!(new_bucket_size, initial_bucket_size - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity - size);
 
 				// Assert that the payment stream rate decrease
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
@@ -8541,6 +8591,10 @@ mod delete_file_and_pending_deletions_tests {
                     }],
                 ));
 
+				// Get the bucket's size and MSP's used capacity after the file was stored
+				let bucket_size_after_confirm = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let msp_used_capacity_after_confirm = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
 					owner_signed.clone(),
@@ -8611,6 +8665,14 @@ mod delete_file_and_pending_deletions_tests {
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
                 );
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				assert_eq!(new_bucket_size, bucket_size_after_confirm - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity_after_confirm - size);
 
                 // Assert that the payment stream was correctly deleted since the user is without funds
                 assert!(pallet_payment_streams::FixedRatePaymentStreams::<Test>::get(msp_id, owner_account_id.clone()).is_none());

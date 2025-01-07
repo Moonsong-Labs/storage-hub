@@ -670,6 +670,20 @@ pub mod pallet {
             file_size: StorageData<T>,
             error: DispatchError,
         },
+        /// Failed to get the MSP owner of the bucket for an expired file deletion request
+        /// This is different from the bucket not having a MSP, which is allowed and won't error
+        FailedToGetMspOfBucket {
+            bucket_id: BucketIdFor<T>,
+            error: DispatchError,
+        },
+        /// Failed to decrease MSP's used capacity for expired file deletion request
+        FailedToDecreaseMspUsedCapacity {
+            user: T::AccountId,
+            msp_id: ProviderIdFor<T>,
+            file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
+            error: DispatchError,
+        },
     }
 
     // Errors inform users that something went wrong.
