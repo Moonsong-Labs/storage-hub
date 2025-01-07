@@ -613,7 +613,6 @@ impl crate::Config for Test {
     type MaxDataServerMultiAddresses = ConstU32<5>;
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;

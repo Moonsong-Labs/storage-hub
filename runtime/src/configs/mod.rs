@@ -838,7 +838,6 @@ impl pallet_file_system::Config for Runtime {
     type StorageRequestTtl = ConstU32<2000>;
     #[cfg(not(feature = "runtime-benchmarks"))]
     type StorageRequestTtl = ConstU32<40>;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;

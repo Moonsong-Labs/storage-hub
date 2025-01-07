@@ -2024,17 +2024,6 @@ where
                     <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
                 }
 
-                // Queue the expiration item.
-                let expiration_item = ExpirationItem::PendingFileDeletionRequests(
-                    FileDeletionRequestExpirationItem::<T> {
-                        user: sender.clone(),
-                        file_key,
-                        bucket_id,
-                        file_size: size,
-                    },
-                );
-                Self::enqueue_expiration_item(expiration_item)?;
-
                 false
             }
             // If the user supplied a proof of inclusion, verify the proof and queue a priority challenge to remove the file key from all the providers.

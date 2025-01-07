@@ -279,10 +279,6 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
-        #[pallet::constant]
-        type PendingFileDeletionRequestTtl: Get<u32>;
-
         /// Time-to-live for a move bucket request, after which the request is considered expired.
         #[pallet::constant]
         type MoveBucketRequestTtl: Get<u32>;
@@ -379,13 +375,6 @@ pub mod pallet {
     /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
     #[pallet::storage]
     pub type NextAvailableStorageRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
-
-    /// A pointer to the earliest available block to insert a new file deletion request expiration.
-    ///
-    /// This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
-    #[pallet::storage]
-    pub type NextAvailableFileDeletionRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A pointer to the earliest available block to insert a new move bucket request expiration.
