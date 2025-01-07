@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, vec};
 
-use anyhow::Result;
-use codec::Encode;
+use anyhow::{anyhow, Result};
+use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
@@ -14,20 +14,23 @@ use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
+    consts::CURRENT_FOREST_KEY,
     types::{
         BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, BCSV_KEY_TYPE,
+        StorageProviderId, TrieAddMutation, TrieMutation, BCSV_KEY_TYPE,
     },
 };
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_file_metadata::FileMetadata;
 use sp_api::ProvideRuntimeApi;
+use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
     SaturatedConversion,
 };
-use storage_hub_runtime::{Runtime, SignedExtra, UncheckedExtrinsic};
+use storage_hub_runtime::{Runtime, RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -673,7 +676,7 @@ where
             // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
-                let max_batch_respond: u32 = MaxBatchMspRespondStorageRequests::get();
+                let max_batch_respond = <MaxBatchMspRespondStorageRequests as Get<u32>>::get();
 
                 // Batch multiple respond storing requests up to the runtime configured maximum.
                 let mut respond_storage_requests = Vec::new();
@@ -783,7 +786,7 @@ where
         }
     }
 
-    /// Emits a `MultipleNewChallengeSeeds` event with all the pending proof submissions for this provider.
+    /// Emits a [`MultipleNewChallengeSeeds`] event with all the pending proof submissions for this provider.
     /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
     /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
     /// also a change in it's challenge period).
@@ -887,6 +890,15 @@ where
         }
     }
 
+    pub(crate) fn forest_root_changes_catchup<Block>(
+        &self,
+        provider_id: &ProofsDealerProviderId,
+        tree_route: &TreeRoute<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+    }
+
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
         provider_id: &ProofsDealerProviderId,
@@ -914,6 +926,131 @@ where
                 self.emit(NotifyPeriod {});
             }
         }
+    }
+
+    /// Applies the Forest root changes that happened in one block.
+    async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
+    where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
+
+        // Process the events in the block, specifically those that are related to the Forest root changes.
+        match get_events_at_block(&self.client, &block.hash) {
+            Ok(events) => {
+                for ev in events {
+                    match ev.event.clone() {
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                                provider_id,
+                                mutations,
+                                old_root,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
+                                &self.provider_id
+                            {
+                                // Check if the `provider_id` is the BSP that this node is managing.
+                                if provider_id == *bsp_id {
+                                    trace!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
+                                    trace!(target: LOG_TARGET, "Mutations: {:?}", mutations);
+
+                                    // Apply forest root changes to the Forest Storage.
+                                    for (file_key, mutation) in &mutations {
+                                        trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+
+                                        // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
+                                        // and not to the File Storage.
+                                        // This is because if in a future block built on top of this one, the BSP needs to provide
+                                        // a proof, it will be against the Forest root with this change applied.
+                                        // For file deletions, we will remove the file from the File Storage only after finality is reached.
+                                        // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                                        if let Err(e) = self
+                                            .apply_mutation_to_bsp_forest(file_key, mutation)
+                                            .await
+                                        {
+                                            error!(target: LOG_TARGET, "Failed to apply mutation to BSP's Forest");
+                                            error!(target: LOG_TARGET, "BSP ID: {:?}", provider_id);
+                                            error!(target: LOG_TARGET, "Mutation: {:?}", mutation);
+                                            error!(target: LOG_TARGET, "Error: {:?}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsApplied {
+                                mutations,
+                                old_root,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            // In which case the mutations are applied to a Bucket's Forest root.
+                            if let Some(StorageProviderId::MainStorageProvider(msp_id)) =
+                                &self.provider_id
+                            {
+                                // TODO: Check if Bucket is managed by this MSP.
+                                // TODO: Apply forest root changes to the Bucket's Forest Storage.
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to get events at block {:?}: {:?}", block.hash, e);
+            }
+        }
+    }
+
+    async fn apply_mutation_to_bsp_forest(
+        &self,
+        file_key: &H256,
+        mutation: &TrieMutation,
+    ) -> Result<()> {
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let fs = self
+            .forest_storage_handler
+            .get(&current_forest_key.into())
+            .await
+            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+
+        // Write lock is released when exiting the scope of this `match` statement.
+        match mutation {
+            TrieMutation::Add(TrieAddMutation {
+                value: encoded_metadata,
+            }) => {
+                // Metadata comes encoded, so we need to decode it first to apply the mutation and add it to the Forest.
+                let metadata = FileMetadata::decode(&mut &encoded_metadata[..]).map_err(|e| {
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to decode metadata from encoded metadata when applying mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                    anyhow!("Failed to decode metadata from encoded metadata: {:?}", e)
+                })?;
+
+                fs.write()
+                    .await
+                    .insert_files_metadata(vec![metadata].as_slice()).map_err(|e| {
+                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                        anyhow!(
+                            "Failed to insert file key into Forest storage: {:?}",
+                            e
+                        )
+                    })?;
+            }
+            TrieMutation::Remove(_) => {
+                fs.write().await.delete_file_key(file_key).map_err(|e| {
+                          error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                          anyhow!(
+                              "Failed to remove file key from Forest storage: {:?}",
+                              e
+                          )
+                      })?;
+            }
+        };
+
+        Ok(())
     }
 }
 

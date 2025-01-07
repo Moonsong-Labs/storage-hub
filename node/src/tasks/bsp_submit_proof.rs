@@ -356,6 +356,7 @@ where
             }
         }
 
+        // TODO: REMOVE THIS
         if mutations_applied {
             trace!(target: LOG_TARGET, "Mutations applied successfully");
 
@@ -600,6 +601,7 @@ where
         })
     }
 
+    // TODO: REMOVE THIS
     async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
         // Check that the new Forest root matches the one on-chain.
@@ -640,6 +642,7 @@ where
         Ok(())
     }
 
+    // TODO: REMOVE THIS
     async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
         // Get root for this provider according to the runtime.
         let onchain_root = self

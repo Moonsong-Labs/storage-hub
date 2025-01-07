@@ -58,6 +58,7 @@ pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
+pub type TrieAddMutation = shp_traits::TrieAddMutation;
 pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
 pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
 pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;

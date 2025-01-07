@@ -477,6 +477,7 @@ where
             }
         };
 
+        // TODO: REMOVE THIS and do it in Blockchain Service
         // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
         if !file_metadatas.is_empty() {
             fs.write().await.insert_files_metadata(
