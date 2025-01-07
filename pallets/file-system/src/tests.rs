@@ -8235,7 +8235,7 @@ mod delete_file_and_pending_deletions_tests {
                     )
                         .unwrap()
                 );
-				
+
 				// Assert that the MSP was removed from the privileged providers list.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
