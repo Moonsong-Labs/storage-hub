@@ -8235,6 +8235,9 @@ mod delete_file_and_pending_deletions_tests {
                     )
                         .unwrap()
                 );
+				
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();
@@ -8375,6 +8378,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
@@ -8406,6 +8412,9 @@ mod delete_file_and_pending_deletions_tests {
 				// Assert that the payment stream rate decrease
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
 				assert!(new_payment_stream_rate < initial_payment_stream_rate);
+
+				// Assert that the MSP was added back to the privileged providers list.
+				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8481,6 +8490,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
                 };
@@ -8495,6 +8507,9 @@ mod delete_file_and_pending_deletions_tests {
 					bucket_id,
 					forest_proof
 				));
+
+				// Assert that the MSP was added back to the privileged providers list.
+				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8631,6 +8646,9 @@ mod delete_file_and_pending_deletions_tests {
                     )
                         .unwrap()
                 );
+
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();

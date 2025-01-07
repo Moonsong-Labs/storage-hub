@@ -309,7 +309,7 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
-        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id)?;
+        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::MspSignUpSuccess {
@@ -429,7 +429,7 @@ where
             }
         })?;
 
-        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id)?;
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
 
         Ok(msp_id)
     }

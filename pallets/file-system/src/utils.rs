@@ -1994,7 +1994,8 @@ where
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
-            // This will leave a window of time for the MSP to provide the proof of (non-)inclusion.
+            // This will leave a window of time for the MSP to provide the proof of (non-)inclusion. Until the MSP provides the proof, it is
+            // removed from the privileged providers' list, which means it is not allowed to charge users.
             // If the proof is not provided within the TTL, the hook will queue a priority challenge to remove the file key from all the providers.
             None => {
                 let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&sender);
@@ -2017,6 +2018,11 @@ where
                     pending_file_deletion_request,
                 )
                 .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
+
+                // If the bucket is stored by a MSP, remove the MSP from the privileged providers list.
+                if let Some(msp_id) = msp_id {
+                    <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
+                }
 
                 // Queue the expiration item.
                 let expiration_item = ExpirationItem::PendingFileDeletionRequests(
@@ -2189,6 +2195,11 @@ where
                 &pending_file_deletion_request.file_key != &file_key
             });
         });
+
+        // Add back the MSP to the privileged providers, to allow it to charge users again.
+        <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(
+            &msp_id,
+        );
 
         Ok((file_key_included, msp_id))
     }
