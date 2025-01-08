@@ -307,17 +307,22 @@ where
                     }
                 }
 
+                // Update root of Provider after all mutations have been applied to the Forest.
+                <T::ProvidersPallet as MutateChallengeableProvidersInterface>::update_root(
+                    *submitter, new_root,
+                )?;
+
+                if new_root == ProvidersPalletFor::<T>::get_default_root() {
+                    // We should remove the BSP from the dealer proof
+                    Self::stop_challenge_cycle(submitter)?;
+                };
+
                 // Emit event of mutation applied.
                 Self::deposit_event(Event::MutationsApplied {
                     provider: *submitter,
                     mutations,
                     new_root,
                 });
-
-                // Update root of Provider after all mutations have been applied to the Forest.
-                <T::ProvidersPallet as MutateChallengeableProvidersInterface>::update_root(
-                    *submitter, new_root,
-                )?;
             }
         };
 

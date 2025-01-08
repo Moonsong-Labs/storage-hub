@@ -792,6 +792,101 @@ fn proofs_dealer_trait_initialise_challenge_cycle_not_provider_fail() {
 }
 
 #[test]
+fn proofs_dealer_trait_stop_challenge_cycle_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Register user as a Provider in Providers pallet.
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
+            },
+        );
+
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
+        // Dispatch initialise provider extrinsic.
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
+
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&provider_id).unwrap();
+        let current_tick = ChallengesTicker::<Test>::get();
+        assert_eq!(proof_record.last_tick_proven, current_tick);
+
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id,
+        )
+        .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = proof_record.last_tick_proven + challenge_period_plus_tolerance;
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
+        assert_eq!(deadline, Some(()));
+
+        // Advance of 1 block.
+        let current_block = System::block_number();
+        run_to_block(current_block + 1);
+
+        // Call stop cycle.
+        assert_ok!(ProofsDealer::stop_challenge_cycle(&provider_id));
+
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&provider_id);
+        assert_eq!(proof_record, None);
+
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, &provider_id);
+        assert_eq!(deadline, None);
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_stop_challenge_cycle_not_provider_fail() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Expect failure since the user is not a provider.
+        assert_noop!(
+            ProofsDealer::stop_challenge_cycle(&provider_id),
+            crate::Error::<Test>::NotProvider
+        );
+    });
+}
+
+#[test]
 fn submit_proof_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.

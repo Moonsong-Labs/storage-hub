@@ -668,6 +668,14 @@ declare module "@polkadot/api-base/types/events" {
        **/
       StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
+       * Event to notify of incoherencies in used capacity.
+       **/
+      UsedCapacityShouldBeZero: AugmentedEvent<
+        ApiType,
+        [actualUsedCapacity: u64],
+        { actualUsedCapacity: u64 }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;

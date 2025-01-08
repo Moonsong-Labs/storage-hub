@@ -1610,6 +1610,9 @@ export default {
         fileKey: "H256",
         fileSize: "u64",
         error: "SpRuntimeDispatchError"
+      },
+      UsedCapacityShouldBeZero: {
+        actualUsedCapacity: "u64"
       }
     }
   },

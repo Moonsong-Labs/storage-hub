@@ -19,6 +19,7 @@ runtimes/
 .env
 *.tmp
 **/tmp/
+res/benchmarking
 
 .DS_Store
 .vscode/
