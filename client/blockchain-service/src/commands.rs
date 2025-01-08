@@ -21,9 +21,9 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, ForestLeaf, MainStorageProviderId, ProofsDealerProviderId,
-    ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId, TickNumber,
-    TrieRemoveMutation,
+    BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf, MainStorageProviderId,
+    ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId,
+    TickNumber,
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
@@ -149,7 +149,7 @@ pub enum BlockchainServiceCommand {
     QueryLastCheckpointChallenges {
         tick: BlockNumber,
         callback: tokio::sync::oneshot::Sender<
-            Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>,
+            Result<Vec<CustomChallenge>, GetCheckpointChallengesError>,
         >,
     },
     QueryProviderForestRoot {
@@ -324,7 +324,7 @@ pub trait BlockchainServiceInterface {
     async fn query_last_checkpoint_challenges(
         &self,
         tick: BlockNumber,
-    ) -> Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>;
+    ) -> Result<Vec<CustomChallenge>, GetCheckpointChallengesError>;
 
     /// Query the Merkle Patricia Forest root for a given Provider.
     async fn query_provider_forest_root(
@@ -673,7 +673,7 @@ where
     async fn query_last_checkpoint_challenges(
         &self,
         tick: BlockNumber,
-    ) -> Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+    ) -> Result<Vec<CustomChallenge>, GetCheckpointChallengesError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastCheckpointChallenges { tick, callback };
         self.send(message).await;

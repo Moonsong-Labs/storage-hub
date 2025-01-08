@@ -1382,7 +1382,7 @@ where
             <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::initialise_randomness_cycle(&bsp_id)?;
 
             // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+            Self::deposit_event(Event::BspChallengeCycleInitialised {
                 who: sender.clone(),
                 bsp_id,
             });
@@ -1484,8 +1484,7 @@ where
         if storage_request_metadata.bsps_confirmed >= ReplicationTargetType::<T>::one() {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
+                &file_key, true,
             )?;
 
             // Emit event.
@@ -2065,8 +2064,7 @@ where
 
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key,
-                    Some(TrieRemoveMutation),
+                    &file_key, true,
                 )?;
 
                 // Emit event.
@@ -2155,8 +2153,7 @@ where
 
             // Initiate the priority challenge to remove the file key from all the providers.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
+                &file_key, true,
             )?;
 
             // Emit event.
@@ -2342,7 +2339,6 @@ mod hooks {
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
-    use shp_traits::TrieRemoveMutation;
     use sp_runtime::{
         traits::{Get, One, Zero},
         Saturating,
@@ -2565,7 +2561,7 @@ mod hooks {
             // Queue a priority challenge to remove the file key from all the providers.
             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &expired_file_deletion_request.file_key,
-                Some(TrieRemoveMutation),
+                true,
             )
             .map_err(|_| {
                 Self::deposit_event(Event::FailedToQueuePriorityChallenge {
