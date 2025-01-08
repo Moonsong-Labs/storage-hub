@@ -148,7 +148,7 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen;
 
-        /// Type representing the storage request bsps size type.
+        /// Type representing the storage request's BSP amount type.
         type ReplicationTargetType: Parameter
             + Member
             + MaybeSerializeDeserialize
@@ -313,12 +313,12 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
-    /// A double map from storage request to BSP `AccountId`s that volunteered to store the file.
+    /// A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
     ///
-    /// Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
+    /// Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
+    /// Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
     ///
-    /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
+    /// When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
     #[pallet::storage]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
         _,
@@ -537,6 +537,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
+            expires_at: BlockNumberFor<T>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -612,10 +613,12 @@ pub mod pallet {
             location: FileLocation<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a priority challenge failed to be queued for pending file deletion.
+        /// Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
+        /// This can happen if the priority challenge queue is full, and the failed challenge should be manually
+        /// queued at a later time.
         FailedToQueuePriorityChallenge {
-            user: T::AccountId,
             file_key: MerkleHash<T>,
+            error: DispatchError,
         },
         /// Notifies that a file will be deleted.
         FileDeletionRequest {
@@ -671,6 +674,14 @@ pub mod pallet {
         /// Event to notify of incoherencies in used capacity.
         UsedCapacityShouldBeZero {
             actual_used_capacity: StorageData<T>,
+        },
+        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+        /// the return of that storage request's deposit to the user failed.
+        FailedToReleaseStorageRequestCreationDeposit {
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            amount_to_return: BalanceOf<T>,
+            error: DispatchError,
         },
     }
 
