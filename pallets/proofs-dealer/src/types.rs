@@ -95,6 +95,33 @@ pub struct ProofSubmissionRecord<T: crate::Config> {
     pub next_tick_to_submit_proof_for: BlockNumberFor<T>,
 }
 
+/// A custom challenge that can be included in a checkpoint challenge round.
+///
+/// It contains the key being challenged and a boolean indicating whether the key should be removed
+/// from the Merkle Patricia Forest. This key will be removed if `should_remove_key` is `true` and
+/// if when the Provider responds to this challenge with a proof, in that proof there is an inclusion
+/// proof for that key (i.e. the key is in the Merkle Patricia Forest).
+#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, MaxEncodedLen)]
+#[scale_info(skip_type_params(T))]
+pub struct CustomChallenge<T: crate::Config> {
+    /// The key being challenged.
+    pub key: KeyFor<T>,
+    /// Whether the key should be removed from the Merkle Patricia Forest.
+    pub should_remove_key: bool,
+}
+
+/// Implement Debug for CustomChallenge. Cannot derive Debug directly because of compiler issues
+/// with the generic type.
+impl<T: crate::Config> Debug for CustomChallenge<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "CustomChallenge {{ key: {:?}, should_remove_key: {:?} }}",
+            self.key, self.should_remove_key
+        )
+    }
+}
+
 // ****************************************************************************
 // ********************* Syntactic sugar for types ****************************
 // ****************************************************************************

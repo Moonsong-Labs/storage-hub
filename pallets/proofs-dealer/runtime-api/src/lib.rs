@@ -7,20 +7,20 @@ use sp_std::vec::Vec;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, RandomnessOutput, TrieRemoveMutation>
+    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, RandomnessOutput, CustomChallenge>
     where
         ProviderId: codec::Codec,
         BlockNumber: codec::Codec,
         Key: codec::Codec,
         RandomnessOutput: codec::Codec,
-        TrieRemoveMutation: codec::Codec,
+        CustomChallenge: codec::Codec,
     {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderId) -> Result<BlockNumber, GetProofSubmissionRecordError>;
         fn get_next_tick_to_submit_proof_for(provider_id: &ProviderId) -> Result<BlockNumber, GetProofSubmissionRecordError>;
         fn get_last_checkpoint_challenge_tick() -> BlockNumber;
         fn get_checkpoint_challenges(
             tick: BlockNumber
-        ) -> Result<Vec<(Key, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>;
+        ) -> Result<Vec<CustomChallenge>, GetCheckpointChallengesError>;
         fn get_challenge_seed(tick: BlockNumber) -> Result<RandomnessOutput, GetChallengeSeedError>;
         fn get_challenge_period(provider_id: &ProviderId) -> Result<BlockNumber, GetChallengePeriodError>;
         fn get_checkpoint_challenge_period() -> BlockNumber;

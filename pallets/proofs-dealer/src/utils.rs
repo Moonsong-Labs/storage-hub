@@ -14,7 +14,7 @@ use pallet_proofs_dealer_runtime_api::{
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
     ProofsDealerInterface, ReadChallengeableProvidersInterface, StorageHubTickGetter, TrieMutation,
-    TrieProofDeltaApplier, TrieRemoveMutation,
+    TrieProofDeltaApplier,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
@@ -30,8 +30,8 @@ use crate::{
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
-        CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
-        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
+        CheckpointChallengePeriodFor, CustomChallenge, ForestVerifierFor, ForestVerifierProofFor,
+        KeyFor, KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
         MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof,
         ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
         RandomnessOutputFor, RandomnessProviderFor, StakeToChallengePeriodFor,
@@ -244,7 +244,11 @@ where
                 ));
 
             if let Some(ref checkpoint_challenges) = checkpoint_challenges {
-                challenges.extend(checkpoint_challenges.iter().map(|(key, _)| key));
+                challenges.extend(
+                    checkpoint_challenges
+                        .iter()
+                        .map(|custom_challenge| custom_challenge.key),
+                );
             }
         }
 
@@ -258,11 +262,19 @@ where
             // Aggregate all mutations to apply to the Forest root.
             let mutations = challenges
                 .iter()
-                .filter_map(|(key, mutation)| match mutation {
-                    Some(mutation) if forest_keys_proven.contains(key) => {
-                        Some((*key, Into::<TrieMutation>::into(mutation.clone())))
+                .filter_map(|custom_challenge| {
+                    // The key should be removed if `should_remove_key` is `true` and if when the Provider responds to this challenge with a proof,
+                    // in that proof there is an inclusion proof for that key (i.e. the key is in the Merkle Patricia Forest).
+                    if custom_challenge.should_remove_key
+                        && forest_keys_proven.contains(&custom_challenge.key)
+                    {
+                        Some((
+                            custom_challenge.key,
+                            TrieMutation::Remove(Default::default()),
+                        ))
+                    } else {
+                        None
                     }
-                    Some(_) | None => None,
                 })
                 .collect::<Vec<_>>();
 
@@ -306,7 +318,7 @@ where
                 };
 
                 // Emit event of mutation applied.
-                Self::deposit_event(Event::<T>::MutationsApplied {
+                Self::deposit_event(Event::MutationsApplied {
                     provider: *submitter,
                     mutations,
                     new_root,
@@ -692,7 +704,7 @@ where
         weight: &mut WeightMeter,
     ) {
         let mut new_checkpoint_challenges: BoundedVec<
-            (KeyFor<T>, Option<TrieRemoveMutation>),
+            CustomChallenge<T>,
             MaxCustomChallengesPerBlockFor<T>,
         > = BoundedVec::new();
 
@@ -722,7 +734,7 @@ where
         // The conversion shouldn't fail because we now have a vector that has even less elements than the original.
         // Anyway, in case it fails, we just use the original priority challenges queue.
         let new_priority_challenges_queue: BoundedVec<
-            (KeyFor<T>, Option<TrieRemoveMutation>),
+            CustomChallenge<T>,
             ChallengesQueueLengthFor<T>,
         > = Vec::from(priority_challenges_queue)
             .try_into()
@@ -745,7 +757,10 @@ where
             };
 
             if new_checkpoint_challenges
-                .try_push((challenge, None))
+                .try_push(CustomChallenge {
+                    key: challenge,
+                    should_remove_key: false,
+                })
                 .is_err()
             {
                 // This should not happen, as we check that new_checkpoint_challenges is not full
@@ -879,21 +894,22 @@ where
     ///
     /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
     /// to the queue.
-    fn enqueue_challenge_with_priority(
-        key: &KeyFor<T>,
-        mutation: Option<TrieRemoveMutation>,
-    ) -> DispatchResult {
+    fn enqueue_challenge_with_priority(key: &KeyFor<T>, should_remove_key: bool) -> DispatchResult {
         // Get priority challenges queue from storage.
         let mut priority_challenges_queue = PriorityChallengesQueue::<T>::get();
 
         // Check if challenge is already queued. If it is, just return.
-        if priority_challenges_queue.contains(&(*key, mutation.clone())) {
+        let new_priority_challenge = CustomChallenge {
+            key: *key,
+            should_remove_key,
+        };
+        if priority_challenges_queue.contains(&new_priority_challenge) {
             return Ok(());
         }
 
         // Add challenge to queue.
         priority_challenges_queue
-            .try_push((*key, mutation))
+            .try_push(new_priority_challenge)
             .map_err(|_| Error::<T>::PriorityChallengesQueueOverflow)?;
 
         // Set priority challenges queue in storage.
@@ -1020,9 +1036,9 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<TrieRemoveMutation>,
+        should_remove_key: bool,
     ) -> DispatchResult {
-        Self::enqueue_challenge_with_priority(key_challenged, mutation)
+        Self::enqueue_challenge_with_priority(key_challenged, should_remove_key)
     }
 
     fn generate_challenges_from_seed(
@@ -1152,7 +1168,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         TickToProvidersDeadlines::<T>::set(next_challenge_deadline, *provider_id, Some(()));
 
         // Emit event.
-        Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
+        Self::deposit_event(Event::NewChallengeCycleInitialised {
             current_tick,
             next_challenge_deadline,
             provider: *provider_id,
@@ -1230,7 +1246,7 @@ where
 
     pub fn get_checkpoint_challenges(
         tick: BlockNumberFor<T>,
-    ) -> Result<Vec<(KeyFor<T>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+    ) -> Result<Vec<CustomChallenge<T>>, GetCheckpointChallengesError> {
         // Check that the tick is smaller than the last checkpoint tick.
         if LastCheckpointTick::<T>::get() < tick {
             return Err(GetCheckpointChallengesError::TickGreaterThanLastCheckpointTick);
