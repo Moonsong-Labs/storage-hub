@@ -857,7 +857,7 @@ where
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        // Slash the held deposit since there's not enough free balance
+        // Slash the held deposit
         let actual_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
