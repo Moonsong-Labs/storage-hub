@@ -2370,7 +2370,6 @@ mod hooks {
         pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
-            weight.consume(T::DbWeight::get().reads(1));
 
             let new_data_price_per_giga_unit =
                 <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
@@ -2383,7 +2382,6 @@ mod hooks {
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
                     new_data_price_per_giga_unit,
                 );
-                weight.consume(T::DbWeight::get().writes(1));
             }
         }
 

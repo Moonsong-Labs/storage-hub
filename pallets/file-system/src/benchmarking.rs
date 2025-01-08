@@ -2318,6 +2318,37 @@ mod benchmarks {
         Ok(())
     }
 
+    #[benchmark]
+    fn on_poll_hook() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Set the total used capacity of the network to be the same as the total capacity of the network,
+        // since this makes the price updater use the second order Taylor series approximation, which
+        // is the most computationally expensive.
+        let total_capacity: StorageData<T> = 1024 * 1024 * 1024;
+        pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
+        pallet_storage_providers::TotalBspsCapacity::<T>::put(total_capacity);
+
+        // Get the current price per giga unit per tick before updating
+        let current_price_per_giga_unit_per_tick =
+            pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<T>::get();
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::do_on_poll(&mut WeightMeter::new());
+        }
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the price per giga unit per tick was updated
+        assert_ne!(
+            pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<T>::get(),
+            current_price_per_giga_unit_per_tick,
+            "Price per giga unit per tick should have been updated."
+        );
+
+        Ok(())
+    }
+
     fn run_to_block<T: crate::Config + pallet_proofs_dealer::Config>(n: BlockNumberFor<T>) {
         assert!(
             n > frame_system::Pallet::<T>::block_number(),
