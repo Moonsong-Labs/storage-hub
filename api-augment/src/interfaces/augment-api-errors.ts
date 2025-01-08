@@ -456,10 +456,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;
       /**
-       * Used Capacity value should be 0.
-       **/
-      UsedCapacityShouldBeZero: AugmentedError<ApiType>;
-      /**
        * A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
        **/
       UserNotInsolvent: AugmentedError<ApiType>;
