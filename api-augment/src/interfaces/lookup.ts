@@ -4541,8 +4541,7 @@ export default {
       "NoFileKeysToConfirm",
       "RootNotUpdated",
       "NoPrivacyChange",
-      "OperationNotAllowedForInsolventProvider",
-      "UsedCapacityShouldBeZero"
+      "OperationNotAllowedForInsolventProvider"
     ]
   },
   /**

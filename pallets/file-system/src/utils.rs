@@ -1800,8 +1800,9 @@ where
                 });
             }
 
-            // We should remove the BSP from the dealer proof
+            // Stop the BSP's challenge and randomness cycles.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
         };
 
         Ok((bsp_id, new_root))
