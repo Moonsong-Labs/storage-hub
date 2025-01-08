@@ -1,46 +1,48 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::events::FinalisedMspStoppedStoringBucket;
-
-use crate::services::handler::StorageHubHandler;
-use crate::tasks::{FileStorageT, MspForestStorageHandlerT};
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::events::FinalisedMspStoppedStoringBucket;
+use shc_file_manager::traits::FileStorage;
+use shc_forest_manager::traits::ForestStorageHandler;
+
+use crate::services::{
+    handler::StorageHubHandler,
+    types::{MspForestStorageHandlerT, ShNodeType},
+};
 
 const LOG_TARGET: &str = "msp-stopped-storing-task";
-
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
 
 /// [`MspStoppedStoringTask`]: Handles the event of the MSP stopping storing a bucket.
 ///
 /// - [`FinalisedMspStoppedStoringBucket`]: Handles the event of the MSP stopping storing a bucket.
 /// This should only be triggered when the anchor relay chain block is finalized to avoid
 /// deleting the bucket prematurely in the event there is a reorg.
-pub struct MspStoppedStoringTask<FL, FSH>
+pub struct MspStoppedStoringTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FSH>,
+    storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<FL, FSH> Clone for MspStoppedStoringTask<FL, FSH>
+impl<NT> Clone for MspStoppedStoringTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    fn clone(&self) -> MspStoppedStoringTask<FL, FSH> {
+    fn clone(&self) -> MspStoppedStoringTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FSH> MspStoppedStoringTask<FL, FSH>
+impl<NT> MspStoppedStoringTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -55,10 +57,10 @@ where
 /// - Delete the bucket from the MSP's storage.
 /// - Delete all the files in the bucket.
 /// upload requests.
-impl<FL, FSH> EventHandler<FinalisedMspStoppedStoringBucket> for MspStoppedStoringTask<FL, FSH>
+impl<NT> EventHandler<FinalisedMspStoppedStoringBucket> for MspStoppedStoringTask<NT>
 where
-    FL: FileStorageT,
-    FSH: MspForestStorageHandlerT,
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
 {
     async fn handle_event(
         &mut self,

@@ -17,22 +17,27 @@ use shc_common::types::ParachainClient;
 
 pub use self::handler::BlockchainService;
 
-pub async fn spawn_blockchain_service(
+pub async fn spawn_blockchain_service<FSH>(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient>,
-    rpc_handlers: Arc<RpcHandlers>,
     keystore: KeystorePtr,
+    rpc_handlers: Arc<RpcHandlers>,
+    forest_storage_handler: FSH,
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,
-) -> ActorHandle<BlockchainService> {
+) -> ActorHandle<BlockchainService<FSH>>
+where
+    FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
+{
     let task_spawner = task_spawner
         .with_name("blockchain-service")
         .with_group("network");
 
-    let blockchain_service = BlockchainService::new(
+    let blockchain_service = BlockchainService::<FSH>::new(
         client,
-        rpc_handlers,
         keystore,
+        rpc_handlers,
+        forest_storage_handler,
         rocksdb_root_path,
         notify_period,
     );

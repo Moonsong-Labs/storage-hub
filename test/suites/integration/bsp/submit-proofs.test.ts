@@ -347,8 +347,8 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
-      // And give some time to process proofs.
-      await sleep(3000);
+      // And give some time to process the latest blocks.
+      await sleep(1000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
@@ -395,11 +395,13 @@ describeBspNet(
         });
       }
 
-      // There should be at least one pending submit proof transaction.
+      // There should be three pending submit proof transactions, one per active BSP.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
-        checkTxPool: true
+        checkTxPool: true,
+        assertLength: 3,
+        exactLength: true
       });
       for (let sbp of submitProofsPending) {
         console.log(sbp);
