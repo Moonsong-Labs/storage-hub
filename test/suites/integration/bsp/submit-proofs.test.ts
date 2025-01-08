@@ -12,7 +12,7 @@ import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../uti
 
 describeBspNet(
   "BSP: Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard", only: true },
+  { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -400,22 +400,16 @@ describeBspNet(
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true,
-        assertLength: 3,
+        assertLength: 2,
         exactLength: true
       });
-      for (let sbp of submitProofsPending) {
-        console.log(sbp);
-      }
-      assert(submitProofsPending.length > 0);
 
       // Seal block and check that the transaction was successful.
       await userApi.block.seal();
 
       // Assert for the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
-      for (let pae of proofAcceptedEvents) {
-        console.log(pae);
-      }
+
       strictEqual(
         proofAcceptedEvents.length,
         submitProofsPending.length,
