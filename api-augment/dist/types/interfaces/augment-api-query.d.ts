@@ -320,6 +320,19 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
+       * Mapping from MSPs to the amount of pending file deletion requests they have.
+       *
+       * This is used to keep track of the amount of pending file deletion requests each MSP has, so that MSPs are removed
+       * from the privileged providers list if they have at least one, and are added back if they have none.
+       * This is to ensure that MSPs are correctly incentivised to submit the required proofs for file deletions.
+       **/
+      mspsAmountOfPendingFileDeletionRequests: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<u32>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * A pointer to the earliest available block to insert a new move bucket request expiration.
        *
        * This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
@@ -362,7 +375,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file deletion requests.
        *
-       * A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
+       * A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
        **/
       pendingFileDeletionRequests: AugmentedQuery<
         ApiType,
