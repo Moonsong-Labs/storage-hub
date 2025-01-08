@@ -14,9 +14,9 @@ use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof, KeyProofs,
-        ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
-        StorageProofsMerkleTrieLayout, TrieRemoveMutation, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+        BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf, HashT, KeyProof,
+        KeyProofs, ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
+        StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
     },
 };
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
@@ -222,7 +222,7 @@ where
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,
-        TrieRemoveMutation,
+        CustomChallenge,
     >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -719,7 +719,7 @@ where
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,
-        TrieRemoveMutation,
+        CustomChallenge,
     >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
