@@ -2038,6 +2038,10 @@ declare module "@polkadot/types/lookup" {
       readonly fileSize: u64;
       readonly error: SpRuntimeDispatchError;
     } & Struct;
+    readonly isUsedCapacityShouldBeZero: boolean;
+    readonly asUsedCapacityShouldBeZero: {
+      readonly actualUsedCapacity: u64;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2064,7 +2068,8 @@ declare module "@polkadot/types/lookup" {
       | "MoveBucketAccepted"
       | "MoveBucketRejected"
       | "MspStoppedStoringBucket"
-      | "FailedToDecreaseBucketSize";
+      | "FailedToDecreaseBucketSize"
+      | "UsedCapacityShouldBeZero";
   }
   /** @name PalletFileSystemRejectedStorageRequestReason (139) */
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
@@ -5452,6 +5457,7 @@ declare module "@polkadot/types/lookup" {
     readonly isRootNotUpdated: boolean;
     readonly isNoPrivacyChange: boolean;
     readonly isOperationNotAllowedForInsolventProvider: boolean;
+    readonly isUsedCapacityShouldBeZero: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5526,7 +5532,8 @@ declare module "@polkadot/types/lookup" {
       | "NoFileKeysToConfirm"
       | "RootNotUpdated"
       | "NoPrivacyChange"
-      | "OperationNotAllowedForInsolventProvider";
+      | "OperationNotAllowedForInsolventProvider"
+      | "UsedCapacityShouldBeZero";
   }
   /** @name PalletProofsDealerProofSubmissionRecord (467) */
   interface PalletProofsDealerProofSubmissionRecord extends Struct {

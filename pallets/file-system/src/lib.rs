@@ -668,6 +668,10 @@ pub mod pallet {
             file_size: StorageData<T>,
             error: DispatchError,
         },
+        /// Event to notify of incoherencies in used capacity.
+        UsedCapacityShouldBeZero {
+            actual_used_capacity: StorageData<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -822,6 +826,8 @@ pub mod pallet {
         NoPrivacyChange,
         /// Operations not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
+        /// Used Capacity value should be 0.
+        UsedCapacityShouldBeZero,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
