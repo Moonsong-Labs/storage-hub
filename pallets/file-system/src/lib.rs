@@ -664,6 +664,10 @@ pub mod pallet {
             file_size: StorageData<T>,
             error: DispatchError,
         },
+        /// Event to notify of incoherencies in used capacity.
+        UsedCapacityShouldBeZero {
+            actual_used_capacity: StorageData<T>,
+        },
     }
 
     // Errors inform users that something went wrong.

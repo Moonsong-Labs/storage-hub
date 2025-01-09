@@ -12,7 +12,7 @@ use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
     CommitRevealRandomnessInterface, ProofSubmittersInterface, ProofsDealerInterface,
-    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation, TrieRemoveMutation,
+    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -167,7 +167,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn challenge_with_priority(
         _key_challenged: &Self::MerkleHash,
-        _mutation: Option<TrieRemoveMutation>,
+        _should_remove_key: bool,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }

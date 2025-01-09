@@ -31,7 +31,6 @@ pub mod pallet {
     use shp_traits::{
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
         ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
-        TrieRemoveMutation,
     };
     use sp_runtime::{
         traits::{CheckedSub, Convert, Saturating, Zero},
@@ -258,7 +257,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
+        BoundedVec<CustomChallenge<T>, MaxCustomChallengesPerBlockFor<T>>,
     >;
 
     /// The challenge tick of the last checkpoint challenge round.
@@ -324,11 +323,8 @@ pub mod pallet {
     /// A `BoundedVec` is used because the `parity_scale_codec::MaxEncodedLen` trait
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
-    pub type PriorityChallengesQueue<T: Config> = StorageValue<
-        _,
-        BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), ChallengesQueueLengthFor<T>>,
-        ValueQuery,
-    >;
+    pub type PriorityChallengesQueue<T: Config> =
+        StorageValue<_, BoundedVec<CustomChallenge<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
     /// A counter of blocks in which challenges were distributed.
     ///
@@ -403,16 +399,15 @@ pub mod pallet {
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
-        /// The checkpoint challenges that will be registered for the first checkpoint challenge (i.e. tick 0).
-        pub initial_checkpoint_challenges:
-            BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
+        #[serde(skip)]
+        pub _phantom: sp_std::marker::PhantomData<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             // Start with an empty vector of checkpoint challenges.
             Self {
-                initial_checkpoint_challenges: Default::default(),
+                _phantom: Default::default(),
             }
         }
     }
@@ -422,7 +417,7 @@ pub mod pallet {
         fn build(&self) {
             TickToCheckpointChallenges::<T>::insert(
                 &BlockNumberFor::<T>::zero(),
-                &self.initial_checkpoint_challenges,
+                BoundedVec::<CustomChallenge<T>, MaxCustomChallengesPerBlockFor<T>>::default(),
             );
         }
     }
@@ -454,10 +449,7 @@ pub mod pallet {
         /// A new checkpoint challenge was generated.
         NewCheckpointChallenge {
             challenges_ticker: BlockNumberFor<T>,
-            challenges: BoundedVec<
-                (KeyFor<T>, Option<TrieRemoveMutation>),
-                MaxCustomChallengesPerBlockFor<T>,
-            >,
+            challenges: BoundedVec<CustomChallenge<T>, MaxCustomChallengesPerBlockFor<T>>,
         },
 
         /// A provider was marked as slashable and their challenge deadline was forcefully pushed.
@@ -733,7 +725,7 @@ pub mod pallet {
             }
 
             // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::ChallengesTickerSet { paused });
+            Self::deposit_event(Event::ChallengesTickerSet { paused });
 
             // Return a successful DispatchResultWithPostInfo.
             Ok(Pays::No.into())
