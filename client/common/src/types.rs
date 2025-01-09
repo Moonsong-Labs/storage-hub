@@ -32,8 +32,6 @@ pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
-pub type MaxBatchMspRespondStorageRequests =
-    pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
 pub type StorageRequestMspBucketResponse =
     pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
 pub type StorageRequestMspResponse = pallet_file_system::types::StorageRequestMspResponse<Runtime>;
@@ -56,6 +54,7 @@ pub type MultiAddress = pallet_storage_providers::types::MultiAddress<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
+pub type CustomChallenge = pallet_proofs_dealer::types::CustomChallenge<Runtime>;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type TrieAddMutation = shp_traits::TrieAddMutation;

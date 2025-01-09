@@ -1243,7 +1243,7 @@ mod users {
                 storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
                     storagehub::Runtime,
                 >::create_bucket {
-                    msp_id: Some(alice_msp_id),
+                    msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
                     value_prop_id: Some(value_prop_id),
@@ -1313,7 +1313,7 @@ mod users {
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
                     size,
-                    msp_id: Some(alice_msp_id.clone()),
+                    msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
                     replication_target: None,
                 });
@@ -1603,7 +1603,7 @@ mod users {
                 storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
                     storagehub::Runtime,
                 >::create_bucket {
-                    msp_id: Some(alice_msp_id),
+                    msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
                     value_prop_id: Some(value_prop_id),
@@ -1685,7 +1685,7 @@ mod users {
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
                     size,
-                    msp_id: Some(alice_msp_id.clone()),
+                    msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
                     replication_target: None,
                 });

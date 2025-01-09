@@ -18,8 +18,8 @@ use shc_blockchain_service::{
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
-        RandomnessOutput, StorageProof, TrieRemoveMutation,
+        BlockNumber, CustomChallenge, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
+        RandomnessOutput, StorageProof,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -209,10 +209,11 @@ where
         let mut key_proofs = KeyProofs::new();
         for file_key in &proven_keys {
             // If the file key is a checkpoint challenge for a file deletion, we should NOT generate a key proof for it.
-            let should_generate_key_proof = !event
-                .data
-                .checkpoint_challenges
-                .contains(&(*file_key, Some(TrieRemoveMutation::default())));
+            let should_generate_key_proof =
+                !event.data.checkpoint_challenges.contains(&CustomChallenge {
+                    key: *file_key,
+                    should_remove_key: true,
+                });
 
             if should_generate_key_proof {
                 // Generate the key proof for each file key.
@@ -335,15 +336,16 @@ where
         // TODO: Don't do this in this task any more.
         // Apply mutations, if any.
         let mut mutations_applied = false;
-        for (file_key, maybe_mutation) in &event.data.checkpoint_challenges {
+        for custom_challenge in &event.data.checkpoint_challenges {
+            let file_key = &custom_challenge.key;
             if proven_keys.contains(file_key) {
                 // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
                 trace!(target: LOG_TARGET, "Checkpoint challenge proven with exact match for file key: {:?}", file_key);
 
-                if let Some(mutation) = maybe_mutation {
+                if custom_challenge.should_remove_key {
                     // If the mutation (which is a remove mutation) is Some and the file key was proven exactly,
                     // then the mutation needs to be applied (i.e. the file key is removed from the Forest).
-                    trace!(target: LOG_TARGET, "Applying mutation: {:?}", mutation);
+                    trace!(target: LOG_TARGET, "Removing file key: {:?}", file_key);
 
                     // At this point, we only remove the file and its metadata from the Forest of this BSP.
                     // This is because if in a future block built on top of this one, the BSP needs to provide
@@ -484,7 +486,7 @@ where
         &self,
         provider_id: ProofsDealerProviderId,
         forest_challenges: &mut Vec<H256>,
-    ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
+    ) -> anyhow::Result<Vec<CustomChallenge>> {
         let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
@@ -523,7 +525,11 @@ where
                 .map_err(|e| anyhow!("Failed to query last checkpoint challenges: {:?}", e))?;
 
             // Add the checkpoint challenges to the forest challenges.
-            forest_challenges.extend(checkpoint_challenges.iter().map(|(key, _)| *key));
+            forest_challenges.extend(
+                checkpoint_challenges
+                    .iter()
+                    .map(|custom_challenge| custom_challenge.key),
+            );
 
             // Return the checkpoint challenges.
             Ok(checkpoint_challenges)

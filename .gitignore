@@ -19,6 +19,7 @@ runtimes/
 .env
 *.tmp
 **/tmp/
+res/benchmarking
 
 .DS_Store
 .vscode/
@@ -31,5 +32,5 @@ runtimes/
 
 test/dist/*
 
-# cSpell settings
-cspell.json
+# Ignore cSpell config files
+cSpell.json

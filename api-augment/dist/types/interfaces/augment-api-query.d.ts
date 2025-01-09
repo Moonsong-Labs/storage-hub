@@ -54,6 +54,7 @@ import type {
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsFixedRatePaymentStream,
   PalletPaymentStreamsProviderLastChargeableInfo,
+  PalletProofsDealerCustomChallenge,
   PalletProofsDealerProofSubmissionRecord,
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
@@ -71,7 +72,6 @@ import type {
   PolkadotPrimitivesV8PersistedValidationData,
   PolkadotPrimitivesV8UpgradeGoAhead,
   PolkadotPrimitivesV8UpgradeRestriction,
-  ShpTraitsTrieRemoveMutation,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
   SpRuntimeDigest,
@@ -1414,7 +1414,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       priorityChallengesQueue: AugmentedQuery<
         ApiType,
-        () => Observable<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>,
+        () => Observable<Vec<PalletProofsDealerCustomChallenge>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -1483,7 +1483,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg: u32 | AnyNumber | Uint8Array
-        ) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>,
+        ) => Observable<Option<Vec<PalletProofsDealerCustomChallenge>>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;

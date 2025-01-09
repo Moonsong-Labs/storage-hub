@@ -16,8 +16,8 @@ use shc_common::{
     blockchain_utils::get_events_at_block,
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, MaxBatchMspRespondStorageRequests, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TrieAddMutation, TrieMutation, BCSV_KEY_TYPE,
+        BlockNumber, ParachainClient, ProofsDealerProviderId, StorageProviderId, TrieAddMutation,
+        TrieMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -51,6 +51,9 @@ use crate::{
     types::{BestBlockInfo, Extrinsic, NewBlockNotificationKind, Tip},
     BlockchainService,
 };
+
+// TODO: Make this configurable in the config file
+const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH> BlockchainService<FSH>
 where
@@ -676,29 +679,31 @@ where
             // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
-                let max_batch_respond = <MaxBatchMspRespondStorageRequests as Get<u32>>::get();
+                if next_event_data.is_none() {
+                    let max_batch_respond: u32 = 100;
 
-                // Batch multiple respond storing requests up to the runtime configured maximum.
-                let mut respond_storage_requests = Vec::new();
-                for _ in 0..max_batch_respond {
-                    if let Some(request) = state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .pop_front()
-                    {
-                        respond_storage_requests.push(request);
-                    } else {
-                        break;
-                    }
-                }
-
-                // If we have at least 1 respond storing request, send the process event.
-                if respond_storage_requests.len() > 0 {
-                    next_event_data = Some(
-                        ProcessMspRespondStoringRequestData {
-                            respond_storing_requests: respond_storage_requests,
+                    // Batch multiple respond storing requests up to the runtime configured maximum.
+                    let mut respond_storage_requests = Vec::new();
+                    for _ in 0..max_batch_respond {
+                        if let Some(request) = state_store_context
+                            .pending_msp_respond_storage_request_deque()
+                            .pop_front()
+                        {
+                            respond_storage_requests.push(request);
+                        } else {
+                            break;
                         }
-                        .into(),
-                    );
+                    }
+
+                    // If we have at least 1 respond storing request, send the process event.
+                    if respond_storage_requests.len() > 0 {
+                        next_event_data = Some(
+                            ProcessMspRespondStoringRequestData {
+                                respond_storing_requests: respond_storage_requests,
+                            }
+                            .into(),
+                        );
+                    }
                 }
             }
         }
