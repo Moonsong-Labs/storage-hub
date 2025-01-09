@@ -2605,7 +2605,7 @@ mod hooks {
             }
         }
 
-        fn process_expired_move_bucket_request(
+        pub(crate) fn process_expired_move_bucket_request(
             msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             meter: &mut WeightMeter,
