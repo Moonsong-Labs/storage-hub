@@ -82,10 +82,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
-       **/
-      maxBatchMspRespondStorageRequests: u32 & AugmentedConst<ApiType>;
-      /**
        * Maximum number of multiaddresses for a storage request.
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;

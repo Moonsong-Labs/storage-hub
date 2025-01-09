@@ -38,11 +38,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
-        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest, ProviderIdFor,
-        RejectedStorageRequest, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingFileDeletionRequest,
+        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
@@ -854,8 +854,7 @@ where
                 &accepted_file_keys.non_inclusion_forest_proof,
             )?;
 
-        let mut accepted_files_metadata =
-            BoundedVec::<_, MaxBatchMspRespondStorageRequests<T>>::new();
+        let mut accepted_files_metadata = Vec::new();
 
         for file_key_with_proof in accepted_file_keys.file_keys_and_proofs.iter() {
             let mut storage_request_metadata =
@@ -906,9 +905,7 @@ where
             // Get the file metadata to insert into the bucket under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
 
-            if accepted_files_metadata.try_push(file_metadata).is_err() {
-                return Err(Error::<T>::TooManyStorageRequestResponses.into());
-            }
+            accepted_files_metadata.push(file_metadata);
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
