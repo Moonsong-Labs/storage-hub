@@ -32,7 +32,7 @@ use crate::types::ProviderIdFor;
 use shp_traits::CommitRevealRandomnessInterface;
 
 pub trait RandomSeedMixer<Seed> {
-    /// Mix randomeness seed 1 and seed 2 to generate new seed.
+    /// Mix randomness seed 1 and seed 2 to generate new seed.
     /// Optionally takes a context seed to further randomize the mixing.
     fn mix_randomness_seed(seed_1: &Seed, seed_2: &Seed, context: Option<impl Into<Seed>>) -> Seed;
 }
