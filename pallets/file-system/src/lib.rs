@@ -650,6 +650,10 @@ pub mod pallet {
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
+        /// Event to notify of incoherencies in used capacity.
+        UsedCapacityShouldBeZero {
+            actual_used_capacity: StorageData<T>,
+        },
     }
 
     // Errors inform users that something went wrong.

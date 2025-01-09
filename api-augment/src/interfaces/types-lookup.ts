@@ -2118,6 +2118,31 @@ declare module "@polkadot/types/lookup" {
       readonly owner: AccountId32;
       readonly bucketId: H256;
     } & Struct;
+    readonly isFailedToDecreaseBucketSize: boolean;
+    readonly asFailedToDecreaseBucketSize: {
+      readonly user: AccountId32;
+      readonly bucketId: H256;
+      readonly fileKey: H256;
+      readonly fileSize: u64;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
+    readonly isFailedToGetMspOfBucket: boolean;
+    readonly asFailedToGetMspOfBucket: {
+      readonly bucketId: H256;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
+    readonly isFailedToDecreaseMspUsedCapacity: boolean;
+    readonly asFailedToDecreaseMspUsedCapacity: {
+      readonly user: AccountId32;
+      readonly mspId: H256;
+      readonly fileKey: H256;
+      readonly fileSize: u64;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
+    readonly isUsedCapacityShouldBeZero: boolean;
+    readonly asUsedCapacityShouldBeZero: {
+      readonly actualUsedCapacity: u64;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2143,7 +2168,11 @@ declare module "@polkadot/types/lookup" {
       | "MoveBucketRequestExpired"
       | "MoveBucketAccepted"
       | "MoveBucketRejected"
-      | "MspStoppedStoringBucket";
+      | "MspStoppedStoringBucket"
+      | "FailedToDecreaseBucketSize"
+      | "FailedToGetMspOfBucket"
+      | "FailedToDecreaseMspUsedCapacity"
+      | "UsedCapacityShouldBeZero";
   }
 
   /** @name PalletFileSystemRejectedStorageRequestReason (139) */
@@ -2191,7 +2220,7 @@ declare module "@polkadot/types/lookup" {
     readonly isNewCheckpointChallenge: boolean;
     readonly asNewCheckpointChallenge: {
       readonly challengesTicker: u32;
-      readonly challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
+      readonly challenges: Vec<PalletProofsDealerCustomChallenge>;
     } & Struct;
     readonly isSlashableProvider: boolean;
     readonly asSlashableProvider: {
@@ -2266,20 +2295,29 @@ declare module "@polkadot/types/lookup" {
   /** @name ShpFileMetadataFingerprint (149) */
   interface ShpFileMetadataFingerprint extends U8aFixed {}
 
-  /** @name ShpTraitsTrieRemoveMutation (155) */
-  type ShpTraitsTrieRemoveMutation = Null;
+  /** @name PalletProofsDealerCustomChallenge (153) */
+  interface PalletProofsDealerCustomChallenge extends Struct {
+    readonly key: H256;
+    readonly shouldRemoveKey: bool;
+  }
 
-  /** @name ShpTraitsTrieMutation (159) */
+  /** @name ShpTraitsTrieMutation (157) */
   interface ShpTraitsTrieMutation extends Enum {
     readonly isAdd: boolean;
     readonly asAdd: ShpTraitsTrieAddMutation;
     readonly isRemove: boolean;
+    readonly asRemove: ShpTraitsTrieRemoveMutation;
     readonly type: "Add" | "Remove";
   }
 
-  /** @name ShpTraitsTrieAddMutation (160) */
+  /** @name ShpTraitsTrieAddMutation (158) */
   interface ShpTraitsTrieAddMutation extends Struct {
     readonly value: Bytes;
+  }
+
+  /** @name ShpTraitsTrieRemoveMutation (159) */
+  interface ShpTraitsTrieRemoveMutation extends Struct {
+    readonly maybeValue: Option<Bytes>;
   }
 
   /** @name PalletRandomnessEvent (161) */
@@ -5331,7 +5369,7 @@ declare module "@polkadot/types/lookup" {
       | "MigrateAndNotifyOldTargets";
   }
 
-  /** @name PalletXcmRemoteLockedFungibleRecord (424) */
+  /** @name PalletXcmRemoteLockedFungibleRecord (423) */
   interface PalletXcmRemoteLockedFungibleRecord extends Struct {
     readonly amount: u128;
     readonly owner: XcmVersionedLocation;
@@ -5339,7 +5377,7 @@ declare module "@polkadot/types/lookup" {
     readonly consumers: Vec<ITuple<[Null, u128]>>;
   }
 
-  /** @name PalletXcmError (431) */
+  /** @name PalletXcmError (430) */
   interface PalletXcmError extends Enum {
     readonly isUnreachable: boolean;
     readonly isSendFailure: boolean;
@@ -5392,7 +5430,7 @@ declare module "@polkadot/types/lookup" {
       | "LocalExecutionIncomplete";
   }
 
-  /** @name PalletMessageQueueBookState (432) */
+  /** @name PalletMessageQueueBookState (431) */
   interface PalletMessageQueueBookState extends Struct {
     readonly begin: u32;
     readonly end: u32;
@@ -5402,13 +5440,13 @@ declare module "@polkadot/types/lookup" {
     readonly size_: u64;
   }
 
-  /** @name PalletMessageQueueNeighbours (434) */
+  /** @name PalletMessageQueueNeighbours (433) */
   interface PalletMessageQueueNeighbours extends Struct {
     readonly prev: CumulusPrimitivesCoreAggregateMessageOrigin;
     readonly next: CumulusPrimitivesCoreAggregateMessageOrigin;
   }
 
-  /** @name PalletMessageQueuePage (436) */
+  /** @name PalletMessageQueuePage (435) */
   interface PalletMessageQueuePage extends Struct {
     readonly remaining: u32;
     readonly remainingSize: u32;
@@ -5418,7 +5456,7 @@ declare module "@polkadot/types/lookup" {
     readonly heap: Bytes;
   }
 
-  /** @name PalletMessageQueueError (438) */
+  /** @name PalletMessageQueueError (437) */
   interface PalletMessageQueueError extends Enum {
     readonly isNotReapable: boolean;
     readonly isNoPage: boolean;
@@ -5441,13 +5479,13 @@ declare module "@polkadot/types/lookup" {
       | "RecursiveDisallowed";
   }
 
-  /** @name PalletStorageProvidersSignUpRequest (439) */
+  /** @name PalletStorageProvidersSignUpRequest (438) */
   interface PalletStorageProvidersSignUpRequest extends Struct {
     readonly spSignUpRequest: PalletStorageProvidersSignUpRequestSpParams;
     readonly at: u32;
   }
 
-  /** @name PalletStorageProvidersSignUpRequestSpParams (440) */
+  /** @name PalletStorageProvidersSignUpRequestSpParams (439) */
   interface PalletStorageProvidersSignUpRequestSpParams extends Enum {
     readonly isBackupStorageProvider: boolean;
     readonly asBackupStorageProvider: PalletStorageProvidersBackupStorageProvider;
@@ -5456,7 +5494,7 @@ declare module "@polkadot/types/lookup" {
     readonly type: "BackupStorageProvider" | "MainStorageProvider";
   }
 
-  /** @name PalletStorageProvidersBackupStorageProvider (441) */
+  /** @name PalletStorageProvidersBackupStorageProvider (440) */
   interface PalletStorageProvidersBackupStorageProvider extends Struct {
     readonly capacity: u64;
     readonly capacityUsed: u64;
@@ -5469,13 +5507,13 @@ declare module "@polkadot/types/lookup" {
     readonly signUpBlock: u32;
   }
 
-  /** @name PalletStorageProvidersMainStorageProviderSignUpRequest (442) */
+  /** @name PalletStorageProvidersMainStorageProviderSignUpRequest (441) */
   interface PalletStorageProvidersMainStorageProviderSignUpRequest extends Struct {
     readonly mspInfo: PalletStorageProvidersMainStorageProvider;
     readonly valueProp: PalletStorageProvidersValueProposition;
   }
 
-  /** @name PalletStorageProvidersMainStorageProvider (443) */
+  /** @name PalletStorageProvidersMainStorageProvider (442) */
   interface PalletStorageProvidersMainStorageProvider extends Struct {
     readonly capacity: u64;
     readonly capacityUsed: u64;
@@ -5486,7 +5524,7 @@ declare module "@polkadot/types/lookup" {
     readonly signUpBlock: u32;
   }
 
-  /** @name PalletStorageProvidersBucket (444) */
+  /** @name PalletStorageProvidersBucket (443) */
   interface PalletStorageProvidersBucket extends Struct {
     readonly root: H256;
     readonly userId: AccountId32;
@@ -5497,7 +5535,7 @@ declare module "@polkadot/types/lookup" {
     readonly valuePropId: Option<H256>;
   }
 
-  /** @name PalletStorageProvidersError (448) */
+  /** @name PalletStorageProvidersError (447) */
   interface PalletStorageProvidersError extends Enum {
     readonly isAlreadyRegistered: boolean;
     readonly isSignUpNotRequested: boolean;
@@ -5594,7 +5632,7 @@ declare module "@polkadot/types/lookup" {
       | "PaymentStreamNotFound";
   }
 
-  /** @name PalletFileSystemStorageRequestMetadata (449) */
+  /** @name PalletFileSystemStorageRequestMetadata (448) */
   interface PalletFileSystemStorageRequestMetadata extends Struct {
     readonly requestedAt: u32;
     readonly owner: AccountId32;
@@ -5609,12 +5647,12 @@ declare module "@polkadot/types/lookup" {
     readonly bspsVolunteered: u32;
   }
 
-  /** @name PalletFileSystemStorageRequestBspsMetadata (452) */
+  /** @name PalletFileSystemStorageRequestBspsMetadata (451) */
   interface PalletFileSystemStorageRequestBspsMetadata extends Struct {
     readonly confirmed: bool;
   }
 
-  /** @name PalletFileSystemPendingFileDeletionRequest (457) */
+  /** @name PalletFileSystemPendingFileDeletionRequest (454) */
   interface PalletFileSystemPendingFileDeletionRequest extends Struct {
     readonly user: AccountId32;
     readonly fileKey: H256;

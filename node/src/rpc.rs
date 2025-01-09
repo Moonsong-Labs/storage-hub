@@ -15,8 +15,8 @@ use sc_consensus_manual_seal::{
 };
 use sc_transaction_pool_api::TransactionPool;
 use shc_common::types::{
-    BackupStorageProviderId, BlockNumber, ChunkId, ForestLeaf, MainStorageProviderId,
-    ProofsDealerProviderId, RandomnessOutput, TrieRemoveMutation,
+    BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, ForestLeaf,
+    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
@@ -63,7 +63,7 @@ where
             BlockNumber,
             ForestLeaf,
             RandomnessOutput,
-            TrieRemoveMutation,
+            CustomChallenge,
         > + FileSystemRuntimeApi<
             Block,
             BackupStorageProviderId,

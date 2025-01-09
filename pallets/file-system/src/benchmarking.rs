@@ -2318,6 +2318,278 @@ mod benchmarks {
         Ok(())
     }
 
+    #[benchmark]
+    fn on_poll_hook() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Set the total used capacity of the network to be the same as the total capacity of the network,
+        // since this makes the price updater use the second order Taylor series approximation, which
+        // is the most computationally expensive.
+        let total_capacity: StorageData<T> = 1024 * 1024 * 1024;
+        pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
+        pallet_storage_providers::TotalBspsCapacity::<T>::put(total_capacity);
+
+        // Get the current price per giga unit per tick before updating
+        let current_price_per_giga_unit_per_tick =
+            pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<T>::get();
+
+        /*********** Call the function to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::do_on_poll(&mut WeightMeter::new());
+        }
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the price per giga unit per tick was updated
+        assert_ne!(
+            pallet_payment_streams::CurrentPricePerGigaUnitPerTick::<T>::get(),
+            current_price_per_giga_unit_per_tick,
+            "Price per giga unit per tick should have been updated."
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn process_expired_storage_request_msp_accepted(
+        n: Linear<
+            0,
+            {
+                <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
+                    pallet::MaxReplicationTarget::<T>::get(),
+                ) as u32
+            },
+        >,
+    ) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the amount of BSPs to add to the storage request
+        let amount_of_bsps = n.into();
+
+        // Get a user account and mint some tokens into it
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Register a MSP with a value proposition
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
+
+        // Create the bucket, assigning it to the MSP
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            Some(msp_id),
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        // Issue the storage request from the user
+        let location: FileLocation<T> = vec![1; MaxFilePathSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let fingerprint =
+            <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
+        let size: StorageData<T> = 100;
+        let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let peer_ids: PeerIds<T> =
+            vec![peer_id; MaxNumberOfPeerIds::<T>::get().try_into().unwrap()]
+                .try_into()
+                .unwrap();
+        Pallet::<T>::issue_storage_request(
+            signed_origin.clone().into(),
+            bucket_id,
+            location.clone(),
+            fingerprint,
+            size,
+            Some(msp_id),
+            peer_ids,
+            None,
+        )?;
+
+        // Compute the file key
+        let file_key = Pallet::<T>::compute_file_key(
+            user.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
+        // Simulate the MSP accepting the storage request
+        StorageRequests::<T>::mutate(file_key, |storage_request| {
+            storage_request.as_mut().unwrap().msp = Some((msp_id, true));
+        });
+
+        // Add n BSPs to the StorageRequestBsps mapping since that's the one that is drained in the benchmarked function
+        for i in 0..amount_of_bsps {
+            let bsp_account: T::AccountId = account("BSP", i, 0);
+            let bsp_id = T::Hashing::hash_of(&bsp_account);
+            <StorageRequestBsps<T>>::insert(
+                &file_key,
+                &bsp_id,
+                StorageRequestBspsMetadata::<T> {
+                    confirmed: false,
+                    _phantom: Default::default(),
+                },
+            )
+        }
+
+        /*********** Call the function to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::process_expired_storage_request(file_key.clone(), &mut WeightMeter::new());
+        }
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::StorageRequestExpired { file_key });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the Storage Request no longer exists in storage
+        assert!(!StorageRequests::<T>::contains_key(&file_key));
+
+        // Ensure the StorageRequestBsps mapping is empty for this file key
+        let mut storage_request_bsps_for_file_key = StorageRequestBsps::<T>::iter_prefix(&file_key);
+        assert!(storage_request_bsps_for_file_key.next().is_none());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn process_expired_storage_request_msp_rejected(
+        n: Linear<
+            0,
+            {
+                <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
+                    pallet::MaxReplicationTarget::<T>::get(),
+                ) as u32
+            },
+        >,
+    ) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the amount of BSPs to add to the storage request
+        let amount_of_bsps = n.into();
+
+        // Get a user account and mint some tokens into it
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Register a MSP with a value proposition
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
+
+        // Create the bucket, assigning it to the MSP
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            Some(msp_id),
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        // Issue the storage request from the user
+        let location: FileLocation<T> = vec![1; MaxFilePathSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let fingerprint =
+            <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
+        let size: StorageData<T> = 100;
+        let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let peer_ids: PeerIds<T> =
+            vec![peer_id; MaxNumberOfPeerIds::<T>::get().try_into().unwrap()]
+                .try_into()
+                .unwrap();
+        Pallet::<T>::issue_storage_request(
+            signed_origin.clone().into(),
+            bucket_id,
+            location.clone(),
+            fingerprint,
+            size,
+            Some(msp_id),
+            peer_ids,
+            None,
+        )?;
+
+        // Compute the file key
+        let file_key = Pallet::<T>::compute_file_key(
+            user.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
+        // Simulate the MSP rejecting the storage request
+        StorageRequests::<T>::mutate(file_key, |storage_request| {
+            storage_request.as_mut().unwrap().msp = Some((msp_id, false));
+        });
+
+        // Add n BSPs to the StorageRequestBsps mapping since that's the one that is drained in the benchmarked function
+        for i in 0..amount_of_bsps {
+            let bsp_account: T::AccountId = account("BSP", i, 0);
+            let bsp_id = T::Hashing::hash_of(&bsp_account);
+            <StorageRequestBsps<T>>::insert(
+                &file_key,
+                &bsp_id,
+                StorageRequestBspsMetadata::<T> {
+                    confirmed: false,
+                    _phantom: Default::default(),
+                },
+            )
+        }
+
+        // Simulate at least one BSP having confirmed the storage request so it has to queue up a priority challenge
+        // when cleaning it up after expiration.
+        StorageRequests::<T>::mutate(file_key, |storage_request| {
+            storage_request.as_mut().unwrap().bsps_confirmed = ReplicationTargetType::<T>::one();
+        });
+
+        /*********** Call the function to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::process_expired_storage_request(file_key.clone(), &mut WeightMeter::new());
+        }
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::StorageRequestRejected {
+                file_key,
+                reason: RejectedStorageRequestReason::RequestExpired,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the Storage Request no longer exists in storage
+        assert!(!StorageRequests::<T>::contains_key(&file_key));
+
+        // Ensure the StorageRequestBsps mapping is empty for this file key
+        let mut storage_request_bsps_for_file_key = StorageRequestBsps::<T>::iter_prefix(&file_key);
+        assert!(storage_request_bsps_for_file_key.next().is_none());
+
+        Ok(())
+    }
+
     fn run_to_block<T: crate::Config + pallet_proofs_dealer::Config>(n: BlockNumberFor<T>) {
         assert!(
             n > frame_system::Pallet::<T>::block_number(),

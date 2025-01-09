@@ -9,7 +9,6 @@ use frame_support::{
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
-use serde::{Deserialize, Serialize};
 use sp_core::Get;
 use sp_runtime::{
     traits::{
@@ -762,7 +761,7 @@ pub trait ProofsDealerInterface {
     /// Submit a new challenge with priority.
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<TrieRemoveMutation>,
+        should_remove_key: bool,
     ) -> DispatchResult;
 
     /// Given a randomness seed, a provider id and a count, generate a list of challenges.
@@ -866,19 +865,22 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(
-    Encode,
-    Decode,
-    MaxEncodedLen,
-    TypeInfo,
-    Clone,
-    PartialEq,
-    Debug,
-    Default,
-    Serialize,
-    Deserialize,
-)]
-pub struct TrieRemoveMutation;
+#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct TrieRemoveMutation {
+    pub maybe_value: Option<Vec<u8>>,
+}
+
+impl TrieRemoveMutation {
+    pub fn new() -> Self {
+        Self { maybe_value: None }
+    }
+
+    pub fn with_value(value: Vec<u8>) -> Self {
+        Self {
+            maybe_value: Some(value),
+        }
+    }
+}
 
 impl Into<TrieMutation> for TrieRemoveMutation {
     fn into(self) -> TrieMutation {

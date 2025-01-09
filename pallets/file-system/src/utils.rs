@@ -1388,7 +1388,7 @@ where
             <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::initialise_randomness_cycle(&bsp_id)?;
 
             // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+            Self::deposit_event(Event::BspChallengeCycleInitialised {
                 who: sender.clone(),
                 bsp_id,
             });
@@ -1490,8 +1490,7 @@ where
         if storage_request_metadata.bsps_confirmed >= ReplicationTargetType::<T>::one() {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
+                &file_key, true,
             )?;
 
             // Emit event.
@@ -1796,6 +1795,21 @@ where
         // Remove the pending stop storing request from storage.
         <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            let used_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
+            if used_capacity != Zero::zero() {
+                // Emit event if we have inconsistency. We can later monitor for those.
+                Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                    actual_used_capacity: used_capacity,
+                });
+            }
+
+            // Stop the BSP's challenge and randomness cycles.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
+        };
+
         Ok((bsp_id, new_root))
     }
 
@@ -1950,13 +1964,28 @@ where
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
 
-        // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
-        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
-            && <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
-                == Zero::zero()
-        {
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&sp_id)?;
-        }
+        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
+            // If it doesn't store any files we stop the challenge cycle and stop its randomness cycle.
+            if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                let used_capacity =
+                    <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id);
+                if used_capacity != Zero::zero() {
+                    // Emit event if we have inconsistency. We can later monitor for those.
+                    Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                        actual_used_capacity: used_capacity,
+                    });
+                }
+
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
+                    &sp_id,
+                )?;
+
+                <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(
+                    &sp_id,
+                )?;
+            }
+        };
 
         Ok((sp_id, new_root))
     }
@@ -2077,8 +2106,7 @@ where
 
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key,
-                    Some(TrieRemoveMutation),
+                    &file_key, true,
                 )?;
 
                 // Emit event.
@@ -2172,8 +2200,7 @@ where
 
             // Initiate the priority challenge to remove the file key from all the providers.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
+                &file_key, true,
             )?;
 
             // Emit event.
@@ -2365,6 +2392,7 @@ mod hooks {
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
+    use shp_traits::TrieRemoveMutation;
     use sp_runtime::{
         traits::{Get, One, Zero},
         Saturating,
@@ -2372,10 +2400,9 @@ mod hooks {
     use sp_weights::WeightMeter;
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
+        pub(crate) fn do_on_poll(_weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
-            weight.consume(T::DbWeight::get().reads(1));
 
             let new_data_price_per_giga_unit =
                 <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
@@ -2388,7 +2415,6 @@ mod hooks {
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
                     new_data_price_per_giga_unit,
                 );
-                weight.consume(T::DbWeight::get().writes(1));
             }
         }
 

@@ -1588,6 +1588,27 @@ declare const _default: {
         owner: string;
         bucketId: string;
       };
+      FailedToDecreaseBucketSize: {
+        user: string;
+        bucketId: string;
+        fileKey: string;
+        fileSize: string;
+        error: string;
+      };
+      FailedToGetMspOfBucket: {
+        bucketId: string;
+        error: string;
+      };
+      FailedToDecreaseMspUsedCapacity: {
+        user: string;
+        mspId: string;
+        fileKey: string;
+        fileSize: string;
+        error: string;
+      };
+      UsedCapacityShouldBeZero: {
+        actualUsedCapacity: string;
+      };
     };
   };
   /**
@@ -1692,11 +1713,14 @@ declare const _default: {
    **/
   ShpFileMetadataFingerprint: string;
   /**
-   * Lookup155: shp_traits::TrieRemoveMutation
+   * Lookup153: pallet_proofs_dealer::types::CustomChallenge<T>
    **/
-  ShpTraitsTrieRemoveMutation: string;
+  PalletProofsDealerCustomChallenge: {
+    key: string;
+    shouldRemoveKey: string;
+  };
   /**
-   * Lookup159: shp_traits::TrieMutation
+   * Lookup157: shp_traits::TrieMutation
    **/
   ShpTraitsTrieMutation: {
     _enum: {
@@ -1705,10 +1729,16 @@ declare const _default: {
     };
   };
   /**
-   * Lookup160: shp_traits::TrieAddMutation
+   * Lookup158: shp_traits::TrieAddMutation
    **/
   ShpTraitsTrieAddMutation: {
     value: string;
+  };
+  /**
+   * Lookup159: shp_traits::TrieRemoveMutation
+   **/
+  ShpTraitsTrieRemoveMutation: {
+    maybeValue: string;
   };
   /**
    * Lookup161: pallet_randomness::pallet::Event<T>
@@ -4057,7 +4087,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup424: pallet_xcm::pallet::RemoteLockedFungibleRecord<ConsumerIdentifier, MaxConsumers>
+   * Lookup423: pallet_xcm::pallet::RemoteLockedFungibleRecord<ConsumerIdentifier, MaxConsumers>
    **/
   PalletXcmRemoteLockedFungibleRecord: {
     amount: string;
@@ -4066,13 +4096,13 @@ declare const _default: {
     consumers: string;
   };
   /**
-   * Lookup431: pallet_xcm::pallet::Error<T>
+   * Lookup430: pallet_xcm::pallet::Error<T>
    **/
   PalletXcmError: {
     _enum: string[];
   };
   /**
-   * Lookup432: pallet_message_queue::BookState<cumulus_primitives_core::AggregateMessageOrigin>
+   * Lookup431: pallet_message_queue::BookState<cumulus_primitives_core::AggregateMessageOrigin>
    **/
   PalletMessageQueueBookState: {
     _alias: {
@@ -4086,14 +4116,14 @@ declare const _default: {
     size_: string;
   };
   /**
-   * Lookup434: pallet_message_queue::Neighbours<cumulus_primitives_core::AggregateMessageOrigin>
+   * Lookup433: pallet_message_queue::Neighbours<cumulus_primitives_core::AggregateMessageOrigin>
    **/
   PalletMessageQueueNeighbours: {
     prev: string;
     next: string;
   };
   /**
-   * Lookup436: pallet_message_queue::Page<Size, HeapSize>
+   * Lookup435: pallet_message_queue::Page<Size, HeapSize>
    **/
   PalletMessageQueuePage: {
     remaining: string;
@@ -4104,20 +4134,20 @@ declare const _default: {
     heap: string;
   };
   /**
-   * Lookup438: pallet_message_queue::pallet::Error<T>
+   * Lookup437: pallet_message_queue::pallet::Error<T>
    **/
   PalletMessageQueueError: {
     _enum: string[];
   };
   /**
-   * Lookup439: pallet_storage_providers::types::SignUpRequest<T>
+   * Lookup438: pallet_storage_providers::types::SignUpRequest<T>
    **/
   PalletStorageProvidersSignUpRequest: {
     spSignUpRequest: string;
     at: string;
   };
   /**
-   * Lookup440: pallet_storage_providers::types::SignUpRequestSpParams<T>
+   * Lookup439: pallet_storage_providers::types::SignUpRequestSpParams<T>
    **/
   PalletStorageProvidersSignUpRequestSpParams: {
     _enum: {
@@ -4126,7 +4156,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup441: pallet_storage_providers::types::BackupStorageProvider<T>
+   * Lookup440: pallet_storage_providers::types::BackupStorageProvider<T>
    **/
   PalletStorageProvidersBackupStorageProvider: {
     capacity: string;
@@ -4140,14 +4170,14 @@ declare const _default: {
     signUpBlock: string;
   };
   /**
-   * Lookup442: pallet_storage_providers::types::MainStorageProviderSignUpRequest<T>
+   * Lookup441: pallet_storage_providers::types::MainStorageProviderSignUpRequest<T>
    **/
   PalletStorageProvidersMainStorageProviderSignUpRequest: {
     mspInfo: string;
     valueProp: string;
   };
   /**
-   * Lookup443: pallet_storage_providers::types::MainStorageProvider<T>
+   * Lookup442: pallet_storage_providers::types::MainStorageProvider<T>
    **/
   PalletStorageProvidersMainStorageProvider: {
     capacity: string;
@@ -4159,7 +4189,7 @@ declare const _default: {
     signUpBlock: string;
   };
   /**
-   * Lookup444: pallet_storage_providers::types::Bucket<T>
+   * Lookup443: pallet_storage_providers::types::Bucket<T>
    **/
   PalletStorageProvidersBucket: {
     _alias: {
@@ -4174,13 +4204,13 @@ declare const _default: {
     valuePropId: string;
   };
   /**
-   * Lookup448: pallet_storage_providers::pallet::Error<T>
+   * Lookup447: pallet_storage_providers::pallet::Error<T>
    **/
   PalletStorageProvidersError: {
     _enum: string[];
   };
   /**
-   * Lookup449: pallet_file_system::types::StorageRequestMetadata<T>
+   * Lookup448: pallet_file_system::types::StorageRequestMetadata<T>
    **/
   PalletFileSystemStorageRequestMetadata: {
     _alias: {
@@ -4199,13 +4229,13 @@ declare const _default: {
     bspsVolunteered: string;
   };
   /**
-   * Lookup452: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   * Lookup451: pallet_file_system::types::StorageRequestBspsMetadata<T>
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: string;
   };
   /**
-   * Lookup457: pallet_file_system::types::PendingFileDeletionRequest<T>
+   * Lookup454: pallet_file_system::types::PendingFileDeletionRequest<T>
    **/
   PalletFileSystemPendingFileDeletionRequest: {
     user: string;

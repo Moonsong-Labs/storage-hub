@@ -7,7 +7,7 @@ use pallet_aura::Authorities;
 use pallet_file_system_runtime_api::*;
 use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{
-    KeyFor, ProviderIdFor as ProofsDealerProviderIdFor, RandomnessOutputFor,
+    CustomChallenge, KeyFor, ProviderIdFor as ProofsDealerProviderIdFor, RandomnessOutputFor,
 };
 use pallet_proofs_dealer_runtime_api::*;
 use pallet_storage_providers::types::{
@@ -16,7 +16,6 @@ use pallet_storage_providers::types::{
 };
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
-use shp_traits::TrieRemoveMutation;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256};
@@ -359,7 +358,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProofsDealerProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProofsDealerProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, CustomChallenge<Runtime>> for Runtime {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProofsDealerProviderIdFor<Runtime>) -> Result<BlockNumber, GetProofSubmissionRecordError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }
@@ -374,7 +373,7 @@ impl_runtime_apis! {
 
         fn get_checkpoint_challenges(
             tick: BlockNumber
-        ) -> Result<Vec<(KeyFor<Runtime>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+        ) -> Result<Vec<CustomChallenge<Runtime>>, GetCheckpointChallengesError> {
             ProofsDealer::get_checkpoint_challenges(tick)
         }
 

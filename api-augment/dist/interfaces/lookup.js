@@ -1601,6 +1601,27 @@ export default {
         mspId: "H256",
         owner: "AccountId32",
         bucketId: "H256"
+      },
+      FailedToDecreaseBucketSize: {
+        user: "AccountId32",
+        bucketId: "H256",
+        fileKey: "H256",
+        fileSize: "u64",
+        error: "SpRuntimeDispatchError"
+      },
+      FailedToGetMspOfBucket: {
+        bucketId: "H256",
+        error: "SpRuntimeDispatchError"
+      },
+      FailedToDecreaseMspUsedCapacity: {
+        user: "AccountId32",
+        mspId: "H256",
+        fileKey: "H256",
+        fileSize: "u64",
+        error: "SpRuntimeDispatchError"
+      },
+      UsedCapacityShouldBeZero: {
+        actualUsedCapacity: "u64"
       }
     }
   },
@@ -1645,7 +1666,7 @@ export default {
       },
       NewCheckpointChallenge: {
         challengesTicker: "u32",
-        challenges: "Vec<(H256,Option<ShpTraitsTrieRemoveMutation>)>"
+        challenges: "Vec<PalletProofsDealerCustomChallenge>"
       },
       SlashableProvider: {
         provider: "H256",
@@ -1712,11 +1733,14 @@ export default {
    **/
   ShpFileMetadataFingerprint: "[u8;32]",
   /**
-   * Lookup155: shp_traits::TrieRemoveMutation
+   * Lookup153: pallet_proofs_dealer::types::CustomChallenge<T>
    **/
-  ShpTraitsTrieRemoveMutation: "Null",
+  PalletProofsDealerCustomChallenge: {
+    key: "H256",
+    shouldRemoveKey: "bool"
+  },
   /**
-   * Lookup159: shp_traits::TrieMutation
+   * Lookup157: shp_traits::TrieMutation
    **/
   ShpTraitsTrieMutation: {
     _enum: {
@@ -1725,10 +1749,16 @@ export default {
     }
   },
   /**
-   * Lookup160: shp_traits::TrieAddMutation
+   * Lookup158: shp_traits::TrieAddMutation
    **/
   ShpTraitsTrieAddMutation: {
     value: "Bytes"
+  },
+  /**
+   * Lookup159: shp_traits::TrieRemoveMutation
+   **/
+  ShpTraitsTrieRemoveMutation: {
+    maybeValue: "Option<Bytes>"
   },
   /**
    * Lookup161: pallet_randomness::pallet::Event<T>
@@ -4198,7 +4228,7 @@ export default {
     }
   },
   /**
-   * Lookup424: pallet_xcm::pallet::RemoteLockedFungibleRecord<ConsumerIdentifier, MaxConsumers>
+   * Lookup423: pallet_xcm::pallet::RemoteLockedFungibleRecord<ConsumerIdentifier, MaxConsumers>
    **/
   PalletXcmRemoteLockedFungibleRecord: {
     amount: "u128",
@@ -4207,7 +4237,7 @@ export default {
     consumers: "Vec<(Null,u128)>"
   },
   /**
-   * Lookup431: pallet_xcm::pallet::Error<T>
+   * Lookup430: pallet_xcm::pallet::Error<T>
    **/
   PalletXcmError: {
     _enum: [
@@ -4239,7 +4269,7 @@ export default {
     ]
   },
   /**
-   * Lookup432: pallet_message_queue::BookState<cumulus_primitives_core::AggregateMessageOrigin>
+   * Lookup431: pallet_message_queue::BookState<cumulus_primitives_core::AggregateMessageOrigin>
    **/
   PalletMessageQueueBookState: {
     _alias: {
@@ -4253,14 +4283,14 @@ export default {
     size_: "u64"
   },
   /**
-   * Lookup434: pallet_message_queue::Neighbours<cumulus_primitives_core::AggregateMessageOrigin>
+   * Lookup433: pallet_message_queue::Neighbours<cumulus_primitives_core::AggregateMessageOrigin>
    **/
   PalletMessageQueueNeighbours: {
     prev: "CumulusPrimitivesCoreAggregateMessageOrigin",
     next: "CumulusPrimitivesCoreAggregateMessageOrigin"
   },
   /**
-   * Lookup436: pallet_message_queue::Page<Size, HeapSize>
+   * Lookup435: pallet_message_queue::Page<Size, HeapSize>
    **/
   PalletMessageQueuePage: {
     remaining: "u32",
@@ -4271,7 +4301,7 @@ export default {
     heap: "Bytes"
   },
   /**
-   * Lookup438: pallet_message_queue::pallet::Error<T>
+   * Lookup437: pallet_message_queue::pallet::Error<T>
    **/
   PalletMessageQueueError: {
     _enum: [
@@ -4287,14 +4317,14 @@ export default {
     ]
   },
   /**
-   * Lookup439: pallet_storage_providers::types::SignUpRequest<T>
+   * Lookup438: pallet_storage_providers::types::SignUpRequest<T>
    **/
   PalletStorageProvidersSignUpRequest: {
     spSignUpRequest: "PalletStorageProvidersSignUpRequestSpParams",
     at: "u32"
   },
   /**
-   * Lookup440: pallet_storage_providers::types::SignUpRequestSpParams<T>
+   * Lookup439: pallet_storage_providers::types::SignUpRequestSpParams<T>
    **/
   PalletStorageProvidersSignUpRequestSpParams: {
     _enum: {
@@ -4303,7 +4333,7 @@ export default {
     }
   },
   /**
-   * Lookup441: pallet_storage_providers::types::BackupStorageProvider<T>
+   * Lookup440: pallet_storage_providers::types::BackupStorageProvider<T>
    **/
   PalletStorageProvidersBackupStorageProvider: {
     capacity: "u64",
@@ -4317,14 +4347,14 @@ export default {
     signUpBlock: "u32"
   },
   /**
-   * Lookup442: pallet_storage_providers::types::MainStorageProviderSignUpRequest<T>
+   * Lookup441: pallet_storage_providers::types::MainStorageProviderSignUpRequest<T>
    **/
   PalletStorageProvidersMainStorageProviderSignUpRequest: {
     mspInfo: "PalletStorageProvidersMainStorageProvider",
     valueProp: "PalletStorageProvidersValueProposition"
   },
   /**
-   * Lookup443: pallet_storage_providers::types::MainStorageProvider<T>
+   * Lookup442: pallet_storage_providers::types::MainStorageProvider<T>
    **/
   PalletStorageProvidersMainStorageProvider: {
     capacity: "u64",
@@ -4336,7 +4366,7 @@ export default {
     signUpBlock: "u32"
   },
   /**
-   * Lookup444: pallet_storage_providers::types::Bucket<T>
+   * Lookup443: pallet_storage_providers::types::Bucket<T>
    **/
   PalletStorageProvidersBucket: {
     _alias: {
@@ -4351,7 +4381,7 @@ export default {
     valuePropId: "Option<H256>"
   },
   /**
-   * Lookup448: pallet_storage_providers::pallet::Error<T>
+   * Lookup447: pallet_storage_providers::pallet::Error<T>
    **/
   PalletStorageProvidersError: {
     _enum: [
@@ -4404,7 +4434,7 @@ export default {
     ]
   },
   /**
-   * Lookup449: pallet_file_system::types::StorageRequestMetadata<T>
+   * Lookup448: pallet_file_system::types::StorageRequestMetadata<T>
    **/
   PalletFileSystemStorageRequestMetadata: {
     _alias: {
@@ -4423,13 +4453,13 @@ export default {
     bspsVolunteered: "u32"
   },
   /**
-   * Lookup452: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   * Lookup451: pallet_file_system::types::StorageRequestBspsMetadata<T>
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: "bool"
   },
   /**
-   * Lookup457: pallet_file_system::types::PendingFileDeletionRequest<T>
+   * Lookup454: pallet_file_system::types::PendingFileDeletionRequest<T>
    **/
   PalletFileSystemPendingFileDeletionRequest: {
     user: "AccountId32",
