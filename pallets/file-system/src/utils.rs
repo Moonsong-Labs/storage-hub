@@ -2482,7 +2482,10 @@ mod hooks {
             }
         }
 
-        fn process_expired_storage_request(file_key: MerkleHash<T>, meter: &mut WeightMeter) {
+        pub(crate) fn process_expired_storage_request(
+            file_key: MerkleHash<T>,
+            meter: &mut WeightMeter,
+        ) {
             let db_weight = T::DbWeight::get();
 
             // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
