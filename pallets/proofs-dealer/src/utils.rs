@@ -318,9 +318,10 @@ where
                 };
 
                 // Emit event of mutation applied.
-                Self::deposit_event(Event::MutationsApplied {
-                    provider: *submitter,
-                    mutations,
+                Self::deposit_event(Event::MutationsAppliedForProvider {
+                    provider_id: *submitter,
+                    mutations: mutations.to_vec(),
+                    old_root: root,
                     new_root,
                 });
             }
