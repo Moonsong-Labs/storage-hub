@@ -2,9 +2,9 @@ use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
-    PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageData, TrieMutation,
-    TrieRemoveMutation,
+    Balance, BlockNumber, BucketId, CustomChallenge, FileKey, FileLocation, Fingerprint,
+    ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput,
+    StorageData, TrieMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -137,7 +137,7 @@ pub struct ProcessSubmitProofRequestData {
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
-    pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+    pub checkpoint_challenges: Vec<CustomChallenge>,
 }
 
 #[derive(Debug, Clone)]

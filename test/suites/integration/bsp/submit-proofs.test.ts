@@ -512,7 +512,7 @@ describeBspNet(
       assert(newCheckpointChallengesEventDataBlob, "Event doesn't match Type");
       let containsFileKey = false;
       for (const checkpointChallenge of newCheckpointChallengesEventDataBlob.challenges) {
-        if (checkpointChallenge[0].toHuman() === oneBspfileMetadata.fileKey) {
+        if (checkpointChallenge.key.toHuman() === oneBspfileMetadata.fileKey) {
           containsFileKey = true;
           break;
         }
