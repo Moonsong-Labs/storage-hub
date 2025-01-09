@@ -1,4 +1,4 @@
-use std::{sync::Arc, vec};
+use std::{fs, sync::Arc, vec};
 
 use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
@@ -9,7 +9,10 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
-use sc_tracing::tracing::{debug, error, info, trace, warn};
+use sc_tracing::{
+    block,
+    tracing::{debug, error, info, trace, warn},
+};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
@@ -17,7 +20,7 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
         BlockNumber, ParachainClient, ProofsDealerProviderId, StorageProviderId, TrieAddMutation,
-        TrieMutation, BCSV_KEY_TYPE,
+        TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -895,15 +898,29 @@ where
         }
     }
 
-    pub(crate) fn forest_root_changes_catchup<Block>(
-        &self,
-        provider_id: &ProofsDealerProviderId,
-        tree_route: &TreeRoute<Block>,
-    ) where
+    /// Applies Forest root changes found in a [`TreeRoute`].
+    ///
+    /// This function can be used both for new blocks as well as for reorgs.
+    /// For new blocks, `tree_route` should be one such that [`TreeRoute::pivot`] is 0, therefore
+    /// all blocks in [`TreeRoute::route`] are "enacted" blocks.
+    /// For reorgs, `tree_route` should be one such that [`TreeRoute::pivot`] is not 0, therefore
+    /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
+    pub(crate) async fn forest_root_changes_catchup<Block>(&self, tree_route: &TreeRoute<Block>)
+    where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
+        // Retracted blocks, i.e. the blocks from the `TreeRoute` that are reverted in the reorg.
+        for block in tree_route.retracted() {
+            self.apply_forest_root_changes(block, true).await;
+        }
+
+        // Enacted blocks, i.e. the blocks from the `TreeRoute` that are applied in the reorg.
+        for block in tree_route.enacted() {
+            self.apply_forest_root_changes(block, false).await;
+        }
     }
 
+    /// Gets the next tick for which a Provider (BSP) should submit a proof.
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
         provider_id: &ProofsDealerProviderId,
@@ -925,6 +942,7 @@ where
         }
     }
 
+    /// Checks if `block_number` is one where this Blockchain Service should emit a `NotifyPeriod` event.
     pub(crate) fn check_for_notify(&self, block_number: &BlockNumber) {
         if let Some(np) = self.notify_period {
             if block_number % np == 0 {
@@ -934,11 +952,28 @@ where
     }
 
     /// Applies the Forest root changes that happened in one block.
+    ///
+    /// Forest root changes can be [`TrieMutation`]s that are either [`TrieAddMutation`]s or [`TrieRemoveMutation`]s.
+    /// These two variants add or remove a key from the Forest root, respectively.
+    ///
+    /// If `revert` is set to `true`, the Forest root changes will be reverted, meaning that if a [`TrieAddMutation`]
+    /// is found in the block, it will be reverted with a [`TrieRemoveMutation`], and vice versa.
+    ///
+    /// A [`TrieRemoveMutation`] is not guaranteed to be convertible to a [`TrieAddMutation`], particularly if
+    /// the [`TrieRemoveMutation::maybe_value`] is `None`. In this case, the function will log an error and return.
+    ///
+    /// Two kinds of events are handled:
+    /// 1. [`pallet_proofs_dealer::Event::MutationsAppliedForProvider`]: for mutations applied to a BSP.
+    /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
     async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
+        if revert {
+            trace!(target: LOG_TARGET, "Reverting Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
+        } else {
+            trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
+        }
 
         // Process the events in the block, specifically those that are related to the Forest root changes.
         match get_events_at_block(&self.client, &block.hash) {
@@ -949,7 +984,7 @@ where
                             pallet_proofs_dealer::Event::MutationsAppliedForProvider {
                                 provider_id,
                                 mutations,
-                                old_root,
+                                old_root: _,
                                 new_root,
                             },
                         ) => {
@@ -964,7 +999,20 @@ where
 
                                     // Apply forest root changes to the Forest Storage.
                                     for (file_key, mutation) in &mutations {
-                                        trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                                        // If we are reverting the Forest root changes, we need to revert the mutation.
+                                        let mutation = if revert {
+                                            trace!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                                            match self.revert_mutation(mutation) {
+                                                Ok(mutation) => mutation,
+                                                Err(e) => {
+                                                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to revert mutation. This is a bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                                                    return;
+                                                }
+                                            }
+                                        } else {
+                                            trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                                            mutation.clone()
+                                        };
 
                                         // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
                                         // and not to the File Storage.
@@ -973,7 +1021,7 @@ where
                                         // For file deletions, we will remove the file from the File Storage only after finality is reached.
                                         // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
                                         if let Err(e) = self
-                                            .apply_mutation_to_bsp_forest(file_key, mutation)
+                                            .apply_mutation_to_bsp_forest(file_key, &mutation)
                                             .await
                                         {
                                             error!(target: LOG_TARGET, "Failed to apply mutation to BSP's Forest");
@@ -981,6 +1029,27 @@ where
                                             error!(target: LOG_TARGET, "Mutation: {:?}", mutation);
                                             error!(target: LOG_TARGET, "Error: {:?}", e);
                                         }
+                                    }
+
+                                    // Verify that the new Forest root matches the one in the block.
+                                    let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+                                    let fs = match self
+                                        .forest_storage_handler
+                                        .get(&current_forest_key.into())
+                                        .await
+                                    {
+                                        Some(fs) => fs,
+                                        None => {
+                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get Forest Storage.");
+                                            return;
+                                        }
+                                    };
+
+                                    let local_new_root = fs.read().await.root();
+
+                                    if new_root != local_new_root {
+                                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ New Forest root does not match the one in the block. This is a bug. Please report it to the StorageHub team.");
+                                        return;
                                     }
                                 }
                             }
@@ -1011,6 +1080,11 @@ where
         }
     }
 
+    /// Applies a [`TrieMutation`] to the Forest of a BSP.
+    ///
+    /// If `mutation` is a [`TrieAddMutation`], it will decode the [`TrieAddMutation::value`] as a
+    /// [`FileMetadata`] and insert it into the Forest.
+    /// If `mutation` is a [`TrieRemoveMutation`], it will remove the file with the key `file_key` from the Forest.
     async fn apply_mutation_to_bsp_forest(
         &self,
         file_key: &H256,
@@ -1056,6 +1130,36 @@ where
         };
 
         Ok(())
+    }
+
+    /// Reverts a [`TrieMutation`].
+    ///
+    /// A [`TrieMutation`] can be either a [`TrieAddMutation`] or a [`TrieRemoveMutation`].
+    /// If the [`TrieMutation`] is a [`TrieAddMutation`], it will be reverted to a [`TrieRemoveMutation`].
+    /// If the [`TrieMutation`] is a [`TrieRemoveMutation`], it will be reverted to a [`TrieAddMutation`].
+    ///
+    /// This operation can fail if the [`TrieMutation`] is a [`TrieRemoveMutation`] but its [`TrieRemoveMutation::maybe_value`]
+    /// is `None`. In this case, the function will return an error.
+    fn revert_mutation(&self, mutation: &TrieMutation) -> Result<TrieMutation> {
+        let reverted_mutation = match mutation {
+            TrieMutation::Add(TrieAddMutation { value }) => {
+                TrieMutation::Remove(TrieRemoveMutation {
+                    maybe_value: Some(value.clone()),
+                })
+            }
+            TrieMutation::Remove(TrieRemoveMutation { maybe_value }) => {
+                let value = match maybe_value {
+                    Some(value) => value.clone(),
+                    None => {
+                        return Err(anyhow!("Failed to revert mutation: TrieRemoveMutation does not contain a value"));
+                    }
+                };
+
+                TrieMutation::Add(TrieAddMutation { value })
+            }
+        };
+
+        Ok(reverted_mutation)
     }
 }
 
