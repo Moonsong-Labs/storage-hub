@@ -511,8 +511,6 @@ where
             });
         }
 
-        // TODO: split this into separate calls based on some constant data size limit.
-        // TODO: since the call is unbounded, we technically could pass as input too big of a size to fit into blocks.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: storage_request_msp_response.clone(),
