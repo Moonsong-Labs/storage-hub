@@ -2350,7 +2350,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn process_expired_storage_request_msp_accepted(
+    fn process_expired_storage_request_msp_accepted_or_no_msp(
         n: Linear<
             0,
             {
