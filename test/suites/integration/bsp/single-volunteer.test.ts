@@ -1,11 +1,9 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-import { describeBspNet, describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 import type { Bytes, u64, U8aFixed } from "@polkadot/types";
 
-// TODO: change this to describeBspNet after this PR is merged: https://github.com/Moonsong-Labs/storage-hub/pull/308
-// TODO: that pr will have all describeBspNet run fullnet by default to include MSP nodes
-describeMspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
+describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 
