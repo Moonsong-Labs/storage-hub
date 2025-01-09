@@ -8441,7 +8441,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true } ));
 
                 // Assert that the pending file deletion request was removed from storage
                 assert!(
