@@ -53,6 +53,9 @@ pub trait WeightInfo {
 	fn delete_file_with_inclusion_proof() -> Weight;
 	fn pending_file_deletion_request_submit_proof() -> Weight;
 	fn set_global_parameters() -> Weight;
+	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight;
+	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight;
+	fn process_expired_move_bucket_request() -> Weight;
 }
 
 /// Weights for `pallet_file_system` using the Substrate node and recommended hardware.
@@ -804,6 +807,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
+
+	// TODO: The next functions are placeholders until the final benchmark gets done after pending PRs are merged
+	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight {
+		Weight::from_parts(1_000_000, 1000)
+			.saturating_add(Weight::from_parts(1_000_000, 0).saturating_mul(n.into()))
+	}
+
+	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight {
+		Weight::from_parts(1_000_000, 1000)
+			.saturating_add(Weight::from_parts(1_000_000, 0).saturating_mul(n.into()))
+	}
+
+	fn process_expired_move_bucket_request() -> Weight {
+		Weight::from_parts(1_000_000, 1000)
+	}
 }
 
 // For backwards compatibility and tests.
@@ -1553,5 +1571,20 @@ impl WeightInfo for () {
 		Weight::from_parts(5_000_000, 3501)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+
+	// TODO: The next functions are placeholders until the final benchmark gets done after pending PRs are merged
+	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight {
+		Weight::from_parts(1_000_000, 1000)
+			.saturating_add(Weight::from_parts(1_000_000, 0).saturating_mul(n.into()))
+	}
+
+	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight {
+		Weight::from_parts(1_000_000, 1000)
+			.saturating_add(Weight::from_parts(1_000_000, 0).saturating_mul(n.into()))
+	}
+
+	fn process_expired_move_bucket_request() -> Weight {
+		Weight::from_parts(1_000_000, 1000)
 	}
 }
