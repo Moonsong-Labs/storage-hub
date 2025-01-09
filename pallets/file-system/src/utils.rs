@@ -2392,7 +2392,6 @@ mod hooks {
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
-    use shp_traits::TrieRemoveMutation;
     use sp_runtime::{
         traits::{Get, One, Zero},
         Saturating,
