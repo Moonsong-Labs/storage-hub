@@ -2579,7 +2579,7 @@ mod hooks {
                             // priority challenge then should be enqueued manually at a later time.
                             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
 									&file_key,
-									Some(TrieRemoveMutation),
+									true,
 								).map_err(|e| {
 									Self::deposit_event(Event::FailedToQueuePriorityChallenge {
 										file_key,

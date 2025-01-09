@@ -260,7 +260,7 @@ impl IndexerService {
                 fingerprint,
                 size,
                 peer_ids,
-                _expires_at,
+                expires_at: _,
             } => {
                 let bucket =
                     Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
