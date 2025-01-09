@@ -2590,6 +2590,75 @@ mod benchmarks {
         Ok(())
     }
 
+    #[benchmark]
+    fn process_expired_move_bucket_request() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get a user account and mint some tokens into it
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Register a MSP with a value proposition
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, None);
+
+        // Create the bucket, assigning it to the MSP
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            Some(msp_id),
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        // Add the bucket to the PendingBucketsToMove storage and to the PendingMoveBucketRequests storage
+        PendingBucketsToMove::<T>::insert(&bucket_id, ());
+        PendingMoveBucketRequests::<T>::insert(
+            &msp_id,
+            &bucket_id,
+            MoveBucketRequestMetadata {
+                requester: user.clone(),
+            },
+        );
+
+        /*********** Call the function to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::process_expired_move_bucket_request(
+                msp_id,
+                bucket_id,
+                &mut WeightMeter::new(),
+            );
+        }
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketRequestExpired {
+                msp_id,
+                bucket_id,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure the bucket was removed from the PendingBucketsToMove storage
+        assert!(!PendingBucketsToMove::<T>::contains_key(&bucket_id));
+
+        // Ensure the bucket was removed from the PendingMoveBucketRequests storage
+        assert!(!PendingMoveBucketRequests::<T>::contains_key(
+            &msp_id, &bucket_id
+        ));
+
+        Ok(())
+    }
+
     fn run_to_block<T: crate::Config + pallet_proofs_dealer::Config>(n: BlockNumberFor<T>) {
         assert!(
             n > frame_system::Pallet::<T>::block_number(),

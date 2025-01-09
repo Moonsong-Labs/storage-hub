@@ -2380,17 +2380,20 @@ mod hooks {
         utils::{
             BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
         },
-        Event, FileDeletionRequestExpirations, MaxReplicationTarget, NextStartingBlockToCleanUp,
-        Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
+        weights::WeightInfo,
+        Event, MaxReplicationTarget, NextStartingBlockToCleanUp, Pallet,
+        PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
         StorageRequestExpirations, StorageRequests,
     };
-    use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
+    use crate::{
+        FileDeletionRequestExpirations, MoveBucketRequestExpirations, PendingBucketsToMove,
+    };
     use frame_system::pallet_prelude::BlockNumberFor;
     use sp_runtime::{
-        traits::{Get, One, Zero},
+        traits::{Get, One},
         Saturating,
     };
-    use sp_weights::WeightMeter;
+    use sp_weights::{RuntimeDbWeight, WeightMeter};
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(_weight: &mut WeightMeter) {
@@ -2416,56 +2419,103 @@ mod hooks {
             mut meter: &mut WeightMeter,
         ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
-            let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
 
-            while block_to_clean <= current_block && !meter.remaining().is_zero() {
-                Self::process_block_expired_items(block_to_clean, &mut meter);
+            // If there's enough weight to get from storage the next block to clean up and possibly update it afterwards, continue
+            if meter.can_consume(T::DbWeight::get().reads_writes(1, 1)) {
+                // Get the next block for which to clean up expired items
+                let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
+                let initial_block_to_clean = block_to_clean;
 
-                if meter.remaining().is_zero() {
-                    break;
+                // While the block to clean up is less than or equal to the current block, process the expired items for that block.
+                while block_to_clean <= current_block {
+                    // Process the expired items for the current block to cleanup.
+                    let exited_early =
+                        Self::process_block_expired_items(block_to_clean, &mut meter, &db_weight);
+
+                    // If processing had to exit early because of weight limitations, stop processing expired items.
+                    if exited_early {
+                        break;
+                    }
+                    // Otherwise, increment the block to clean up and continue processing the next block.
+                    block_to_clean.saturating_accrue(BlockNumberFor::<T>::one());
                 }
 
-                block_to_clean.saturating_accrue(BlockNumberFor::<T>::one());
-            }
-
-            // Update the next starting block for cleanup
-            if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
-                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
-                meter.consume(db_weight.writes(1));
+                // Update the next starting block for cleanup
+                if block_to_clean > initial_block_to_clean {
+                    NextStartingBlockToCleanUp::<T>::put(block_to_clean);
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
             meter
         }
 
-        fn process_block_expired_items(block: BlockNumberFor<T>, meter: &mut WeightMeter) {
-            let db_weight = T::DbWeight::get();
-            let minimum_required_weight_processing_expired_items = db_weight.reads_writes(1, 1);
+        // This function cleans up the expired items for the current block to cleanup.
+        // It returns a boolean which indicates if the function had to exit early for this block because of weight limitations.
+        // This is to allow the caller to know if it should continue processing the next block or stop.
+        fn process_block_expired_items(
+            block: BlockNumberFor<T>,
+            meter: &mut WeightMeter,
+            db_weight: &RuntimeDbWeight,
+        ) -> bool {
+            let mut ran_out_of_weight = false;
 
-            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
-                return;
+            // Expired storage requests clean up section:
+            // If there's enough weight to get from storage the maximum amount of BSPs required for a storage request
+            // and get the storage request expirations for the current block, continue.
+            if meter.can_consume(db_weight.reads_writes(2, 1)) {
+                // Get the maximum amount of BSPs required for a storage request.
+                let max_bsp_required: u64 = MaxReplicationTarget::<T>::get().into();
+                meter.consume(db_weight.reads(1));
+
+                // Get the storage request expirations for the current block.
+                let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&block);
+                meter.consume(db_weight.reads_writes(1, 1));
+
+                // Get the required weight to process an expired storage request in its worst case scenario.
+                let maximum_required_weight_expired_storage_request =
+                    T::WeightInfo::process_expired_storage_request_msp_accepted_or_no_msp(
+                        max_bsp_required as u32,
+                    )
+                    .max(
+                        T::WeightInfo::process_expired_storage_request_msp_rejected(
+                            max_bsp_required as u32,
+                        ),
+                    );
+
+                // While there's enough weight to process an expired storage request in its worst-case scenario AND re-insert the remaining storage requests to storage, continue.
+                while let Some(file_key) = expired_storage_requests.pop() {
+                    if meter.can_consume(
+                        maximum_required_weight_expired_storage_request
+                            .saturating_add(db_weight.writes(1)),
+                    ) {
+                        // Process a expired storage request. This internally consumes the used weight from the meter.
+                        Self::process_expired_storage_request(file_key, meter);
+                    } else {
+                        // Push back the expired storage request into the storage requests queue to be able to re-insert it.
+                        // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
+                        let _ = expired_storage_requests.try_push(file_key);
+                        ran_out_of_weight = true;
+                        break;
+                    }
+                }
+
+                // If the expired storage requests were not fully processed, re-insert them into storage.
+                if !expired_storage_requests.is_empty() {
+                    StorageRequestExpirations::<T>::insert(&block, expired_storage_requests);
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
-            // Storage requests section
-            let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&block);
-            meter.consume(minimum_required_weight_processing_expired_items);
-
-            while let Some(file_key) = expired_storage_requests.pop() {
-                Self::process_expired_storage_request(file_key, meter);
-            }
-
-            if !expired_storage_requests.is_empty() {
-                StorageRequestExpirations::<T>::insert(&block, expired_storage_requests);
-                meter.consume(db_weight.writes(1));
-            }
-
-            // File deletion requests section
-            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
-                return;
+            // Expired file deletion requests clean up section:
+            // Note: this is unchanged since it has been deprecated and will be removed in another PR.
+            if !meter.can_consume(db_weight.reads_writes(1, 1)) {
+                return true;
             }
 
             let mut expired_file_deletion_requests =
                 FileDeletionRequestExpirations::<T>::take(&block);
-            meter.consume(minimum_required_weight_processing_expired_items);
+            meter.consume(db_weight.reads_writes(1, 1));
 
             while let Some(expired_file_deletion_request) = expired_file_deletion_requests.pop() {
                 Self::process_expired_pending_file_deletion(expired_file_deletion_request, meter);
@@ -2476,22 +2526,43 @@ mod hooks {
                 meter.consume(db_weight.writes(1));
             }
 
-            // Move bucket requests section
-            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
-                return;
+            // Expired move bucket requests clean up section:
+            // If there's enough weight to get from storage the expired move bucket requests, continue.
+            if meter.can_consume(db_weight.reads_writes(1, 1)) {
+                // Get the expired move bucket requests for the current block.
+                let mut expired_move_bucket_requests =
+                    MoveBucketRequestExpirations::<T>::take(&block);
+                meter.consume(db_weight.reads_writes(1, 1));
+
+                // Get the required weight to process one expired move bucket request.
+                let required_weight_processing_expired_move_bucket_request =
+                    T::WeightInfo::process_expired_move_bucket_request();
+
+                // While there's enough weight to process an expired move bucket request AND re-insert the remaining move bucket requests to storage, continue.
+                while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
+                    if meter.can_consume(
+                        required_weight_processing_expired_move_bucket_request
+                            .saturating_add(db_weight.writes(1)),
+                    ) {
+                        // Process an expired move bucket request. This internally consumes the used weight from the meter.
+                        Self::process_expired_move_bucket_request(msp_id, bucket_id, meter);
+                    } else {
+                        // Push back the expired move bucket request into the move bucket requests queue to be able to re-insert it.
+                        // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
+                        let _ = expired_move_bucket_requests.try_push((msp_id, bucket_id));
+                        ran_out_of_weight = true;
+                        break;
+                    }
+                }
+
+                // If the expired move bucket requests were not fully processed, re-insert them into storage.
+                if !expired_move_bucket_requests.is_empty() {
+                    MoveBucketRequestExpirations::<T>::insert(&block, expired_move_bucket_requests);
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
-            let mut expired_move_bucket_requests = MoveBucketRequestExpirations::<T>::take(&block);
-            meter.consume(minimum_required_weight_processing_expired_items);
-
-            while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
-                Self::process_expired_move_bucket_request(msp_id, bucket_id, meter);
-            }
-
-            if !expired_move_bucket_requests.is_empty() {
-                MoveBucketRequestExpirations::<T>::insert(&block, expired_move_bucket_requests);
-                meter.consume(db_weight.writes(1));
-            }
+            ran_out_of_weight
         }
 
         pub(crate) fn process_expired_storage_request(
@@ -2653,24 +2724,20 @@ mod hooks {
             meter.consume(potential_weight);
         }
 
-        fn process_expired_move_bucket_request(
+        pub(crate) fn process_expired_move_bucket_request(
             msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             meter: &mut WeightMeter,
         ) {
-            let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(0, 2);
-
-            if !meter.can_consume(potential_weight) {
-                return;
-            }
-
+            // Remove from storage the pending move bucket request.
             PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
             PendingBucketsToMove::<T>::remove(&bucket_id);
 
-            meter.consume(potential_weight);
-
+            // Deposit the event of the expired move bucket request.
             Self::deposit_event(Event::MoveBucketRequestExpired { msp_id, bucket_id });
+
+            // Consume the weight used by this function.
+            meter.consume(T::WeightInfo::process_expired_move_bucket_request());
         }
     }
 }
