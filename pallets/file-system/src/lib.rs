@@ -491,7 +491,7 @@ pub mod pallet {
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
             root: MerkleHash<T>,
@@ -822,6 +822,8 @@ pub mod pallet {
         NoPrivacyChange,
         /// Operations not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
+        /// Operations not allowed while bucket is not being stored by an MSP
+        OperationNotAllowedWhileBucketIsNotStoredByMsp,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -843,7 +845,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::create_bucket())]
         pub fn create_bucket(
             origin: OriginFor<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
             value_prop_id: Option<ValuePropId<T>>,
@@ -989,7 +991,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
             replication_target: Option<ReplicationTargetType<T>>,
         ) -> DispatchResult {
@@ -1003,7 +1005,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
-                msp_id,
+                Some(msp_id),
                 replication_target,
                 Some(peer_ids.clone()),
             )?;
