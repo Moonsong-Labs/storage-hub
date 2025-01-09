@@ -25,13 +25,13 @@ import type {
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
   PalletNftsPriceWithDirection,
+  PalletProofsDealerCustomChallenge,
   PalletProofsDealerProof,
   PalletStorageProvidersStorageProviderId,
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieMutation,
-  ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
   StagingXcmV4AssetAssets,
@@ -856,6 +856,16 @@ declare module "@polkadot/api-base/types/events" {
         [fileKey: H256],
         {
           fileKey: H256;
+        }
+      >;
+      /**
+       * Event to notify of incoherencies in used capacity.
+       **/
+      UsedCapacityShouldBeZero: AugmentedEvent<
+        ApiType,
+        [actualUsedCapacity: u64],
+        {
+          actualUsedCapacity: u64;
         }
       >;
       /**
@@ -2117,13 +2127,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewCheckpointChallenge: AugmentedEvent<
         ApiType,
-        [
-          challengesTicker: u32,
-          challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>
-        ],
+        [challengesTicker: u32, challenges: Vec<PalletProofsDealerCustomChallenge>],
         {
           challengesTicker: u32;
-          challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
+          challenges: Vec<PalletProofsDealerCustomChallenge>;
         }
       >;
       /**
