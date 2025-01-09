@@ -1491,6 +1491,7 @@ declare const _default: {
         fingerprint: string;
         size_: string;
         peerIds: string;
+        expiresAt: string;
       };
       MspAcceptedStorageRequest: {
         fileKey: string;
@@ -1550,8 +1551,8 @@ declare const _default: {
         newRoot: string;
       };
       FailedToQueuePriorityChallenge: {
-        user: string;
         fileKey: string;
+        error: string;
       };
       FileDeletionRequest: {
         user: string;
@@ -1597,6 +1598,12 @@ declare const _default: {
       };
       UsedCapacityShouldBeZero: {
         actualUsedCapacity: string;
+      };
+      FailedToReleaseStorageRequestCreationDeposit: {
+        fileKey: string;
+        owner: string;
+        amountToReturn: string;
+        error: string;
       };
     };
   };
@@ -4197,6 +4204,7 @@ declare const _default: {
       size_: string;
     };
     requestedAt: string;
+    expiresAt: string;
     owner: string;
     bucketId: string;
     location: string;

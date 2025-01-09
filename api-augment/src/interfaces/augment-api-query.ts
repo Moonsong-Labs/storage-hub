@@ -437,12 +437,12 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
+       * A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
        *
-       * Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
-       * Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
+       * Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
+       * Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
        *
-       * When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
+       * When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
        **/
       storageRequestBsps: AugmentedQuery<
         ApiType,

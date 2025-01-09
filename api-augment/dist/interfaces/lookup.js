@@ -1504,7 +1504,8 @@ export default {
         location: "Bytes",
         fingerprint: "H256",
         size_: "u64",
-        peerIds: "Vec<Bytes>"
+        peerIds: "Vec<Bytes>",
+        expiresAt: "u32"
       },
       MspAcceptedStorageRequest: {
         fileKey: "H256"
@@ -1564,8 +1565,8 @@ export default {
         newRoot: "H256"
       },
       FailedToQueuePriorityChallenge: {
-        user: "AccountId32",
-        fileKey: "H256"
+        fileKey: "H256",
+        error: "SpRuntimeDispatchError"
       },
       FileDeletionRequest: {
         user: "AccountId32",
@@ -1611,6 +1612,12 @@ export default {
       },
       UsedCapacityShouldBeZero: {
         actualUsedCapacity: "u64"
+      },
+      FailedToReleaseStorageRequestCreationDeposit: {
+        fileKey: "H256",
+        owner: "AccountId32",
+        amountToReturn: "u128",
+        error: "SpRuntimeDispatchError"
       }
     }
   },
@@ -4421,6 +4428,7 @@ export default {
       size_: "size"
     },
     requestedAt: "u32",
+    expiresAt: "u32",
     owner: "AccountId32",
     bucketId: "H256",
     location: "Bytes",
