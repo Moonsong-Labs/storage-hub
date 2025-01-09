@@ -14,9 +14,9 @@ use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChunkId, FileMetadata, ForestLeaf, HashT, KeyProof, KeyProofs,
-        ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
-        StorageProofsMerkleTrieLayout, TrieRemoveMutation, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+        BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf, HashT, KeyProof,
+        KeyProofs, ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
+        StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
     },
 };
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
@@ -165,6 +165,18 @@ pub trait StorageHubClientApi {
 
     #[method(name = "removeBcsvKeys")]
     async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()>;
+
+    // Note: This RPC method allow BSP administrator to add a file to the exclude list (and later
+    // buckets, users or file fingerprint). This method is required to call before deleting a file to
+    // avoid re-uploading a file that has just been deleted.
+    #[method(name = "addToExcludeList")]
+    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+
+    // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
+    // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
+    // list ban users, bucket or even file fingerprint.
+    #[method(name = "removeFromExcludeList")]
+    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -210,7 +222,7 @@ where
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,
-        TrieRemoveMutation,
+        CustomChallenge,
     >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -648,6 +660,28 @@ where
 
         Ok(())
     }
+
+    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()> {
+        let mut write_file_storage = self.file_storage.write().await;
+        write_file_storage
+            .add_file_to_exclude_list(file_key)
+            .map_err(into_rpc_error)?;
+
+        drop(write_file_storage);
+
+        Ok(())
+    }
+
+    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()> {
+        let mut write_file_storage = self.file_storage.write().await;
+        write_file_storage
+            .remove_file_from_exclude_list(&file_key)
+            .map_err(into_rpc_error)?;
+
+        drop(write_file_storage);
+
+        Ok(())
+    }
 }
 
 /// Get the file name for the given public key and key type.
@@ -685,7 +719,7 @@ where
         BlockNumber,
         ForestLeaf,
         RandomnessOutput,
-        TrieRemoveMutation,
+        CustomChallenge,
     >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {

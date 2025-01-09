@@ -38,11 +38,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
-        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest, ProviderIdFor,
-        RejectedStorageRequest, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingFileDeletionRequest,
+        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
@@ -266,24 +266,22 @@ where
     /// Create a bucket for an owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
-        msp_id: Option<ProviderIdFor<T>>,
+        msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
         value_prop_id: Option<ValuePropId<T>>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // Check if the MSP is indeed an MSP.
-        if let Some(msp_id) = msp_id {
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
-                Error::<T>::NotAMsp
-            );
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
 
-            // Check if MSP is insolvent
-            ensure!(
-                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
-                Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-        }
+        // Check if MSP is insolvent
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         // Create collection only if bucket is private
         let maybe_collection_id = if private {
@@ -849,8 +847,7 @@ where
                 &accepted_file_keys.non_inclusion_forest_proof,
             )?;
 
-        let mut accepted_files_metadata =
-            BoundedVec::<_, MaxBatchMspRespondStorageRequests<T>>::new();
+        let mut accepted_files_metadata = Vec::new();
 
         for file_key_with_proof in accepted_file_keys.file_keys_and_proofs.iter() {
             let mut storage_request_metadata =
@@ -901,9 +898,7 @@ where
             // Get the file metadata to insert into the bucket under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
 
-            if accepted_files_metadata.try_push(file_metadata).is_err() {
-                return Err(Error::<T>::TooManyStorageRequestResponses.into());
-            }
+            accepted_files_metadata.push(file_metadata);
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
@@ -1382,7 +1377,7 @@ where
             <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::initialise_randomness_cycle(&bsp_id)?;
 
             // Emit the corresponding event.
-            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+            Self::deposit_event(Event::BspChallengeCycleInitialised {
                 who: sender.clone(),
                 bsp_id,
             });
@@ -1484,8 +1479,7 @@ where
         if storage_request_metadata.bsps_confirmed >= ReplicationTargetType::<T>::one() {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
+                &file_key, true,
             )?;
 
             // Emit event.
@@ -1790,6 +1784,21 @@ where
         // Remove the pending stop storing request from storage.
         <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            let used_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
+            if used_capacity != Zero::zero() {
+                // Emit event if we have inconsistency. We can later monitor for those.
+                Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                    actual_used_capacity: used_capacity,
+                });
+            }
+
+            // Stop the BSP's challenge and randomness cycles.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
+        };
+
         Ok((bsp_id, new_root))
     }
 
@@ -1944,13 +1953,28 @@ where
         // Decrease data used by the SP.
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
 
-        // If the new capacity used is 0 and the Provider is a BSP, stop its randomness cycle.
-        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id)
-            && <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id)
-                == Zero::zero()
-        {
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&sp_id)?;
-        }
+        if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
+            // If it doesn't store any files we stop the challenge cycle and stop its randomness cycle.
+            if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                let used_capacity =
+                    <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&sp_id);
+                if used_capacity != Zero::zero() {
+                    // Emit event if we have inconsistency. We can later monitor for those.
+                    Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                        actual_used_capacity: used_capacity,
+                    });
+                }
+
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
+                    &sp_id,
+                )?;
+
+                <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(
+                    &sp_id,
+                )?;
+            }
+        };
 
         Ok((sp_id, new_root))
     }
@@ -1986,6 +2010,11 @@ where
         );
 
         let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
+
+        ensure!(
+            msp_id.is_some(),
+            Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp
+        );
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
@@ -2065,8 +2094,7 @@ where
 
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key,
-                    Some(TrieRemoveMutation),
+                    &file_key, true,
                 )?;
 
                 // Emit event.
@@ -2155,8 +2183,7 @@ where
 
             // Initiate the priority challenge to remove the file key from all the providers.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
+                &file_key, true,
             )?;
 
             // Emit event.
@@ -2342,7 +2369,6 @@ mod hooks {
     };
     use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
     use frame_system::pallet_prelude::BlockNumberFor;
-    use shp_traits::TrieRemoveMutation;
     use sp_runtime::{
         traits::{Get, One, Zero},
         Saturating,
@@ -2565,7 +2591,7 @@ mod hooks {
             // Queue a priority challenge to remove the file key from all the providers.
             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &expired_file_deletion_request.file_key,
-                Some(TrieRemoveMutation),
+                true,
             )
             .map_err(|_| {
                 Self::deposit_event(Event::FailedToQueuePriorityChallenge {
