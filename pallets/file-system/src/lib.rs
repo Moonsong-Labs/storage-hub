@@ -249,10 +249,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
-        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
-        #[pallet::constant]
-        type MaxBatchMspRespondStorageRequests: Get<u32>;
-
         /// Maximum byte size of a file path.
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;

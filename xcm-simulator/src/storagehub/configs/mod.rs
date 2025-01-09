@@ -876,7 +876,6 @@ impl pallet_file_system::Config for Runtime {
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
     type BspStopStoringFilePenalty = ConstU128<1>;
     type TreasuryAccount = TreasuryAccount;
-    type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
