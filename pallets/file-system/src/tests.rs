@@ -23,12 +23,12 @@ use frame_support::{
     weights::Weight,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_proofs_dealer::types::CustomChallenge;
 use pallet_proofs_dealer::{PriorityChallengesQueue, ProviderToProofSubmissionRecord};
 use pallet_storage_providers::types::{Bucket, StorageProviderId, ValueProposition};
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    TrieRemoveMutation,
 };
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -2824,7 +2824,10 @@ mod revoke_storage_request {
                 // Check ProofsDealer pallet storage for queued custom challenges for remove trie mutation of file key
                 let priority_challenges_queue = PriorityChallengesQueue::<Test>::get();
 
-                assert!(priority_challenges_queue.contains(&(file_key, Some(TrieRemoveMutation))));
+                assert!(priority_challenges_queue.contains(&CustomChallenge {
+                    key: file_key,
+                    should_remove_key: true
+                }));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
@@ -8010,7 +8013,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that there was no queued priority challenge for file key in proofs dealer pallet
                 assert!(!pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }));
             });
         }
     }
@@ -8103,7 +8106,7 @@ mod delete_file_and_pending_deletions_tests {
                     // Find file key in vec of queued priority challenges
                     pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                         .iter()
-                        .any(|x| *x == (file_key, Some(TrieRemoveMutation))),
+                        .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),
                 );
 
 				// Assert that the Bucket root was correctly updated
@@ -8286,7 +8289,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),);
             });
         }
 
@@ -8431,7 +8434,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),);
 
                 // Assert that the pending file deletion request was removed from storage
                 assert_eq!(
@@ -8527,7 +8530,7 @@ mod delete_file_and_pending_deletions_tests {
                 assert!(
 					!pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
 						.iter()
-						.any(|x| *x == (file_key, Some(TrieRemoveMutation))),
+						.any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),
 				);
 
                 // Assert that the pending file deletion request was removed from storage
@@ -8698,7 +8701,7 @@ mod delete_file_and_pending_deletions_tests {
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
+                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),);
             });
         }
     }

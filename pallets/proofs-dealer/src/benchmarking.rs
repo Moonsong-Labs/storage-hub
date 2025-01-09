@@ -39,7 +39,6 @@ mod benchmarks {
     use pallet_storage_providers::types::ProviderIdFor;
     use shp_traits::{
         PaymentStreamsInterface, ProofsDealerInterface, ReadChallengeableProvidersInterface,
-        TrieRemoveMutation,
     };
     use sp_runtime::{
         traits::{Hash, One, Zero},
@@ -55,7 +54,7 @@ mod benchmarks {
         },
         pallet,
         types::{
-            ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, KeyFor,
+            ChallengeTicksToleranceFor, CheckpointChallengePeriodFor, CustomChallenge,
             MaxCustomChallengesPerBlockFor, MerkleTrieHashingFor, Proof, ProofSubmissionRecord,
             ProvidersPalletFor,
         },
@@ -241,12 +240,11 @@ mod benchmarks {
         // Add the maximum number of checkpoint challenges to the last checkpoint tick.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         let checkpoint_challenges: BoundedVec<_, T::MaxCustomChallengesPerBlock> = vec![
-            (
-                MerkleTrieHashingFor::<T>::hash(b"checkpoint_challenge"),
-                None,
-            );
-            T::MaxCustomChallengesPerBlock::get()
-                as usize
+            CustomChallenge {
+                key: MerkleTrieHashingFor::<T>::hash(b"checkpoint_challenge"),
+                should_remove_key: false,
+            };
+            T::MaxCustomChallengesPerBlock::get() as usize
         ]
         .try_into()
         .expect("Failed to convert checkpoint challenges to BoundedVec, when the size is known.");
@@ -745,8 +743,7 @@ mod benchmarks {
 
     fn generate_challenges<T: Config>(
         n: u32,
-    ) -> BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>
-    {
+    ) -> BoundedVec<CustomChallenge<T>, MaxCustomChallengesPerBlockFor<T>> {
         let encoded_challenges = fetch_challenges(n);
         let mut custom_challenges = Vec::new();
         for encoded_challenge in encoded_challenges {
@@ -754,7 +751,10 @@ mod benchmarks {
                 <T as crate::Config>::MerkleTrieHash::decode(&mut encoded_challenge.as_ref())
                     .expect("Challenge key should be decodable as it is a hash");
 
-            let custom_challenge = (typed_challenge, Some(TrieRemoveMutation::default()));
+            let custom_challenge = CustomChallenge {
+                key: typed_challenge,
+                should_remove_key: true,
+            };
             custom_challenges.push(custom_challenge);
         }
         BoundedVec::try_from(custom_challenges).expect("Length of custom challenges should be less than or equal to MaxCustomChallengesPerBlockFor")

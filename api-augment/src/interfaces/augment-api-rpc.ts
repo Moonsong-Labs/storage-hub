@@ -1029,6 +1029,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
+       * Add filekey to exclude list
+       **/
+      addToExcludeList: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<ITuple<[]>>
+      >;
+      /**
        * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
        **/
       generateFileKeyProofBspConfirm: AugmentedRpc<
@@ -1126,6 +1132,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Remove keys of BCSV type for the Blockchain Service.
        **/
       removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
+      /**
+       * Remove filekey from exclude list
+       **/
+      removeFromExcludeList: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<ITuple<[]>>
+      >;
       /**
        * Save a file from the local storage to the disk.
        **/

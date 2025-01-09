@@ -168,6 +168,26 @@ export const rpcDefinitions = {
         }
       ],
       type: "()"
+    },
+    addToExcludeList: {
+      description: "Add filekey to exclude list",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "()"
+    },
+    removeFromExcludeList: {
+      description: "Remove filekey from exclude list",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "()"
     }
   }
 };
