@@ -1043,7 +1043,7 @@ where
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let last_block_processed = self.best_block.number;
+        let last_block_processed = self.best_block;
 
         // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
@@ -1052,9 +1052,15 @@ where
         // A new non-best block is ignored and not processed.
         let (block_info, tree_route) = match new_block_notification_kind {
             NewBlockNotificationKind::NewBestBlock(new_best_block_info) => {
-                // Making up a tree route just with the new best block.
-                let tree_route = TreeRoute::new(vec![new_best_block_info.clone().into()], 0)
-                    .expect("`TreeRoute` with `pivot` 0 should be valid; qed");
+                // Making up a tree route with the new best block, and the old best block as the pivot.
+                let tree_route = TreeRoute::new(
+                    vec![
+                        last_block_processed.clone().into(),
+                        new_best_block_info.clone().into(),
+                    ],
+                    0,
+                )
+                .expect("`TreeRoute` with `pivot` 0 should be valid; qed");
                 (new_best_block_info, tree_route)
             }
             NewBlockNotificationKind::NewNonBestBlock(_) => return,
@@ -1078,7 +1084,7 @@ where
         // Check if we just came out of syncing mode.
         // We use saturating_sub because in a reorg, there is a potential scenario where the last
         // block processed is higher than the current block number.
-        if block_number.saturating_sub(last_block_processed) > SYNC_MODE_MIN_BLOCKS_BEHIND {
+        if block_number.saturating_sub(last_block_processed.number) > SYNC_MODE_MIN_BLOCKS_BEHIND {
             self.handle_initial_sync(notification).await;
         }
 
