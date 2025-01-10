@@ -1,19 +1,18 @@
 use codec::Decode;
 use rand::seq::SliceRandom;
+use sp_core::H256;
 use std::time::Duration;
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::types::Tip;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::MoveBucketRequestedForNewMsp,
+    commands::BlockchainServiceInterface, events::MoveBucketRequestedForNewMsp, types::Tip,
 };
 use shc_common::types::{BucketId, FileKeyProof, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
-use shc_forest_manager::traits::ForestStorage;
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::ChunkId;
 
 use crate::services::{
@@ -31,6 +30,8 @@ where
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    file_storage_inserted_file_keys: Vec<H256>,
+    pending_bucket_id: Option<BucketId>,
 }
 
 impl<NT> Clone for MspMoveBucketTask<NT>
@@ -41,6 +42,8 @@ where
     fn clone(&self) -> MspMoveBucketTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
+            pending_bucket_id: self.pending_bucket_id.clone(),
         }
     }
 }
@@ -53,15 +56,40 @@ where
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
+            file_storage_inserted_file_keys: Vec::new(),
+            pending_bucket_id: None,
         }
     }
 
-    async fn reject_bucket_move(&self, bucket_id: BucketId) -> anyhow::Result<()> {
+    async fn reject_bucket_move(&mut self, bucket_id: BucketId) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: rejecting move bucket request for bucket {:?}",
             bucket_id.as_ref(),
         );
+
+        for file_key in self.file_storage_inserted_file_keys.iter() {
+            if let Err(error) = self
+                .storage_hub_handler
+                .file_storage
+                .write()
+                .await
+                .delete_file(file_key)
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to delete (move bucket rollback) file {:?} from file storage: {:?}",
+                    file_key, error
+                );
+            }
+        }
+
+        if let Some(bucket_id) = self.pending_bucket_id {
+            self.storage_hub_handler
+                .forest_storage_handler
+                .remove_forest_storage(&bucket_id.as_ref().to_vec())
+                .await;
+        }
 
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_move_bucket_request {
@@ -288,6 +316,8 @@ where
             .get_or_create(&bucket)
             .await;
 
+        self.pending_bucket_id = Some(event.bucket_id);
+
         let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
             &mut indexer_connection,
             bucket.clone(),
@@ -299,13 +329,13 @@ where
             let file_metadata = file.to_file_metadata(bucket.clone());
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
-            if let Err(error) = self
+            let result = self
                 .storage_hub_handler
                 .file_storage
                 .write()
                 .await
-                .insert_file(file_key.clone(), file_metadata.clone())
-            {
+                .insert_file(file_key.clone(), file_metadata.clone());
+            if let Err(error) = result {
                 error!(
                     target: LOG_TARGET,
                     "Failed to insert file {:?} into file storage: {:?}",
@@ -313,6 +343,7 @@ where
                 );
                 return self.reject_bucket_move(event.bucket_id).await;
             }
+            self.file_storage_inserted_file_keys.push(file_key);
 
             if let Err(error) = forest_storage
                 .write()
