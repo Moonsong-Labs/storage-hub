@@ -1188,6 +1188,28 @@ where
         Ok(())
     }
 
+    pub(crate) fn do_stop_all_cycles(account_id: &T::AccountId) -> DispatchResult {
+        let provider_id = AccountIdToBackupStorageProviderId::<T>::get(account_id)
+            .ok_or(Error::<T>::BspOnlyOperation)?;
+
+        if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            ensure!(
+                provider.root == T::DefaultMerkleRoot::get(),
+                Error::<T>::CannotStopCycleWithNonDefaultRoot
+            );
+        } else {
+            return Err(Error::<T>::BspOnlyOperation.into());
+        }
+
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&provider_id)?;
+
+        <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::stop_randomness_cycle(
+            &provider_id,
+        )?;
+
+        Ok(())
+    }
+
     fn hold_balance(
         account_id: &T::AccountId,
         previous_deposit: BalanceOf<T>,

@@ -137,6 +137,7 @@ impl pallet_storage_providers::Config for Test {
     type ProofDealer = ProofsDealer;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
+    type CrRandomness = CrRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;

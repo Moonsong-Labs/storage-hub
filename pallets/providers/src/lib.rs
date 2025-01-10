@@ -91,6 +91,11 @@ pub mod pallet {
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
 
+        /// The trait to initialise a Provider's randomness commit-reveal cycle.
+        type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
+            ProviderId = ProviderIdFor<Self>,
+        >;
+
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;
 
@@ -752,6 +757,10 @@ pub mod pallet {
         ///
         /// Call `can_delete_provider` runtime API to check if the provider can be deleted.
         DeleteProviderConditionsNotMet,
+        /// Cannot stop BSP cycles without a default root
+        CannotStopCycleWithNonDefaultRoot,
+        /// An operation dedicated to BSPs only
+        BspOnlyOperation,
 
         // `MutateChallengeableProvidersInterface` errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -1447,6 +1456,25 @@ pub mod pallet {
             ensure_signed(origin)?;
 
             Self::do_delete_provider(&provider_id)?;
+
+            Ok(Pays::No.into())
+        }
+
+        /// BSP operation to stop all of your automatic cycles.
+        ///
+        /// This includes:
+        ///
+        /// - Commit reveal randomness cycle
+        /// - Proof challenge cycle
+        ///
+        /// If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
+        #[pallet::call_index(16)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed.
+            let who = ensure_signed(origin)?;
+
+            Self::do_stop_all_cycles(&who)?;
 
             Ok(Pays::No.into())
         }

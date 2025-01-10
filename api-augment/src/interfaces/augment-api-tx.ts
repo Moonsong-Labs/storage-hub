@@ -3161,6 +3161,17 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
+       * BSP operation to stop all of your automatic cycles.
+       *
+       * This includes:
+       *
+       * - Commit reveal randomness cycle
+       * - Proof challenge cycle
+       *
+       * If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
+       **/
+      stopAllCycles: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
        * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
        *
        * The dispatch origin for this call must be signed.

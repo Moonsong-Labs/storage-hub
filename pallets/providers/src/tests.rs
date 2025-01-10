@@ -6,8 +6,8 @@ use crate::{
         SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
         ValuePropositionWithId,
     },
-    AwaitingTopUpFromProviders, Error, Event, InsolventProviders, MainStorageProviders,
-    ProviderTopUpExpirations,
+    AwaitingTopUpFromProviders, BackupStorageProviders, Error, Event, InsolventProviders,
+    MainStorageProviders, ProviderTopUpExpirations,
 };
 
 use core::u32;
@@ -6271,6 +6271,68 @@ mod delete_provider {
                     RuntimeOrigin::signed(alice),
                     msp_id
                 ));
+            });
+        }
+    }
+}
+
+mod stop_all_cycles {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn stop_all_cycles_fails_for_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                assert_noop!(
+                    StorageProviders::stop_all_cycles(RuntimeOrigin::signed(alice)),
+                    Error::<Test>::BspOnlyOperation
+                );
+            });
+        }
+
+        #[test]
+        fn stop_all_cycles_requires_default_root() {
+            ExtBuilder::build().execute_with(|| {
+                // register BSP
+                let bob: AccountId = accounts::BOB.0;
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let bsp_id = StorageProviders::get_provider_id(bob).unwrap();
+
+                // Simulate non-default root for BSP before stopping all cycles
+                BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
+                    let bsp = bsp.as_mut().unwrap();
+                    bsp.root = H256::from_slice(&[1; 32]);
+                });
+
+                assert_noop!(
+                    StorageProviders::stop_all_cycles(RuntimeOrigin::signed(bob),),
+                    Error::<Test>::CannotStopCycleWithNonDefaultRoot
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn stop_all_cycles_works() {
+            ExtBuilder::build().execute_with(|| {
+                // register BSP
+                let bob: AccountId = accounts::BOB.0;
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
+                    bob
+                ),));
             });
         }
     }
