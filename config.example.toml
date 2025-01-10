@@ -1,18 +1,18 @@
-[general]
+# name="sh-bsp"
+# no_hardware_benchmarks=true
+# unsafe_rpc_external=true
+# rpc_methods=true
+# port=30350
+# rpc_cors="all"
+# node_key="0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be" # as hex format starting with '0x'
+# bootnodes="/ip4/127.0.0.1/tcp/30350/p2p/2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
+# keystore_path="/keystore"
+# sealing="manual"
+# base_path="/data"
 
-dev=true
-provider=true
-provider_type="bsp" # other choise is 'msp' and 'user'
-max_storage_capacity=4294967295
-jump_capacity=1073741824
-name="sh-bsp"
-no_hardware_benchmarks=true
-unsafe_rpc_external=true
-rpc_methods=true
-port=30350
-rpc_cors="all"
-node_key="0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be" # as hex format starting with '0x'
-bootnodes="/ip4/127.0.0.1/tcp/30350/p2p/2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
-keystore_path="/keystore"
-sealing="manual"
-base_path="/data"
+[provider]
+provider_type = "bsp"             # other choices are 'msp' and 'user'
+storage_layer = "memory"          # other choice is 'rocksdb'
+max_storage_capacity = 4294967295
+jump_capacity = 1073741824
+extrinsic_retry_timeout = 60
