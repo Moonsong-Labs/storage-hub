@@ -191,12 +191,8 @@ impl IndexerService {
                 value_prop_id: _,
                 root,
             } => {
-                let msp = match msp_id {
-                    Some(msp_id) => {
-                        Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?)
-                    }
-                    None => None,
-                };
+                let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
+
                 Bucket::create(
                     conn,
                     msp.map(|m| m.id),

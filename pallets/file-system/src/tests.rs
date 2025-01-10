@@ -58,7 +58,7 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        Some(H256::from_slice(&msp.as_slice())),
+                        H256::from_slice(&msp.as_slice()),
                         name,
                         true,
                         Some(ValuePropId::<Test>::default())
@@ -82,7 +82,7 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        Some(msp_id),
+                        msp_id,
                         name.clone(),
                         private,
                         Some(value_prop_id)
@@ -113,7 +113,7 @@ mod create_bucket_tests {
                 assert_noop!(
                     FileSystem::create_bucket(
                         origin,
-                        Some(msp_id),
+                        msp_id,
                         name.clone(),
                         private,
                         Some(value_prop_id)
@@ -151,7 +151,7 @@ mod create_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin,
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -188,7 +188,7 @@ mod create_bucket_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -223,7 +223,7 @@ mod create_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin,
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -242,7 +242,7 @@ mod create_bucket_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner,
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: None,
@@ -305,7 +305,7 @@ mod delete_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     RuntimeOrigin::signed(owner.clone()),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -337,7 +337,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -350,7 +350,7 @@ mod delete_bucket_tests {
                     FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                     BlakeTwo256::hash(&b"test".to_vec()),
                     4,
-                    Some(msp_id),
+                    msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                     None
                 ));
@@ -358,10 +358,10 @@ mod delete_bucket_tests {
                 // Accept the storage request to store the file, so the bucket is not empty.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key: FileSystem::compute_file_key(
                                     owner.clone(),
                                     bucket_id,
@@ -377,7 +377,7 @@ mod delete_bucket_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -417,7 +417,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -430,7 +430,7 @@ mod delete_bucket_tests {
                     FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                     BlakeTwo256::hash(&b"test".to_vec()),
                     4,
-                    Some(msp_id),
+                    msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                     None
                 ));
@@ -445,10 +445,10 @@ mod delete_bucket_tests {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         RuntimeOrigin::signed(msp),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: FileSystem::compute_file_key(
                                         owner.clone(),
                                         bucket_id,
@@ -464,7 +464,7 @@ mod delete_bucket_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
@@ -495,7 +495,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -542,7 +542,7 @@ mod delete_bucket_tests {
                 // Create a new bucket.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -600,7 +600,7 @@ mod delete_bucket_tests {
 				// Create a new bucket.
 				assert_ok!(FileSystem::create_bucket(
 					origin.clone(),
-					Some(msp_id),
+					msp_id,
 					name.clone(),
 					private,
 					Some(value_prop_id)
@@ -613,7 +613,7 @@ mod delete_bucket_tests {
 					FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
 					BlakeTwo256::hash(&b"test".to_vec()),
 					4,
-					Some(msp_id),
+					msp_id,
 					BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
                     None
 				));
@@ -621,10 +621,10 @@ mod delete_bucket_tests {
 				// Accept the storage request to store the file, so the bucket is not empty.
 				assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
 					RuntimeOrigin::signed(msp),
-					bounded_vec![StorageRequestMspBucketResponse {
+					vec![StorageRequestMspBucketResponse {
 						bucket_id,
 						accept: Some(StorageRequestMspAcceptedFileKeys {
-							file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+							file_keys_and_proofs: vec![FileKeyWithProof {
 								file_key: FileSystem::compute_file_key(
 									owner.clone(),
 									bucket_id,
@@ -640,7 +640,7 @@ mod delete_bucket_tests {
 								encoded_nodes: vec![H256::default().as_ref().to_vec()],
 							},
 						}),
-						reject: bounded_vec![],
+						reject: vec![],
 					}],
 				));
 
@@ -730,7 +730,7 @@ mod request_move_bucket {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_charlie_id),
+                    msp_charlie_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -873,7 +873,7 @@ mod request_move_bucket {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_charlie_id),
+                    msp_charlie_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -907,10 +907,10 @@ mod request_move_bucket {
                 // This operation increases the bucket size.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp_charlie),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -920,7 +920,7 @@ mod request_move_bucket {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -1309,7 +1309,7 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1328,7 +1328,7 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -1383,7 +1383,7 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1402,7 +1402,7 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -1484,7 +1484,7 @@ mod update_bucket_privacy_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1503,7 +1503,7 @@ mod update_bucket_privacy_tests {
                 System::assert_last_event(
                     Event::NewBucket {
                         who: owner.clone(),
-                        msp_id: Some(msp_id),
+                        msp_id,
                         bucket_id,
                         name,
                         collection_id: Some(0),
@@ -1620,7 +1620,7 @@ mod create_and_associate_collection_with_bucket_tests {
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
                     origin.clone(),
-                    Some(msp_id),
+                    msp_id,
                     name.clone(),
                     private,
                     Some(value_prop_id)
@@ -1699,7 +1699,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1733,7 +1733,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1790,7 +1790,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         4,
-                        Some(msp_charlie_id),
+                        msp_charlie_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1847,7 +1847,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -1898,7 +1898,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         Some(0)
                     ),
@@ -1938,7 +1938,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         Some(MaxReplicationTarget::<Test>::get() + 1)
                     ),
@@ -1984,7 +1984,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -2032,7 +2032,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2049,7 +2049,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -2124,7 +2124,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(MaxReplicationTarget::<Test>::get())
                 ),);
@@ -2162,7 +2162,7 @@ mod request_storage {
                     file_1_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2179,7 +2179,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id: bucket_id.clone(),
                         location: file_1_location.clone(),
@@ -2200,7 +2200,7 @@ mod request_storage {
                     file_2_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2217,7 +2217,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: file_2_location.clone(),
@@ -2278,7 +2278,7 @@ mod request_storage {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         peer_ids.clone(),
                         None
                     ),
@@ -2317,7 +2317,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2334,7 +2334,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -2433,7 +2433,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -2512,7 +2512,7 @@ mod request_storage {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -2611,7 +2611,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None
                 ));
@@ -2662,7 +2662,7 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None
                 ));
@@ -2709,23 +2709,23 @@ mod revoke_storage_request {
                 let bucket_id =
                     create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
 
-                assert_ok!(FileSystem::issue_storage_request(
-                    owner.clone(),
-                    bucket_id,
-                    location.clone(),
-                    fingerprint,
-                    4,
-                    Some(msp_id),
-                    peer_ids.clone(),
-                    None
-                ));
-
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
                 let storage_amount: StorageData<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                    None
+                ));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
@@ -2775,6 +2775,13 @@ mod revoke_storage_request {
                 let bucket_id =
                     create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
 
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+                let storage_amount: StorageData<Test> = 100;
+
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -2782,17 +2789,10 @@ mod revoke_storage_request {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-
-                let storage_amount: StorageData<Test> = 100;
-
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2869,7 +2869,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2887,10 +2887,10 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -2900,7 +2900,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -2962,7 +2962,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2974,7 +2974,7 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -2982,7 +2982,7 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request for the first file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
                             file_keys_and_proofs: bounded_vec![
@@ -3003,7 +3003,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -3089,7 +3089,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_fingerprint,
                     first_size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3101,7 +3101,7 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_fingerprint,
                     second_size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3113,7 +3113,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3123,12 +3123,12 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         },
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3138,7 +3138,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }
                     ],
                 ));
@@ -3236,7 +3236,7 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_fingerprint,
                     first_size,
-                    Some(msp_id),
+                    msp_id,
                     first_peer_ids.clone(),
                     None
                 ));
@@ -3248,7 +3248,7 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_fingerprint,
                     second_size,
-                    Some(msp_id),
+                    msp_id,
                     second_peer_ids.clone(),
                     None
                 ));
@@ -3260,7 +3260,7 @@ mod msp_respond_storage_request {
                         StorageRequestMspBucketResponse {
                             bucket_id: first_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: first_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3270,12 +3270,12 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         },
                         StorageRequestMspBucketResponse {
                             bucket_id: second_bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key: second_file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3285,7 +3285,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }
                     ],
                 ));
@@ -3334,6 +3334,13 @@ mod msp_respond_storage_request {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+                let storage_amount: StorageData<Test> = 100;
+
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -3341,7 +3348,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -3354,13 +3361,6 @@ mod msp_respond_storage_request {
                     size,
                     fingerprint,
                 );
-
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-
-                let storage_amount: StorageData<Test> = 100;
-
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch the BSP volunteer
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -3383,10 +3383,10 @@ mod msp_respond_storage_request {
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3396,7 +3396,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -3433,10 +3433,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3446,7 +3446,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::StorageRequestNotFound
@@ -3479,7 +3479,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3498,10 +3498,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         not_msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3511,7 +3511,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::NotASp
@@ -3540,6 +3540,9 @@ mod msp_respond_storage_request {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -3547,7 +3550,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3560,16 +3563,13 @@ mod msp_respond_storage_request {
                     fingerprint,
                 );
 
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         bsp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3579,7 +3579,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::NotAMsp
@@ -3617,7 +3617,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -3634,10 +3634,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -3647,7 +3647,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::RequestWithoutMsp
@@ -3685,7 +3685,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -3708,10 +3708,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![],
@@ -3721,7 +3721,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
@@ -3761,7 +3761,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(expected_msp_id),
+                    expected_msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3778,10 +3778,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         caller_msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3791,7 +3791,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::MspNotStoringBucket
@@ -3825,7 +3825,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -3841,10 +3841,10 @@ mod msp_respond_storage_request {
                 // Accept storing the file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3854,7 +3854,7 @@ mod msp_respond_storage_request {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -3862,10 +3862,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3875,7 +3875,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::MspAlreadyConfirmed
@@ -3917,7 +3917,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -3935,10 +3935,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         expected_msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -3948,7 +3948,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::MspNotStoringBucket
@@ -3989,7 +3989,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -4007,10 +4007,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4020,7 +4020,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::InsufficientAvailableCapacity
@@ -4053,7 +4053,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4070,10 +4070,10 @@ mod msp_respond_storage_request {
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
                         msp_signed.clone(),
-                        bounded_vec![StorageRequestMspBucketResponse {
+                        vec![StorageRequestMspBucketResponse {
                             bucket_id,
                             accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_keys_and_proofs: vec![FileKeyWithProof {
                                     file_key,
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4083,7 +4083,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                                 },
                             }),
-                            reject: bounded_vec![],
+                            reject: vec![],
                         }],
                     ),
                     Error::<Test>::ExpectedNonInclusionProof
@@ -4126,7 +4126,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4193,6 +4193,9 @@ mod bsp_volunteer {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -4200,13 +4203,10 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -4248,6 +4248,9 @@ mod bsp_volunteer {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -4255,13 +4258,10 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -4308,6 +4308,9 @@ mod bsp_volunteer {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -4315,13 +4318,10 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -4381,7 +4381,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4440,6 +4440,9 @@ mod bsp_volunteer {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     origin,
@@ -4447,13 +4450,10 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
@@ -4504,6 +4504,9 @@ mod bsp_volunteer {
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     origin,
@@ -4511,13 +4514,10 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     4,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner.clone(),
@@ -4593,7 +4593,7 @@ mod bsp_volunteer {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4690,7 +4690,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4781,6 +4781,9 @@ mod bsp_confirm {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -4788,13 +4791,10 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -4843,6 +4843,10 @@ mod bsp_confirm {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_bob_signed.clone(), storage_amount,));
+                assert_ok!(bsp_sign_up(bsp_charlie_signed.clone(), storage_amount,));
+
                 let name = BoundedVec::try_from(vec![1]).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -4854,7 +4858,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -4870,10 +4874,10 @@ mod bsp_confirm {
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     msp_signed.clone(),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -4883,7 +4887,7 @@ mod bsp_confirm {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -4894,10 +4898,6 @@ mod bsp_confirm {
                         .msp,
                     Some((msp_id, true))
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_bob_signed.clone(), storage_amount,));
-                assert_ok!(bsp_sign_up(bsp_charlie_signed.clone(), storage_amount,));
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_bob_signed.clone(), file_key,));
@@ -4997,7 +4997,7 @@ mod bsp_confirm {
                         location.clone(),
                         fingerprint,
                         size,
-                        Some(msp_id),
+                        msp_id,
                         Default::default(),
                         None
                     ));
@@ -5112,7 +5112,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -5174,6 +5174,9 @@ mod bsp_confirm {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5181,13 +5184,10 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5255,6 +5255,9 @@ mod bsp_confirm {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5262,13 +5265,10 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5305,7 +5305,7 @@ mod bsp_confirm {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -5453,7 +5453,7 @@ mod bsp_confirm {
                             location.clone(),
                             fingerprint,
                             size,
-                            Some(msp_id),
+                            msp_id,
                             peer_ids.clone(),
                             Some(1)
                         ));
@@ -5551,6 +5551,9 @@ mod bsp_confirm {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5558,13 +5561,10 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5601,7 +5601,7 @@ mod bsp_confirm {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -5687,7 +5687,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     new_size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5808,7 +5808,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -5862,6 +5862,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -5869,13 +5872,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -5919,7 +5919,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -5982,6 +5982,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -5989,13 +5992,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6039,7 +6039,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6105,6 +6105,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6112,13 +6115,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6162,7 +6162,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6243,6 +6243,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6250,13 +6253,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6300,7 +6300,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6344,7 +6344,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6414,6 +6414,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6421,13 +6424,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6471,7 +6471,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6521,7 +6521,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6572,6 +6572,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6579,13 +6582,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6629,7 +6629,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6690,7 +6690,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6784,6 +6784,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6791,13 +6794,11 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
 					None
                 ));
 
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -6863,7 +6864,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6907,7 +6908,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6995,6 +6996,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7002,7 +7006,7 @@ mod bsp_stop_storing {
                     first_file_location.clone(),
                     first_file_fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
 					None
                 ));
@@ -7014,13 +7018,10 @@ mod bsp_stop_storing {
                     second_file_location.clone(),
                     second_file_fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
 					None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let first_file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -7120,7 +7121,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: first_file_location.clone(),
@@ -7136,7 +7137,7 @@ mod bsp_stop_storing {
 				assert_eq!(
                     file_system::StorageRequests::<Test>::get(second_file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: second_file_location.clone(),
@@ -7172,7 +7173,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: first_file_location.clone(),
@@ -7266,6 +7267,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7273,13 +7277,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None,
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -7339,7 +7340,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -7385,6 +7386,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7392,13 +7396,10 @@ mod bsp_stop_storing {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     Default::default(),
                     None,
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
@@ -7435,7 +7436,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -7908,7 +7909,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -7916,10 +7917,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -7929,7 +7930,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8061,7 +8062,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -8069,10 +8070,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8082,7 +8083,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8172,7 +8173,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
@@ -8180,10 +8181,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8193,7 +8194,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8523,7 +8524,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     Some(1)
                 ));
@@ -8531,10 +8532,10 @@ mod delete_file_and_pending_deletions_tests {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8544,7 +8545,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8665,7 +8666,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -8724,7 +8725,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -8858,7 +8859,7 @@ mod compute_threshold {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
@@ -9122,6 +9123,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9129,13 +9133,10 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9172,7 +9173,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9316,6 +9317,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9323,13 +9327,10 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9360,10 +9361,10 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -9373,7 +9374,7 @@ mod stop_storing_for_insolvent_user {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -9388,7 +9389,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9481,6 +9482,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9488,13 +9492,10 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9531,7 +9532,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9717,6 +9718,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9724,13 +9728,10 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9767,7 +9768,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9928,6 +9929,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9935,13 +9939,10 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     None
                 ));
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9978,7 +9979,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: 1,
+                        requested_at: System::block_number(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -10283,7 +10284,7 @@ fn create_bucket(
     // Dispatch a signed extrinsic.
     assert_ok!(FileSystem::create_bucket(
         origin,
-        Some(msp_id),
+        msp_id,
         name.clone(),
         false,
         Some(value_prop_id)

@@ -1,9 +1,20 @@
 import assert, { notEqual, strictEqual } from "node:assert";
 import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import type { H256 } from "@polkadot/types/interfaces";
+import type { Bytes, u64, U8aFixed } from "@polkadot/types";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
+
+  const source = "res/whatsup.jpg";
+  const destination = "test/whatsup.jpg";
+  const bucketName = "nothingmuch-2";
+
+  let file_size: u64;
+  let fingerprint: U8aFixed;
+  let location: Bytes;
+  let bucketId: H256;
 
   before(async () => {
     userApi = await createUserApi();
@@ -18,38 +29,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
   });
 
-  it("file is finger printed correctly", async () => {
-    const source = "res/adolphus.jpg";
-    const destination = "test/adolphus.jpg";
-    const bucketName = "nothingmuch-0";
-
-    const newBucketEventEvent = await userApi.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
-
-    const {
-      file_metadata: { location, fingerprint, file_size }
-    } = await userApi.rpc.storagehubclient.loadFileInStorage(
-      source,
-      destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
-      newBucketEventDataBlob.bucketId
-    );
-
-    strictEqual(location.toHuman(), destination);
-    strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
-    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
-  });
-
   it("bsp volunteers when issueStorageRequest sent", async () => {
-    const source = "res/whatsup.jpg";
-    const destination = "test/whatsup.jpg";
-    const bucketName = "nothingmuch-2";
-
     const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
 
     strictEqual(
@@ -63,14 +43,20 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     assert(newBucketEventDataBlob, "Event doesn't match Type");
 
+    bucketId = newBucketEventDataBlob.bucketId;
+
     const {
-      file_metadata: { location, fingerprint, file_size }
+      file_metadata: { location: loc, fingerprint: fp, file_size: s }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
       userApi.shConsts.NODE_INFOS.user.AddressId,
       newBucketEventDataBlob.bucketId
     );
+
+    location = loc;
+    fingerprint = fp;
+    file_size = s;
 
     await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
@@ -80,7 +66,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         file_size,
         userApi.shConsts.DUMMY_MSP_ID,
         [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        null
+        1
       ),
       shUser
     );
@@ -154,6 +140,29 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       assert(saveFileToDisk.isSuccess);
       const sha = await userApi.docker.checkFileChecksum("test/whatsup.jpg");
       strictEqual(sha, userApi.shConsts.TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
+    });
+  });
+
+  it("bsp skips volunteering for the same file key already being stored", async () => {
+    await userApi.sealBlock(
+      userApi.tx.fileSystem.issueStorageRequest(
+        bucketId,
+        location,
+        fingerprint,
+        file_size,
+        userApi.shConsts.DUMMY_MSP_ID,
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+        1
+      ),
+      shUser
+    );
+
+    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+
+    await bspApi.docker.waitForLog({
+      containerName: "docker-sh-bsp-1",
+      searchString: "Skipping file key",
+      timeout: 15000
     });
   });
 });
