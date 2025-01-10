@@ -227,9 +227,9 @@ describeBspNet(
         "BspConfirmStoppedStoring"
       );
       // Wait for confirmation line in docker logs.
-      await bspThreeApi.assert.log({
-        searchString: "successfully removed from forest",
-        containerName: "sh-bsp-three"
+      await bspThreeApi.docker.waitForLog({
+        containerName: "sh-bsp-three",
+        searchString: "New local Forest root matches the one in the block for BSP"
       });
 
       // Make sure the new root was updated correctly.
