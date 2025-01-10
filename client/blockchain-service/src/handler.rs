@@ -14,6 +14,7 @@ use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::{ApiError, ProvideRuntimeApi};
+use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
@@ -63,7 +64,7 @@ use crate::{
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BestBlockInfo, ForestStorageSnapshotInfo, NewBlockNotificationKind,
+        ForestStorageSnapshotInfo, MinimalBlockInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
 };
@@ -108,7 +109,7 @@ where
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: BestBlockInfo,
+    pub(crate) best_block: MinimalBlockInfo,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
@@ -1023,7 +1024,7 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: BestBlockInfo::default(),
+            best_block: MinimalBlockInfo::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -1043,21 +1044,30 @@ where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let last_block_processed = self.best_block.number;
+
+        // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
-        let BestBlockInfo {
-            number: block_number,
-            hash: block_hash,
-        } = match new_block_notification_kind {
-            NewBlockNotificationKind::NewBestBlock(new_best_block_info) => new_best_block_info,
+
+        // Get the new best block info, and the `TreeRoute`, i.e. the blocks from the old best block to the new best block.
+        // A new non-best block is ignored and not processed.
+        let (block_info, tree_route) = match new_block_notification_kind {
+            NewBlockNotificationKind::NewBestBlock(new_best_block_info) => {
+                // Making up a tree route just with the new best block.
+                let tree_route = TreeRoute::new(vec![new_best_block_info.clone().into()], 0)
+                    .expect("`TreeRoute` with `pivot` 0 should be valid; qed");
+                (new_best_block_info, tree_route)
+            }
             NewBlockNotificationKind::NewNonBestBlock(_) => return,
             NewBlockNotificationKind::Reorg {
                 old_best_block: _,
                 new_best_block,
-            } => {
-                // TODO: Handle catch up of reorgs.
-                new_best_block
-            }
+                tree_route,
+            } => (new_best_block, tree_route),
         };
+        let MinimalBlockInfo {
+            number: block_number,
+            hash: block_hash,
+        } = block_info;
 
         info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
 
@@ -1072,7 +1082,8 @@ where
             self.handle_initial_sync(notification).await;
         }
 
-        self.process_block_import(&block_hash, &block_number).await;
+        self.process_block_import(&block_hash, &block_number, tree_route)
+            .await;
     }
 
     fn pre_block_processing_checks(&mut self, block_hash: &H256) {
@@ -1166,8 +1177,18 @@ where
         }
     }
 
-    async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
+    async fn process_block_import<Block>(
+        &mut self,
+        block_hash: &H256,
+        block_number: &BlockNumber,
+        tree_route: TreeRoute<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
+
+        // Before triggering any task, we make sure to be caught up to the Forest roots on-chain.
+        self.forest_root_changes_catchup(&tree_route).await;
 
         // Trigger catch up of proofs if the block is a multiple of `CHECK_FOR_PENDING_PROOFS_PERIOD`.
         // This is only relevant if this node is managing a BSP.

@@ -1,4 +1,4 @@
-use std::{fs, sync::Arc, vec};
+use std::{sync::Arc, vec};
 
 use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
@@ -9,10 +9,7 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
-use sc_tracing::{
-    block,
-    tracing::{debug, error, info, trace, warn},
-};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
@@ -51,7 +48,7 @@ use crate::{
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BestBlockInfo, Extrinsic, NewBlockNotificationKind, Tip},
+    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, Tip},
     BlockchainService,
 };
 
@@ -121,20 +118,20 @@ where
 
     /// From a [`BlockImportNotification`], gets the imported block, and checks if:
     /// 1. The block is not the new best block. For example, it could be a block from a non-best fork branch.
-    ///     - If so, it returns [`NewNonBestBlock`].
+    ///     - If so, it returns [`NewBlockNotificationKind::NewNonBestBlock`].
     /// 2. The block is the new best block, and its parent is the previous best block.
-    ///     - If so, it registers it as the new best block and returns [`NewBestBlock`].
+    ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::NewBestBlock`].
     /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
-    ///     - If so, it registers it as the new best block and returns [`Reorg`].
+    ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::Reorg`].
     pub(crate) fn register_best_block_and_check_reorg<Block>(
         &mut self,
         block_import_notification: &BlockImportNotification<Block>,
-    ) -> NewBlockNotificationKind
+    ) -> NewBlockNotificationKind<Block>
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let last_best_block = self.best_block;
-        let new_block_info: BestBlockInfo = block_import_notification.into();
+        let new_block_info: MinimalBlockInfo = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
         if !block_import_notification.is_new_best {
@@ -157,11 +154,13 @@ where
             .as_ref()
             .expect("Tree route should exist, it was just checked to be `Some`; qed")
             .clone();
+        let tree_route = (*tree_route).clone();
         info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
         info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
             old_best_block: last_best_block,
             new_best_block: new_block_info,
+            tree_route,
         }
     }
 
@@ -683,7 +682,7 @@ where
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
                 if next_event_data.is_none() {
-                    let max_batch_respond: u32 = 100;
+                    let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
                     // Batch multiple respond storing requests up to the runtime configured maximum.
                     let mut respond_storage_requests = Vec::new();

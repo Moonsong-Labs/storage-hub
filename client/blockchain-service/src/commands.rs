@@ -31,7 +31,7 @@ use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        BestBlockInfo, ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest,
+        MinimalBlockInfo, ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest,
         RetryStrategy, StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
     },
 };
@@ -55,7 +55,7 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
     GetBestBlockInfo {
-        callback: tokio::sync::oneshot::Sender<BestBlockInfo>,
+        callback: tokio::sync::oneshot::Sender<MinimalBlockInfo>,
     },
     WaitForBlock {
         block_number: BlockNumber,
