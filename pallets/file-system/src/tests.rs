@@ -2871,10 +2871,9 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    Some(1)
                 ));
 
-                // Compute the file key.
                 // Compute the file key.
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -2883,6 +2882,11 @@ mod msp_respond_storage_request {
                     size,
                     fingerprint,
                 );
+
+                // Simulate a BSP already confirming the storage request.
+                StorageRequests::<Test>::mutate(file_key, |storage_request| {
+                    storage_request.as_mut().unwrap().bsps_confirmed = 1;
+                });
 
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
@@ -2904,13 +2908,65 @@ mod msp_respond_storage_request {
                     }],
                 ));
 
-                // Assert that the storage was updated
-                assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                // Check that the storage request has been deleted since it is fulfilled.
+                assert_eq!(StorageRequests::<Test>::get(file_key), None);
+
+                // Get bucket root
+                let bucket_root = <<Test as Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
+                // Check that the bucket root is not default
+                assert_ne!(bucket_root, <<Test as Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root());
+
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    Some(1)
+                ));
+
+                // Compute the file key.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
                 );
+
+                // Simulate a BSP already confirming the storage request.
+                StorageRequests::<Test>::mutate(file_key, |storage_request| {
+                    storage_request.as_mut().unwrap().bsps_confirmed = 1;
+                });
+
+                // Dispatch the MSP accept request with the file key in the forest proof.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec(), file_key.as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                let post_state_bucket_root = <<Test as Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
+                // Bucket root should not have changed
+                assert_eq!(bucket_root, post_state_bucket_root);
             });
         }
 

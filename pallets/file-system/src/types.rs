@@ -121,6 +121,8 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
     pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
+    /// File keys which have already been accepted by the MSP in a previous storage request should be included
+    /// in the proof.
     pub non_inclusion_forest_proof: ForestProof<T>,
 }
 
