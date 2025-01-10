@@ -7,10 +7,10 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -400,15 +400,8 @@ where
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         move_bucket_expired_event_bus_listener.start();
 
-        // Task that listen for `BspConfirmStoppedStoring` to delete file and update forest root.
+        // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
         let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
-        let bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
-            BspConfirmStoppedStoring,
-            _,
-        > = bsp_delete_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        bsp_confirm_stopped_storing_event_bus_listener.start();
         let finalised_bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
             FinalisedBspConfirmStoppedStoring,
             _,

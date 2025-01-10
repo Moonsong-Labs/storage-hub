@@ -1068,7 +1068,7 @@ where
                         ) => {
                             // This event is relevant in case the Provider managed is an MSP.
                             // In which case the mutations are applied to a Bucket's Forest root.
-                            if let Some(StorageProviderId::MainStorageProvider(msp_id)) =
+                            if let Some(StorageProviderId::MainStorageProvider(_msp_id)) =
                                 &self.provider_id
                             {
                                 // TODO: Check if Bucket is managed by this MSP.
