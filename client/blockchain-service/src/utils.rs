@@ -917,6 +917,8 @@ where
         for block in tree_route.enacted() {
             self.apply_forest_root_changes(block, false).await;
         }
+
+        trace!(target: LOG_TARGET, "Applied Forest root changes for tree route {:?}", tree_route);
     }
 
     /// Gets the next tick for which a Provider (BSP) should submit a proof.
@@ -1046,10 +1048,14 @@ where
 
                                     let local_new_root = fs.read().await.root();
 
+                                    trace!(target: LOG_TARGET, "Mutations applied. New local Forest root: {:?}", local_new_root);
+
                                     if new_root != local_new_root {
                                         error!(target: LOG_TARGET, "CRITICAL❗️❗️ New Forest root does not match the one in the block. This is a bug. Please report it to the StorageHub team.");
                                         return;
                                     }
+
+                                    info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
                                 }
                             }
                         }
