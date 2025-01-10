@@ -1061,9 +1061,9 @@ where
                         }
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::MutationsApplied {
-                                mutations,
-                                old_root,
-                                new_root,
+                                mutations: _,
+                                old_root: _,
+                                new_root: _,
                             },
                         ) => {
                             // This event is relevant in case the Provider managed is an MSP.
