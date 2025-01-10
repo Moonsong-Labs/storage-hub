@@ -1650,9 +1650,15 @@ declare const _default: {
         provider: string;
         maybeProviderAccount: string;
       };
-      MutationsApplied: {
-        provider: string;
+      MutationsAppliedForProvider: {
+        providerId: string;
         mutations: string;
+        oldRoot: string;
+        newRoot: string;
+      };
+      MutationsApplied: {
+        mutations: string;
+        oldRoot: string;
         newRoot: string;
       };
       ChallengesTickerSet: {
