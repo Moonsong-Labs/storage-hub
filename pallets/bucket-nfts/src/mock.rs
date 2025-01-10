@@ -12,7 +12,7 @@ use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
     CommitRevealRandomnessInterface, ProofSubmittersInterface, ProofsDealerInterface,
-    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation, TrieRemoveMutation,
+    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -167,7 +167,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn challenge_with_priority(
         _key_challenged: &Self::MerkleHash,
-        _mutation: Option<TrieRemoveMutation>,
+        _should_remove_key: bool,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
@@ -260,7 +260,6 @@ impl pallet_file_system::Config for Test {
     type BspStopStoringFilePenalty = ConstU128<1>;
     type TreasuryAccount = TreasuryAccount;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
-    type MaxBatchMspRespondStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;

@@ -10,9 +10,8 @@ use frame_support::dispatch::DispatchInfo;
 use log::warn;
 use sc_client_api::BlockImportNotification;
 use shc_common::types::{
-    BlockNumber, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
+    BlockNumber, CustomChallenge, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
     RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
-    TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::{traits::Header, AccountId32, DispatchError, SaturatedConversion};
@@ -28,7 +27,7 @@ pub struct SubmitProofRequest {
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
-    pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+    pub checkpoint_challenges: Vec<CustomChallenge>,
 }
 
 impl SubmitProofRequest {
@@ -37,7 +36,7 @@ impl SubmitProofRequest {
         tick: BlockNumber,
         seed: RandomnessOutput,
         forest_challenges: Vec<H256>,
-        checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+        checkpoint_challenges: Vec<CustomChallenge>,
     ) -> Self {
         Self {
             provider_id,

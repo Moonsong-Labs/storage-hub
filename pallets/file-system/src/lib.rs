@@ -249,10 +249,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
-        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
-        #[pallet::constant]
-        type MaxBatchMspRespondStorageRequests: Get<u32>;
-
         /// Maximum byte size of a file path.
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
@@ -495,7 +491,7 @@ pub mod pallet {
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
             root: MerkleHash<T>,
@@ -668,6 +664,10 @@ pub mod pallet {
             file_size: StorageData<T>,
             error: DispatchError,
         },
+        /// Event to notify of incoherencies in used capacity.
+        UsedCapacityShouldBeZero {
+            actual_used_capacity: StorageData<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -822,6 +822,8 @@ pub mod pallet {
         NoPrivacyChange,
         /// Operations not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
+        /// Operations not allowed while bucket is not being stored by an MSP
+        OperationNotAllowedWhileBucketIsNotStoredByMsp,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -843,7 +845,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::create_bucket())]
         pub fn create_bucket(
             origin: OriginFor<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
             value_prop_id: Option<ValuePropId<T>>,
@@ -868,7 +870,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::request_move_bucket())]
         pub fn request_move_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -888,7 +890,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::msp_respond_move_bucket_request())]
         pub fn msp_respond_move_bucket_request(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -912,7 +914,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::update_bucket_privacy())]
         pub fn update_bucket_privacy(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -935,7 +937,7 @@ pub mod pallet {
 
         /// Create and associate a collection with a bucket.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::create_and_associate_collection_with_bucket())]
         pub fn create_and_associate_collection_with_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -962,7 +964,7 @@ pub mod pallet {
         ///
         /// To check if a bucket is empty, we compare its current root with the one of an empty trie.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::delete_bucket())]
         pub fn delete_bucket(origin: OriginFor<T>, bucket_id: BucketIdFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -989,7 +991,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
             replication_target: Option<ReplicationTargetType<T>>,
         ) -> DispatchResult {
@@ -1003,7 +1005,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
-                msp_id,
+                Some(msp_id),
                 replication_target,
                 Some(peer_ids.clone()),
             )?;
@@ -1013,7 +1015,12 @@ pub mod pallet {
 
         /// Revoke storage request
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+          let confirmed = StorageRequests::<T>::get(file_key).map_or(0, |metadata| metadata.bsps_confirmed.into());
+          let weight = T::WeightInfo::revoke_storage_request(confirmed as u32);
+
+          weight.saturating_add(T::DbWeight::get().reads_writes(1, 0))
+        })]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1054,7 +1061,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(9)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::msp_stop_storing_bucket())]
         pub fn msp_stop_storing_bucket(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -1079,7 +1086,7 @@ pub mod pallet {
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
         #[pallet::call_index(10)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_volunteer())]
         pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;

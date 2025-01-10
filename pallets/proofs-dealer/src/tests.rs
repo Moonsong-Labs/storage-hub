@@ -31,7 +31,7 @@ use crate::{
     types::{
         BalanceFor, BlockFullnessHeadroomFor, BlockFullnessPeriodFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesQueueLengthFor, CheckpointChallengePeriodFor,
-        KeyProof, MaxCustomChallengesPerBlockFor, MaxSlashableProvidersPerTickFor,
+        CustomChallenge, KeyProof, MaxCustomChallengesPerBlockFor, MaxSlashableProvidersPerTickFor,
         MaxSubmittersPerTickFor, MinChallengePeriodFor, MinNotFullBlocksRatioFor, Proof,
         ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
@@ -419,14 +419,20 @@ fn proofs_dealer_trait_challenge_with_priority_succeed() {
 
         // Challenge using trait.
         <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-            &file_key, None,
+            &file_key, false,
         )
         .unwrap();
 
         // Check that the challenge is in the queue.
         let priority_challenges_queue = crate::PriorityChallengesQueue::<Test>::get();
         assert_eq!(priority_challenges_queue.len(), 1);
-        assert_eq!(priority_challenges_queue[0], (file_key, None));
+        assert_eq!(
+            priority_challenges_queue[0],
+            CustomChallenge {
+                key: file_key,
+                should_remove_key: false
+            }
+        );
     });
 }
 
@@ -442,7 +448,7 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
             assert_ok!(
                 <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key, None
+                    &file_key, false
                 )
             );
         }
@@ -450,7 +456,7 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
         // Dispatch challenge extrinsic.
         assert_noop!(
             <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key, None
+                &file_key, false
             ),
             crate::Error::<Test>::PriorityChallengesQueueOverflow
         );
@@ -780,6 +786,101 @@ fn proofs_dealer_trait_initialise_challenge_cycle_not_provider_fail() {
         // Expect failure since the user is not a provider.
         assert_noop!(
             ProofsDealer::initialise_challenge_cycle(&provider_id),
+            crate::Error::<Test>::NotProvider
+        );
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_stop_challenge_cycle_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Register user as a Provider in Providers pallet.
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                capacity_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
+                sign_up_block: Default::default(),
+            },
+        );
+
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
+        // Dispatch initialise provider extrinsic.
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
+
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&provider_id).unwrap();
+        let current_tick = ChallengesTicker::<Test>::get();
+        assert_eq!(proof_record.last_tick_proven, current_tick);
+
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id,
+        )
+        .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = proof_record.last_tick_proven + challenge_period_plus_tolerance;
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
+        assert_eq!(deadline, Some(()));
+
+        // Advance of 1 block.
+        let current_block = System::block_number();
+        run_to_block(current_block + 1);
+
+        // Call stop cycle.
+        assert_ok!(ProofsDealer::stop_challenge_cycle(&provider_id));
+
+        let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&provider_id);
+        assert_eq!(proof_record, None);
+
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, &provider_id);
+        assert_eq!(deadline, None);
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_stop_challenge_cycle_not_provider_fail() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Expect failure since the user is not a provider.
+        assert_noop!(
+            ProofsDealer::stop_challenge_cycle(&provider_id),
             crate::Error::<Test>::NotProvider
         );
     });
@@ -1306,8 +1407,14 @@ fn submit_proof_with_checkpoint_challenges_success() {
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            (BlakeTwo256::hash(b"custom_challenge_1"), None),
-            (BlakeTwo256::hash(b"custom_challenge_2"), None),
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_1"),
+                should_remove_key: false,
+            },
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_2"),
+                should_remove_key: false,
+            },
         ])
         .unwrap();
 
@@ -1318,7 +1425,11 @@ fn submit_proof_with_checkpoint_challenges_success() {
         );
 
         // Add custom challenges to the challenges vector.
-        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
+        challenges.extend(
+            custom_challenges
+                .iter()
+                .map(|custom_challenge| custom_challenge.key),
+        );
 
         // Creating a vec of proofs with some content to pass verification.
         let mut key_proofs = BTreeMap::new();
@@ -1465,14 +1576,14 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            (
-                BlakeTwo256::hash(b"custom_challenge_1"),
-                Some(TrieRemoveMutation::default()),
-            ),
-            (
-                BlakeTwo256::hash(b"custom_challenge_2"),
-                Some(TrieRemoveMutation::default()),
-            ),
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_1"),
+                should_remove_key: true,
+            },
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_2"),
+                should_remove_key: true,
+            },
         ])
         .unwrap();
 
@@ -1500,7 +1611,11 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         }
 
         // Add custom challenges to the challenges vector.
-        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
+        challenges.extend(
+            custom_challenges
+                .iter()
+                .map(|custom_challenge| custom_challenge.key),
+        );
 
         // Mock a proof.
         let proof = Proof::<Test> {
@@ -1519,7 +1634,13 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 provider: provider_id,
                 mutations: custom_challenges
                     .iter()
-                    .map(|(key, mutation)| (*key, mutation.clone().unwrap().into()))
+                    .filter_map(|custom_challenge| {
+                        if custom_challenge.should_remove_key {
+                            Some((custom_challenge.key, TrieRemoveMutation::default().into()))
+                        } else {
+                            None
+                        }
+                    })
                     .collect(),
                 new_root: challenges.last().unwrap().clone(),
             }
@@ -2204,14 +2325,14 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            (
-                [0; BlakeTwo256::LENGTH].into(), // Challenge that will return invalid metadata
-                Some(TrieRemoveMutation::default()),
-            ),
-            (
-                BlakeTwo256::hash(b"custom_challenge_2"),
-                Some(TrieRemoveMutation::default()),
-            ),
+            CustomChallenge {
+                key: [0; BlakeTwo256::LENGTH].into(), // Challenge that will return invalid metadata
+                should_remove_key: true,
+            },
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_2"),
+                should_remove_key: false,
+            },
         ])
         .unwrap();
 
@@ -2222,7 +2343,11 @@ fn submit_proof_with_checkpoint_challenges_mutations_fails_if_decoded_metadata_i
         );
 
         // Add custom challenges to the challenges vector.
-        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
+        challenges.extend(
+            custom_challenges
+                .iter()
+                .map(|custom_challenge| custom_challenge.key),
+        );
 
         // Creating a vec of proofs with some content to pass verification.
         let mut key_proofs = BTreeMap::new();
@@ -3283,8 +3408,14 @@ fn submit_proof_out_checkpoint_challenges_fail() {
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            (BlakeTwo256::hash(b"custom_challenge_1"), None),
-            (BlakeTwo256::hash(b"custom_challenge_2"), None),
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_1"),
+                should_remove_key: false,
+            },
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_2"),
+                should_remove_key: false,
+            },
         ])
         .unwrap();
 
@@ -3626,7 +3757,7 @@ fn new_challenges_round_checkpoint_challenges_with_custom_challenges() {
         assert_ok!(
             <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
                 &priority_key_challenged,
-                Some(TrieRemoveMutation::default())
+                true
             )
         );
 
@@ -3641,9 +3772,18 @@ fn new_challenges_round_checkpoint_challenges_with_custom_challenges() {
         assert_eq!(checkpoint_challenges.len(), 2);
         assert_eq!(
             checkpoint_challenges[0],
-            (priority_key_challenged, Some(TrieRemoveMutation::default()))
+            CustomChallenge {
+                key: priority_key_challenged,
+                should_remove_key: true
+            }
         );
-        assert_eq!(checkpoint_challenges[1], (key_challenged, None));
+        assert_eq!(
+            checkpoint_challenges[1],
+            CustomChallenge {
+                key: key_challenged,
+                should_remove_key: false
+            }
+        );
     });
 }
 
@@ -3677,7 +3817,7 @@ fn new_challenges_round_max_custom_challenges() {
             assert_ok!(
                 <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
                     &key_challenged,
-                    Some(TrieRemoveMutation::default())
+                    true
                 )
             );
         }
@@ -3686,7 +3826,7 @@ fn new_challenges_round_max_custom_challenges() {
         assert_err!(
             <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
                 &BlakeTwo256::hash(b"key_challenged"),
-                Some(TrieRemoveMutation::default())
+                true
             ),
             crate::Error::<Test>::PriorityChallengesQueueOverflow
         );
@@ -3715,7 +3855,10 @@ fn new_challenges_round_max_custom_challenges() {
             let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
             assert_eq!(
                 checkpoint_challenges[i],
-                (key_challenged, Some(TrieRemoveMutation::default()))
+                CustomChallenge {
+                    key: key_challenged,
+                    should_remove_key: true
+                }
             );
         }
 
@@ -3747,7 +3890,10 @@ fn new_challenges_round_max_custom_challenges() {
             );
             assert_eq!(
                 checkpoint_challenges[i as usize],
-                (key_challenged, Some(TrieRemoveMutation::default()))
+                CustomChallenge {
+                    key: key_challenged,
+                    should_remove_key: true
+                }
             );
         }
 
@@ -3764,7 +3910,10 @@ fn new_challenges_round_max_custom_challenges() {
             let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
             assert_eq!(
                 checkpoint_challenges[(checkpoint_challenges_start_index + i) as usize],
-                (key_challenged, None)
+                CustomChallenge {
+                    key: key_challenged,
+                    should_remove_key: false
+                }
             );
         }
 
@@ -3782,10 +3931,10 @@ fn new_challenges_round_max_custom_challenges() {
         let last_checkpoint_challenge = &checkpoint_challenges[checkpoint_challenges.len() - 1];
         assert_eq!(
             last_checkpoint_challenge,
-            &(
-                BlakeTwo256::hash(&((queue_length - 1) as usize).to_le_bytes()),
-                None
-            )
+            &CustomChallenge {
+                key: BlakeTwo256::hash(&((queue_length - 1) as usize).to_le_bytes()),
+                should_remove_key: false
+            }
         )
     });
 }
@@ -4000,8 +4149,14 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            (BlakeTwo256::hash(b"custom_challenge_1"), None),
-            (BlakeTwo256::hash(b"custom_challenge_2"), None),
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_1"),
+                should_remove_key: false,
+            },
+            CustomChallenge {
+                key: BlakeTwo256::hash(b"custom_challenge_2"),
+                should_remove_key: false,
+            },
         ])
         .unwrap();
 
@@ -4323,7 +4478,7 @@ fn challenges_ticker_paused_works() {
         assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), true));
 
         // Assert event emitted.
-        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: true }.into());
+        System::assert_last_event(Event::ChallengesTickerSet { paused: true }.into());
 
         // Advance a number of blocks.
         let current_block = System::block_number();
@@ -4336,7 +4491,7 @@ fn challenges_ticker_paused_works() {
         assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), false));
 
         // Assert event emitted.
-        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: false }.into());
+        System::assert_last_event(Event::ChallengesTickerSet { paused: false }.into());
 
         // Advance a number of blocks.
         let current_block = System::block_number();

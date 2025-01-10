@@ -19,6 +19,7 @@ runtimes/
 .env
 *.tmp
 **/tmp/
+res/benchmarking
 
 .DS_Store
 .vscode/
@@ -30,6 +31,9 @@ runtimes/
 .idea/
 
 test/dist/*
+
+# Ignore cSpell config files
+cSpell.json
 
 # Dont commit you config file
 config.toml

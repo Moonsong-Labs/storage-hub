@@ -50,7 +50,7 @@ mod benchmarks {
         #[extrinsic_call]
         _(
             signed_origin.clone(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -90,7 +90,7 @@ mod benchmarks {
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(initial_msp_id),
+            initial_msp_id,
             name,
             true,
             Some(initial_value_prop_id),
@@ -153,7 +153,7 @@ mod benchmarks {
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(initial_msp_id),
+            initial_msp_id,
             name,
             true,
             Some(initial_value_prop_id),
@@ -215,7 +215,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -281,7 +281,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -346,7 +346,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection so it has to be deleted as well.
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -411,7 +411,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -424,10 +424,135 @@ mod benchmarks {
             location,
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn revoke_storage_request(
+        n: Linear<
+            1,
+            {
+                Into::<u64>::into(MaxReplicationTarget::<T>::get())
+                    .try_into()
+                    .unwrap()
+            },
+        >,
+    ) -> Result<(), BenchmarkError> {
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+        let location: FileLocation<T> = vec![1; MaxFilePathSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let fingerprint =
+            <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
+        let size: StorageData<T> = 100;
+        let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let peer_ids: PeerIds<T> =
+            vec![peer_id; MaxNumberOfPeerIds::<T>::get().try_into().unwrap()]
+                .try_into()
+                .unwrap();
+
+        // Register MSP with value proposition
+        let msp: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            msp_id,
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        Pallet::<T>::issue_storage_request(
+            signed_origin.clone().into(),
+            bucket_id,
+            location.clone(),
+            fingerprint,
+            size,
+            msp_id,
+            peer_ids,
+            Some(n.into()),
+        )?;
+
+        let file_key = Pallet::<T>::compute_file_key(user, bucket_id, location, size, fingerprint);
+
+        // The `revoke_storage_request` executes the `drain_prefix` function to remove all sub keys including the primary key
+        // from `StorageRequestBsps`.
+        for i in 0..n {
+            let bsp_user: T::AccountId = account("bsp", i as u32, i as u32);
+            mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+            let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone());
+
+            StorageRequestBsps::<T>::insert(
+                file_key,
+                bsp_id,
+                StorageRequestBspsMetadata::<T> {
+                    confirmed: true,
+                    _phantom: Default::default(),
+                },
+            );
+        }
+
+        // Mutate the storage request to have bsps_volunteered equal to MaxReplicationTarget
+        StorageRequests::<T>::mutate(file_key, |storage_request| {
+            storage_request.as_mut().unwrap().bsps_volunteered = n.into();
+            // Setting this greater than 0 triggers a priority challenge
+            storage_request.as_mut().unwrap().bsps_confirmed = n.into();
+        });
+
+        #[extrinsic_call]
+        _(signed_origin, file_key);
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn msp_stop_storing_bucket() -> Result<(), BenchmarkError> {
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+
+        // Register MSP with value proposition
+        let msp: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp);
+
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            msp_id,
+            name,
+            true,
+            Some(value_prop_id),
+        )?;
+
+        #[extrinsic_call]
+        _(RawOrigin::Signed(msp), bucket_id);
 
         Ok(())
     }
@@ -462,7 +587,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -488,7 +613,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         )?;
@@ -587,7 +712,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -613,7 +738,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
         )?;
 

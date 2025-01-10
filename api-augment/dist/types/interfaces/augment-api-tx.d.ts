@@ -590,12 +590,12 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       createBucket: AugmentedSubmittable<
         (
-          mspId: Option<H256> | null | Uint8Array | H256 | string,
+          mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
           valuePropId: Option<H256> | null | Uint8Array | H256 | string
         ) => SubmittableExtrinsic<ApiType>,
-        [Option<H256>, Bytes, bool, Option<H256>]
+        [H256, Bytes, bool, Option<H256>]
       >;
       /**
        * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
@@ -638,11 +638,11 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          mspId: Option<H256> | null | Uint8Array | H256 | string,
+          mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, Option<H256>, Vec<Bytes>, Option<u32>]
+        [H256, Bytes, H256, u64, H256, Vec<Bytes>, Option<u32>]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (

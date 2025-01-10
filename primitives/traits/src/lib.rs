@@ -9,7 +9,6 @@ use frame_support::{
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
-use serde::{Deserialize, Serialize};
 use sp_core::Get;
 use sp_runtime::{
     traits::{
@@ -289,7 +288,7 @@ pub trait MutateBucketsInterface {
     /// If `privacy` is true, the bucket will be private and optionally the `read_access_group_id` will be used to
     /// determine the collection of NFTs that can access the bucket.
     fn add_bucket(
-        provider_id: Option<Self::ProviderId>,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -762,7 +761,7 @@ pub trait ProofsDealerInterface {
     /// Submit a new challenge with priority.
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<TrieRemoveMutation>,
+        should_remove_key: bool,
     ) -> DispatchResult;
 
     /// Given a randomness seed, a provider id and a count, generate a list of challenges.
@@ -866,19 +865,22 @@ impl TrieAddMutation {
     }
 }
 
-#[derive(
-    Encode,
-    Decode,
-    MaxEncodedLen,
-    TypeInfo,
-    Clone,
-    PartialEq,
-    Debug,
-    Default,
-    Serialize,
-    Deserialize,
-)]
-pub struct TrieRemoveMutation;
+#[derive(Encode, Decode, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct TrieRemoveMutation {
+    pub maybe_value: Option<Vec<u8>>,
+}
+
+impl TrieRemoveMutation {
+    pub fn new() -> Self {
+        Self { maybe_value: None }
+    }
+
+    pub fn with_value(value: Vec<u8>) -> Self {
+        Self {
+            maybe_value: Some(value),
+        }
+    }
+}
 
 impl Into<TrieMutation> for TrieRemoveMutation {
     fn into(self) -> TrieMutation {
@@ -1043,10 +1045,10 @@ pub trait PaymentStreamsInterface {
     /// Check if a provider has any active payment streams.
     fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool;
 
-    /// Add a priviledge provider to the PriviledgerProvider storage.
+    /// Add a privileged provider to the PrivilegedProvider storage.
     fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 
-    /// Remove a priviledge provider to the PriviledgerProvider storage.
+    /// Remove a privileged provider to the PrivilegedProvider storage.
     fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
 
     /// Get current tick.

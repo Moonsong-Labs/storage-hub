@@ -78,8 +78,10 @@ export const createBucketAndSendNewStorageRequest = async (
   let localValuePropId = valuePropId;
   let localOwner = owner;
 
-  if (!localValuePropId && mspId) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+  if (!localValuePropId) {
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+      mspId ?? ShConsts.DUMMY_MSP_ID
+    );
     localValuePropId = valueProps[0].id;
 
     if (!localValuePropId) {
@@ -95,7 +97,7 @@ export const createBucketAndSendNewStorageRequest = async (
     api,
     bucketName,
     localValuePropId,
-    mspId,
+    mspId ?? ShConsts.DUMMY_MSP_ID,
     localOwner
   );
   const newBucketEventDataBlob =
@@ -117,7 +119,7 @@ export const createBucketAndSendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      mspId ?? null,
+      mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       replicationTarget ?? null
     ),
@@ -169,7 +171,12 @@ export const createBucket = async (
 
   const createBucketResult = await sealBlock(
     api,
-    api.tx.fileSystem.createBucket(mspId, bucketName, false, localValuePropId),
+    api.tx.fileSystem.createBucket(
+      mspId ?? ShConsts.DUMMY_MSP_ID,
+      bucketName,
+      false,
+      localValuePropId
+    ),
     owner ?? undefined
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
