@@ -31,7 +31,7 @@ use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        MinimalBlockInfo, ConfirmStoringRequest, Extrinsic, ExtrinsicResult, RespondStorageRequest,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, MinimalBlockInfo, RespondStorageRequest,
         RetryStrategy, StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
     },
 };
