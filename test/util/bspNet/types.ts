@@ -382,6 +382,12 @@ export type SealBlockOptions = {
   signer?: KeyringPair;
 
   /**
+   * Optional parent hash for the block.
+   * If not provided, the current block hash will be used.
+   */
+  parentHash?: string;
+
+  /**
    * Whether to finalize the block after sealing.
    * Defaults to true if not specified.
    */

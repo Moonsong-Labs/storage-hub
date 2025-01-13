@@ -99,6 +99,7 @@ export const sealBlock = async (
     | SubmittableExtrinsic<"promise", ISubmittableResult>
     | SubmittableExtrinsic<"promise", ISubmittableResult>[],
   signer?: KeyringPair,
+  parentHash?: string,
   finaliseBlock = true
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
@@ -135,8 +136,15 @@ export const sealBlock = async (
     }
   }
 
+  let blockReceipt: CreatedBlock;
+  if (parentHash) {
+    blockReceipt = await api.rpc.engine.createBlock(true, finaliseBlock, parentHash);
+  } else {
+    blockReceipt = await api.rpc.engine.createBlock(true, finaliseBlock);
+  }
+
   const sealedResults = {
-    blockReceipt: await api.rpc.engine.createBlock(true, finaliseBlock),
+    blockReceipt,
     txHashes: results.hashes.map((hash) => hash.toString())
   };
 
@@ -393,7 +401,7 @@ export const advanceToBlock = async (
       }
     }
 
-    blockResult = await sealBlock(api, [], undefined, options.finalised);
+    blockResult = await sealBlock(api, [], undefined, undefined, options.finalised);
     currentBlockNumber += 1;
 
     const blockWeight = await api.query.system.blockWeight();

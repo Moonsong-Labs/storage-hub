@@ -409,7 +409,13 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to a SealedBlock object.
        */
       seal: (options?: SealBlockOptions) =>
-        BspNetBlock.sealBlock(this._api, options?.calls, options?.signer, options?.finaliseBlock),
+        BspNetBlock.sealBlock(
+          this._api,
+          options?.calls,
+          options?.signer,
+          options?.parentHash,
+          options?.finaliseBlock
+        ),
       /**
        * Seal blocks until the next challenge period block.
        * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
