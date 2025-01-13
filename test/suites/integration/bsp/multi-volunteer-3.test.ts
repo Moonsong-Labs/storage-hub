@@ -23,7 +23,9 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
 
   it("multiple BSPs volunteer to multiple requests", async () => {
     // Replicate to 3 BSPs, 1 block to maxthreshold (i.e. instant acceptance)
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(3, 1)));
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(3, 1))]
+    });
 
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,
@@ -75,7 +77,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
       signedExts.push(signedExt);
     }
 
-    await api.sealBlock(signedExts);
+    await api.block.seal({ calls: signedExts });
 
     await api.assert.extrinsicPresent({
       module: "fileSystem",

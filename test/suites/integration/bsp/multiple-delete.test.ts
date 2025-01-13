@@ -20,9 +20,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
   it("Volunteer for multiple files and delete them", async () => {
     // Set global params
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
-    );
+    await userApi.block.seal({
+      calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
@@ -60,7 +60,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       );
     }
 
-    await userApi.sealBlock(txs, shUser);
+    await userApi.block.seal({ calls: txs, signer: shUser });
 
     // Get the new storage request events, making sure we have 3
     const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
@@ -117,7 +117,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       );
     }
 
-    await userApi.sealBlock(stopStroringTxs, bspKey);
+    await userApi.block.seal({ calls: stopStroringTxs, signer: bspKey });
     const stopStoringEvents = await userApi.assert.eventMany(
       "fileSystem",
       "BspRequestedToStopStoring"
@@ -135,10 +135,12 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKeys[i]
       ]);
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString()),
-        bspKey
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.bspConfirmStopStoring(fileKeys[i], inclusionForestProof.toString())
+        ],
+        signer: bspKey
+      });
 
       // Check for the confirm stopped storing event.
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
@@ -196,7 +198,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         );
       }
 
-      await userApi.sealBlock(txs, shUser);
+      await userApi.block.seal({ calls: txs, signer: shUser });
 
       // Get the new storage request events, making sure we have 3
       const storageRequestEvents = await userApi.assert.eventMany(
@@ -256,7 +258,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         );
       }
 
-      await userApi.sealBlock(stopStroringTxs, bspKey);
+      await userApi.block.seal({ calls: stopStroringTxs, signer: bspKey });
       const stopStoringEvents = await userApi.assert.eventMany(
         "fileSystem",
         "BspRequestedToStopStoring"
@@ -295,7 +297,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         });
       }
 
-      await userApi.sealBlock(confirmStopStoringTxs, bspKey);
+      await userApi.block.seal({ calls: confirmStopStoringTxs, signer: bspKey });
 
       // Check for the confirm stopped storing event.
       const confirmStopStoringEvents = await userApi.assert.eventMany(

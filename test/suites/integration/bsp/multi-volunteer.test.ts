@@ -13,7 +13,9 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 1", ({ before, it, createUse
   // Test below seems to be failing. sh-bsp isn't volunteering to requests even though logs claim to
   it("single BSP volunteers to multiple requests", async () => {
     // 1 block to maxthreshold (i.e. instant acceptance)
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     const signers = [alice, bob, charlie];
     const signedExts: SubmittableExtrinsic<"promise", ISubmittableResult>[] = [];
@@ -47,7 +49,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 1", ({ before, it, createUse
       signedExts.push(signedExt);
     }
 
-    await api.sealBlock(signedExts);
+    await api.block.seal({ calls: signedExts });
 
     await api.assert.extrinsicPresent({
       module: "fileSystem",
