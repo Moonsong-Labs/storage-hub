@@ -239,10 +239,12 @@ export class BspNetTestApi implements AsyncDisposable {
        * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
        * Then seals a block and checks for the `BspConfirmedStoring` events.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
+       * @param sealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspAccount?: Address) =>
-        Waits.waitForBspStored(this._api, expectedExts, bspAccount),
+      bspStored: (expectedExts?: number, bspAccount?: Address, sealBlock = true) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspAccount, sealBlock),
 
       /**
        * A generic utility to wait for a transaction to be in the tx pool.
@@ -473,8 +475,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param hashToFinalise - The hash of the block to finalise.
        * @returns A Promise that resolves when the chain reorganization is complete.
        */
-      finaliseBlock: (hasshToFinalise: string) =>
-        BspNetBlock.finaliseBlock(this._api, hasshToFinalise),
+      finaliseBlock: (hashToFinalise: string) =>
+        BspNetBlock.finaliseBlock(this._api, hashToFinalise),
 
       /**
        * Performs a chain reorganisation by creating a finalised block on top of the parent block.
@@ -493,6 +495,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * finalised block.
        *
        * !!! WARNING !!!
+       *
        * The number of blocks this function can create for the alternative fork is limited by the
        * "unincluded segment capacity" parameter, set in the `ConsensusHook` config type of the
        * `cumulus-pallet-parachain-system`. If you try to build more blocks than this limit to
