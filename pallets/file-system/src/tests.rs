@@ -3366,6 +3366,13 @@ mod msp_respond_storage_request {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+                let storage_amount: StorageData<Test> = 100;
+
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -3373,13 +3380,6 @@ mod msp_respond_storage_request {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-
-                let storage_amount: StorageData<Test> = 100;
-
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5311,6 +5311,9 @@ mod bsp_confirm {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -5318,9 +5321,6 @@ mod bsp_confirm {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5616,6 +5616,9 @@ mod bsp_confirm {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -5623,9 +5626,6 @@ mod bsp_confirm {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5909,7 +5909,7 @@ mod bsp_confirm {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids.clone(),
                     Some(1)
                 ));
@@ -6107,6 +6107,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -6114,9 +6117,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6236,6 +6236,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -6243,9 +6246,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6368,6 +6368,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -6375,9 +6378,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6515,6 +6515,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -6522,9 +6525,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6696,6 +6696,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -6703,9 +6706,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6864,6 +6864,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -6871,9 +6874,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7086,11 +7086,11 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
-
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7303,11 +7303,11 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-				let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
-
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+				let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
 
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7580,6 +7580,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -7587,9 +7590,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7708,6 +7708,9 @@ mod bsp_stop_storing {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -7715,9 +7718,6 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9463,6 +9463,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -9470,9 +9473,6 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9666,6 +9666,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -9673,9 +9676,6 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9840,6 +9840,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -9847,9 +9850,6 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10085,6 +10085,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -10092,9 +10095,6 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10305,6 +10305,9 @@ mod stop_storing_for_insolvent_user {
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
                 let current_block_plus_storage_request_ttl =
                     frame_system::Pallet::<Test>::block_number()
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
@@ -10312,9 +10315,6 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationBlock::<Test>::get(),
                     current_block_plus_storage_request_ttl,
                 );
-
-                // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
