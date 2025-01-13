@@ -1064,19 +1064,14 @@ pub mod pallet {
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight({
-			let amount_of_buckets = storage_request_msp_response.iter().count();
-			let max_amount_of_files_to_accept_for_bucket = storage_request_msp_response.iter().map(|response|
-				if let Some(accept_response) = &response.accept {
-					accept_response.file_keys_and_proofs.len()
-				} else {
-					0
-				}
-			)
-			.max()
-			.unwrap_or(0);
-			let max_amount_of_files_to_reject = storage_request_msp_response.iter().map(|response| response.reject.len()).max().unwrap_or(0);
+			let total_weight: Weight = Weight::zero();
+			for bucket_response in storage_request_msp_response.iter() {
+				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
+				let amount_of_files_to_reject = bucket_response.reject.len();
 
-			T::WeightInfo::msp_respond_storage_requests_multiple_buckets(amount_of_buckets as u32, max_amount_of_files_to_accept_for_bucket as u32, max_amount_of_files_to_reject as u32)
+				total_weight.saturating_add(T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32));
+			}
+			total_weight
 		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,

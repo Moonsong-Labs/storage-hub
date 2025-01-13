@@ -175,7 +175,7 @@ async function generateBenchmarkProofs() {
 
       await userApi.wait.bspVolunteerInTxPool(1);
       await userApi.wait.mspResponseInTxPool(1);
-      await userApi.sealBlock();
+      await userApi.block.seal();
       await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
       await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
       await userApi.wait.bspStored(1);
