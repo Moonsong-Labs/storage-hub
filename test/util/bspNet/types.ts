@@ -5,7 +5,6 @@ import type { Event, EventRecord } from "@polkadot/types/interfaces";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
-import type { SealedBlock } from "./block";
 import type { BspNetTestApi } from "./test-api";
 import type { NetworkLauncher } from "../netLaunch";
 import type postgres from "postgres";
@@ -17,20 +16,6 @@ export type SqlClient = postgres.Sql<{}>;
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
 export interface BspNetApi extends ApiPromise {
-  /**
-   * Seals a block optionally with a given extrinsic and signer.
-   *
-   * @param call - The extrinsic to be included in the block.
-   * @param signer - The keyring pair used to sign the block.
-   * @returns A promise that resolves to a sealed block.
-   */
-  sealBlock(
-    calls?:
-      | SubmittableExtrinsic<"promise", ISubmittableResult>
-      | SubmittableExtrinsic<"promise", ISubmittableResult>[],
-    signer?: KeyringPair
-  ): Promise<SealedBlock>;
-
   /**
    * @description Creates a new bucket and submits a new storage request.
    *

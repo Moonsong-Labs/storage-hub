@@ -34,18 +34,20 @@ describeMspNet(
 
       const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.issueStorageRequest(
-          bucketId,
-          destination,
-          userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
-          userApi.shConsts.TEST_ARTEFACTS[source].size,
-          userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
-        ),
-        shUser
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.issueStorageRequest(
+            bucketId,
+            destination,
+            userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
+            userApi.shConsts.TEST_ARTEFACTS[source].size,
+            userApi.shConsts.DUMMY_MSP_ID,
+            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            null
+          )
+        ],
+        signer: shUser
+      });
 
       // Allow time for the MSP to receive and store the file from the user
       await sleep(3000);
@@ -74,7 +76,7 @@ describeMspNet(
       );
 
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       const { event: storageRequestRejectedEvent } = await userApi.assert.eventPresent(
         "fileSystem",

@@ -20,18 +20,20 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    const issueStorageRequestResult = await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        null
-      ),
-      shUser
-    );
+    const issueStorageRequestResult = await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          newBucketEventDataBlob.bucketId,
+          location,
+          userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
+        )
+      ],
+      signer: shUser
+    });
 
     strictEqual(issueStorageRequestResult.extSuccess, false);
   });
@@ -75,18 +77,20 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        userApi.shConsts.TEST_ARTEFACTS["res/half-chunk-file"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/half-chunk-file"].size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [],
-        null
-      ),
-      shUser
-    );
+    await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          newBucketEventDataBlob.bucketId,
+          location,
+          userApi.shConsts.TEST_ARTEFACTS["res/half-chunk-file"].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS["res/half-chunk-file"].size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [],
+          null
+        )
+      ],
+      signer: shUser
+    });
 
     // wait for the bsp to volunteer
     await sleep(500);
@@ -118,18 +122,20 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
     // random 32 bytes
     const bucketId = "1ce1a1614e9798e9c7f2b7214ca73c87";
 
-    const issueStorageRequestResult = await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        bucketId,
-        location,
-        userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        null
-      ),
-      shUser
-    );
+    const issueStorageRequestResult = await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          bucketId,
+          location,
+          userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
+        )
+      ],
+      signer: shUser
+    });
 
     strictEqual(issueStorageRequestResult.extSuccess, false);
   });
@@ -149,18 +155,20 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    const issueStorageRequestResult = await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].size,
-        INVALID_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        null
-      ),
-      shUser
-    );
+    const issueStorageRequestResult = await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          newBucketEventDataBlob.bucketId,
+          location,
+          userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].size,
+          INVALID_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
+        )
+      ],
+      signer: shUser
+    });
 
     strictEqual(issueStorageRequestResult.extSuccess, false);
   });
@@ -177,18 +185,20 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        destination,
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        null
-      ),
-      shUser
-    );
+    await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          newBucketEventDataBlob.bucketId,
+          destination,
+          userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
+        )
+      ],
+      signer: shUser
+    });
 
     // wait for the bsp to volunteer
     await sleep(500);
@@ -211,18 +221,20 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
     strictEqual(dataBlob.peerIds.length, 1);
     strictEqual(dataBlob.peerIds[0].toHuman(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
-    const issueStorageRequestResultTwice = await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        destination,
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        null
-      ),
-      shUser
-    );
+    const issueStorageRequestResultTwice = await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          newBucketEventDataBlob.bucketId,
+          destination,
+          userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
+          userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          null
+        )
+      ],
+      signer: shUser
+    });
 
     await sleep(500);
 
