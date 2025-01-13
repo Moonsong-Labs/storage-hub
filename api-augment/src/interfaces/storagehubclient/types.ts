@@ -160,11 +160,8 @@ export interface MainStorageProviderId extends H256 {}
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
 
-/** @name Multiaddress */
-export interface Multiaddress extends Bytes {}
-
 /** @name Multiaddresses */
-export interface Multiaddresses extends Vec<Multiaddress> {}
+export interface Multiaddresses extends Vec<Bytes> {}
 
 /** @name ProviderId */
 export interface ProviderId extends H256 {}
@@ -263,7 +260,7 @@ export interface SaveFileToDisk extends Enum {
 export interface ShouldRemoveFile extends bool {}
 
 /** @name StorageData */
-export interface StorageData extends u32 {}
+export interface StorageData extends u64 {}
 
 /** @name StorageDataUnit */
 export interface StorageDataUnit extends u32 {}
