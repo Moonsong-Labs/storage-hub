@@ -29,7 +29,7 @@ mod share_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 true,
                 Some(value_prop_id)
@@ -80,7 +80,7 @@ mod share_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 true,
                 Some(value_prop_id)
@@ -151,7 +151,7 @@ mod share_access_tests {
             // Create a public bucket (no collection ID)
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 false,
                 Some(value_prop_id)
@@ -190,7 +190,7 @@ mod share_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 true,
                 Some(value_prop_id)
@@ -240,7 +240,7 @@ mod update_read_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 true,
                 Some(value_prop_id)
@@ -301,7 +301,7 @@ mod update_read_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 true,
                 Some(value_prop_id)
@@ -376,7 +376,7 @@ mod update_read_access_tests {
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                Some(msp_id),
+                msp_id,
                 bucket_name.clone(),
                 true,
                 Some(value_prop_id)

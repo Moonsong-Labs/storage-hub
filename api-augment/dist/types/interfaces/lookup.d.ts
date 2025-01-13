@@ -3537,7 +3537,7 @@ declare const _default: {
     proof: string;
   };
   /**
-   * Lookup349: pallet_file_system::types::RejectedStorageRequest<T>
+   * Lookup348: pallet_file_system::types::RejectedStorageRequest<T>
    **/
   PalletFileSystemRejectedStorageRequest: {
     fileKey: string;

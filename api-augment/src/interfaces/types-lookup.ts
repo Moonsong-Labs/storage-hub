@@ -1963,7 +1963,7 @@ declare module "@polkadot/types/lookup" {
     readonly isNewBucket: boolean;
     readonly asNewBucket: {
       readonly who: AccountId32;
-      readonly mspId: Option<H256>;
+      readonly mspId: H256;
       readonly bucketId: H256;
       readonly name: Bytes;
       readonly root: H256;
@@ -4390,7 +4390,7 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemCall extends Enum {
     readonly isCreateBucket: boolean;
     readonly asCreateBucket: {
-      readonly mspId: Option<H256>;
+      readonly mspId: H256;
       readonly name: Bytes;
       readonly private: bool;
       readonly valuePropId: Option<H256>;
@@ -4424,7 +4424,7 @@ declare module "@polkadot/types/lookup" {
       readonly location: Bytes;
       readonly fingerprint: H256;
       readonly size_: u64;
-      readonly mspId: Option<H256>;
+      readonly mspId: H256;
       readonly peerIds: Vec<Bytes>;
       readonly replicationTarget: Option<u32>;
     } & Struct;
@@ -4544,7 +4544,7 @@ declare module "@polkadot/types/lookup" {
     readonly proof: ShpFileKeyVerifierFileKeyProof;
   }
 
-  /** @name PalletFileSystemRejectedStorageRequest (349) */
+  /** @name PalletFileSystemRejectedStorageRequest (348) */
   interface PalletFileSystemRejectedStorageRequest extends Struct {
     readonly fileKey: H256;
     readonly reason: PalletFileSystemRejectedStorageRequestReason;
@@ -5748,6 +5748,7 @@ declare module "@polkadot/types/lookup" {
     readonly isRootNotUpdated: boolean;
     readonly isNoPrivacyChange: boolean;
     readonly isOperationNotAllowedForInsolventProvider: boolean;
+    readonly isOperationNotAllowedWhileBucketIsNotStoredByMsp: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5822,7 +5823,8 @@ declare module "@polkadot/types/lookup" {
       | "NoFileKeysToConfirm"
       | "RootNotUpdated"
       | "NoPrivacyChange"
-      | "OperationNotAllowedForInsolventProvider";
+      | "OperationNotAllowedForInsolventProvider"
+      | "OperationNotAllowedWhileBucketIsNotStoredByMsp";
   }
 
   /** @name PalletProofsDealerProofSubmissionRecord (463) */

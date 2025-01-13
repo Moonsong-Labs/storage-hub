@@ -63,7 +63,7 @@ export async function describeBspNet<
           launchEventEmitter.once("networkLaunched", resolve);
         });
 
-        const launchResponse = await NetworkLauncher.create("bspnet", {
+        const launchResponse = await NetworkLauncher.create("fullnet", {
           ...bspNetConfig,
           toxics: options?.toxics,
           initialised: options?.initialised

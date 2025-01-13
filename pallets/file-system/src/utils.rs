@@ -38,11 +38,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
-        FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof,
-        MaxBatchMspRespondStorageRequests, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest, ProviderIdFor,
-        RejectedStorageRequest, ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingFileDeletionRequest,
+        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
@@ -266,24 +266,22 @@ where
     /// Create a bucket for an owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
-        msp_id: Option<ProviderIdFor<T>>,
+        msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
         value_prop_id: Option<ValuePropId<T>>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // Check if the MSP is indeed an MSP.
-        if let Some(msp_id) = msp_id {
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
-                Error::<T>::NotAMsp
-            );
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
 
-            // Check if MSP is insolvent
-            ensure!(
-                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
-                Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-        }
+        // Check if MSP is insolvent
+        ensure!(
+            !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
 
         // Create collection only if bucket is private
         let maybe_collection_id = if private {
@@ -849,8 +847,7 @@ where
                 &accepted_file_keys.non_inclusion_forest_proof,
             )?;
 
-        let mut accepted_files_metadata =
-            BoundedVec::<_, MaxBatchMspRespondStorageRequests<T>>::new();
+        let mut accepted_files_metadata = Vec::new();
 
         for file_key_with_proof in accepted_file_keys.file_keys_and_proofs.iter() {
             let mut storage_request_metadata =
@@ -901,9 +898,7 @@ where
             // Get the file metadata to insert into the bucket under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
 
-            if accepted_files_metadata.try_push(file_metadata).is_err() {
-                return Err(Error::<T>::TooManyStorageRequestResponses.into());
-            }
+            accepted_files_metadata.push(file_metadata);
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
@@ -2020,6 +2015,11 @@ where
         );
 
         let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
+
+        ensure!(
+            msp_id.is_some(),
+            Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp
+        );
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
