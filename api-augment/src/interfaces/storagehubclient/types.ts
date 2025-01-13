@@ -263,7 +263,7 @@ export interface ShouldRemoveFile extends bool {}
 export interface StorageData extends u64 {}
 
 /** @name StorageDataUnit */
-export interface StorageDataUnit extends u32 {}
+export interface StorageDataUnit extends u64 {}
 
 /** @name StorageProviderId */
 export interface StorageProviderId extends Enum {

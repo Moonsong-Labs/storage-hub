@@ -46,7 +46,7 @@ export const ALL_TYPES: RegistryTypes = {
   StorageData: "u64",
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
-  StorageDataUnit: "u32",
+  StorageDataUnit: "u64",
   Multiaddresses: "Vec<Bytes>",
   ReputationWeightType: "u32",
   ValuePropId: "H256",
