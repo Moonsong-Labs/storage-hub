@@ -574,6 +574,41 @@ where
         Ok(FileStorageWriteOutcome::FileComplete)
     }
 
+    /// Check if all the chunks of a file are stored.
+    fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+        let metadata = self
+            .get_metadata(key)?
+            .ok_or(FileStorageError::FileDoesNotExist)?;
+
+        let raw_final_root = metadata.fingerprint.as_ref();
+        let final_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToParseFingerprint
+            })?;
+
+        let raw_partial_root = self
+            .storage
+            .read(ROOTS_COLUMN, final_root.as_ref())
+            .map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .expect("Failed to find partial root");
+
+        let mut partial_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToParsePartialRoot
+            })?;
+
+        let file_trie =
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
+
+        let stored_chunks = file_trie.stored_chunks_count()?;
+        Ok(metadata.chunks_count() == stored_chunks)
+    }
+
     /// Stores file metadata and an empty root.
     /// Should only be used if no chunks have beeen written yet.
     /// Otherwise use [`Self::insert_file_with_data`]

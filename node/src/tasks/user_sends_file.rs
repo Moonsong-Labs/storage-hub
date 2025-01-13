@@ -232,8 +232,15 @@ where
                         .await;
 
                     match upload_response {
-                        Ok(_) => {
+                        Ok(upload_response) => {
                             debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
+
+                            // Stop the uploading process if the provider signals to have the entire file.
+                            if upload_response.file_complete {
+                                info!(target: LOG_TARGET, "Stopping file upload process. Peer {:?} has the entire file {:?}", peer_id, file_metadata.fingerprint);
+                                return Ok(());
+                            }
+
                             break;
                         }
                         // Retry if the request was refused by the peer (MSP). This could happen if the user was too fast

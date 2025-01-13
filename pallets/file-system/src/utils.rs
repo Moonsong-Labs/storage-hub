@@ -707,15 +707,6 @@ where
     }
 
     /// Accepts or rejects batches of storage requests assumed to be grouped by bucket.
-    ///
-    /// This is using a best-effort strategy to process as many file keys as possible, returning
-    /// the ones that were accepted, rejected, or failed to be processed.
-    ///
-    /// File keys that are not part of the bucket they belong to will be skipped (failed).
-    ///
-    /// All file keys will be processed (unless there are duplicates, they are simply skipped) and any errors
-    /// while processing them will be marked as a failed key and continue processing the rest. It is up to the
-    /// caller to verify the final result and apply only the file keys that have been successfully accepted.
     pub(crate) fn do_msp_respond_storage_request(
         sender: T::AccountId,
         storage_request_msp_response: StorageRequestMspResponse<T>,
@@ -815,7 +806,8 @@ where
     /// 1. Verify the non-inclusion proof.
     /// 2. For each file key: Verify and process the acceptance. If any operation fails during the processing of a file key,
     /// the entire function will fail and no changes will be applied.
-    /// 3. If all file keys are successfully processed, apply the delta with all the accepted keys to the root of the bucket.
+    /// 3. If all file keys are successfully processed, apply the delta with all the accepted keys to the root of the bucket which are part of the set of
+    /// non-inclusion file keys (since it is possible that the file key was already stored by the MSP).
     /// 4. If any step fails, the function will return an error and no changes will be made to the storage state.
     fn do_msp_accept_storage_request(
         msp_id: ProviderIdFor<T>,
@@ -903,7 +895,7 @@ where
             // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
             // This can happen if the storage request was issued again by the user and the MSP has already stored the file.
             if !proven_keys.contains(&file_key_with_proof.file_key) {
-                accepted_files_metadata.push(file_metadata);
+                accepted_files_metadata.push((file_metadata, file_key_with_proof));
 
                 // Check that the key proof is valid.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
@@ -931,7 +923,7 @@ where
                 );
             }
 
-            // Notify that the storage request has been accepted by an MSP.
+            // Notify that the storage request has been accepted by the MSP.
             Self::deposit_event(Event::MspAcceptedStorageRequest {
                 file_key: file_key_with_proof.file_key,
             });
@@ -981,6 +973,11 @@ where
             }
         }
 
+        // If there are no mutations to apply, return the current root of the bucket.
+        if accepted_files_metadata.is_empty() {
+            return Ok(bucket_root);
+        }
+
         // Get the current root of the bucket where the file will be stored.
         let bucket_root = expect_or_err!(
             <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id),
@@ -994,7 +991,6 @@ where
                 &bucket_root,
                 accepted_files_metadata
                     .iter()
-                    .zip(accepted_file_keys.file_keys_and_proofs)
                     .map(|(file_metadata, file_key_with_proof)| {
                         (
                             file_key_with_proof.file_key,

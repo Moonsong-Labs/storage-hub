@@ -140,111 +140,23 @@ where
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
-        let proven = match event
-            .file_key_proof
-            .proven::<StorageProofsMerkleTrieLayout>()
-        {
-            Ok(proven) => {
-                if proven.len() != 1 {
-                    Err(anyhow::anyhow!(
-                        "Expected exactly one proven chunk but got {}.",
-                        proven.len()
-                    ))
-                } else {
-                    Ok(proven[0].clone())
-                }
-            }
-            Err(e) => Err(anyhow::anyhow!(
-                "Failed to verify and get proven file key chunks: {:?}",
-                e
-            )),
-        };
-
-        let proven = match proven {
-            Ok(proven) => proven,
+        let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
+            Ok(complete) => complete,
             Err(e) => {
-                warn!(target: LOG_TARGET, "{}", e);
-
-                // Unvolunteer the file.
-                self.unvolunteer_file(event.file_key.into()).await;
+                // Send error response before propagating error
+                let _ = event.file_complete_channel.send(false).await;
                 return Err(e);
             }
         };
 
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        let write_chunk_result =
-            write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
-        // Release the file storage write lock as soon as possible.
-        drop(write_file_storage);
+        // Send completion status to user
+        if let Err(e) = event.file_complete_channel.send(file_complete).await {
+            error!(target: LOG_TARGET, "Failed to send response to channel: {:?}", e);
+        }
 
-        match write_chunk_result {
-            Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => {
-                    self.on_file_complete(&event.file_key.into()).await?
-                }
-                FileStorageWriteOutcome::FileIncomplete => {}
-            },
-            Err(error) => match error {
-                FileStorageWriteError::FileChunkAlreadyExists => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Received duplicate chunk with key: {:?}",
-                        proven.key
-                    );
-
-                    // TODO: Consider informing this to the file transfer service so that it can handle reputation for this peer id.
-                }
-                FileStorageWriteError::FileDoesNotExist => {
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
-                }
-                FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk
-                | FileStorageWriteError::FailedToDeleteChunk
-                | FileStorageWriteError::FailedToPersistChanges
-                | FileStorageWriteError::FailedToParseFileMetadata
-                | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage
-                | FileStorageWriteError::FailedToUpdatePartialRoot
-                | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
-                    // This internal error should not happen.
-
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "Internal trie read/write error {:?}:{:?}",
-                        event.file_key, proven.key
-                    )));
-                }
-                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                    // This should never happen, given that the first check in the handler is verifying the proof.
-                    // This means that something is seriously wrong, so we error out the whole task.
-
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                        event.file_key
-                    )));
-                }
-                FileStorageWriteError::FailedToConstructTrieIter => {
-                    // This should never happen for a well constructed trie.
-                    // This means that something is seriously wrong, so we error out the whole task.
-
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "This is a bug! Failed to construct trie iter for key {:?}.",
-                        event.file_key
-                    )));
-                }
-            },
+        // Handle file completion if the entire file is uploaded or is already being stored.
+        if file_complete {
+            self.on_file_complete(&event.file_key.into()).await?;
         }
 
         Ok(())
@@ -822,6 +734,131 @@ where
         }
 
         Ok(())
+    }
+
+    /// Handles the [`RemoteUploadRequest`] event.
+    ///
+    /// Returns `true` if the file is complete, `false` if the file is incomplete.
+    async fn handle_remote_upload_request_event(
+        &mut self,
+        event: RemoteUploadRequest,
+    ) -> anyhow::Result<bool> {
+        // Check if file is already complete
+        if self
+            .storage_hub_handler
+            .file_storage
+            .read()
+            .await
+            .is_file_complete(&event.file_key.into())
+            .unwrap_or(false)
+        {
+            return Ok(true);
+        }
+
+        let proven = match event
+            .file_key_proof
+            .proven::<StorageProofsMerkleTrieLayout>()
+        {
+            Ok(proven) => {
+                if proven.len() != 1 {
+                    Err(anyhow::anyhow!(
+                        "Expected exactly one proven chunk but got {}.",
+                        proven.len()
+                    ))
+                } else {
+                    Ok(proven[0].clone())
+                }
+            }
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to verify and get proven file key chunks: {:?}",
+                e
+            )),
+        };
+
+        let proven = match proven {
+            Ok(proven) => proven,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "{}", e);
+                // Unvolunteer the file.
+                self.unvolunteer_file(event.file_key.into()).await;
+                return Err(e);
+            }
+        };
+
+        let write_result = {
+            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+            let result =
+                write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
+            drop(write_file_storage);
+            result
+        };
+
+        match write_result {
+            Ok(outcome) => match outcome {
+                FileStorageWriteOutcome::FileComplete => Ok(true),
+                FileStorageWriteOutcome::FileIncomplete => Ok(false),
+            },
+            Err(error) => match error {
+                FileStorageWriteError::FileChunkAlreadyExists => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Received duplicate chunk with key: {:?}",
+                        proven.key
+                    );
+                    Ok(false)
+                }
+                FileStorageWriteError::FileDoesNotExist => {
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                        event.file_key
+                    )))
+                }
+                FileStorageWriteError::FailedToGetFileChunk
+                | FileStorageWriteError::FailedToInsertFileChunk
+                | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToPersistChanges
+                | FileStorageWriteError::FailedToParseFileMetadata
+                | FileStorageWriteError::FailedToParseFingerprint
+                | FileStorageWriteError::FailedToReadStorage
+                | FileStorageWriteError::FailedToUpdatePartialRoot
+                | FileStorageWriteError::FailedToParsePartialRoot
+                | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                    // This internal error should not happen.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "Internal trie read/write error {:?}:{:?}",
+                        event.file_key, proven.key
+                    )))
+                }
+                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
+                    // This should never happen, given that the first check in the handler is verifying the proof.
+                    // This means that something is seriously wrong, so we error out the whole task.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                        event.file_key
+                    )))
+                }
+                FileStorageWriteError::FailedToConstructTrieIter => {
+                    // This should never happen for a well constructed trie.
+                    // This means that something is seriously wrong, so we error out the whole task.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "This is a bug! Failed to construct trie iter for key {:?}.",
+                        event.file_key
+                    )))
+                }
+            },
+        }
     }
 
     /// Calculate the new capacity after adding the required capacity for the file.

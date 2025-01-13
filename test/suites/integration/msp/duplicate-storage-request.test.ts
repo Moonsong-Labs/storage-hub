@@ -2,7 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
-  "Single MSP rejecting storage request",
+  "Single MSP accepting subsequent storage request for same file key",
   { initialised: true },
   ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
@@ -24,7 +24,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("MSP rejects storage request since it is already being stored", async () => {
+    it("MSP accepts subsequent storage request for the same file key", async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const initialised = await getLaunchResponse();
@@ -76,16 +76,18 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.sealBlock();
 
-      const { event: storageRequestRejectedEvent } = await userApi.assert.eventPresent(
+      const { event: storageRequestAccepted } = await userApi.assert.eventPresent(
         "fileSystem",
-        "StorageRequestRejected"
+        "MspAcceptedStorageRequest"
       );
 
-      const storageRequestRejectedDataBlob =
-        userApi.events.fileSystem.StorageRequestRejected.is(storageRequestRejectedEvent) &&
-        storageRequestRejectedEvent.data;
+      const storageRequestAcceptedDataBlob =
+        userApi.events.fileSystem.MspAcceptedStorageRequest.is(storageRequestAccepted) &&
+        storageRequestAccepted.data;
 
-      assert(storageRequestRejectedDataBlob, "Event doesn't match Type");
+      if (!storageRequestAcceptedDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
 
       // Allow time for the MSP to update the local forest root
       await sleep(3000);

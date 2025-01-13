@@ -137,6 +137,9 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError>;
 
+    /// Check if a file is completely stored.
+    fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError>;
+
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
     /// This method does not require the actual data, file [`Chunk`]s being inserted separately.

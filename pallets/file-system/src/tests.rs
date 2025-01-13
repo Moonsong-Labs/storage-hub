@@ -4083,69 +4083,6 @@ mod msp_respond_storage_request {
                 );
             });
         }
-
-        #[test]
-        fn fails_if_the_non_inclusion_proof_includes_the_file_key() {
-            new_test_ext().execute_with(|| {
-                let owner_account_id = Keyring::Alice.to_account_id();
-                let msp = Keyring::Charlie.to_account_id();
-                let msp_signed = RuntimeOrigin::signed(msp.clone());
-                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
-                let fingerprint = H256::zero();
-                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
-
-                // Dispatch a storage request.
-                assert_ok!(FileSystem::issue_storage_request(
-                    RuntimeOrigin::signed(owner_account_id.clone()),
-                    bucket_id,
-                    location.clone(),
-                    fingerprint,
-                    size,
-                    msp_id,
-                    peer_ids.clone(),
-                    None
-                ));
-
-                let file_key = FileSystem::compute_file_key(
-                    owner_account_id.clone(),
-                    bucket_id,
-                    location.clone(),
-                    size,
-                    fingerprint,
-                );
-
-                // Try to accept storing a file with a non-inclusion proof that includes the file key
-                assert_noop!(
-                    FileSystem::msp_respond_storage_requests_multiple_buckets(
-                        msp_signed.clone(),
-                        vec![StorageRequestMspBucketResponse {
-                            bucket_id,
-                            accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
-                                    file_key,
-                                    proof: CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                }],
-                                non_inclusion_forest_proof: CompactProof {
-                                    encoded_nodes: vec![file_key.as_ref().to_vec()],
-                                },
-                            }),
-                            reject: vec![],
-                        }],
-                    ),
-                    Error::<Test>::ExpectedNonInclusionProof
-                );
-            });
-        }
     }
 }
 

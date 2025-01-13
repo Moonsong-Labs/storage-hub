@@ -8,6 +8,9 @@ pub struct RemoteUploadRequest {
     pub file_key: FileKey,
     pub file_key_proof: FileKeyProof,
     pub bucket_id: Option<BucketId>,
+    /// A channel to notify the user that the file is stored completely
+    /// and there is no need to continue uploading chunks.
+    pub file_complete_channel: tokio::sync::mpsc::Sender<bool>,
 }
 
 impl EventBusMessage for RemoteUploadRequest {}

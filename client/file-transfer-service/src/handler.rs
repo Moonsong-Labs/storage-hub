@@ -429,7 +429,8 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
                     } = request;
 
                     self.actor
-                        .handle_request(peer.into(), payload, pending_response);
+                        .handle_request(peer.into(), payload, pending_response)
+                        .await;
                 }
                 Some(MergedEventLoopMessage::Tick) => {
                     // Handle expired buckets
@@ -466,7 +467,7 @@ impl FileTransferService {
         }
     }
 
-    fn handle_request(
+    async fn handle_request(
         &mut self,
         peer: PeerId,
         payload: Vec<u8>,
@@ -524,6 +525,9 @@ impl FileTransferService {
                 };
 
                 if self.is_allowed(peer, file_key, bucket_id) {
+                    // Create a new channel for getting the result
+                    let (tx, mut rx) = tokio::sync::mpsc::channel::<bool>(1);
+
                     // Emit the event to the event bus, letting the upper layers know about the
                     // upload request.
                     self.emit(RemoteUploadRequest {
@@ -531,11 +535,28 @@ impl FileTransferService {
                         file_key,
                         file_key_proof,
                         bucket_id,
+                        file_complete_channel: tx,
                     });
+
+                    // Wait for result of whether the entire file is already stored by the provider.
+                    let file_complete = match rx.recv().await {
+                        Some(success) => success,
+                        None => {
+                            error!(
+                                target: LOG_TARGET,
+                                "Failed to receive upload request result from upper layers"
+                            );
+                            self.handle_bad_request(pending_response);
+                            return;
+                        }
+                    };
 
                     let response =
                         schema::v1::provider::response::Response::RemoteUploadDataResponse(
-                            schema::v1::provider::RemoteUploadDataResponse { success: true },
+                            schema::v1::provider::RemoteUploadDataResponse {
+                                success: true,
+                                file_complete,
+                            },
                         );
 
                     // Serialize the response
