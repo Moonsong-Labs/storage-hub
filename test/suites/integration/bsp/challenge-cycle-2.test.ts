@@ -44,13 +44,13 @@ describeBspNet(
 
       // Advance blocksToAdvance blocks.
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for task to execute and seal one more block.
       // In this block, the BSP should have submitted a proof.
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -77,10 +77,10 @@ describeBspNet(
 
       // Send transaction to increase capacity
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.providers.changeCapacity(newCapacity),
-        bspKey
-      );
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+        signer: bspKey
+      });
       strictEqual(extSuccess, true, "Change capacity transaction should succeed");
 
       // Assert the capacity change event was emitted
@@ -135,12 +135,12 @@ describeBspNet(
 
       // Advance blocks until next challenge tick
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for BSP to submit proof and seal one more block
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Verify proof was submitted successfully
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -189,10 +189,10 @@ describeBspNet(
 
       // Send transaction to decrease capacity
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.providers.changeCapacity(newCapacity),
-        bspKey
-      );
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+        signer: bspKey
+      });
       strictEqual(extSuccess, true, "Change capacity transaction should succeed");
 
       // Assert the capacity change event was emitted
@@ -232,12 +232,12 @@ describeBspNet(
 
       // Advance blocks until next challenge tick
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for BSP to submit proof and seal one more block
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Verify proof was submitted successfully
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -293,12 +293,12 @@ describeBspNet(
 
       // Advance blocks until next challenge tick
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for BSP to submit proof and seal one more block
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Verify proof was submitted successfully
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");

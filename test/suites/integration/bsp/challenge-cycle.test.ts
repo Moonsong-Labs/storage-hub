@@ -45,13 +45,13 @@ describeBspNet(
 
       // Advance blocksToAdvance blocks.
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for task to execute and seal one more block.
       // In this block, the BSP should have submitted a proof.
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -87,7 +87,7 @@ describeBspNet(
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const blocksToAdvance = nextDeadlineTick - currentBlockNumber;
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Check for event of slashable BSP.
