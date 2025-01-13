@@ -1465,7 +1465,7 @@ export default {
     _enum: {
       NewBucket: {
         who: "AccountId32",
-        mspId: "Option<H256>",
+        mspId: "H256",
         bucketId: "H256",
         name: "Bytes",
         root: "H256",
@@ -3478,7 +3478,7 @@ export default {
   PalletFileSystemCall: {
     _enum: {
       create_bucket: {
-        mspId: "Option<H256>",
+        mspId: "H256",
         name: "Bytes",
         private: "bool",
         valuePropId: "Option<H256>"
@@ -3509,7 +3509,7 @@ export default {
         location: "Bytes",
         fingerprint: "H256",
         size_: "u64",
-        mspId: "Option<H256>",
+        mspId: "H256",
         peerIds: "Vec<Bytes>",
         replicationTarget: "Option<u32>"
       },
@@ -4556,7 +4556,8 @@ export default {
       "NoFileKeysToConfirm",
       "RootNotUpdated",
       "NoPrivacyChange",
-      "OperationNotAllowedForInsolventProvider"
+      "OperationNotAllowedForInsolventProvider",
+      "OperationNotAllowedWhileBucketIsNotStoredByMsp"
     ]
   },
   /**

@@ -1653,7 +1653,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
-        provider_id: Option<Self::ProviderId>,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -1672,25 +1672,21 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
-        if let Some(provider_id) = provider_id {
-            // Check if the MSP exists
+        // Check if the MSP exists
+        ensure!(
+            MainStorageProviders::<T>::contains_key(&provider_id),
+            Error::<T>::NotRegistered
+        );
+
+        if let Some(value_prop_id) = value_prop_id {
+            let value_prop =
+                MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
             ensure!(
-                MainStorageProviders::<T>::contains_key(&provider_id),
-                Error::<T>::NotRegistered
+                value_prop.available,
+                Error::<T>::ValuePropositionNotAvailable
             );
-
-            if let Some(value_prop_id) = value_prop_id {
-                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                    &provider_id,
-                    &value_prop_id,
-                )
-                .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
-                ensure!(
-                    value_prop.available,
-                    Error::<T>::ValuePropositionNotAvailable
-                );
-            }
         }
 
         let deposit = T::BucketDeposit::get();
@@ -1705,7 +1701,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
-            msp_id: provider_id,
+            msp_id: Some(provider_id),
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id: user_id.clone(),
@@ -1715,16 +1711,14 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        if let Some(provider_id) = provider_id {
-            MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+        MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
-            Self::apply_delta_fixed_rate_payment_stream(
-                &provider_id,
-                &bucket_id,
-                &user_id,
-                RateDeltaParam::NewBucket,
-            )?;
-        }
+        Self::apply_delta_fixed_rate_payment_stream(
+            &provider_id,
+            &bucket_id,
+            &user_id,
+            RateDeltaParam::NewBucket,
+        )?;
 
         Ok(())
     }
