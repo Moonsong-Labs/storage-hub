@@ -33,15 +33,17 @@ describeBspNet(
 
     it("BSP correctly charges multiple payment streams", async () => {
       // Create a new payment stream between Bob and the DUMMY_BSP_ID
-      const createBobPaymentStreamResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.createDynamicRatePaymentStream(
-            ShConsts.DUMMY_BSP_ID,
-            bob.address,
-            1024 * 1024 // 1 MB
+      const createBobPaymentStreamResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.paymentStreams.createDynamicRatePaymentStream(
+              ShConsts.DUMMY_BSP_ID,
+              bob.address,
+              1024 * 1024 // 1 MB
+            )
           )
-        )
-      );
+        ]
+      });
       const { extSuccess } = createBobPaymentStreamResult;
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
@@ -56,7 +58,7 @@ describeBspNet(
       assert(paymentStreamExistsResult.length === 2);
 
       // Seal one more block.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Check if both the user and Bob owes the provider.
       let usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
@@ -69,7 +71,7 @@ describeBspNet(
       assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Calculate the next challenge tick for the BSPs. It should be the same for all BSPs,
       // since they all have the same file they were initialised with, and responded to it at
@@ -112,7 +114,7 @@ describeBspNet(
       assert(providersWithProofs.isEmpty, "No Providers should have submitted a valid proof yet");
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -139,7 +141,7 @@ describeBspNet(
       assert(lastChargeableInfo.priceIndex.toNumber() === 0);
 
       // Seal one more block to update the last chargeable info of the Provider
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the last chargeable info of the Providers being updated
       const lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
@@ -196,7 +198,7 @@ describeBspNet(
       });
 
       // Seal a block to allow BSPs to charge the payment stream
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert that event for the BSP charging its users with payment streams was emitted
       await userApi.assert.eventPresent("paymentStreams", "UsersCharged");
@@ -219,11 +221,13 @@ describeBspNet(
     it("Correctly updates payment stream on-chain to make user insolvent", async () => {
       // Reduce the free balance of the user to make it insolvent
       const initialFreeBalance = (await userApi.query.system.account(userAddress)).data.free;
-      const reduceFreeBalanceResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.balances.forceSetBalance(userAddress, initialFreeBalance.divn(10))
-        )
-      );
+      const reduceFreeBalanceResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.balances.forceSetBalance(userAddress, initialFreeBalance.divn(10))
+          )
+        ]
+      });
       const changeBalanceSuccess = reduceFreeBalanceResult.extSuccess;
       strictEqual(changeBalanceSuccess, true, "Extrinsic should be successful");
 
@@ -290,7 +294,7 @@ describeBspNet(
       );
 
       // Seal one more block.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Check if the user owes the provider.
       const usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
@@ -303,7 +307,7 @@ describeBspNet(
       assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Get the current price of storage from the runtime, the new stream deposit and the ED
       const currentPriceOfStorage =
@@ -326,15 +330,17 @@ describeBspNet(
         .div(currentPriceOfStorage.mul(newStreamDeposit));
 
       // Make the user insolvent by updating the payment stream with a very high amount
-      const updateDynamicRatePaymentStreamResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.updateDynamicRatePaymentStream(
-            ShConsts.DUMMY_BSP_ID,
-            userAddress,
-            newAmountProvidedForInsolvency
+      const updateDynamicRatePaymentStreamResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.paymentStreams.updateDynamicRatePaymentStream(
+              ShConsts.DUMMY_BSP_ID,
+              userAddress,
+              newAmountProvidedForInsolvency
+            )
           )
-        )
-      );
+        ]
+      });
       const { extSuccess } = updateDynamicRatePaymentStreamResult;
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
@@ -385,7 +391,7 @@ describeBspNet(
 
       // Advance blocksToAdvance blocks.
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       await userApi.assert.extrinsicPresent({
@@ -403,7 +409,7 @@ describeBspNet(
       assert(providersWithProofs.isEmpty, "No Providers should have submitted a valid proof yet");
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -432,7 +438,7 @@ describeBspNet(
       );
 
       // Seal one more block to update the last chargeable info of the Provider
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the last chargeable info of the Providers being updated
       const lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
@@ -485,7 +491,7 @@ describeBspNet(
       });
 
       // Seal a block to allow BSPs to charge the payment stream
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
@@ -540,7 +546,7 @@ describeBspNet(
 
       // Advance blocksToAdvance blocks
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       await userApi.assert.extrinsicPresent({
@@ -558,7 +564,7 @@ describeBspNet(
       assert(providersWithProofs.isEmpty, "No Providers should have submitted a valid proof yet");
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -587,7 +593,7 @@ describeBspNet(
       );
 
       // Seal one more block to update the last chargeable info of the Provider
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the last chargeable info of the Providers being updated
       const lastChargeableInfoUpdatedEvents = await userApi.assert.eventMany(
@@ -611,7 +617,7 @@ describeBspNet(
       });
 
       // Seal a block to allow BSPs to charge the payment stream
-      const blockResult = await userApi.sealBlock();
+      const blockResult = await userApi.block.seal();
 
       // Assert that event for the BSP charging its payment stream was emitted
       await userApi.assert.eventPresent("paymentStreams", "PaymentStreamCharged");
@@ -642,7 +648,7 @@ describeBspNet(
         const blocksToAdvance = nextChallengeTick - currentBlockNumber;
         // Advance blocksToAdvance blocks
         for (let i = 0; i < blocksToAdvance; i++) {
-          await userApi.sealBlock();
+          await userApi.block.seal();
         }
 
         await userApi.assert.extrinsicPresent({
@@ -653,10 +659,10 @@ describeBspNet(
         });
 
         // Seal one more block with the pending extrinsics.
-        await userApi.sealBlock();
+        await userApi.block.seal();
 
         // Seal another block so the last chargeable info of the providers is updated
-        await userApi.sealBlock();
+        await userApi.block.seal();
 
         // Check that the three Providers have tried to charge the user
         // since the user has a payment stream with each of them
@@ -668,7 +674,7 @@ describeBspNet(
         });
 
         // Seal a block to allow BSPs to charge the payment stream
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Assert that the user without funds event was emitted
@@ -755,7 +761,7 @@ describeBspNet(
         }
 
         // Seal a block with the `stopStoringForInsolventUser` extrinsics.
-        await userApi.sealBlock();
+        await userApi.block.seal();
 
         // Assert that event for the BSP deleting the files of the user was emitted
         const spStopStoringForInsolventUserEvents = await userApi.assert.eventMany(

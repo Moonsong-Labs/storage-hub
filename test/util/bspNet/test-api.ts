@@ -1,16 +1,13 @@
 import "@storagehub/api-augment"; // must be first import
 
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
-import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
 import * as BspNetBlock from "./block";
-import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
@@ -108,24 +105,6 @@ export class BspNetTestApi implements AsyncDisposable {
 
   private async disconnect() {
     await this._api.disconnect();
-  }
-
-  /**
-   * Seals a block with optional extrinsics and finalizes it.
-   *
-   * @param calls - Optional extrinsic(s) to include in the block.
-   * @param signer - Optional signer for the extrinsics.
-   * @param finaliseBlock - Whether to finalize the block. Defaults to true.
-   * @returns A Promise resolving to a SealedBlock object.
-   */
-  private async sealBlock(
-    calls?:
-      | SubmittableExtrinsic<"promise", ISubmittableResult>
-      | SubmittableExtrinsic<"promise", ISubmittableResult>[],
-    signer?: KeyringPair,
-    finaliseBlock = true
-  ) {
-    return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
   private async createBucketAndSendNewStorageRequest(
@@ -544,11 +523,6 @@ export class BspNetTestApi implements AsyncDisposable {
     };
 
     return Object.assign(this._api, {
-      /**
-       * Soon Deprecated. Use api.block.seal() instead.
-       * @see {@link sealBlock}
-       */
-      sealBlock: this.sealBlock.bind(this),
       /**
        * Soon Deprecated. Use api.file.newStorageRequest() instead.
        * @see {@link createBucketAndSendNewStorageRequest}

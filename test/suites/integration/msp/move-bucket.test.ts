@@ -61,9 +61,9 @@ describeMspNet(
 
     it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))
-      );
+      await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))]
+      });
 
       await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
@@ -125,7 +125,7 @@ describeMspNet(
           )
         );
       }
-      await userApi.sealBlock(txs, shUser);
+      await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
     it("MSP 1 receives files from user and accepts them", async () => {
@@ -170,7 +170,7 @@ describeMspNet(
       // also prioritise a fast response, so if the Forest Write Lock is available, it will send
       // the first response it can immediately.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Give time for the MSP to update the local forest root.
       // TODO: Ideally, this should be turned into a polling helper function.
@@ -214,7 +214,7 @@ describeMspNet(
       // An additional block needs to be sealed to accept the rest of the files.
       // There should be a pending transaction to accept the rest of the files.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Give time for the MSP to update the local forest root.
       // TODO: Ideally, this should be turned into a polling helper function.
@@ -264,17 +264,17 @@ describeMspNet(
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
       for (let i = 0; i < 5; i++) {
         await sleep(500);
-        const block = await userApi.sealBlock();
+        const block = await userApi.block.seal();
 
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
     });
 
     it("User moves bucket to second MSP", async () => {
-      const requestMoveBucketResult = await userApi.sealBlock(
-        userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2),
-        shUser
-      );
+      const requestMoveBucketResult = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        signer: shUser
+      });
 
       assertEventPresent(
         userApi,
@@ -288,7 +288,7 @@ describeMspNet(
         method: "mspRespondMoveBucketRequest"
       });
 
-      const { events } = await userApi.sealBlock();
+      const { events } = await userApi.block.seal();
 
       assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
 
