@@ -1329,7 +1329,7 @@ where
                 // Remove the storage request from the expiration queue.
                 let expiration_block = storage_request_metadata.expires_at;
                 <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
-                    expiration_items.retain(|item| item != &file_key.0);
+                    expiration_items.retain(|item| item != &file_key);
                 });
 
                 // Remove storage request metadata.
@@ -2403,13 +2403,10 @@ mod hooks {
             BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
         },
         weights::WeightInfo,
-        Event, MaxReplicationTarget, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
-        StorageRequestExpirations, StorageRequests,
-        BucketsWithStorageRequests, FileDeletionRequestExpirations, HoldReason,
-         MoveBucketRequestExpirations,
-        PendingBucketsToMove,
-        ,
+        BucketsWithStorageRequests, Event, FileDeletionRequestExpirations, HoldReason,
+        MaxReplicationTarget, MoveBucketRequestExpirations, NextStartingBlockToCleanUp, Pallet,
+        PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use frame_system::pallet_prelude::BlockNumberFor;

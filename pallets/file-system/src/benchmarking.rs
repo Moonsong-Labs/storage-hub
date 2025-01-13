@@ -47,7 +47,7 @@ mod benchmarks {
     };
     use sp_core::{Decode, Hasher};
     use sp_runtime::{
-        traits::{Hash, One, Zero},
+        traits::{Bounded, Hash, One, Zero},
         Saturating,
     };
     use sp_std::{vec, vec::Vec};
@@ -648,6 +648,7 @@ mod benchmarks {
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+					expires_at: BlockNumberFor::<T>::max_value(),
                     owner: user_account.clone(),
                     bucket_id,
                     location: location.clone(),
@@ -721,6 +722,7 @@ mod benchmarks {
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+					expires_at: BlockNumberFor::<T>::max_value(),
                     owner: user_account.clone(),
                     bucket_id,
                     location: location.clone().try_into().unwrap(),
@@ -1024,6 +1026,7 @@ mod benchmarks {
             let storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+				expires_at: BlockNumberFor::<T>::max_value(),
 				owner: user_account.clone(),
 				bucket_id,
 				location: location.clone().try_into().unwrap(),

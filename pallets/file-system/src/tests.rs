@@ -5935,12 +5935,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
