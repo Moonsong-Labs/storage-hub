@@ -12,13 +12,15 @@ import type {
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
-  readonly capacity: StorageData;
-  readonly data_used: StorageData;
+  readonly capacity: StorageDataUnit;
+  readonly capacity_used: StorageDataUnit;
   readonly multiaddresses: Multiaddresses;
   readonly root: MerklePatriciaRoot;
   readonly last_capacity_change: BlockNumber;
   readonly owner_account: AccountId;
   readonly payment_account: AccountId;
+  readonly reputation_weight: ReputationWeightType;
+  readonly sign_up_block: BlockNumber;
 }
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
@@ -208,6 +210,8 @@ export interface QueryStorageProviderCapacityError extends Enum {
 }
 /** @name RandomnessOutput */
 export interface RandomnessOutput extends H256 {}
+/** @name ReputationWeightType */
+export interface ReputationWeightType extends u32 {}
 /** @name SaveFileToDisk */
 export interface SaveFileToDisk extends Enum {
   readonly isFileNotFound: boolean;

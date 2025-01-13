@@ -49,6 +49,7 @@ export const ALL_TYPES: RegistryTypes = {
   StorageDataUnit: "u32",
   Multiaddress: "BoundedVec<u8, 100>",
   Multiaddresses: "BoundedVec<Multiaddress, 5>",
+  ReputationWeightType: "u32",
   ValuePropId: "H256",
   ValueProposition: {
     price_per_giga_unit_of_data_per_block: "u64",
@@ -59,13 +60,15 @@ export const ALL_TYPES: RegistryTypes = {
     value_prop: "ValueProposition"
   },
   BackupStorageProvider: {
-    capacity: "StorageData",
-    data_used: "StorageData",
+    capacity: "StorageDataUnit",
+    capacity_used: "StorageDataUnit",
     multiaddresses: "Multiaddresses",
     root: "MerklePatriciaRoot",
     last_capacity_change: "BlockNumber",
     owner_account: "AccountId",
-    payment_account: "AccountId"
+    payment_account: "AccountId",
+    reputation_weight: "ReputationWeightType",
+    sign_up_block: "BlockNumber"
   },
   StorageProviderId: {
     _enum: {

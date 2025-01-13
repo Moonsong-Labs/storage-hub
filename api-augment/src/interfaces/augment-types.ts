@@ -1292,6 +1292,7 @@ import type {
   QueryProviderMultiaddressesError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
+  ReputationWeightType,
   SaveFileToDisk,
   ShouldRemoveFile,
   StorageDataUnit,
@@ -2171,6 +2172,7 @@ declare module "@polkadot/types/types/registry" {
     ReportedRoundStates: ReportedRoundStates;
     Reporter: Reporter;
     ReportIdOf: ReportIdOf;
+    ReputationWeightType: ReputationWeightType;
     ReserveData: ReserveData;
     ReserveIdentifier: ReserveIdentifier;
     Response: Response;
