@@ -475,22 +475,36 @@ export class BspNetTestApi implements AsyncDisposable {
        */
       finaliseBlock: (hasshToFinalise: string) =>
         BspNetBlock.finaliseBlock(this._api, hasshToFinalise),
+
       /**
-       * Causes a chain re-org by creating a finalised block on top of the last finalised block.
-       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * Performs a chain reorganisation by creating a finalised block on top of the parent block.
        *
-       * IMPORTANT! Finality is not a network-wide synced state. Each node will have its
-       * own finalised head, as far as it knows. So for this reorg to happen in all nodes,
-       * all nodes must be made aware of the new finalised head.
+       * This function is used to simulate network forks and test the system's ability to handle
+       * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+       * in face of potential consensus issues.
        *
-       * @returns A promise that resolves when the chain re-org is complete.
+       * @throws Will throw an error if the head block is already finalised.
+       * @returns A Promise that resolves when the chain reorganization is complete.
        */
       reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
       /**
-       * Causes a chain re-org by creating a longer forked chain.
-       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * Performs a chain reorganisation by creating a longer forked chain.
+       * If no parent starting block is provided, the chain will start the fork from the last
+       * finalised block.
+       *
+       * !!! WARNING !!!
+       * The number of blocks this function can create for the alternative fork is limited by the
+       * "unincluded segment capacity" parameter, set in the `ConsensusHook` config type of the
+       * `cumulus-pallet-parachain-system`. If you try to build more blocks than this limit to
+       * achieve the reorg, the node will panic when building the block.
+       *
+       * This function is used to simulate network forks and test the system's ability to handle
+       * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+       * in face of potential consensus issues.
        *
        * @param startingBlockHash - Optional. The hash of the block to start the fork from.
+       * @throws Will throw an error if the last finalised block is greater than the starting block
+       *         or if the starting block is the same or higher than the current block.
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithLongerChain: (startingBlockHash?: string) =>
