@@ -152,17 +152,37 @@ export const sealBlock = async (
     };
 
     // Print any errors in the extrinsics to console for easier debugging
-    for (const { event } of allEvents.filter(
+    for (const { event, phase } of allEvents.filter(
       ({ event }) => api.events.system.ExtrinsicFailed.is(event) && event.data
     )) {
       const errorEventDataBlob = api.events.system.ExtrinsicFailed.is(event) && event.data;
       assert(errorEventDataBlob, "Must have errorEventDataBlob since array is filtered for it");
+
+      console.log(`Transaction failed in block ${blockHash.toString()}`);
+
+      // Get the index of the extrinsic that failed in the block
+      const extIndex = phase.isApplyExtrinsic ? phase.asApplyExtrinsic.toNumber() : -1;
+
+      if (extIndex >= 0) {
+        // Retrieve the extrinsic causing the error
+        const failedExtrinsic = results.blockData?.block.extrinsics[extIndex];
+
+        if (failedExtrinsic) {
+          const { method, section } = failedExtrinsic.method;
+          const args = failedExtrinsic.method.args.map((arg) => arg.toHuman());
+
+          console.log(`Failed Extrinsic: ${section}.${method} with args ${JSON.stringify(args)}`);
+        }
+      }
+
       if (errorEventDataBlob.dispatchError.isModule) {
         const decoded = api.registry.findMetaError(errorEventDataBlob.dispatchError.asModule);
         const { docs, method, section } = decoded;
-        console.log(`${section}.${method}: ${docs.join(" ")}`);
+        console.log(`Error: ${section}.${method}: ${docs.join(" ")}`);
       } else {
-        console.log(errorEventDataBlob.dispatchError.toString());
+        console.log(
+          `Unable to link error to module, printing raw error message: ${errorEventDataBlob.dispatchError.toString()}`
+        );
       }
     }
 
