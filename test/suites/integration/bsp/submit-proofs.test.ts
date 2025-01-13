@@ -177,19 +177,21 @@ describeBspNet(
         [fileMetadata.fileKey]
       );
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
-      const blockResult = await userApi.sealBlock(
-        bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-          fileMetadata.fileKey,
-          fileMetadata.bucketId,
-          fileMetadata.location,
-          fileMetadata.owner,
-          fileMetadata.fingerprint,
-          fileMetadata.fileSize,
-          false,
-          inclusionForestProof.toString()
-        ),
-        bspThreeKey
-      );
+      const blockResult = await userApi.block.seal({
+        calls: [
+          bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+            fileMetadata.fileKey,
+            fileMetadata.bucketId,
+            fileMetadata.location,
+            fileMetadata.owner,
+            fileMetadata.fingerprint,
+            fileMetadata.fileSize,
+            false,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspThreeKey
+      });
       assert(blockResult.extSuccess, "Extrinsic was part of the block so its result should exist.");
       assert(
         blockResult.extSuccess === true,
@@ -214,13 +216,15 @@ describeBspNet(
         currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
       // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-      await userApi.sealBlock(
-        bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-          fileMetadata.fileKey,
-          inclusionForestProof.toString()
-        ),
-        bspThreeKey
-      );
+      await userApi.block.seal({
+        calls: [
+          bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
+            fileMetadata.fileKey,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspThreeKey
+      });
       // Check for the confirm stopped storing event.
       const confirmStopStoringEvent = await userApi.assert.eventPresent(
         "fileSystem",
@@ -459,17 +463,19 @@ describeBspNet(
       );
 
       // User sends file deletion request.
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.deleteFile(
-          oneBspfileMetadata.bucketId,
-          oneBspfileMetadata.fileKey,
-          oneBspfileMetadata.location,
-          oneBspfileMetadata.fileSize,
-          oneBspfileMetadata.fingerprint,
-          null
-        ),
-        shUser
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.deleteFile(
+            oneBspfileMetadata.bucketId,
+            oneBspfileMetadata.fileKey,
+            oneBspfileMetadata.location,
+            oneBspfileMetadata.fileSize,
+            oneBspfileMetadata.fingerprint,
+            null
+          )
+        ],
+        signer: shUser
+      });
 
       // Check for a file deletion request event.
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequest");

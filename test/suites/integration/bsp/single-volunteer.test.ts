@@ -58,18 +58,20 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     fingerprint = fp;
     file_size = s;
 
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        fingerprint,
-        file_size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        1
-      ),
-      shUser
-    );
+    await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          newBucketEventDataBlob.bucketId,
+          location,
+          fingerprint,
+          file_size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          1
+        )
+      ],
+      signer: shUser
+    });
 
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
@@ -144,18 +146,20 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
   });
 
   it("bsp skips volunteering for the same file key already being stored", async () => {
-    await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        bucketId,
-        location,
-        fingerprint,
-        file_size,
-        userApi.shConsts.DUMMY_MSP_ID,
-        [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-        1
-      ),
-      shUser
-    );
+    await userApi.block.seal({
+      calls: [
+        userApi.tx.fileSystem.issueStorageRequest(
+          bucketId,
+          location,
+          fingerprint,
+          file_size,
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+          1
+        )
+      ],
+      signer: shUser
+    });
 
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
@@ -178,9 +182,9 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
 
   it("bsp volunteers multiple files properly", async () => {
     // 1 block to maxthreshold (i.e. instant acceptance)
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
-    );
+    await userApi.block.seal({
+      calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
@@ -216,7 +220,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
       );
     }
 
-    await userApi.sealBlock(txs, shUser);
+    await userApi.block.seal({ calls: txs, signer: shUser });
 
     // Get the new storage request events, making sure we have 3
     const storageRequestEvents = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");

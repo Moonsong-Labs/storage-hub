@@ -26,16 +26,16 @@ describeBspNet(
     });
 
     beforeEach(async () => {
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1))
-      );
+      await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1))]
+      });
     });
 
     it("Can set params with setGlobalParams", async () => {
       // Set global params
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(87, 200))
-      );
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(87, 200))]
+      });
 
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
@@ -54,9 +54,9 @@ describeBspNet(
     });
 
     it("Shouldn't be able to setGlobalParams without sudo", async () => {
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.fileSystem.setGlobalParameters(13, 37)
-      );
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.setGlobalParameters(13, 37)]
+      });
 
       strictEqual(extSuccess, false, "Extrinsic should be unsuccessful");
       const { data } = await userApi.assert.eventPresent("system", "ExtrinsicFailed");
@@ -107,15 +107,17 @@ describeBspNet(
           DefaultReplicationTarget: [null, 5]
         }
       };
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
-        )
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
 
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 500))
-      );
+      await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 500))]
+      });
 
       // Create a new BSP and onboard with no reputation
       const { rpcPort } = await addBsp(userApi, bspDownKey, {
@@ -191,15 +193,17 @@ describeBspNet(
           DefaultReplicationTarget: [null, 2]
         }
       };
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
-        )
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
 
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 20))
-      );
+      await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 20))]
+      });
 
       // Add the second BSP
       const { rpcPort } = await addBsp(userApi, bspTwoKey, {
@@ -272,9 +276,9 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // Set global params to small numbers
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 100))
-      );
+      await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 100))]
+      });
 
       // Create a new storage request
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -337,15 +341,17 @@ describeBspNet(
             DefaultReplicationTarget: [null, 2]
           }
         };
-        await userApi.sealBlock(
-          userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
-          )
-        );
+        await userApi.block.seal({
+          calls: [
+            userApi.tx.sudo.sudo(
+              userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+            )
+          ]
+        });
 
-        await userApi.sealBlock(
-          userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 50))
-        );
+        await userApi.block.seal({
+          calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 50))]
+        });
 
         const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
           "res/cloud.jpg",

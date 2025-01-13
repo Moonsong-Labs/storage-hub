@@ -409,26 +409,28 @@ export class NetworkLauncher {
 
     const sudoTxns = await Promise.all(signedCalls);
 
-    return api.sealBlock(sudoTxns);
+    return api.block.seal({ calls: sudoTxns });
   }
 
   public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
-    await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.providers.forceMspSignUp(
-          who,
-          mspId ?? ShConsts.DUMMY_MSP_ID,
-          this.config.capacity || ShConsts.CAPACITY_512,
-          // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
-          [multiAddressMsp],
-          // The MSP will charge 100 UNITS per GigaUnit of data per block.
-          100 * 1024 * 1024,
-          "Terms of Service...",
-          9999999,
-          who
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(
+          api.tx.providers.forceMspSignUp(
+            who,
+            mspId ?? ShConsts.DUMMY_MSP_ID,
+            this.config.capacity || ShConsts.CAPACITY_512,
+            // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
+            [multiAddressMsp],
+            // The MSP will charge 100 UNITS per GigaUnit of data per block.
+            100 * 1024 * 1024,
+            "Terms of Service...",
+            9999999,
+            who
+          )
         )
-      )
-    );
+      ]
+    });
     return this;
   }
 
@@ -465,41 +467,49 @@ export class NetworkLauncher {
         SlashAmountPerMaxFileSize: [null, 20n * MILLIUNIT]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter))
+      ]
+    });
     const stakeToChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
         StakeToChallengePeriod: [null, 1000n * UNIT]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter))
+      ]
+    });
     const checkpointChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
         CheckpointChallengePeriod: [null, 10]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter))
+      ]
+    });
     const minChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
         MinChallengePeriod: [null, 5]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))]
+    });
     const defaultReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
         DefaultReplicationTarget: [null, 3]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+      ]
+    });
   }
 
   public async execDemoTransfer() {
@@ -542,11 +552,15 @@ export class NetworkLauncher {
         DefaultReplicationTarget: [null, 4]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+      ]
+    });
 
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.

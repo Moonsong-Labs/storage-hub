@@ -65,7 +65,7 @@ describeMspNet(
           )
         );
       }
-      await userApi.sealBlock(txs, shUser);
+      await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
     it("MSP receives files from user and accepts them", async () => {

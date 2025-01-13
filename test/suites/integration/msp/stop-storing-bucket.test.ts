@@ -118,11 +118,11 @@ describeMspNet(
     });
 
     it("MSP stops storing bucket and deletes bucket from storage", async () => {
-      const block = await userApi.sealBlock(
-        userApi.tx.fileSystem.mspStopStoringBucket(bucketId),
-        mspKey,
-        false
-      );
+      const block = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.mspStopStoringBucket(bucketId)],
+        signer: mspKey,
+        finaliseBlock: false
+      });
 
       await sleep(1500);
 

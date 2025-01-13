@@ -77,10 +77,10 @@ describeBspNet(
 
       // Send transaction to increase capacity
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.providers.changeCapacity(newCapacity),
-        bspKey
-      );
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+        signer: bspKey
+      });
       strictEqual(extSuccess, true, "Change capacity transaction should succeed");
 
       // Assert the capacity change event was emitted
@@ -189,10 +189,10 @@ describeBspNet(
 
       // Send transaction to decrease capacity
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.providers.changeCapacity(newCapacity),
-        bspKey
-      );
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+        signer: bspKey
+      });
       strictEqual(extSuccess, true, "Change capacity transaction should succeed");
 
       // Assert the capacity change event was emitted

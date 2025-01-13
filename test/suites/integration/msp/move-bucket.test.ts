@@ -61,9 +61,9 @@ describeMspNet(
 
     it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))
-      );
+      await userApi.block.seal({
+        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))]
+      });
 
       await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
@@ -125,7 +125,7 @@ describeMspNet(
           )
         );
       }
-      await userApi.sealBlock(txs, shUser);
+      await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
     it("MSP 1 receives files from user and accepts them", async () => {
@@ -271,10 +271,10 @@ describeMspNet(
     });
 
     it("User moves bucket to second MSP", async () => {
-      const requestMoveBucketResult = await userApi.sealBlock(
-        userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2),
-        shUser
-      );
+      const requestMoveBucketResult = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        signer: shUser
+      });
 
       assertEventPresent(
         userApi,

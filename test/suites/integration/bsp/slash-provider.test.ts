@@ -20,11 +20,13 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
 
   it("Slash provider when SlashableProvider event processed", async () => {
     // Force initialise challenge cycle of Provider.
-    const initialiseChallengeCycleResult = await userApi.sealBlock(
-      userApi.tx.sudo.sudo(
-        userApi.tx.proofsDealer.forceInitialiseChallengeCycle(bspApi.shConsts.DUMMY_BSP_ID)
-      )
-    );
+    const initialiseChallengeCycleResult = await userApi.block.seal({
+      calls: [
+        userApi.tx.sudo.sudo(
+          userApi.tx.proofsDealer.forceInitialiseChallengeCycle(bspApi.shConsts.DUMMY_BSP_ID)
+        )
+      ]
+    });
 
     // Assert that event for challenge cycle initialisation is emitted.
     await userApi.assert.eventPresent(

@@ -33,15 +33,17 @@ describeBspNet(
 
     it("BSP correctly charges multiple payment streams", async () => {
       // Create a new payment stream between Bob and the DUMMY_BSP_ID
-      const createBobPaymentStreamResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.createDynamicRatePaymentStream(
-            ShConsts.DUMMY_BSP_ID,
-            bob.address,
-            1024 * 1024 // 1 MB
+      const createBobPaymentStreamResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.paymentStreams.createDynamicRatePaymentStream(
+              ShConsts.DUMMY_BSP_ID,
+              bob.address,
+              1024 * 1024 // 1 MB
+            )
           )
-        )
-      );
+        ]
+      });
       const { extSuccess } = createBobPaymentStreamResult;
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 
@@ -219,11 +221,13 @@ describeBspNet(
     it("Correctly updates payment stream on-chain to make user insolvent", async () => {
       // Reduce the free balance of the user to make it insolvent
       const initialFreeBalance = (await userApi.query.system.account(userAddress)).data.free;
-      const reduceFreeBalanceResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.balances.forceSetBalance(userAddress, initialFreeBalance.divn(10))
-        )
-      );
+      const reduceFreeBalanceResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.balances.forceSetBalance(userAddress, initialFreeBalance.divn(10))
+          )
+        ]
+      });
       const changeBalanceSuccess = reduceFreeBalanceResult.extSuccess;
       strictEqual(changeBalanceSuccess, true, "Extrinsic should be successful");
 
@@ -326,15 +330,17 @@ describeBspNet(
         .div(currentPriceOfStorage.mul(newStreamDeposit));
 
       // Make the user insolvent by updating the payment stream with a very high amount
-      const updateDynamicRatePaymentStreamResult = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.updateDynamicRatePaymentStream(
-            ShConsts.DUMMY_BSP_ID,
-            userAddress,
-            newAmountProvidedForInsolvency
+      const updateDynamicRatePaymentStreamResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.paymentStreams.updateDynamicRatePaymentStream(
+              ShConsts.DUMMY_BSP_ID,
+              userAddress,
+              newAmountProvidedForInsolvency
+            )
           )
-        )
-      );
+        ]
+      });
       const { extSuccess } = updateDynamicRatePaymentStreamResult;
       strictEqual(extSuccess, true, "Extrinsic should be successful");
 

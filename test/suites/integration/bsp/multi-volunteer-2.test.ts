@@ -24,12 +24,16 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
         DefaultReplicationTarget: [null, 1]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+      ]
+    });
 
     // 1 block to maxthreshold (i.e. instant acceptance)
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,
