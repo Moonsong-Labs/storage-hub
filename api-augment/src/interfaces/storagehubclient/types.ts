@@ -1,14 +1,24 @@
 // Auto-generated via `yarn polkadot-types-from-defs`, do not edit
 /* eslint-disable */
 
-import type { Bytes, Enum, Null, Struct, U8aFixed, bool, u32, u64 } from "@polkadot/types-codec";
+import type {
+  Bytes,
+  Enum,
+  Null,
+  Struct,
+  U8aFixed,
+  Vec,
+  bool,
+  u32,
+  u64
+} from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
   readonly capacity: StorageData;
   readonly data_used: StorageData;
-  readonly multiaddresses: Bytes;
+  readonly multiaddresses: Multiaddresses;
   readonly root: MerklePatriciaRoot;
   readonly last_capacity_change: BlockNumber;
   readonly owner_account: AccountId;
@@ -148,8 +158,11 @@ export interface MainStorageProviderId extends H256 {}
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
 
+/** @name Multiaddress */
+export interface Multiaddress extends Bytes {}
+
 /** @name Multiaddresses */
-export interface Multiaddresses extends Bytes {}
+export interface Multiaddresses extends Vec<Multiaddress> {}
 
 /** @name ProviderId */
 export interface ProviderId extends H256 {}

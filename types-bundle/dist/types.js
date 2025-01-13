@@ -45,7 +45,8 @@ export const ALL_TYPES = {
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
   StorageDataUnit: "u32",
-  Multiaddresses: "BoundedVec<u8, 5>",
+  Multiaddress: "BoundedVec<u8, 100>",
+  Multiaddresses: "BoundedVec<Multiaddress, 5>",
   ValuePropId: "H256",
   ValueProposition: {
     price_per_giga_unit_of_data_per_block: "u64",
@@ -58,7 +59,7 @@ export const ALL_TYPES = {
   BackupStorageProvider: {
     capacity: "StorageData",
     data_used: "StorageData",
-    multiaddresses: "BoundedVec<u8, 5>",
+    multiaddresses: "Multiaddresses",
     root: "MerklePatriciaRoot",
     last_capacity_change: "BlockNumber",
     owner_account: "AccountId",
