@@ -1917,6 +1917,7 @@ declare module "@polkadot/types/lookup" {
       readonly fingerprint: H256;
       readonly size_: u64;
       readonly peerIds: Vec<Bytes>;
+      readonly expiresAt: u32;
     } & Struct;
     readonly isMspAcceptedStorageRequest: boolean;
     readonly asMspAcceptedStorageRequest: {
@@ -1985,8 +1986,8 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isFailedToQueuePriorityChallenge: boolean;
     readonly asFailedToQueuePriorityChallenge: {
-      readonly user: AccountId32;
       readonly fileKey: H256;
+      readonly error: SpRuntimeDispatchError;
     } & Struct;
     readonly isFileDeletionRequest: boolean;
     readonly asFileDeletionRequest: {
@@ -2042,6 +2043,13 @@ declare module "@polkadot/types/lookup" {
     readonly asUsedCapacityShouldBeZero: {
       readonly actualUsedCapacity: u64;
     } & Struct;
+    readonly isFailedToReleaseStorageRequestCreationDeposit: boolean;
+    readonly asFailedToReleaseStorageRequestCreationDeposit: {
+      readonly fileKey: H256;
+      readonly owner: AccountId32;
+      readonly amountToReturn: u128;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2069,7 +2077,8 @@ declare module "@polkadot/types/lookup" {
       | "MoveBucketRejected"
       | "MspStoppedStoringBucket"
       | "FailedToDecreaseBucketSize"
-      | "UsedCapacityShouldBeZero";
+      | "UsedCapacityShouldBeZero"
+      | "FailedToReleaseStorageRequestCreationDeposit";
   }
   /** @name PalletFileSystemRejectedStorageRequestReason (139) */
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
@@ -5357,6 +5366,7 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletFileSystemStorageRequestMetadata (448) */
   interface PalletFileSystemStorageRequestMetadata extends Struct {
     readonly requestedAt: u32;
+    readonly expiresAt: u32;
     readonly owner: AccountId32;
     readonly bucketId: H256;
     readonly location: Bytes;

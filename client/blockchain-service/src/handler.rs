@@ -1208,6 +1208,7 @@ where
                                 fingerprint,
                                 size,
                                 peer_ids,
+                                expires_at,
                             },
                         ) => self.emit(NewStorageRequest {
                             who,
@@ -1217,6 +1218,7 @@ where
                             fingerprint: fingerprint.as_ref().into(),
                             size,
                             user_peer_ids: peer_ids,
+                            expires_at,
                         }),
                         // A Provider's challenge cycle has been initialised.
                         RuntimeEvent::ProofsDealer(
