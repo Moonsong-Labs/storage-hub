@@ -43,7 +43,7 @@ describeMspNet(
 
       // Seal block containing the MSP's transaction response to the storage request
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       let mspAcceptedStorageRequestDataBlob: any = undefined;
       let storageRequestFulfilledDataBlob: any = undefined;

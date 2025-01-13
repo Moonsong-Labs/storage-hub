@@ -94,7 +94,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     // Assert that the capacity has changed.
     await userApi.assert.eventPresent("providers", "CapacityChanged");
@@ -109,7 +109,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     const updatedCapacity = BigInt(userApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
@@ -215,7 +215,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     // Assert that the capacity has changed.
     await userApi.assert.eventPresent("providers", "CapacityChanged");

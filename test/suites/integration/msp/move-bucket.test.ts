@@ -170,7 +170,7 @@ describeMspNet(
       // also prioritise a fast response, so if the Forest Write Lock is available, it will send
       // the first response it can immediately.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Give time for the MSP to update the local forest root.
       // TODO: Ideally, this should be turned into a polling helper function.
@@ -214,7 +214,7 @@ describeMspNet(
       // An additional block needs to be sealed to accept the rest of the files.
       // There should be a pending transaction to accept the rest of the files.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Give time for the MSP to update the local forest root.
       // TODO: Ideally, this should be turned into a polling helper function.
@@ -264,7 +264,7 @@ describeMspNet(
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
       for (let i = 0; i < 5; i++) {
         await sleep(500);
-        const block = await userApi.sealBlock();
+        const block = await userApi.block.seal();
 
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
@@ -288,7 +288,7 @@ describeMspNet(
         method: "mspRespondMoveBucketRequest"
       });
 
-      const { events } = await userApi.sealBlock();
+      const { events } = await userApi.block.seal();
 
       assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
 

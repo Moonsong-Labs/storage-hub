@@ -79,7 +79,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
     const {
       data: {
         bspId: resBspId,
@@ -112,7 +112,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
     const {
       data: {
         bspId: bspConfirmRes_bspId,

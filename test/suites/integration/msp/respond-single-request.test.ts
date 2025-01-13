@@ -97,7 +97,7 @@ describeMspNet(
       assert(result.isFileFound, "File not found in storage");
 
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       let mspAcceptedStorageRequestDataBlob: any = undefined;
       let storageRequestFulfilledDataBlob: any = undefined;

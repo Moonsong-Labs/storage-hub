@@ -44,13 +44,13 @@ describeBspNet(
 
       // Advance blocksToAdvance blocks.
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for task to execute and seal one more block.
       // In this block, the BSP should have submitted a proof.
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -135,12 +135,12 @@ describeBspNet(
 
       // Advance blocks until next challenge tick
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for BSP to submit proof and seal one more block
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Verify proof was submitted successfully
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -232,12 +232,12 @@ describeBspNet(
 
       // Advance blocks until next challenge tick
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for BSP to submit proof and seal one more block
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Verify proof was submitted successfully
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");
@@ -293,12 +293,12 @@ describeBspNet(
 
       // Advance blocks until next challenge tick
       for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Wait for BSP to submit proof and seal one more block
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Verify proof was submitted successfully
       await userApi.assert.eventPresent("proofsDealer", "ProofAccepted");

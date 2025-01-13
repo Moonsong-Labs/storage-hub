@@ -63,7 +63,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       assertLength: 3,
       timeout: 15000
     });
-    await api.sealBlock();
+    await api.block.seal();
 
     await api.assert.extrinsicPresent({
       module: "fileSystem",
@@ -72,7 +72,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       assertLength: 3,
       timeout: 15000
     });
-    await api.sealBlock();
+    await api.block.seal();
 
     const matchedEvents = await api.assert.eventMany("system", "ExtrinsicFailed");
     strictEqual(matchedEvents.length, 2, "Expected 2 ExtrinsicFailed events from the losing BSPs");

@@ -74,7 +74,7 @@ describeMspNet(
       );
 
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       const { event: storageRequestRejectedEvent } = await userApi.assert.eventPresent(
         "fileSystem",

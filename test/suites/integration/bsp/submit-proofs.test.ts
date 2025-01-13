@@ -77,7 +77,7 @@ describeBspNet(
       });
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -315,7 +315,7 @@ describeBspNet(
       assert(submitProofsPending.length > 0);
 
       // Seal block and check that the transaction was successful.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -582,7 +582,7 @@ describeBspNet(
 
       // Wait for BSP to generate the proof and advance one more block.
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Check for a ProofAccepted event.
       const firstChallengeBlockEvents = await userApi.assert.eventMany(
@@ -638,7 +638,7 @@ describeBspNet(
 
         // Wait for BSP to generate the proof and advance one more block.
         await sleep(500);
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Check for a ProofAccepted event.

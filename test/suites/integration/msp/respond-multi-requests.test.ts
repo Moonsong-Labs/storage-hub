@@ -94,7 +94,7 @@ describeMspNet(
       // also prioritise a fast response, so if the Forest Write Lock is available, it will send
       // the first response it can immediately.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
         "providers",
@@ -137,7 +137,7 @@ describeMspNet(
       // An additional block needs to be sealed to accept the rest of the files.
       // There should be a pending transaction to accept the rest of the files.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
         "providers",
