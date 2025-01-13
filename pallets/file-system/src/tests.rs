@@ -8324,7 +8324,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     fingerprint,
                     size,
-                    Some(msp_id),
+                    msp_id,
                     peer_ids,
                     None
                 ));
