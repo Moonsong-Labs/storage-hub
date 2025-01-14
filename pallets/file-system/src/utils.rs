@@ -2417,7 +2417,7 @@ mod hooks {
     use sp_weights::{RuntimeDbWeight, WeightMeter};
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_poll(_weight: &mut WeightMeter) {
+        pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
 
@@ -2433,6 +2433,9 @@ mod hooks {
                     new_data_price_per_giga_unit,
                 );
             }
+
+            // Consume the weight utilised by this hook
+            weight.consume(T::WeightInfo::on_poll_hook());
         }
 
         pub(crate) fn do_on_idle(
@@ -2486,6 +2489,8 @@ mod hooks {
             // and get the storage request expirations for the current block, continue.
             if meter.can_consume(db_weight.reads_writes(2, 1)) {
                 // Get the maximum amount of BSPs required for a storage request.
+                // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
+                // We could increase this potential weight to account for potentially more volunteers.
                 let max_bsp_required: u64 = MaxReplicationTarget::<T>::get().into();
                 meter.consume(db_weight.reads(1));
 
@@ -2590,27 +2595,10 @@ mod hooks {
             file_key: MerkleHash<T>,
             meter: &mut WeightMeter,
         ) {
-            let db_weight = T::DbWeight::get();
-
-            // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
-            // We could increase this potential weight to account for potentially more volunteers.
-            let potential_weight = db_weight.writes(
-                MaxReplicationTarget::<T>::get()
-                    .saturating_plus_one()
-                    .into(),
-            );
-
-            if !meter.can_consume(potential_weight) {
-                return;
-            }
-
-            // Remove storage request and all bsps that volunteered for it.
+            // Remove storage request and all BSPs that volunteered for it.
             let storage_request_metadata = StorageRequests::<T>::take(&file_key);
-            let removed = StorageRequestBsps::<T>::drain_prefix(&file_key)
+            let amount_of_deleted_bsps = StorageRequestBsps::<T>::drain_prefix(&file_key)
                 .fold(0u32, |acc, _| acc.saturating_add(One::one()));
-
-            let weight_used = db_weight.writes(1.saturating_add(removed.into()));
-            meter.consume(weight_used);
 
             match storage_request_metadata {
                 Some(storage_request_metadata) => match storage_request_metadata.msp {
@@ -2647,6 +2635,13 @@ mod hooks {
 
                         // Emit the StorageRequestExpired event
                         Self::deposit_event(Event::StorageRequestExpired { file_key });
+
+                        // Consume the weight used.
+                        meter.consume(
+                            T::WeightInfo::process_expired_storage_request_msp_accepted_or_no_msp(
+                                amount_of_deleted_bsps,
+                            ),
+                        );
                     }
                     Some((msp_id, false)) => {
                         // If the MSP did not accept the file in time, treat the storage request as rejected. For that:
@@ -2706,6 +2701,11 @@ mod hooks {
                             file_key,
                             reason: RejectedStorageRequestReason::RequestExpired,
                         });
+
+                        // Consume the weight used.
+                        meter.consume(T::WeightInfo::process_expired_storage_request_msp_rejected(
+                            amount_of_deleted_bsps,
+                        ));
                     }
                 },
                 None => {
