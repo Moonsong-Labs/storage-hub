@@ -2428,7 +2428,7 @@ mod hooks {
     use sp_weights::{RuntimeDbWeight, WeightMeter};
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_poll(_weight: &mut WeightMeter) {
+        pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
 
