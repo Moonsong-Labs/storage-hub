@@ -44,7 +44,7 @@ describeMspNet(
       }
     });
 
-    it.only("postgres DB is ready", async () => {
+    it("postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
         containerName: "docker-sh-postgres-1",
         searchString: "database system is ready to accept connections",
@@ -52,7 +52,7 @@ describeMspNet(
       });
     });
 
-    it.only("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -60,7 +60,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it.only("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
+    it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
       await userApi.block.seal({
         calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))]
@@ -85,7 +85,7 @@ describeMspNet(
       });
     });
 
-    it.only("User submits 3 storage requests in the same bucket for first MSP", async () => {
+    it("User submits 3 storage requests in the same bucket for first MSP", async () => {
       // Get value propositions form the MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -129,7 +129,7 @@ describeMspNet(
       await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
-    it.only("MSP 1 receives files from user and accepts them", async () => {
+    it("MSP 1 receives files from user and accepts them", async () => {
       // Get the events of the storage requests to extract the file keys and check
       // that the MSP received them.
       const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
@@ -271,7 +271,7 @@ describeMspNet(
       }
     });
 
-    it.only("MSP 2 rejects move request when indexer postgres DB is down", async () => {
+    it("MSP 2 rejects move request when indexer postgres DB is down", async () => {
       // Pause the postgres container - this preserves the state
       const docker = new Docker();
       const postgresContainer = docker.getContainer("docker-sh-postgres-1");
@@ -312,7 +312,7 @@ describeMspNet(
       });
     });
 
-    it.only("MSP 2 rejects move request when indexer data is corrupted", async () => {
+    it("MSP 2 rejects move request when indexer data is corrupted", async () => {
       // Delete all entries from bsp_file table to corrupt the replication data
       const sql = createSqlClient();
       await sql`DELETE FROM bsp_file`;
