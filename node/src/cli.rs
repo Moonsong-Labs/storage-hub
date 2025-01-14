@@ -1,6 +1,5 @@
 use clap::{Parser, ValueEnum};
-use serde::Deserialize;
-use serde::Deserializer;
+use serde::{Deserialize, Deserializer};
 use std::{path::PathBuf, str::FromStr};
 use storage_hub_runtime::StorageDataUnit;
 

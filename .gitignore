@@ -35,5 +35,5 @@ test/dist/*
 # Ignore cSpell config files
 cSpell.json
 
-# Dont commit you config file
+# Don't commit your config file
 config.toml
