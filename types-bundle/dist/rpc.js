@@ -119,6 +119,36 @@ export const rpcDefinitions = {
       ],
       type: "Vec<u8>"
     },
+    generateFileKeyProofBspConfirm: {
+      description:
+        "Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.",
+      params: [
+        {
+          name: "bsp_id",
+          type: "H256"
+        },
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "Vec<u8>"
+    },
+    generateFileKeyProofMspAccept: {
+      description:
+        "Generate a SCALE-encoded proof for a file key to allow a MSP to accept storing it.",
+      params: [
+        {
+          name: "msp_id",
+          type: "H256"
+        },
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "Vec<u8>"
+    },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [

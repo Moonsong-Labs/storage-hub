@@ -10,13 +10,15 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
+use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf, HashT, KeyProof,
-        KeyProofs, ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
-        StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+        BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf,
+        HashT, KeyProof, KeyProofs, MainStorageProviderId, ProofsDealerProviderId, Proven,
+        RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
+        FILE_CHUNK_SIZE,
     },
 };
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
@@ -160,6 +162,24 @@ pub trait StorageHubClientApi {
         checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>>;
 
+    // Note: this RPC method returns a Vec<u8> because the KeyVerifier Proof type is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateFileKeyProofBspConfirm")]
+    async fn generate_file_key_proof_bsp_confirm(
+        &self,
+        bsp_id: BackupStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>>;
+
+    // Note: this RPC method returns a Vec<u8> because the KeyVerifier Proof type is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateFileKeyProofMspAccept")]
+    async fn generate_file_key_proof_msp_accept(
+        &self,
+        msp_id: MainStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>>;
+
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
 
@@ -217,13 +237,20 @@ where
     Block: BlockT,
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
-        Block,
-        ProofsDealerProviderId,
-        BlockNumber,
-        ForestLeaf,
-        RandomnessOutput,
-        CustomChallenge,
-    >,
+            Block,
+            ProofsDealerProviderId,
+            BlockNumber,
+            ForestLeaf,
+            RandomnessOutput,
+            CustomChallenge,
+        > + FileSystemRuntimeApi<
+            Block,
+            BackupStorageProviderId,
+            MainStorageProviderId,
+            H256,
+            BlockNumber,
+            ChunkId,
+        >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
 {
@@ -596,8 +623,9 @@ where
                     self.client.clone(),
                     self.file_storage.clone(),
                     *file_key,
-                    seed,
                     provider_id,
+                    Some(seed),
+                    None,
                     None,
                 )
                 .await?;
@@ -613,6 +641,64 @@ where
         };
 
         Ok(proof.encode())
+    }
+
+    async fn generate_file_key_proof_bsp_confirm(
+        &self,
+        bsp_id: BackupStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>> {
+        // Getting Runtime APIs
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        // Generate chunk IDs to prove to confirm the file
+        let chunks_to_prove: Vec<ChunkId> = api
+            .query_bsp_confirm_chunks_to_prove_for_file(at_hash, bsp_id.into(), file_key)
+            .unwrap()
+            .unwrap();
+
+        let key_proof = generate_key_proof(
+            self.client.clone(),
+            self.file_storage.clone(),
+            file_key,
+            bsp_id,
+            None,
+            None,
+            Some(chunks_to_prove),
+        )
+        .await?;
+
+        Ok(key_proof.proof.encode())
+    }
+
+    async fn generate_file_key_proof_msp_accept(
+        &self,
+        msp_id: MainStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>> {
+        // Getting Runtime APIs
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        // Generate chunk IDs to prove to accept the file
+        let chunks_to_prove: Vec<ChunkId> = api
+            .query_msp_confirm_chunks_to_prove_for_file(at_hash, msp_id.into(), file_key)
+            .unwrap()
+            .unwrap();
+
+        let key_proof = generate_key_proof(
+            self.client.clone(),
+            self.file_storage.clone(),
+            file_key,
+            msp_id,
+            None,
+            None,
+            Some(chunks_to_prove),
+        )
+        .await?;
+
+        Ok(key_proof.proof.encode())
     }
 
     // If a seed is provided, we manually generate and persist it into the file system.
@@ -706,9 +792,10 @@ async fn generate_key_proof<FL, C, Block>(
     client: Arc<C>,
     file_storage: Arc<RwLock<FL>>,
     file_key: H256,
-    seed: RandomnessOutput,
     provider_id: ProofsDealerProviderId,
+    seed: Option<RandomnessOutput>,
     at: Option<Block::Hash>,
+    chunks_to_prove: Option<Vec<ChunkId>>,
 ) -> RpcResult<KeyProof>
 where
     Block: BlockT,
@@ -739,17 +826,28 @@ where
     // Calculate the number of challenges for this file.
     let challenge_count = metadata.chunks_to_check();
 
-    // Generate the challenges for this file.
-    let file_key_challenges = api
-        .get_challenges_from_seed(at_hash, &seed, &provider_id, challenge_count)
-        .map_err(|e| into_rpc_error(format!("Failed to generate challenges from seed: {:?}", e)))?;
+    // Get the chunks to prove.
+    let chunks_to_prove = match chunks_to_prove {
+        Some(chunks) => chunks,
+        None => {
+            // Generate the challenges for this file.
+            let seed = seed.ok_or_else(|| {
+                into_rpc_error("Seed is required to generate challenges if chunk IDs are missing")
+            })?;
+            let file_key_challenges = api
+                .get_challenges_from_seed(at_hash, &seed, &provider_id, challenge_count)
+                .map_err(|e| {
+                    into_rpc_error(format!("Failed to generate challenges from seed: {:?}", e))
+                })?;
 
-    // Convert the challenges to chunk IDs.
-    let chunks_count = metadata.chunks_count();
-    let chunks_to_prove = file_key_challenges
-        .iter()
-        .map(|challenge| ChunkId::from_challenge(challenge.as_ref(), chunks_count))
-        .collect::<Vec<_>>();
+            // Convert the challenges to chunk IDs.
+            let chunks_count = metadata.chunks_count();
+            file_key_challenges
+                .iter()
+                .map(|challenge| ChunkId::from_challenge(challenge.as_ref(), chunks_count))
+                .collect::<Vec<_>>()
+        }
+    };
 
     // Construct file key proofs for the challenges.
     let read_file_storage = file_storage.read().await;

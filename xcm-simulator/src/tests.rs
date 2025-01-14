@@ -1169,6 +1169,7 @@ mod users {
     use crate::sh_sibling_account_account_id;
     use crate::CHARLIE;
     use crate::SH_PARA_ID;
+    use pallet_file_system::types::FileKeyWithProof;
     use pallet_file_system::types::MaxFilePathSize;
     use pallet_file_system::types::MaxNumberOfPeerIds;
     use pallet_file_system::types::MaxPeerIdSize;
@@ -1360,16 +1361,16 @@ mod users {
 
             // And confirm storing the file
             let mut vec_of_key_proofs: BoundedVec<
-                (
-                    pallet_file_system::types::MerkleHash<storagehub::Runtime>,
-                    <storagehub::ProofsDealer as shp_traits::ProofsDealerInterface>::KeyProof,
-                ),
+                FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
             let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
-            vec_of_key_proofs.force_push((file_key.clone(), simulated_proof.clone()));
+            vec_of_key_proofs.force_push(FileKeyWithProof {
+                file_key: file_key.clone(),
+                proof: simulated_proof.clone(),
+            });
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
                 simulated_proof.clone(),
@@ -1743,16 +1744,16 @@ mod users {
 
             // And confirm storing the file
             let mut vec_of_key_proofs: BoundedVec<
-                (
-                    pallet_file_system::types::MerkleHash<storagehub::Runtime>,
-                    <storagehub::ProofsDealer as shp_traits::ProofsDealerInterface>::KeyProof,
-                ),
+                FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
             let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
-            vec_of_key_proofs.force_push((file_key.clone(), simulated_proof.clone()));
+            vec_of_key_proofs.force_push(FileKeyWithProof {
+                file_key: file_key.clone(),
+                proof: simulated_proof.clone(),
+            });
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
                 simulated_proof.clone(),

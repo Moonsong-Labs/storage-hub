@@ -321,6 +321,8 @@ impl IndexerService {
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
+            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
+            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }

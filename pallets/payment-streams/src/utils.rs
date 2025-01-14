@@ -708,12 +708,12 @@ where
 
                             // Get the payment account of the SP
                             let provider_payment_account = expect_or_err!(
-                            <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-                                *provider_id
-                            ),
-                            "Provider should exist and have a payment account if its ID exists.",
-                            Error::<T>::ProviderInconsistencyError
-                        );
+                            	<T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                                	*provider_id
+                            	),
+                            	"Provider should exist and have a payment account if its ID exists.",
+                            	Error::<T>::ProviderInconsistencyError
+                        	);
 
                             // Check if the total amount charged would overflow
                             ensure!(
