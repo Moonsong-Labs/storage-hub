@@ -13,7 +13,8 @@ use trie_db::{DBValue, Trie, TrieDBBuilder, TrieDBMutBuilder};
 use crate::{
     error::{other_io_error, ErrorT},
     traits::{
-        FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
+        ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
+        FileStorageWriteOutcome,
     },
     LOG_TARGET,
 };
@@ -23,7 +24,20 @@ const METADATA_COLUMN: u32 = 0;
 const ROOTS_COLUMN: u32 = 1;
 const CHUNKS_COLUMN: u32 = 2;
 const BUCKET_PREFIX_COLUMN: u32 = 3;
-const EXCLUDE_COLUMN: u32 = 4;
+const EXCLUDE_FILE_COLUMN: u32 = 4;
+const EXCLUDE_USER_COLUMN: u32 = 5;
+const EXCLUDE_BUCKET_COLUMN: u32 = 6;
+const EXCLUDE_FINGERPRINT_COLUMN: u32 = 7;
+
+// Helper function to map ExcludeType enum to their matching rocksdb column.
+fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
+    match exclude_type {
+        ExcludeType::File => EXCLUDE_FILE_COLUMN,
+        ExcludeType::User => EXCLUDE_USER_COLUMN,
+        ExcludeType::Bucket => EXCLUDE_BUCKET_COLUMN,
+        ExcludeType::Fingerprint => EXCLUDE_FINGERPRINT_COLUMN,
+    }
+}
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
@@ -31,7 +45,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     path.push(db_path.as_str());
     path.push("storagehub/file_storage/");
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(5);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(8);
 
     let path_str = path
         .to_str()
@@ -804,11 +818,16 @@ where
         Ok(())
     }
 
-    fn is_allowed(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+    fn is_allowed(
+        &self,
+        key: &HasherOutT<T>,
+        exclude_type: ExcludeType,
+    ) -> Result<bool, FileStorageError> {
+        let exclude_column = get_exclude_type_db_column(exclude_type);
         let find = self
             .storage
             .db
-            .get(EXCLUDE_COLUMN, key.as_ref())
+            .get(exclude_column, key.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -820,10 +839,15 @@ where
         }
     }
 
-    fn add_file_to_exclude_list(&mut self, key: HasherOutT<T>) -> Result<(), FileStorageError> {
-        let mut transaction = DBTransaction::new();
+    fn add_to_exclude_list(
+        &mut self,
+        key: HasherOutT<T>,
+        exclude_type: ExcludeType,
+    ) -> Result<(), FileStorageError> {
+        let exclude_column = get_exclude_type_db_column(exclude_type);
 
-        transaction.put(EXCLUDE_COLUMN, key.as_ref(), &Vec::<u8>::new());
+        let mut transaction = DBTransaction::new();
+        transaction.put(exclude_column, key.as_ref(), &Vec::<u8>::new());
 
         self.storage.db.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
@@ -833,13 +857,15 @@ where
         Ok(())
     }
 
-    fn remove_file_from_exclude_list(
+    fn remove_from_exclude_list(
         &mut self,
         key: &HasherOutT<T>,
+        exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError> {
-        let mut transaction = DBTransaction::new();
+        let exclude_column = get_exclude_type_db_column(exclude_type);
 
-        transaction.delete(EXCLUDE_COLUMN, key.as_ref());
+        let mut transaction = DBTransaction::new();
+        transaction.delete(exclude_column, key.as_ref());
 
         self.storage.db.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to write to DB: {}", e);

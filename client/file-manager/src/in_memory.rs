@@ -12,6 +12,8 @@ use crate::traits::{
 
 use codec::{Decode, Encode};
 
+use crate::traits::ExcludeType;
+
 pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
     root: HasherOutT<T>,
     memdb: MemoryDB<T::Hash>,
@@ -150,7 +152,7 @@ where
     pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
     pub bucket_prefix_map: HashSet<[u8; 64]>,
-    pub exclude_list: HashSet<HasherOutT<T>>,
+    pub exclude_list: HashMap<ExcludeType, HashSet<HasherOutT<T>>>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T>
@@ -158,11 +160,19 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     pub fn new() -> Self {
+        let mut exclude_list: HashMap<ExcludeType, HashSet<HasherOutT<T>>> = HashMap::new();
+
+        // Initialize our exclude list for each type of value we want to exclude
+        exclude_list.insert(ExcludeType::File, HashSet::new());
+        exclude_list.insert(ExcludeType::User, HashSet::new());
+        exclude_list.insert(ExcludeType::Bucket, HashSet::new());
+        exclude_list.insert(ExcludeType::Fingerprint, HashSet::new());
+
         Self {
             metadata: HashMap::new(),
             file_data: HashMap::new(),
             bucket_prefix_map: HashSet::new(),
-            exclude_list: HashSet::new(),
+            exclude_list,
         }
     }
 }
@@ -357,26 +367,44 @@ where
         Ok(())
     }
 
-    fn is_allowed(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
-        if self.exclude_list.contains(key) {
+    fn is_allowed(
+        &self,
+        key: &HasherOutT<T>,
+        exclude_type: ExcludeType,
+    ) -> Result<bool, FileStorageError> {
+        let exclude_list = match self.exclude_list.get(&exclude_type) {
+            Some(list) => list,
+            None => return Ok(true),
+        };
+
+        if exclude_list.contains(key) {
             return Ok(false);
         }
 
         return Ok(true);
     }
 
-    fn add_file_to_exclude_list(&mut self, key: HasherOutT<T>) -> Result<(), FileStorageError> {
-        self.exclude_list.insert(key);
-
+    fn add_to_exclude_list(
+        &mut self,
+        key: HasherOutT<T>,
+        exclude_type: ExcludeType,
+    ) -> Result<(), FileStorageError> {
+        match self.exclude_list.get_mut(&exclude_type) {
+            Some(list) => list.insert(key),
+            None => return Err(FileStorageError::FailedToAddEntityToExcludeList),
+        };
         Ok(())
     }
 
-    fn remove_file_from_exclude_list(
+    fn remove_from_exclude_list(
         &mut self,
         key: &HasherOutT<T>,
+        exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError> {
-        self.exclude_list.remove(key);
-
+        match self.exclude_list.get_mut(&exclude_type) {
+            Some(list) => list.remove(key),
+            None => return Err(FileStorageError::FailedToAddEntityToExcludeList),
+        };
         Ok(())
     }
 }
