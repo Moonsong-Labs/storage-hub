@@ -208,7 +208,7 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
 };
 
 /**
- * Waits for a BSP to complete storing a file in its file storage.
+ * Waits for a Provider to complete storing a file in its file storage.
  *
  * This function performs the following steps:
  * 1. Waits for a longer period to allow for local file transfer.
@@ -216,13 +216,13 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
  *
  * @param api - The ApiPromise instance to interact with the RPC.
  * @param fileKey - The file key to check for in the file storage.
- * @returns A Promise that resolves when a BSP has correctly stored a file in its file storage.
+ * @returns A Promise that resolves when the Provider has correctly stored a file in its file storage.
  *
  * @throws Will throw an error if the file is not complete in the file storage after a timeout.
  */
 export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
-  // To allow time for local file transfer to complete (10s)
-  const iterations = 10;
+  // To allow time for local file transfer to complete (20s)
+  const iterations = 20;
   const delay = 1000;
   for (let i = 0; i < iterations + 1; i++) {
     try {
@@ -233,7 +233,7 @@ export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 
     } catch {
       assert(
         i !== iterations,
-        `Failed to detect BSP file in file storage after ${(i * delay) / 1000}s`
+        `Failed to detect file in Provider's file storage after ${(i * delay) / 1000}s`
       );
     }
   }
