@@ -47,7 +47,8 @@ use crate::{
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
     PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequests, TickRangeToMaximumThreshold,
+    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    TickRangeToMaximumThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -647,21 +648,6 @@ where
         let current_tick =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-        let zero = ReplicationTargetType::<T>::zero();
-        let storage_request_metadata = StorageRequestMetadata::<T> {
-            requested_at: current_tick,
-            owner: sender.clone(),
-            bucket_id,
-            location: location.clone(),
-            fingerprint,
-            size,
-            msp,
-            user_peer_ids: user_peer_ids.clone().unwrap_or_default(),
-            bsps_required: replication_target,
-            bsps_confirmed: zero,
-            bsps_volunteered: zero,
-        };
-
         // Compute the file key used throughout this file's lifespan.
         let file_key = Self::compute_file_key(
             sender.clone(),
@@ -677,6 +663,27 @@ where
             Error::<T>::StorageRequestAlreadyRegistered
         );
 
+        // Enqueue an expiration item for the storage request to clean it up if it expires without being fulfilled or cancelled.
+        let expiration_item = ExpirationItem::StorageRequest(file_key);
+        let expiration_block = Self::enqueue_expiration_item(expiration_item)?;
+
+        // Create the storage request's metadata.
+        let zero = ReplicationTargetType::<T>::zero();
+        let storage_request_metadata = StorageRequestMetadata::<T> {
+            requested_at: current_tick,
+            owner: sender.clone(),
+            bucket_id,
+            location: location.clone(),
+            fingerprint,
+            size,
+            msp,
+            user_peer_ids: user_peer_ids.clone().unwrap_or_default(),
+            bsps_required: replication_target,
+            bsps_confirmed: zero,
+            bsps_volunteered: zero,
+            expires_at: expiration_block,
+        };
+
         // Hold the deposit from the user
         T::Currency::hold(
             &HoldReason::StorageRequestCreationHold.into(),
@@ -689,9 +696,6 @@ where
 
         <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-        let expiration_item = ExpirationItem::StorageRequest(file_key);
-        Self::enqueue_expiration_item(expiration_item)?;
-
         // BSPs listen to this event and volunteer to store the file
         Self::deposit_event(Event::NewStorageRequest {
             who: sender,
@@ -701,6 +705,7 @@ where
             fingerprint,
             size,
             peer_ids: user_peer_ids.unwrap_or_default(),
+            expires_at: expiration_block,
         });
 
         Ok(file_key)
@@ -938,6 +943,12 @@ where
 
             // Check if all BSPs have confirmed storing the file.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
+                // Remove the storage request from the expiration queue.
+                let expiration_block = storage_request_metadata.expires_at;
+                <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
+                    expiration_items.retain(|item| item != &file_key_with_proof.file_key);
+                });
+
                 // Remove storage request metadata.
                 <StorageRequests<T>>::remove(&file_key_with_proof.file_key);
                 <BucketsWithStorageRequests<T>>::remove(
@@ -1308,6 +1319,12 @@ where
                     .map(|(_, confirmed)| confirmed)
                     .unwrap_or(true)
             {
+                // Remove the storage request from the expiration queue.
+                let expiration_block = storage_request_metadata.expires_at;
+                <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
+                    expiration_items.retain(|item| item != &file_key.0);
+                });
+
                 // Remove storage request metadata.
                 <StorageRequests<T>>::remove(&file_key.0);
                 <BucketsWithStorageRequests<T>>::remove(
@@ -1500,6 +1517,12 @@ where
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
         );
+
+        // Remove the storage request from the expiration queue.
+        let expiration_block = storage_request_metadata.expires_at;
+        <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
+            expiration_items.retain(|item| item != &file_key);
+        });
 
         // Remove storage request.
         <StorageRequests<T>>::remove(&file_key);
@@ -2356,24 +2379,24 @@ where
 }
 
 mod hooks {
-    use crate::types::RejectedStorageRequestReason;
     use crate::{
         pallet,
-        types::MerkleHash,
+        types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType},
         utils::{
             BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
         },
-        Event, FileDeletionRequestExpirations, MaxReplicationTarget, NextStartingBlockToCleanUp,
-        Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
-        StorageRequestExpirations, StorageRequests,
+        BucketsWithStorageRequests, Event, FileDeletionRequestExpirations, HoldReason,
+        MaxReplicationTarget, MoveBucketRequestExpirations, NextStartingBlockToCleanUp, Pallet,
+        PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
-    use crate::{MoveBucketRequestExpirations, PendingBucketsToMove};
+    use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use frame_system::pallet_prelude::BlockNumberFor;
     use sp_runtime::{
         traits::{Get, One, Zero},
         Saturating,
     };
-    use sp_weights::WeightMeter;
+    use sp_weights::{RuntimeDbWeight, WeightMeter};
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
@@ -2402,9 +2425,10 @@ mod hooks {
         ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
             let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
+            let initial_block_to_clean = block_to_clean;
 
             while block_to_clean <= current_block && !meter.remaining().is_zero() {
-                Self::process_block_expired_items(block_to_clean, &mut meter);
+                Self::process_block_expired_items(block_to_clean, &mut meter, &db_weight);
 
                 if meter.remaining().is_zero() {
                     break;
@@ -2414,7 +2438,7 @@ mod hooks {
             }
 
             // Update the next starting block for cleanup
-            if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
+            if block_to_clean > initial_block_to_clean {
                 NextStartingBlockToCleanUp::<T>::put(block_to_clean);
                 meter.consume(db_weight.writes(1));
             }
@@ -2422,8 +2446,11 @@ mod hooks {
             meter
         }
 
-        fn process_block_expired_items(block: BlockNumberFor<T>, meter: &mut WeightMeter) {
-            let db_weight = T::DbWeight::get();
+        fn process_block_expired_items(
+            block: BlockNumberFor<T>,
+            meter: &mut WeightMeter,
+            db_weight: &RuntimeDbWeight,
+        ) {
             let minimum_required_weight_processing_expired_items = db_weight.reads_writes(1, 1);
 
             if !meter.can_consume(minimum_required_weight_processing_expired_items) {
@@ -2479,7 +2506,10 @@ mod hooks {
             }
         }
 
-        fn process_expired_storage_request(file_key: MerkleHash<T>, meter: &mut WeightMeter) {
+        pub(crate) fn process_expired_storage_request(
+            file_key: MerkleHash<T>,
+            meter: &mut WeightMeter,
+        ) {
             let db_weight = T::DbWeight::get();
 
             // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
@@ -2504,29 +2534,104 @@ mod hooks {
 
             match storage_request_metadata {
                 Some(storage_request_metadata) => match storage_request_metadata.msp {
-                    Some((msp_id, msp_confirmed)) => {
-                        if msp_confirmed {
-                            Self::deposit_event(Event::StorageRequestExpired { file_key });
-                        } else {
-                            // Error should not happen, we ignore it.
-                            let _ = Self::cleanup_storage_request(
-                                EitherAccountIdOrMspId::MspId(msp_id),
-                                file_key,
-                                &storage_request_metadata,
+                    None | Some((_, true)) => {
+                        // If the request was originated by a request to stop storing from a BSP for a file that had no
+                        // storage request open, or if the MSP has already accepted storing the file, treat the storage request
+                        // as fulfilled with whatever amount of BSPs got to volunteer and confirm the file. For that:
+                        // Return the storage request creation deposit to the user, emitting an error event if it fails
+                        // but continuing execution.
+                        let storage_request_creation_deposit =
+                            T::StorageRequestCreationDeposit::get();
+                        let _ = T::Currency::release(
+                            &HoldReason::StorageRequestCreationHold.into(),
+                            &storage_request_metadata.owner,
+                            storage_request_creation_deposit,
+                            Precision::BestEffort,
+                        )
+                        .map_err(|e| {
+                            Self::deposit_event(
+                                Event::FailedToReleaseStorageRequestCreationDeposit {
+                                    file_key,
+                                    owner: storage_request_metadata.owner.clone(),
+                                    amount_to_return: storage_request_creation_deposit,
+                                    error: e,
+                                },
                             );
+                        });
 
-                            Self::deposit_event(Event::StorageRequestRejected {
+                        // Remove the storage request from the active storage requests for the bucket
+                        <BucketsWithStorageRequests<T>>::remove(
+                            &storage_request_metadata.bucket_id,
+                            &file_key,
+                        );
+
+                        // Emit the StorageRequestExpired event
+                        Self::deposit_event(Event::StorageRequestExpired { file_key });
+                    }
+                    Some((msp_id, false)) => {
+                        // If the MSP did not accept the file in time, treat the storage request as rejected. For that:
+                        // Check if there are already BSPs who have confirmed to store the file.
+                        if storage_request_metadata.bsps_confirmed
+                            >= ReplicationTargetType::<T>::one()
+                        {
+                            // If there are, queue up a priority challenge for the file key with a remove mutation, forcing all BSPs to delete the file.
+                            // This can error if the priority challenge queue is full. In that case, we emit an error event and continue. The
+                            // priority challenge then should be enqueued manually at a later time.
+                            let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+									&file_key,
+									true,
+								).map_err(|e| {
+									Self::deposit_event(Event::FailedToQueuePriorityChallenge {
+										file_key,
+										error: e,
+									});
+								});
+
+                            // Emit the event of the priority challenge being queued.
+                            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                                issuer: EitherAccountIdOrMspId::MspId(msp_id),
                                 file_key,
-                                reason: RejectedStorageRequestReason::RequestExpired,
                             });
                         }
-                    }
-                    None => {
-                        Self::deposit_event(Event::StorageRequestExpired { file_key });
+
+                        // Return the storage request creation deposit to the user, emitting an error event if it fails
+                        // but continuing execution.
+                        let storage_request_creation_deposit =
+                            T::StorageRequestCreationDeposit::get();
+                        let _ = T::Currency::release(
+                            &HoldReason::StorageRequestCreationHold.into(),
+                            &storage_request_metadata.owner,
+                            storage_request_creation_deposit,
+                            Precision::BestEffort,
+                        )
+                        .map_err(|e| {
+                            Self::deposit_event(
+                                Event::FailedToReleaseStorageRequestCreationDeposit {
+                                    file_key,
+                                    owner: storage_request_metadata.owner.clone(),
+                                    amount_to_return: storage_request_creation_deposit,
+                                    error: e,
+                                },
+                            );
+                        });
+
+                        // Remove the storage request from the active storage requests for the bucket
+                        <BucketsWithStorageRequests<T>>::remove(
+                            &storage_request_metadata.bucket_id,
+                            &file_key,
+                        );
+
+                        // Emit the StorageRequestRejected event
+                        Self::deposit_event(Event::StorageRequestRejected {
+                            file_key,
+                            reason: RejectedStorageRequestReason::RequestExpired,
+                        });
                     }
                 },
                 None => {
-                    // This should never happen.
+                    // This should never happen, since it would mean the storage request was deleted on
+                    // its own but the expiration item wasn't removed from the queue. Do nothing since
+                    // the storage request is already gone.
                 }
             }
         }
@@ -2593,10 +2698,10 @@ mod hooks {
                 &expired_file_deletion_request.file_key,
                 true,
             )
-            .map_err(|_| {
+            .map_err(|e| {
                 Self::deposit_event(Event::FailedToQueuePriorityChallenge {
-                    user: user.clone(),
                     file_key: expired_file_deletion_request.file_key,
+                    error: e,
                 });
             });
 

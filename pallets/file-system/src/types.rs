@@ -29,6 +29,12 @@ pub struct StorageRequestMetadata<T: Config> {
     /// cleaning up old requests.
     pub requested_at: TickNumber<T>,
 
+    /// Block number at which the storage request will expire.
+    ///
+    /// Used to track what storage elements to clean when a storage request gets fulfilled.
+    /// Note: we use block numbers for expiration items instead of ticks. Maybe we should unify this.
+    pub expires_at: BlockNumberFor<T>,
+
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
 
