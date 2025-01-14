@@ -382,6 +382,12 @@ export type SealBlockOptions = {
   signer?: KeyringPair;
 
   /**
+   * Optional nonce for the extrinsics.
+   * If not provided, the next nonce will be used.
+   */
+  nonce?: number;
+
+  /**
    * Optional parent hash for the block.
    * If not provided, the current block hash will be used.
    */

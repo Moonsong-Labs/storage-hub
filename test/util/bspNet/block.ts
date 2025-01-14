@@ -99,6 +99,7 @@ export const sealBlock = async (
     | SubmittableExtrinsic<"promise", ISubmittableResult>
     | SubmittableExtrinsic<"promise", ISubmittableResult>[],
   signer?: KeyringPair,
+  nonce?: number,
   parentHash?: string,
   finaliseBlock = true
 ): Promise<SealedBlock> => {
@@ -119,7 +120,8 @@ export const sealBlock = async (
   const callArray = Array.isArray(calls) ? calls : calls ? [calls] : [];
 
   if (callArray.length > 0) {
-    const nonce = await api.rpc.system.accountNextIndex((signer || alice).address);
+    const nonceToUse =
+      nonce ?? (await api.rpc.system.accountNextIndex((signer || alice).address)).toNumber();
 
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
@@ -129,7 +131,7 @@ export const sealBlock = async (
       if (call.isSigned) {
         hash = await call.send();
       } else {
-        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
+        hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
       }
 
       results.hashes.push(hash);
@@ -401,7 +403,7 @@ export const advanceToBlock = async (
       }
     }
 
-    blockResult = await sealBlock(api, [], undefined, undefined, options.finalised);
+    blockResult = await sealBlock(api, [], undefined, undefined, undefined, options.finalised);
     currentBlockNumber += 1;
 
     const blockWeight = await api.query.system.blockWeight();

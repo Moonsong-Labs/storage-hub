@@ -413,6 +413,7 @@ export class BspNetTestApi implements AsyncDisposable {
           this._api,
           options?.calls,
           options?.signer,
+          options?.nonce,
           options?.parentHash,
           options?.finaliseBlock
         ),
