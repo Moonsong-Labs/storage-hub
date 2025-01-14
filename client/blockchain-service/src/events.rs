@@ -63,6 +63,8 @@ pub struct NewStorageRequest {
     pub size: StorageData,
     /// libp2p peer IDs from where the user would send the file.
     pub user_peer_ids: PeerIds,
+    /// Block number at which the storage request will expire if not fulfilled.
+    pub expires_at: BlockNumber,
 }
 
 impl EventBusMessage for NewStorageRequest {}

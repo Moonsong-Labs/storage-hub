@@ -47,7 +47,7 @@ mod benchmarks {
     };
     use sp_core::{Decode, Hasher};
     use sp_runtime::{
-        traits::{Hash, One, Zero},
+        traits::{Bounded, Hash, One, Zero},
         Saturating,
     };
     use sp_std::{vec, vec::Vec};
@@ -72,7 +72,7 @@ mod benchmarks {
         #[extrinsic_call]
         _(
             signed_origin.clone(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -112,7 +112,7 @@ mod benchmarks {
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(initial_msp_id),
+            initial_msp_id,
             name,
             true,
             Some(initial_value_prop_id),
@@ -175,7 +175,7 @@ mod benchmarks {
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(initial_msp_id),
+            initial_msp_id,
             name,
             true,
             Some(initial_value_prop_id),
@@ -236,7 +236,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -302,7 +302,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -367,7 +367,7 @@ mod benchmarks {
         // Create the bucket as private, creating the collection so it has to be deleted as well.
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -432,7 +432,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -445,7 +445,7 @@ mod benchmarks {
             location,
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         );
@@ -496,7 +496,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -508,7 +508,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             Some(n.into()),
         )?;
@@ -566,7 +566,7 @@ mod benchmarks {
 
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -580,9 +580,9 @@ mod benchmarks {
 
     #[benchmark]
     fn msp_respond_storage_requests_multiple_buckets(
-        n: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
-        m: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
-        l: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
+        n: Linear<1, 10>,
+        m: Linear<1, 10>,
+        l: Linear<1, 10>,
     ) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Get from the linear variables the amount of buckets to accept, the amount of file keys to accept per bucket and the amount to reject.
@@ -603,7 +603,7 @@ mod benchmarks {
             .expect("Failed to decode provider ID from bytes.");
         let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
 
-        let mut msp_total_response: StorageRequestMspResponse<T> = BoundedVec::new();
+        let mut msp_total_response: StorageRequestMspResponse<T> = Vec::new();
         // For each bucket to accept:
         for i in 1..amount_of_buckets_to_accept + 1 {
             // Create the bucket to store in the MSP
@@ -612,7 +612,7 @@ mod benchmarks {
                 <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
                     .expect("Bucket ID should be decodable as it is a hash");
             <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-                Some(msp_id),
+                msp_id,
                 user_account.clone(),
                 bucket_id,
                 false,
@@ -635,10 +635,7 @@ mod benchmarks {
             // Build the reject response for this bucket:
 
             // Create all the storage requests for the files to reject
-            let mut file_keys_to_reject: BoundedVec<
-                MerkleHash<T>,
-                MaxBatchMspRespondStorageRequests<T>,
-            > = BoundedVec::new();
+            let mut file_keys_to_reject: Vec<MerkleHash<T>> = Vec::new();
             for j in 0..amount_of_file_keys_to_reject_per_bucket {
                 let location: FileLocation<T> =
                     vec![j as u8; MaxFilePathSize::<T>::get().try_into().unwrap()]
@@ -651,6 +648,7 @@ mod benchmarks {
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+					expires_at: BlockNumberFor::<T>::max_value(),
                     owner: user_account.clone(),
                     bucket_id,
                     location: location.clone(),
@@ -674,11 +672,9 @@ mod benchmarks {
 
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-                file_keys_to_reject
-                    .try_push(file_key)
-                    .expect("File key amounts is limited by the same value as the bounded vector");
+                file_keys_to_reject.push(file_key);
             }
-            let reject_vec = file_keys_to_reject
+            let reject = file_keys_to_reject
                 .iter()
                 .map(|file_key| {
                     let reject_reason = RejectedStorageRequestReason::ReachedMaximumCapacity;
@@ -688,20 +684,11 @@ mod benchmarks {
                     }
                 })
                 .collect::<Vec<RejectedStorageRequest<T>>>();
-            let reject: BoundedVec<
-                RejectedStorageRequest<T>,
-                MaxBatchMspRespondStorageRequests<T>,
-            > = reject_vec
-                .try_into()
-                .expect("Reject amounts is limited by the same value as the bounded vector");
 
             // Build the accept response for this bucket:
 
             // Get the file keys to accept from the generated proofs.
-            let mut file_keys_and_proofs: BoundedVec<
-                FileKeyWithProof<T>,
-                <T as Config>::MaxBatchMspRespondStorageRequests,
-            > = BoundedVec::new();
+            let mut file_keys_and_proofs: Vec<FileKeyWithProof<T>> = Vec::new();
             let encoded_file_keys_to_accept =
                 fetch_file_keys_to_accept(amount_of_file_keys_to_accept_per_bucket, i as u32);
             let file_keys_to_accept = encoded_file_keys_to_accept
@@ -735,6 +722,7 @@ mod benchmarks {
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+					expires_at: BlockNumberFor::<T>::max_value(),
                     owner: user_account.clone(),
                     bucket_id,
                     location: location.clone().try_into().unwrap(),
@@ -756,9 +744,7 @@ mod benchmarks {
                 };
 
                 // Push it to the file keys and proofs bounded vector
-                file_keys_and_proofs
-                    .try_push(file_key_with_proof)
-                    .expect("File key amounts is limited by the same value as the bounded vector");
+                file_keys_and_proofs.push(file_key_with_proof);
             }
 
             // Get the non-inclusion forest proof for this amount of file keys
@@ -782,9 +768,7 @@ mod benchmarks {
                 reject,
             };
 
-            msp_total_response.try_push(response).expect(
-                "Amount of buckets to accept is limited by the same value as the bounded vector",
-            );
+            msp_total_response.push(response);
         }
 
         /*********** Call the extrinsic to benchmark: ***********/
@@ -825,7 +809,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -851,7 +835,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         )?;
@@ -918,9 +902,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn bsp_confirm_storing(
-        n: Linear<1, { T::MaxBatchMspRespondStorageRequests::get() }>,
-    ) -> Result<(), BenchmarkError> {
+    fn bsp_confirm_storing(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Get from the linear variable the amount of files to confirm storing
         let amount_of_files_to_confirm_storing: u32 = n.into();
@@ -961,7 +943,7 @@ mod benchmarks {
         let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
             .expect("Bucket ID should be decodable as it is a hash");
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             bucket_id,
             false,
@@ -1044,6 +1026,7 @@ mod benchmarks {
             let storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
+				expires_at: BlockNumberFor::<T>::max_value(),
 				owner: user_account.clone(),
 				bucket_id,
 				location: location.clone().try_into().unwrap(),
@@ -1192,7 +1175,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -1336,7 +1319,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -1516,7 +1499,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -1639,7 +1622,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -1813,7 +1796,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -1947,7 +1930,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -2113,7 +2096,7 @@ mod benchmarks {
 
         // Create the bucket to store in the MSP
         <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
-            Some(msp_id),
+            msp_id,
             user_account.clone(),
             file_bucket_id,
             false,
@@ -2384,7 +2367,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -2410,7 +2393,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         )?;
@@ -2500,7 +2483,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),
@@ -2526,7 +2509,7 @@ mod benchmarks {
             location.clone(),
             fingerprint,
             size,
-            Some(msp_id),
+            msp_id,
             peer_ids,
             None,
         )?;
@@ -2613,7 +2596,7 @@ mod benchmarks {
         );
         Pallet::<T>::create_bucket(
             signed_origin.clone().into(),
-            Some(msp_id),
+            msp_id,
             name,
             true,
             Some(value_prop_id),

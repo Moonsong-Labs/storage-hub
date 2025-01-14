@@ -633,14 +633,30 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a priority challenge failed to be queued for pending file deletion.
+       * Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
+       * This can happen if the priority challenge queue is full, and the failed challenge should be manually
+       * queued at a later time.
        **/
       FailedToQueuePriorityChallenge: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256],
+        [fileKey: H256, error: SpRuntimeDispatchError],
         {
-          user: AccountId32;
           fileKey: H256;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
+       * Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+       * the return of that storage request's deposit to the user failed.
+       **/
+      FailedToReleaseStorageRequestCreationDeposit: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, owner: AccountId32, amountToReturn: u128, error: SpRuntimeDispatchError],
+        {
+          fileKey: H256;
+          owner: AccountId32;
+          amountToReturn: u128;
+          error: SpRuntimeDispatchError;
         }
       >;
       /**
@@ -745,7 +761,7 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
-          mspId: Option<H256>,
+          mspId: H256,
           bucketId: H256,
           name: Bytes,
           root: H256,
@@ -755,7 +771,7 @@ declare module "@polkadot/api-base/types/events" {
         ],
         {
           who: AccountId32;
-          mspId: Option<H256>;
+          mspId: H256;
           bucketId: H256;
           name: Bytes;
           root: H256;
@@ -788,7 +804,8 @@ declare module "@polkadot/api-base/types/events" {
           location: Bytes,
           fingerprint: H256,
           size_: u64,
-          peerIds: Vec<Bytes>
+          peerIds: Vec<Bytes>,
+          expiresAt: u32
         ],
         {
           who: AccountId32;
@@ -798,6 +815,7 @@ declare module "@polkadot/api-base/types/events" {
           fingerprint: H256;
           size_: u64;
           peerIds: Vec<Bytes>;
+          expiresAt: u32;
         }
       >;
       /**

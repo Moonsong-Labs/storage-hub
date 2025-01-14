@@ -11,7 +11,7 @@ use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError};
-use sp_std::fmt::Debug;
+use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, FileDeletionRequestExpirations, MoveBucketRequestExpirations,
@@ -28,6 +28,12 @@ pub struct StorageRequestMetadata<T: Config> {
     /// Used primarily for tracking the age of the request which is useful for
     /// cleaning up old requests.
     pub requested_at: TickNumber<T>,
+
+    /// Block number at which the storage request will expire.
+    ///
+    /// Used to track what storage elements to clean when a storage request gets fulfilled.
+    /// Note: we use block numbers for expiration items instead of ticks. Maybe we should unify this.
+    pub expires_at: BlockNumberFor<T>,
 
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
@@ -120,7 +126,7 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
-    pub file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, MaxBatchMspRespondStorageRequests<T>>,
+    pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
     pub non_inclusion_forest_proof: ForestProof<T>,
 }
 
@@ -165,7 +171,7 @@ impl<T: Config> Debug for RejectedStorageRequest<T> {
 pub struct StorageRequestMspBucketResponse<T: Config> {
     pub bucket_id: BucketIdFor<T>,
     pub accept: Option<StorageRequestMspAcceptedFileKeys<T>>,
-    pub reject: BoundedVec<RejectedStorageRequest<T>, MaxBatchMspRespondStorageRequests<T>>,
+    pub reject: Vec<RejectedStorageRequest<T>>,
 }
 
 impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
@@ -178,14 +184,13 @@ impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
     }
 }
 
-/// Input for MSPs to respond to storage request(s).
+/// Unbounded input for MSPs to respond to storage request(s).
 ///
 /// The input is a list of bucket responses, where each response contains:
 /// - The bucket ID
 /// - Optional accepted file keys and proof for the whole list
 /// - List of rejected file keys and rejection reasons
-pub type StorageRequestMspResponse<T> =
-    BoundedVec<StorageRequestMspBucketResponse<T>, MaxBatchMspRespondStorageRequests<T>>;
+pub type StorageRequestMspResponse<T> = Vec<StorageRequestMspBucketResponse<T>>;
 
 /// Ephemeral BSP storage request tracking metadata.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -354,10 +359,6 @@ pub type FileKeyHasher<T> =
 
 /// Alias for the `MaxBatchConfirmStorageRequests` type used in the FileSystem pallet.
 pub type MaxBatchConfirmStorageRequests<T> = <T as crate::Config>::MaxBatchConfirmStorageRequests;
-
-/// Alias for the `MaxBatchMspRespondStorageRequests` type used in the FileSystem pallet.
-pub type MaxBatchMspRespondStorageRequests<T> =
-    <T as crate::Config>::MaxBatchMspRespondStorageRequests;
 
 /// Alias for the `MaxFilePathSize` type used in the FileSystem pallet.
 pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;

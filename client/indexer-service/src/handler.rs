@@ -191,12 +191,8 @@ impl IndexerService {
                 value_prop_id: _,
                 root,
             } => {
-                let msp = match msp_id {
-                    Some(msp_id) => {
-                        Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?)
-                    }
-                    None => None,
-                };
+                let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
+
                 Bucket::create(
                     conn,
                     msp.map(|m| m.id),
@@ -260,6 +256,7 @@ impl IndexerService {
                 fingerprint,
                 size,
                 peer_ids,
+                expires_at: _,
             } => {
                 let bucket =
                     Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
@@ -327,6 +324,9 @@ impl IndexerService {
             pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
             pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::__Ignore(_, _) => {}

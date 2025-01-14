@@ -150,7 +150,7 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen;
 
-        /// Type representing the storage request bsps size type.
+        /// Type representing the storage request's BSP amount type.
         type ReplicationTargetType: Parameter
             + Member
             + MaybeSerializeDeserialize
@@ -251,10 +251,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
-        /// Maximum batch of storage requests that can be responded to at once when calling `msp_respond_storage_requests_multiple_buckets`.
-        #[pallet::constant]
-        type MaxBatchMspRespondStorageRequests: Get<u32>;
-
         /// Maximum byte size of a file path.
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
@@ -315,12 +311,12 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
-    /// A double map from storage request to BSP `AccountId`s that volunteered to store the file.
+    /// A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
     ///
-    /// Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
+    /// Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
+    /// Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
     ///
-    /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
+    /// When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
     #[pallet::storage]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
         _,
@@ -497,7 +493,7 @@ pub mod pallet {
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             name: BucketNameFor<T>,
             root: MerkleHash<T>,
@@ -539,6 +535,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
+            expires_at: BlockNumberFor<T>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -614,10 +611,12 @@ pub mod pallet {
             location: FileLocation<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a priority challenge failed to be queued for pending file deletion.
+        /// Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
+        /// This can happen if the priority challenge queue is full, and the failed challenge should be manually
+        /// queued at a later time.
         FailedToQueuePriorityChallenge {
-            user: T::AccountId,
             file_key: MerkleHash<T>,
+            error: DispatchError,
         },
         /// Notifies that a file will be deleted.
         FileDeletionRequest {
@@ -687,6 +686,14 @@ pub mod pallet {
         /// Event to notify of incoherencies in used capacity.
         UsedCapacityShouldBeZero {
             actual_used_capacity: StorageData<T>,
+        },
+        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+        /// the return of that storage request's deposit to the user failed.
+        FailedToReleaseStorageRequestCreationDeposit {
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            amount_to_return: BalanceOf<T>,
+            error: DispatchError,
         },
     }
 
@@ -842,6 +849,8 @@ pub mod pallet {
         NoPrivacyChange,
         /// Operations not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
+        /// Operations not allowed while bucket is not being stored by an MSP
+        OperationNotAllowedWhileBucketIsNotStoredByMsp,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -863,7 +872,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::create_bucket())]
         pub fn create_bucket(
             origin: OriginFor<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
             value_prop_id: Option<ValuePropId<T>>,
@@ -1009,7 +1018,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
             replication_target: Option<ReplicationTargetType<T>>,
         ) -> DispatchResult {
@@ -1023,7 +1032,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
-                msp_id,
+                Some(msp_id),
                 replication_target,
                 Some(peer_ids.clone()),
             )?;
@@ -1066,19 +1075,14 @@ pub mod pallet {
         /// wasn't storing it before.
         #[pallet::call_index(8)]
         #[pallet::weight({
-			let amount_of_buckets = storage_request_msp_response.iter().count();
-			let max_amount_of_files_to_accept_for_bucket = storage_request_msp_response.iter().map(|response|
-				if let Some(accept_response) = &response.accept {
-					accept_response.file_keys_and_proofs.len()
-				} else {
-					0
-				}
-			)
-			.max()
-			.unwrap_or(0);
-			let max_amount_of_files_to_reject = storage_request_msp_response.iter().map(|response| response.reject.len()).max().unwrap_or(0);
+			let total_weight: Weight = Weight::zero();
+			for bucket_response in storage_request_msp_response.iter() {
+				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
+				let amount_of_files_to_reject = bucket_response.reject.len();
 
-			T::WeightInfo::msp_respond_storage_requests_multiple_buckets(amount_of_buckets as u32, max_amount_of_files_to_accept_for_bucket as u32, max_amount_of_files_to_reject as u32)
+				total_weight.saturating_add(T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32));
+			}
+			total_weight
 		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
@@ -1393,8 +1397,6 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
-            // TODO: Benchmark computational weight cost of this hook.
-
             Self::do_on_poll(weight);
         }
 
