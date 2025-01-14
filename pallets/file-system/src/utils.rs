@@ -29,7 +29,7 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
-    PaymentStreamsInterface, ReadBucketsInterface, ReadProvidersInterface,
+    PaymentStreamsInterface, ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
     ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
@@ -45,10 +45,9 @@ use crate::{
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
-    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
-    TickRangeToMaximumThreshold,
+    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
+    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -641,7 +640,7 @@ where
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if replication_target > MaxReplicationTarget::<T>::get().into() {
+        if replication_target > T::MaxReplicationTarget::get() {
             return Err(Error::<T>::ReplicationTargetExceedsMaximum)?;
         }
 
@@ -1715,7 +1714,7 @@ where
             &bsp_id,
             &file_key,
             PendingStopStoringRequest {
-                tick_when_requested: frame_system::Pallet::<T>::block_number(),
+                tick_when_requested: <T::ProofDealer as ProofsDealerInterface>::get_current_tick(),
                 file_owner: owner,
                 file_size: size,
             },
@@ -1742,7 +1741,7 @@ where
 
         // Get the block when the pending stop storing request of the BSP for the file key was opened.
         let PendingStopStoringRequest {
-            tick_when_requested: block_when_opened,
+            tick_when_requested,
             file_size,
             file_owner,
         } = <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
@@ -1750,8 +1749,8 @@ where
 
         // Check that enough time has passed since the pending stop storing request was opened.
         ensure!(
-            frame_system::Pallet::<T>::block_number()
-                >= block_when_opened.saturating_add(T::MinWaitForStopStoring::get()),
+            <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_current_tick()
+                >= tick_when_requested.saturating_add(T::MinWaitForStopStoring::get()),
             Error::<T>::MinWaitForStopStoringNotReached
         );
 
@@ -2347,7 +2346,7 @@ where
         let threshold_global_starting_point = maximum_threshold
             .checked_div(&global_weight)
             .unwrap_or(T::ThresholdType::one())
-            .checked_mul(&MaxReplicationTarget::<T>::get().into()).unwrap_or({
+            .checked_mul(&T::MaxReplicationTarget::get().into()).unwrap_or({
                 log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
                 maximum_threshold
             })
@@ -2365,7 +2364,7 @@ where
         let base_slope = maximum_threshold
             .saturating_sub(threshold_global_starting_point)
             .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
-                TickRangeToMaximumThreshold::<T>::get(),
+                T::TickRangeToMaximumThreshold::get(),
             ))
             .unwrap_or(T::ThresholdType::one());
 
@@ -2404,9 +2403,9 @@ mod hooks {
         },
         weights::WeightInfo,
         BucketsWithStorageRequests, Event, FileDeletionRequestExpirations, HoldReason,
-        MaxReplicationTarget, MoveBucketRequestExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        MoveBucketRequestExpirations, NextStartingBlockToCleanUp, Pallet, PendingBucketsToMove,
+        PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
+        StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -2491,7 +2490,7 @@ mod hooks {
                 // Get the maximum amount of BSPs required for a storage request.
                 // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
                 // We could increase this potential weight to account for potentially more volunteers.
-                let max_bsp_required: u64 = MaxReplicationTarget::<T>::get().into();
+                let max_bsp_required: u64 = T::MaxReplicationTarget::get().into();
                 meter.consume(db_weight.reads(1));
 
                 // Get the storage request expirations for the current block.
