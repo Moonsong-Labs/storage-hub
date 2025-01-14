@@ -446,7 +446,13 @@ where
             return self.reject_bucket_move(event.bucket_id).await;
         };
 
-        let mut indexer_connection = indexer_db_pool.get().await?;
+        let mut indexer_connection = match indexer_db_pool.get().await {
+            Ok(connection) => connection,
+            Err(error) => {
+                error!(target: LOG_TARGET, "Failed to get indexer connection after timeout: {:?}", error);
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+        };
         let bucket = event.bucket_id.as_ref().to_vec();
 
         let forest_storage = self
