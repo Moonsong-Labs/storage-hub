@@ -17,7 +17,7 @@ diesel::table! {
 diesel::table! {
     bsp_file (bsp_id, file_id) {
         bsp_id -> Int4,
-        file_id -> Int4,
+        file_id -> Int8,
     }
 }
 
@@ -45,7 +45,7 @@ diesel::table! {
 
 diesel::table! {
     file (id) {
-        id -> Int4,
+        id -> Int8,
         account -> Bytea,
         file_key -> Bytea,
         bucket_id -> Int4,
@@ -60,7 +60,7 @@ diesel::table! {
 
 diesel::table! {
     file_peer_id (file_id, peer_id) {
-        file_id -> Int4,
+        file_id -> Int8,
         peer_id -> Int4,
     }
 }

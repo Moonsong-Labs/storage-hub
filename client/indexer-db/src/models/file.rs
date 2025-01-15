@@ -22,7 +22,7 @@ pub enum FileStorageRequestStep {
 #[diesel(table_name = file)]
 pub struct File {
     /// The ID of the file as stored in the database. For the runtime id, use `onchain_bsp_id`.
-    pub id: i32,
+    pub id: i64,
     pub account: Vec<u8>,
     pub file_key: Vec<u8>,
     pub bucket_id: i32,
@@ -41,7 +41,7 @@ pub struct File {
 #[diesel(belongs_to(File, foreign_key = file_id))]
 #[diesel(belongs_to(crate::models::PeerId, foreign_key = peer_id))]
 pub struct FilePeerId {
-    pub file_id: i32,
+    pub file_id: i64,
     pub peer_id: i32,
 }
 

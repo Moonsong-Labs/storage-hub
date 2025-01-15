@@ -166,14 +166,14 @@ impl Bsp {
 #[diesel(table_name = bsp_file)]
 pub struct BspFile {
     pub bsp_id: i32,
-    pub file_id: i32,
+    pub file_id: i64,
 }
 
 impl BspFile {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
         bsp_id: i32,
-        file_id: i32,
+        file_id: i64,
     ) -> Result<(), diesel::result::Error> {
         diesel::insert_into(bsp_file::table)
             .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))
