@@ -2567,6 +2567,14 @@ mod sign_off {
                     // Check that the counter of registered BSPs has decreased
                     assert_eq!(StorageProviders::get_bsp_count(), 0);
 
+                    // Verify that the proof challenge cycle has been stopped
+                    assert!(
+                        pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                            &alice_bsp_id
+                        )
+                        .is_none()
+                    );
+
                     // Check the BSP Sign Off event was emitted
                     System::assert_has_event(
                         Event::<Test>::BspSignOffSuccess {

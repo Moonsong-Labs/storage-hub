@@ -463,6 +463,9 @@ where
             Error::<T>::SignOffPeriodNotPassed
         );
 
+        // Stop all cycles before deleting the BSP since this function will check if the BSP has default root
+        Self::do_stop_all_cycles(who)?;
+
         // Update the BSPs storage, removing the signer as an BSP
         AccountIdToBackupStorageProviderId::<T>::remove(who);
         BackupStorageProviders::<T>::remove(&bsp_id);
