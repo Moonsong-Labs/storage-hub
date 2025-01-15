@@ -1,6 +1,7 @@
 use std::{
     cmp::max,
     collections::{HashMap, HashSet},
+    hash::Hash,
     ops::Add,
     str::FromStr,
     sync::Arc,
@@ -8,10 +9,10 @@ use std::{
 };
 
 use anyhow::anyhow;
-use frame_support::BoundedVec;
+use frame_support::{traits::dynamic_params::IntoKey, BoundedVec};
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_core::H256;
+use sp_core::{ByteArray, H256};
 use sp_runtime::AccountId32;
 use tokio::sync::Mutex;
 
@@ -530,7 +531,7 @@ where
 
         is_allowed = read_file_storage
             .is_allowed(
-                &event.fingerprint.into(),
+                &event.fingerprint.as_hash().into(),
                 shc_file_manager::traits::ExcludeType::Fingerprint,
             )
             .map_err(|e| {
@@ -542,12 +543,48 @@ where
                 anyhow::anyhow!(err_msg)
             })?;
 
-        drop(read_file_storage);
-
         if !is_allowed {
-            info!("File is in the exclude list");
+            info!("File fingerprint is in the exclude list");
             return Ok(());
         }
+
+        let owner = H256::from(event.who.as_ref());
+        is_allowed = read_file_storage
+            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Owner is in the exclude list");
+            return Ok(());
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.bucket_id,
+                shc_file_manager::traits::ExcludeType::Bucket,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Bucket is in the exclude list");
+            return Ok(());
+        }
+
+        drop(read_file_storage);
 
         // Get the current Forest key of the Provider running this node.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
