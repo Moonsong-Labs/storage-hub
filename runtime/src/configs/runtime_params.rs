@@ -11,8 +11,6 @@ pub mod dynamic_params {
     #[codec(index = 0)]
     pub mod runtime_config {
 
-        use pallet_file_system::types::ReplicationTargetType;
-
         use super::*;
 
         #[codec(index = 0)]

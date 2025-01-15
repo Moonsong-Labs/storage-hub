@@ -1365,7 +1365,6 @@ pub mod pallet {
 
             assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");
 
-            assert!(min_wait_for_stop_storing > Zero::zero(), "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be zero.");
             assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
         }
     }

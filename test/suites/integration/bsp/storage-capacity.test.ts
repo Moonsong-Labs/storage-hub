@@ -54,8 +54,17 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
   it("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
     // 1 block to maxthreshold (i.e. instant acceptance)
+    const tickToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
     await userApi.block.seal({
-      calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+      calls: [
+        userApi.tx.sudo.sudo(
+          userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+        )
+      ]
     });
 
     const capacityUsed = (

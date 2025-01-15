@@ -182,8 +182,17 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
 
   it("bsp volunteers multiple files properly", async () => {
     // 1 block to maxthreshold (i.e. instant acceptance)
+    const tickToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
     await userApi.block.seal({
-      calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+      calls: [
+        userApi.tx.sudo.sudo(
+          userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+        )
+      ]
     });
 
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
