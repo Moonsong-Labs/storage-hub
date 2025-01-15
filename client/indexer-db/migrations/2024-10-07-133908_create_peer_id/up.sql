@@ -7,7 +7,7 @@ CREATE TABLE peer_id (
 
 -- Create File_PeerId table
 CREATE TABLE file_peer_id (
-    file_id INTEGER NOT NULL,
+    file_id BIGINT NOT NULL,
     peer_id INTEGER NOT NULL,
     PRIMARY KEY (file_id, peer_id),
     FOREIGN KEY (file_id) REFERENCES file(id) ON DELETE CASCADE,
