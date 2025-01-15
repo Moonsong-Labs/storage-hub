@@ -1,0 +1,6 @@
+[provider]
+provider_type = "bsp"             # other choices are 'msp' and 'user'
+storage_layer = "memory"          # other choice is 'rocksdb'
+max_storage_capacity = 4294967295
+jump_capacity = 1073741824
+extrinsic_retry_timeout = 60

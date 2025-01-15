@@ -77,7 +77,7 @@ describeBspNet(
       });
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -177,19 +177,21 @@ describeBspNet(
         [fileMetadata.fileKey]
       );
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
-      const blockResult = await userApi.sealBlock(
-        bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-          fileMetadata.fileKey,
-          fileMetadata.bucketId,
-          fileMetadata.location,
-          fileMetadata.owner,
-          fileMetadata.fingerprint,
-          fileMetadata.fileSize,
-          false,
-          inclusionForestProof.toString()
-        ),
-        bspThreeKey
-      );
+      const blockResult = await userApi.block.seal({
+        calls: [
+          bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+            fileMetadata.fileKey,
+            fileMetadata.bucketId,
+            fileMetadata.location,
+            fileMetadata.owner,
+            fileMetadata.fingerprint,
+            fileMetadata.fileSize,
+            false,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspThreeKey
+      });
       assert(blockResult.extSuccess, "Extrinsic was part of the block so its result should exist.");
       assert(
         blockResult.extSuccess === true,
@@ -203,24 +205,30 @@ describeBspNet(
     });
 
     it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
+      // Generate the inclusion proof for the file key that BSP-Three requested to stop storing.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileMetadata.fileKey]
       );
+
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
+      await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
+
       // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-      await userApi.sealBlock(
-        bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-          fileMetadata.fileKey,
-          inclusionForestProof.toString()
-        ),
-        bspThreeKey
-      );
+      await userApi.block.seal({
+        calls: [
+          bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
+            fileMetadata.fileKey,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspThreeKey
+      });
       // Check for the confirm stopped storing event.
       const confirmStopStoringEvent = await userApi.assert.eventPresent(
         "fileSystem",
@@ -315,7 +323,7 @@ describeBspNet(
       assert(submitProofsPending.length > 0);
 
       // Seal block and check that the transaction was successful.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -459,17 +467,19 @@ describeBspNet(
       );
 
       // User sends file deletion request.
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.deleteFile(
-          oneBspfileMetadata.bucketId,
-          oneBspfileMetadata.fileKey,
-          oneBspfileMetadata.location,
-          oneBspfileMetadata.fileSize,
-          oneBspfileMetadata.fingerprint,
-          null
-        ),
-        shUser
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.deleteFile(
+            oneBspfileMetadata.bucketId,
+            oneBspfileMetadata.fileKey,
+            oneBspfileMetadata.location,
+            oneBspfileMetadata.fileSize,
+            oneBspfileMetadata.fingerprint,
+            null
+          )
+        ],
+        signer: shUser
+      });
 
       // Check for a file deletion request event.
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequest");
@@ -582,7 +592,7 @@ describeBspNet(
 
       // Wait for BSP to generate the proof and advance one more block.
       await sleep(500);
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Check for a ProofAccepted event.
       const firstChallengeBlockEvents = await userApi.assert.eventMany(
@@ -638,7 +648,7 @@ describeBspNet(
 
         // Wait for BSP to generate the proof and advance one more block.
         await sleep(500);
-        await userApi.sealBlock();
+        await userApi.block.seal();
       }
 
       // Check for a ProofAccepted event.

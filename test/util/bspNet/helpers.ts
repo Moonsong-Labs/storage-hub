@@ -135,18 +135,20 @@ export const forceSignupBsp = async (options: {
   weight?: bigint;
 }) => {
   const bspId = options.bspId || `0x${crypto.randomBytes(32).toString("hex")}`;
-  const blockResults = await options.api.sealBlock(
-    options.api.tx.sudo.sudo(
-      options.api.tx.providers.forceBspSignUp(
-        options.who,
-        bspId,
-        options.capacity || ShConsts.CAPACITY_512,
-        [options.multiaddress],
-        options.payeeAddress || options.who,
-        options.weight ?? null
+  const blockResults = await options.api.block.seal({
+    calls: [
+      options.api.tx.sudo.sudo(
+        options.api.tx.providers.forceBspSignUp(
+          options.who,
+          bspId,
+          options.capacity || ShConsts.CAPACITY_512,
+          [options.multiaddress],
+          options.payeeAddress || options.who,
+          options.weight ?? null
+        )
       )
-    )
-  );
+    ]
+  });
   return Object.assign(bspId, blockResults);
 };
 

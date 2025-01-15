@@ -5,6 +5,7 @@
 mod chain_spec;
 mod cli;
 mod command;
+mod config;
 mod rpc;
 mod service;
 mod services;

@@ -24,12 +24,16 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
         DefaultReplicationTarget: [null, 1]
       }
     };
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
-    );
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+      ]
+    });
 
     // 1 block to maxthreshold (i.e. instant acceptance)
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1)));
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,
@@ -63,7 +67,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       assertLength: 3,
       timeout: 15000
     });
-    await api.sealBlock();
+    await api.block.seal();
 
     await api.assert.extrinsicPresent({
       module: "fileSystem",
@@ -72,7 +76,7 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
       assertLength: 3,
       timeout: 15000
     });
-    await api.sealBlock();
+    await api.block.seal();
 
     const matchedEvents = await api.assert.eventMany("system", "ExtrinsicFailed");
     strictEqual(matchedEvents.length, 2, "Expected 2 ExtrinsicFailed events from the losing BSPs");
