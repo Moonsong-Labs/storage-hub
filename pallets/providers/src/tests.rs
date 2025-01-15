@@ -6330,9 +6330,19 @@ mod stop_all_cycles {
                 let bob: AccountId = accounts::BOB.0;
                 let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
 
+                let provider_id = StorageProviders::get_provider_id(bob).unwrap();
+
                 assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
                     bob
                 ),));
+
+                // Verify that the proof challenge cycle has been stopped
+                assert!(
+                    pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                        &provider_id
+                    )
+                    .is_none()
+                );
             });
         }
     }
