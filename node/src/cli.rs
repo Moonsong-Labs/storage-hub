@@ -1,6 +1,6 @@
-use std::{path::PathBuf, str::FromStr};
-
 use clap::{Parser, ValueEnum};
+use serde::{Deserialize, Deserializer};
+use std::{path::PathBuf, str::FromStr};
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::command::ProviderOptions;
@@ -54,12 +54,49 @@ pub enum ProviderType {
     User,
 }
 
+impl<'de> serde::Deserialize<'de> for ProviderType {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+
+        let provider_type = match s.as_str() {
+            "bsp" => ProviderType::Bsp,
+            "msp" => ProviderType::Msp,
+            "user" => ProviderType::User,
+            _ => {
+                return Err(serde::de::Error::custom(
+                    "Cannot parse `provider_type`. Invalid value.",
+                ))
+            }
+        };
+
+        Ok(provider_type)
+    }
+}
+
 #[derive(ValueEnum, Clone, Debug)]
 pub enum StorageLayer {
     /// RocksDB with path.
     RocksDB,
     /// In Memory
     Memory,
+}
+
+impl<'de> serde::Deserialize<'de> for StorageLayer {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+
+        let storage_layer = match s.as_str() {
+            "rocksdb" => StorageLayer::RocksDB,
+            "memory" => StorageLayer::Memory,
+            _ => {
+                return Err(serde::de::Error::custom(
+                    "Cannot parse `storage_type`. Invalid value.",
+                ))
+            }
+        };
+
+        Ok(storage_layer)
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -158,7 +195,7 @@ pub struct IndexerConfigurations {
 }
 
 /// Block authoring scheme to be used by the dev service.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Deserialize)]
 pub enum Sealing {
     /// Author a block immediately upon receiving a transaction into the transaction pool
     Instant,
@@ -227,6 +264,10 @@ pub struct Cli {
     /// Provider configurations
     #[command(flatten)]
     pub provider_config: ProviderConfigurations,
+
+    /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
+    #[clap(long, conflicts_with_all = ["provider", "provider_type", "max_storage_capacity", "jump_capacity", "storage_layer", "storage_path", "extrinsic_retry_timeout", "msp_charging_period"])]
+    pub provider_config_file: Option<String>,
 
     /// Indexer configurations
     #[command(flatten)]

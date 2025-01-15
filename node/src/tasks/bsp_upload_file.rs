@@ -24,7 +24,8 @@ use shc_blockchain_service::{
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        Balance, FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+        Balance, FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
+        StorageProviderId,
     },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -345,7 +346,10 @@ where
                 read_file_storage.get_metadata(&confirm_storing_request.file_key),
             ) {
                 (Ok(proof), Ok(Some(metadata))) => {
-                    file_keys_and_proofs.push((confirm_storing_request.file_key, proof));
+                    file_keys_and_proofs.push(FileKeyWithProof {
+                        file_key: confirm_storing_request.file_key,
+                        proof,
+                    });
                     file_metadatas.insert(confirm_storing_request.file_key, metadata);
                 }
                 _ => {
@@ -375,7 +379,7 @@ where
 
         let file_keys = file_keys_and_proofs
             .iter()
-            .map(|(file_key, _)| *file_key)
+            .map(|file_key_with_proof| file_key_with_proof.file_key)
             .collect::<Vec<_>>();
 
         let fs = self

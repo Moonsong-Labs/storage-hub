@@ -495,23 +495,21 @@ mod benchmarks {
         let amount_charged: BalanceOf<T> = rate_as_balance
             + (initial_amount_as_balance * CurrentPricePerGigaUnitPerTick::<T>::get()
                 / GIGAUNIT.into());
-        let charge_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::PaymentStreamCharged {
-                user_account: user_account.clone(),
-                provider_id,
-                amount: amount_charged,
-                last_tick_charged: frame_system::Pallet::<T>::block_number(),
-                charged_at_tick: frame_system::Pallet::<T>::block_number(),
-            });
+        let charge_event = <T as pallet::Config>::RuntimeEvent::from(Event::PaymentStreamCharged {
+            user_account: user_account.clone(),
+            provider_id,
+            amount: amount_charged,
+            last_tick_charged: frame_system::Pallet::<T>::block_number(),
+            charged_at_tick: frame_system::Pallet::<T>::block_number(),
+        });
         frame_system::Pallet::<T>::assert_has_event(charge_event.into());
         // Verify the dynamic-rate payment stream update event was emitted.
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(
-            Event::<T>::DynamicRatePaymentStreamUpdated {
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::DynamicRatePaymentStreamUpdated {
                 user_account: user_account.clone(),
                 provider_id,
                 new_amount_provided: new_amount_provided.into(),
-            },
-        );
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the payment stream exists in storage and was updated

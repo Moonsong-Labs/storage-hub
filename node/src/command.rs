@@ -7,17 +7,19 @@ use sc_cli::{
     NetworkParams, Result, RpcEndpoint, SharedParams, SubstrateCli,
 };
 use sc_service::config::{BasePath, PrometheusConfig};
+use serde::Deserialize;
 use storage_hub_runtime::{Block, StorageDataUnit};
 
 use crate::{
     chain_spec,
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
+    config,
     service::new_partial,
 };
 
 // TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
 /// Configuration for the provider.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ProviderOptions {
     /// Provider type.
     pub provider_type: ProviderType,
@@ -244,11 +246,20 @@ pub fn run() -> Result<()> {
             }
         }
         None => {
+            let mut provider_options = None;
             let runner = cli.create_runner(&cli.run.normalize())?;
-            let provider_options = if cli.provider_config.provider {
-                Some(cli.provider_config.provider_options())
-            } else {
-                None
+
+            // If we have a provider config file
+            if let Some(provider_config_file) = cli.provider_config_file {
+                let config = config::read_config(&provider_config_file);
+                if let Some(c) = config {
+                    provider_options = Some(c.provider);
+                };
+            };
+
+            // We then check cli (the cli doesn't allow to have both cli parameters and a config file so we should not have overlap here)
+            if cli.provider_config.provider {
+                provider_options = Some(cli.provider_config.provider_options());
             };
 
             runner.run_node_until_exit(|config| async move {

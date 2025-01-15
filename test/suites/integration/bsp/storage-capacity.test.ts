@@ -26,10 +26,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     );
     assert.ok(bspCapacityBefore.unwrap().capacity.eq(totalCapacityBefore));
 
-    const { events, extSuccess } = await userApi.sealBlock(
-      userApi.tx.providers.changeCapacity(userApi.shConsts.CAPACITY[1024]),
-      ferdie
-    );
+    const { events, extSuccess } = await userApi.block.seal({
+      calls: [userApi.tx.providers.changeCapacity(userApi.shConsts.CAPACITY[1024])],
+      signer: ferdie
+    });
     assert.strictEqual(extSuccess, false);
 
     await userApi.block.skip(20);
@@ -54,9 +54,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
   it("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
     // 1 block to maxthreshold (i.e. instant acceptance)
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))
-    );
+    await userApi.block.seal({
+      calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+    });
 
     const capacityUsed = (
       await userApi.query.providers.backupStorageProviders(userApi.shConsts.DUMMY_BSP_ID)
@@ -69,10 +69,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-    const { extSuccess } = await userApi.sealBlock(
-      userApi.tx.providers.changeCapacity(newCapacity),
-      bspKey
-    );
+    const { extSuccess } = await userApi.block.seal({
+      calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+      signer: bspKey
+    });
     assert.strictEqual(extSuccess, true);
 
     const source = "res/cloud.jpg";
@@ -94,7 +94,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     // Assert that the capacity has changed.
     await userApi.assert.eventPresent("providers", "CapacityChanged");
@@ -109,7 +109,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     const updatedCapacity = BigInt(userApi.shConsts.JUMP_CAPACITY_BSP + newCapacity);
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
@@ -129,7 +129,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await userApi.block.skipToMinChangeTime();
 
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-    await userApi.sealBlock(userApi.tx.providers.changeCapacity(newCapacity), bspKey);
+    await userApi.block.seal({
+      calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+      signer: bspKey
+    });
 
     const totalCapacityAfter = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
@@ -152,10 +155,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await userApi.block.skipToMinChangeTime();
 
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-    const { events, extSuccess } = await userApi.sealBlock(
-      userApi.tx.providers.changeCapacity(2n),
-      bspKey
-    );
+    const { events, extSuccess } = await userApi.block.seal({
+      calls: [userApi.tx.providers.changeCapacity(2n)],
+      signer: bspKey
+    });
     assert.strictEqual(extSuccess, false);
     const {
       data: { dispatchError: eventInfo }
@@ -182,10 +185,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
     // Set BSP's available capacity to 0 to force the BSP to increase its capacity before volunteering for the storage request.
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-    const { extSuccess } = await userApi.sealBlock(
-      userApi.tx.providers.changeCapacity(newCapacity),
-      bspKey
-    );
+    const { extSuccess } = await userApi.block.seal({
+      calls: [userApi.tx.providers.changeCapacity(newCapacity)],
+      signer: bspKey
+    });
     assert.strictEqual(extSuccess, true);
 
     // First storage request
@@ -215,7 +218,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       checkTxPool: true
     });
 
-    await userApi.sealBlock();
+    await userApi.block.seal();
 
     // Assert that the capacity has changed.
     await userApi.assert.eventPresent("providers", "CapacityChanged");
