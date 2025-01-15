@@ -1,6 +1,8 @@
 use sc_network::PeerId;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
-use shc_common::types::{BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof};
+use shc_common::types::{
+    BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
+};
 
 #[derive(Clone)]
 pub struct RemoteUploadRequest {
@@ -8,9 +10,8 @@ pub struct RemoteUploadRequest {
     pub file_key: FileKey,
     pub file_key_proof: FileKeyProof,
     pub bucket_id: Option<BucketId>,
-    /// A channel to notify the user that the file is stored completely
-    /// and there is no need to continue uploading chunks.
-    pub file_complete_channel: tokio::sync::mpsc::Sender<bool>,
+    /// The request ID used to send back the response through the FileTransferService
+    pub request_id: UploadRequestId,
 }
 
 impl EventBusMessage for RemoteUploadRequest {}

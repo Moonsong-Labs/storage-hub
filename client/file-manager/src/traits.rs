@@ -5,7 +5,7 @@ use trie_db::TrieLayout;
 pub enum FileStorageWriteError {
     /// The requested file does not exist.
     FileDoesNotExist,
-    /// File chunk already exists.
+    /// File chunk ID already exists.
     FileChunkAlreadyExists,
     /// Failed to insert the file chunk.
     FailedToInsertFileChunk,

@@ -143,20 +143,52 @@ where
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
             Err(e) => {
-                // Send error response before propagating error
-                let _ = event.file_complete_channel.send(false).await;
+                // Send error response through FileTransferService
+                if let Err(e) = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .upload_response(false, event.request_id)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to send error response: {:?}", e);
+                }
                 return Err(e);
             }
         };
 
-        // Send completion status to user
-        if let Err(e) = event.file_complete_channel.send(file_complete).await {
-            error!(target: LOG_TARGET, "Failed to send response to channel: {:?}", e);
+        // Send completion status through FileTransferService
+        if let Err(e) = self
+            .storage_hub_handler
+            .file_transfer
+            .upload_response(file_complete, event.request_id)
+            .await
+        {
+            error!(target: LOG_TARGET, "Failed to send response: {:?}", e);
         }
 
-        // Handle file completion if the entire file is uploaded or is already being stored.
+        // Handle file completion if the entire file is uploaded
         if file_complete {
-            self.on_file_complete(&event.file_key.into()).await?;
+            if let Err(e) = self
+                .storage_hub_handler
+                .file_transfer
+                .unregister_file(event.file_key)
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to unregister file {:?} from file transfer service: {:?}",
+                    event.file_key,
+                    e
+                );
+            }
+
+            self.storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(ConfirmStoringRequest {
+                    file_key: event.file_key.into(),
+                    try_count: 0,
+                })
+                .await?;
         }
 
         Ok(())
@@ -743,69 +775,47 @@ where
         &mut self,
         event: RemoteUploadRequest,
     ) -> anyhow::Result<bool> {
-        // Check if file is already complete
-        if self
-            .storage_hub_handler
-            .file_storage
-            .read()
-            .await
-            .is_file_complete(&event.file_key.into())
-            .unwrap_or(false)
-        {
-            return Ok(true);
-        }
+        let file_key = event.file_key.into();
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
-        let proven = match event
+        // Verify and extract chunk from proof
+        let proven = event
             .file_key_proof
             .proven::<StorageProofsMerkleTrieLayout>()
-        {
-            Ok(proven) => {
-                if proven.len() != 1 {
-                    Err(anyhow::anyhow!(
-                        "Expected exactly one proven chunk but got {}.",
-                        proven.len()
-                    ))
-                } else {
-                    Ok(proven[0].clone())
-                }
-            }
-            Err(e) => Err(anyhow::anyhow!(
-                "Failed to verify and get proven file key chunks: {:?}",
-                e
-            )),
-        };
+            .map_err(|e| anyhow!("Failed to verify proof: {:?}", e))?;
+        if proven.len() != 1 {
+            return Err(anyhow!(
+                "Expected exactly one proven chunk but got {}",
+                proven.len()
+            ));
+        }
 
-        let proven = match proven {
-            Ok(proven) => proven,
-            Err(e) => {
-                warn!(target: LOG_TARGET, "{}", e);
-                // Unvolunteer the file.
-                self.unvolunteer_file(event.file_key.into()).await;
-                return Err(e);
-            }
-        };
+        let proven_chunk: &shp_file_metadata::Leaf<shp_file_metadata::ChunkId, Vec<u8>> =
+            &proven[0];
 
-        let write_result = {
-            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-            let result =
-                write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
-            drop(write_file_storage);
-            result
-        };
-
-        match write_result {
+        match write_file_storage.write_chunk(&file_key, &proven_chunk.key, &proven_chunk.data) {
             Ok(outcome) => match outcome {
                 FileStorageWriteOutcome::FileComplete => Ok(true),
                 FileStorageWriteOutcome::FileIncomplete => Ok(false),
             },
-            Err(error) => match error {
+            Err(e) => match e {
                 FileStorageWriteError::FileChunkAlreadyExists => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Received duplicate chunk with key: {:?}",
-                        proven.key
-                    );
-                    Ok(false)
+                    // Check if the file is already complete
+                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                    match read_file_storage.is_file_complete(&file_key) {
+                        Ok(is_complete) => Ok(is_complete),
+                        Err(e) => {
+                            // Unvolunteer the file.
+                            self.unvolunteer_file(event.file_key.into()).await;
+
+                            let err_msg = format!(
+                            "Received duplicate chunk but failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
+                            event.file_key, e
+                        );
+                            error!(target: LOG_TARGET, "{}", err_msg);
+                            Err(anyhow::anyhow!(err_msg))
+                        }
+                    }
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     // Unvolunteer the file.
@@ -832,7 +842,7 @@ where
 
                     Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{:?}",
-                        event.file_key, proven.key
+                        event.file_key, proven_chunk.key
                     )))
                 }
                 FileStorageWriteError::FingerprintAndStoredFileMismatch => {
@@ -903,36 +913,23 @@ where
             .unregister_file(file_key.as_ref().into())
             .await
         {
-            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}", file_key, e);
+            error!(
+                target: LOG_TARGET,
+                "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}",
+                file_key,
+                e
+            );
         }
 
-        // TODO: Send transaction to runtime to unvolunteer the file.
-
-        // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-
-        // TODO: Handle error
         if let Err(e) = write_file_storage.delete_file(&file_key) {
-            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}", file_key, e);
+            error!(
+                target: LOG_TARGET,
+                "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}",
+                file_key,
+                e
+            );
         }
-    }
-
-    async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
-
-        // Unregister the file from the file transfer service.
-        self.storage_hub_handler
-            .file_transfer
-            .unregister_file((*file_key).into())
-            .await
-            .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
-
-        // Queue a request to confirm the storing of the file.
-        self.storage_hub_handler
-            .blockchain
-            .queue_confirm_bsp_request(ConfirmStoringRequest::new(*file_key))
-            .await?;
-
-        Ok(())
+        drop(write_file_storage);
     }
 }

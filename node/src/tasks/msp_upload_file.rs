@@ -132,15 +132,27 @@ where
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
             Err(e) => {
-                // Send error response before propagating error
-                let _ = event.file_complete_channel.send(false).await;
+                // Send error response through FileTransferService
+                if let Err(e) = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .upload_response(false, event.request_id)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to send error response: {:?}", e);
+                }
                 return Err(e);
             }
         };
 
-        // Send completion status to user
-        if let Err(e) = event.file_complete_channel.send(file_complete).await {
-            error!(target: LOG_TARGET, "Failed to send response to channel: {:?}", e);
+        // Send completion status through FileTransferService
+        if let Err(e) = self
+            .storage_hub_handler
+            .file_transfer
+            .upload_response(file_complete, event.request_id)
+            .await
+        {
+            error!(target: LOG_TARGET, "Failed to send response: {:?}", e);
         }
 
         // Handle file completion if the entire file is uploaded or is already being stored.
@@ -644,18 +656,6 @@ where
         &mut self,
         event: RemoteUploadRequest,
     ) -> anyhow::Result<bool> {
-        // Check if file is already complete
-        if self
-            .storage_hub_handler
-            .file_storage
-            .read()
-            .await
-            .is_file_complete(&event.file_key.into())
-            .unwrap_or(false)
-        {
-            return Ok(true);
-        }
-
         let bucket_id = match self
             .storage_hub_handler
             .file_storage
@@ -715,10 +715,7 @@ where
 
         let write_result = {
             let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-            let result =
-                write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
-            drop(write_file_storage);
-            result
+            write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data)
         };
 
         match write_result {
@@ -728,12 +725,30 @@ where
             },
             Err(error) => match error {
                 FileStorageWriteError::FileChunkAlreadyExists => {
-                    warn!(
+                    trace!(
                         target: LOG_TARGET,
                         "Received duplicate chunk with key: {:?}",
                         proven.key
                     );
-                    Ok(false)
+                    // Check if the file is already complete
+                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                    match read_file_storage.is_file_complete(&event.file_key.into()) {
+                        Ok(is_complete) => Ok(is_complete),
+                        Err(e) => {
+                            self.handle_rejected_storage_request(
+                                &event.file_key.into(),
+                                bucket_id,
+                                RejectedStorageRequestReason::InternalError,
+                            )
+                            .await?;
+                            let err_msg = format!(
+                                "Received duplicate chunk but failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
+                                event.file_key, e
+                            );
+                            error!(target: LOG_TARGET, "{}", err_msg);
+                            Err(anyhow::anyhow!(err_msg))
+                        }
+                    }
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     self.handle_rejected_storage_request(

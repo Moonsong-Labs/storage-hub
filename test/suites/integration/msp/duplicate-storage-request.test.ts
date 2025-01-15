@@ -34,6 +34,8 @@ describeMspNet(
 
       const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 
+      await mspApi.wait.fileStorageComplete(initialised?.fileMetadata.fileKey);
+
       await userApi.sealBlock(
         userApi.tx.fileSystem.issueStorageRequest(
           bucketId,
@@ -97,6 +99,8 @@ describeMspNet(
         localBucketRoot.toString(),
         (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).toString()
       );
+
+      await mspApi.wait.fileStorageComplete(newStorageRequestDataBlob.fileKey);
     });
   }
 );

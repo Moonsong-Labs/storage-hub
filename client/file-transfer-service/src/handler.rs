@@ -38,7 +38,7 @@ use sc_network::{
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{BucketId, DownloadRequestId, FileKey, FileKeyProof};
+use shc_common::types::{BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId};
 use shp_file_metadata::ChunkId;
 use tokio::time::{interval, Duration};
 
@@ -111,7 +111,13 @@ pub struct FileTransferService {
     /// Mapping from RequestId to a download pending response channel
     download_pending_responses:
         HashMap<DownloadRequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
+    /// Counter for generating unique download request IDs
     download_pending_response_nonce: DownloadRequestId,
+    /// Mapping from RequestId to an upload pending response channel
+    upload_pending_responses:
+        HashMap<UploadRequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
+    /// Counter for generating unique upload request IDs
+    upload_pending_response_nonce: UploadRequestId,
 }
 
 impl Actor for FileTransferService {
@@ -161,6 +167,66 @@ impl Actor for FileTransferService {
                             "Failed to send the response back. Looks like the requester task is gone."
                         ),
                     }
+                }
+                FileTransferServiceCommand::UploadResponse {
+                    request_id,
+                    file_complete,
+                    callback,
+                } => {
+                    let response =
+                        schema::v1::provider::response::Response::RemoteUploadDataResponse(
+                            schema::v1::provider::RemoteUploadDataResponse {
+                                success: true,
+                                file_complete,
+                            },
+                        );
+
+                    let mut response_data = Vec::new();
+                    response.encode(&mut response_data);
+
+                    let outgoing_response = OutgoingResponse {
+                        result: Ok(response_data),
+                        reputation_changes: Vec::new(),
+                        sent_feedback: None,
+                    };
+
+                    // Tries to find the sender half of the response channel
+                    let maybe_pending_response =
+                        self.upload_pending_responses.remove(&request_id).take();
+
+                    // Tries to send back the upload response and then gets the request callback result.
+                    let request_callback_result = match maybe_pending_response {
+                        Some(pending_response_sender) => {
+                            // Tries to send upload response back
+                            let pending_response_result =
+                                pending_response_sender.send(outgoing_response);
+
+                            // Checks if response was sent back
+                            match pending_response_result {
+                                Ok(()) => callback.send(Ok(())),
+                                Err(e) => {
+                                    error!(
+                                        target: LOG_TARGET,
+                                        "Failed to return Upload Response {:?}", e
+                                    );
+                                    callback.send(Err(RequestError::UploadResponseFailure(e)))
+                                }
+                            }
+                        }
+                        None => {
+                            error!(target: LOG_TARGET, "No pending response channel found for request id {:?}", request_id);
+                            callback.send(Err(RequestError::UploadRequestIdNotFound))
+                        }
+                    };
+
+                    // Checks that request callback was returned correctly.
+                    match request_callback_result {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    };
                 }
                 FileTransferServiceCommand::DownloadRequest {
                     peer_id,
@@ -464,6 +530,8 @@ impl FileTransferService {
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
             download_pending_responses: HashMap::new(),
             download_pending_response_nonce: DownloadRequestId::new(0),
+            upload_pending_responses: HashMap::new(),
+            upload_pending_response_nonce: UploadRequestId::new(0),
         }
     }
 
@@ -504,12 +572,13 @@ impl FileTransferService {
                         return;
                     }
                 };
+
                 let file_key_proof = match FileKeyProof::decode(&mut r.file_key_proof.as_slice()) {
-                    Ok(chunk_with_proof) => chunk_with_proof,
+                    Ok(file_key_proof) => file_key_proof,
                     Err(e) => {
                         error!(
                             target: LOG_TARGET,
-                            "Failed to deserialize file chunk with proof from provider client request from {}: {:?}",
+                            "Failed to deserialize file key proof from provider client request from {}: {:?}",
                             peer,
                             e
                         );
@@ -519,59 +588,28 @@ impl FileTransferService {
                         return;
                     }
                 };
-                let bucket_id = match r.bucket_id {
-                    Some(ref bucket_id) => BucketId::decode(&mut bucket_id.as_slice()).ok(),
+
+                let bucket_id = match &r.bucket_id {
+                    Some(bucket_id) => match BucketId::decode(&mut bucket_id.as_slice()) {
+                        Ok(bucket_id) => Some(bucket_id),
+                        Err(e) => {
+                            error!(
+                                target: LOG_TARGET,
+                                "Failed to deserialize bucket id from provider client request from {}: {:?}",
+                                peer,
+                                e
+                            );
+
+                            self.handle_bad_request(pending_response);
+
+                            return;
+                        }
+                    },
                     None => None,
                 };
 
-                if self.is_allowed(peer, file_key, bucket_id) {
-                    // Create a new channel for getting the result
-                    let (tx, mut rx) = tokio::sync::mpsc::channel::<bool>(1);
-
-                    // Emit the event to the event bus, letting the upper layers know about the
-                    // upload request.
-                    self.emit(RemoteUploadRequest {
-                        peer,
-                        file_key,
-                        file_key_proof,
-                        bucket_id,
-                        file_complete_channel: tx,
-                    });
-
-                    // Wait for result of whether the entire file is already stored by the provider.
-                    let file_complete = match rx.recv().await {
-                        Some(success) => success,
-                        None => {
-                            error!(
-                                target: LOG_TARGET,
-                                "Failed to receive upload request result from upper layers"
-                            );
-                            self.handle_bad_request(pending_response);
-                            return;
-                        }
-                    };
-
-                    let response =
-                        schema::v1::provider::response::Response::RemoteUploadDataResponse(
-                            schema::v1::provider::RemoteUploadDataResponse {
-                                success: true,
-                                file_complete,
-                            },
-                        );
-
-                    // Serialize the response
-                    let mut response_data = Vec::new();
-                    response.encode(&mut response_data);
-
-                    let response = OutgoingResponse {
-                        result: Ok(response_data),
-                        reputation_changes: Vec::new(),
-                        sent_feedback: None,
-                    };
-
-                    // Send the response back.
-                    pending_response.send(response).unwrap();
-                } else {
+                // Check if the peer is allowed to upload this file
+                if !self.is_allowed(peer, file_key, bucket_id) {
                     debug!(
                         target: LOG_TARGET,
                         "Received unexpected upload request from {} for file key {:?}",
@@ -580,7 +618,24 @@ impl FileTransferService {
                     );
 
                     self.handle_bad_request(pending_response);
+                    return;
                 }
+
+                // Generate a new request ID for this upload request
+                let request_id = self.upload_pending_response_nonce.next();
+
+                // Store the pending response channel with this ID
+                self.upload_pending_responses
+                    .insert(request_id.clone(), pending_response);
+
+                // Emit the RemoteUploadRequest event
+                self.emit(RemoteUploadRequest {
+                    peer,
+                    file_key,
+                    file_key_proof,
+                    bucket_id,
+                    request_id,
+                });
             }
             Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
                 // TODO: Respond to the pending_response with some criteria of what is a valid download request.
