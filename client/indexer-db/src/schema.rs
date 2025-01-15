@@ -60,7 +60,7 @@ diesel::table! {
 
 diesel::table! {
     file_peer_id (file_id, peer_id) {
-        file_id -> Int8,
+        file_id -> Int4,
         peer_id -> Int4,
     }
 }

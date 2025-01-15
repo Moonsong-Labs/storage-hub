@@ -1,5 +1,5 @@
 CREATE TABLE file (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     account BYTEA NOT NULL,
     file_key BYTEA NOT NULL,
     bucket_id INTEGER NOT NULL,
@@ -20,7 +20,7 @@ CREATE INDEX idx_file_bucket_id ON file(bucket_id);
 -- Create Bsp_File table
 CREATE TABLE bsp_file (
     bsp_id INTEGER NOT NULL,
-    file_id INTEGER NOT NULL,
+    file_id BIGINT NOT NULL,
     PRIMARY KEY (bsp_id, file_id),
     FOREIGN KEY (file_id) REFERENCES file(id) ON DELETE CASCADE
 );
