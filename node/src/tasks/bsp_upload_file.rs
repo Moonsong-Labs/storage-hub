@@ -510,10 +510,31 @@ where
     ) -> anyhow::Result<()> {
         // First check if the file is not on our exclude list
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let is_allowed = read_file_storage
-            .is_allowed(&event.file_key.into())
+        let mut is_allowed = read_file_storage
+            .is_allowed(
+                &event.file_key.into(),
+                shc_file_manager::traits::ExcludeType::File,
+            )
             .map_err(|e| {
-                let err_msg = format!("Failed to read exclude list: {:?}", e);
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.fingerprint.into(),
+                shc_file_manager::traits::ExcludeType::Fingerprint,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
                 error!(
                     target: LOG_TARGET,
                     err_msg
