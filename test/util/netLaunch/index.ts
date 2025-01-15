@@ -395,7 +395,7 @@ export class NetworkLauncher {
     };
     const tickRangeToMaximumThresholdRuntimeParameter = {
       RuntimeConfig: {
-        TickRangeToMaximumThreshold: [null, 100]
+        TickRangeToMaximumThreshold: [null, 1]
       }
     };
 
@@ -529,6 +529,46 @@ export class NetworkLauncher {
       calls: [
         api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
       ]
+    });
+    const maxReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        MaxReplicationTarget: [null, 9]
+      }
+    };
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
+      ]
+    });
+    const tickRangeToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 10]
+      }
+    };
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(
+          api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+        )
+      ]
+    });
+    const minWaitForStopStoringRuntimeParameter = {
+      RuntimeConfig: {
+        MinWaitForStopStoring: [null, 15]
+      }
+    };
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(minWaitForStopStoringRuntimeParameter))
+      ]
+    });
+    const storageRequestTtlRuntimeParameter = {
+      RuntimeConfig: {
+        StorageRequestTtl: [null, 20]
+      }
+    };
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(storageRequestTtlRuntimeParameter))]
     });
   }
 
