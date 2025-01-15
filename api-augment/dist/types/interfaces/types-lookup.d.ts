@@ -5436,7 +5436,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspNotEligibleToVolunteer: boolean;
     readonly isStorageRequestExpiredNoSlotAvailable: boolean;
     readonly isStorageRequestNotAuthorized: boolean;
-    readonly isMaxBlockNumberReached: boolean;
+    readonly isMaxTickNumberReached: boolean;
     readonly isFailedToEncodeBsp: boolean;
     readonly isFailedToEncodeFingerprint: boolean;
     readonly isFailedToDecodeThreshold: boolean;
@@ -5512,7 +5512,7 @@ declare module "@polkadot/types/lookup" {
       | "BspNotEligibleToVolunteer"
       | "StorageRequestExpiredNoSlotAvailable"
       | "StorageRequestNotAuthorized"
-      | "MaxBlockNumberReached"
+      | "MaxTickNumberReached"
       | "FailedToEncodeBsp"
       | "FailedToEncodeFingerprint"
       | "FailedToDecodeThreshold"
