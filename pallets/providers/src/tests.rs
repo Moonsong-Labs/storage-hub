@@ -2585,6 +2585,85 @@ mod sign_off {
                     );
                 });
             }
+
+            #[test]
+            fn bsp_sign_off_stop_cycles_before_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = accounts::ALICE.0;
+                    let storage_amount: StorageDataUnit<Test> = 100;
+                    let (deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        accounts::ALICE.1 - deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_amount
+                    );
+
+                    // Check the capacity of all the BSPs
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+                    // Check the counter of registered BSPs
+                    assert_eq!(StorageProviders::get_bsp_count(), 1);
+
+                    // Get the BSP ID of Alice
+                    let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                    // Advance enough blocks for the BSP to sign off
+                    let bsp_sign_up_lock_period: u64 =
+                        <Test as crate::Config>::BspSignUpLockPeriod::get();
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number() + bsp_sign_up_lock_period,
+                    );
+
+                    // Stop all cycles before signing off Alice with the account origin
+                    assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
+                        alice
+                    )));
+
+                    // Sign off Alice as a Backup Storage Provider
+                    assert_ok!(StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)));
+
+                    // Check the new capacity of all BSPs
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), 0);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        0
+                    );
+
+                    // Check that Alice is not a Backup Storage Provider anymore
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
+                    assert!(alice_sp_id.is_none());
+
+                    // Check that the counter of registered BSPs has decreased
+                    assert_eq!(StorageProviders::get_bsp_count(), 0);
+
+                    // Verify that the proof challenge cycle has been stopped
+                    assert!(
+                        pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                            &alice_bsp_id
+                        )
+                        .is_none()
+                    );
+
+                    // Check the BSP Sign Off event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::BspSignOffSuccess {
+                            who: alice,
+                            bsp_id: alice_bsp_id,
+                        }
+                        .into(),
+                    );
+                });
+            }
         }
     }
 

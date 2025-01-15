@@ -1469,7 +1469,7 @@ pub mod pallet {
         ///
         /// If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
         #[pallet::call_index(16)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::stop_all_cycles())]
         pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed.
             let who = ensure_signed(origin)?;
